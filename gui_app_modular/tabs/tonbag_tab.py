@@ -1,0 +1,992 @@
+# -*- coding: utf-8 -*-
+"""
+SQM 재고관리 - 톤백 탭
+======================
+
+v3.6.0 - UI 통일성 적용
+v5.5.2 - 재고 리스트(Inventory) UI 기준 통일
+  - 필터 바 1개만 사용 (재고와 동일: LOT NO, SAP NO, BL NO, CONTAINER, PRODUCT, STATUS + 초기화)
+  - 표시 컬럼 바 → 액션 바 → 트리 → 푸터 순서 (재고와 동일)
+  - ★ 유지보수: 재고 리스트(inventory_tab.py) UI가 바뀌면 이 탭도 동일하게 반영할 것.
+"""
+
+import logging
+
+from ..utils.ui_constants import CustomMessageBox, ThemeColors
+logger = logging.getLogger(__name__)
+
+
+class TonbagTabMixin:
+    """
+    톤백 탭 Mixin
+    
+    SQMInventoryApp 클래스에 mix-in 됩니다.
+    """
+    
+    def _setup_tonbag_tab(self) -> None:
+        """톤백 탭 설정 (v5.0.2: 필터바 추가)"""
+        from ..utils.constants import ttk, tk, VERTICAL, HORIZONTAL, BOTH, YES, LEFT, RIGHT, X, Y
+        from ..utils.ui_constants import Spacing, ThemeColors, FontScale, apply_tooltip
+        
+        # ═══════════════════════════════════════════════════════════════
+        # v5.0.8: 헤더 필터 바 (재고 리스트와 완전 동일)
+        # ═══════════════════════════════════════════════════════════════
+        _is_dark_filter = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        
+        self._tonbag_filter_bar = None
+        try:
+            from ..utils.tree_enhancements import HeaderFilterBar
+            
+            # 재고 리스트와 동일: LOT NO, SAP NO, BL NO, CONTAINER, PRODUCT, STATUS + 초기화
+            tonbag_filter_cols = [
+                ('lot_no',       'LOT NO',     120),
+                ('sap_no',       'SAP NO',     120),
+                ('bl_no',        'BL NO',      140),
+                ('container_no', 'CONTAINER',  130),
+                ('product',      'PRODUCT',    160),
+                ('tonbag_status','STATUS',      90),
+            ]
+            self._tonbag_filter_bar = HeaderFilterBar(
+                self.tab_tonbag, None, tonbag_filter_cols,
+                on_filter=self._on_tonbag_filter_apply,
+                is_dark=_is_dark_filter
+            )
+            self._tonbag_filter_bar.pack(fill=X, padx=5, pady=(0, 2))
+        except (ImportError, AttributeError) as e:
+            logger.debug(f"HeaderFilterBar 로딩 실패: {e}")
+        
+        # v5.0.2: 컬럼 토글 + 표시 모드 바
+        try:
+            from ..utils.column_toggle import ColumnToggleBar
+            
+            # 재고 리스트와 동일한 6개 표시 컬럼 (v5.5.2)
+            tonbag_toggle_cols = [
+                ('sap_no', 'SAP NO'),
+                ('bl_no', 'BL NO'),
+                ('container_no', 'CONTAINER'),
+                ('ship_date', 'SHIP DATE'),
+                ('free_time', 'FREE TIME'),
+                ('customs', 'CUSTOMS'),
+            ]
+            
+            self._tonbag_toggle_bar = ColumnToggleBar(
+                self.tab_tonbag,
+                None,  # Treeview는 나중에 연결
+                tonbag_toggle_cols,
+                is_dark=_is_dark_filter
+            )
+            self._tonbag_toggle_bar.pack(fill=X, padx=5, pady=(0, 2))
+        except (ImportError, Exception) as e:
+            logger.debug(f"컬럼 토글바 생성 실패: {e}")
+        
+        # ═══════════════════════════════════════════════════════════════
+        # 트리뷰 (v5.5.2: 재고와 동일 순서 — 필터 → 표시 컬럼 → 트리 → 액션/통계 → 푸터)
+        # ═══════════════════════════════════════════════════════════════
+        from ..utils.tree_enhancements import FooterTotalBar, apply_striped_rows
+        
+        tree_frame = ttk.Frame(self.tab_tonbag)
+        tree_frame.pack(fill=BOTH, expand=YES, padx=5, pady=5)
+        self._tonbag_tree_frame = tree_frame
+        
+        # v3.8.9: 재고리스트와 동일 컬럼 + TONBAG NO 추가 (MXBG 다음)
+        import tkinter.font as tkfont
+        _style = ttk.Style()
+        _tb_font = tkfont.Font(family='맑은 고딕', size=12)
+        _tb_head_font = tkfont.Font(family='맑은 고딕', size=12, weight='bold')
+        _tb_row_h = _tb_font.metrics('linespace') + 6
+        
+        _is_dark_tb = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        if _is_dark_tb:
+            _tb_bg, _tb_fg, _tb_field = '#1e1e1e', '#e0e0e0', '#1e1e1e'
+            _tb_hd_bg, _tb_hd_fg = '#333333', ThemeColors.get('bg_card')
+        else:
+            _tb_bg, _tb_fg, _tb_field = ThemeColors.get('bg_card'), '#1a1a1a', ThemeColors.get('bg_card')
+            _tb_hd_bg, _tb_hd_fg = ThemeColors.get('text_primary'), ThemeColors.get('bg_card')
+        
+        _style.configure('Tb.Treeview',
+                         font=_tb_font, rowheight=_tb_row_h,
+                         background=_tb_bg, foreground=_tb_fg,
+                         fieldbackground=_tb_field)
+        _style.configure('Tb.Treeview.Heading',
+                         font=_tb_head_font,
+                         background=_tb_hd_bg, foreground=_tb_hd_fg)
+        _style.map('Tb.Treeview',
+                   background=[('selected', ThemeColors.get('tree_select_fg'))],
+                   foreground=[('selected', ThemeColors.get('bg_card'))])
+        
+        # v3.9.0: 톤백리스트 20열 = 재고리스트 18열 + TONBAG NO + LOCATION
+        # MXBG(#7) 뒤에 TONBAG NO(#8), LOCATION(#9) 삽입
+        # v5.6.3: MXBG 제거 (LOT 단위 정보 → 톤백리스트 불필요), 21→20열
+        self._tonbag_columns = [
+            ('row_num',            'No.',            50, 'center'),   #  1. 순번
+            ('lot_no',             'LOT NO',        120, 'center'),   #  2
+            ('tonbag_no_print',    'TONBAG NO',      90, 'center'),   #  3
+            ('tonbag_uid',         'UID',           150, 'center'),   #  4
+            ('sap_no',             'SAP NO',        120, 'center'),   #  5
+            ('bl_no',              'BL NO',         140, 'center'),   #  6
+            ('container_no',       'CONTAINER',     130, 'center'),   #  7
+            ('product',            'PRODUCT',       160, 'center'),   #  8
+            ('location',           'LOCATION',       90, 'center'),   #  9
+            ('net_weight',         'NET(Kg)',        100, 'e'),        # 10
+            ('salar_invoice_no',   'INVOICE NO',    100, 'center'),   # 11
+            ('ship_date',          'SHIP DATE',      95, 'center'),   # 12
+            ('arrival_date',       'ARRIVAL',        95, 'center'),   # 13
+            ('free_time',          'FREE TIME',      80, 'center'),   # 14
+            ('warehouse',          'WH',             80, 'center'),   # 15
+            ('tonbag_status',      'STATUS',         90, 'center'),   # 16
+            ('customs',            'CUSTOMS',        90, 'center'),   # 17
+            ('current_weight',     'Balance(Kg)',   100, 'e'),         # 18
+            ('initial_weight',     'Inbound(Kg)',   100, 'e'),         # 19
+            ('outbound_weight',    'Outbound(Kg)',  100, 'e'),         # 20
+        ]
+        
+        col_ids = [c[0] for c in self._tonbag_columns]
+        self.tree_sublot = ttk.Treeview(
+            tree_frame, columns=col_ids, show="headings", height=20,
+            selectmode='extended', style='Tb.Treeview'
+        )
+        
+        for col_id, label, width, anchor in self._tonbag_columns:
+            self.tree_sublot.heading(
+                col_id, text=label,
+                command=lambda c=col_id: self._sort_treeview(self.tree_sublot, c)
+            )
+            self.tree_sublot.column(col_id, width=width, anchor=anchor, minwidth=50)
+        
+        # v4.2.2: 테이블 스타일 적용 (그리드 라인, 줄무늬)
+        try:
+            from ..utils.table_styler import apply_table_style
+            apply_table_style(
+                self.tree_sublot,
+                grid_lines=True,
+                striped_rows=True,
+                row_height='normal'
+            )
+        except (ImportError, Exception) as e:
+            logger.debug(f"테이블 스타일 적용 실패: {e}")
+        
+        # 스크롤바
+        scrollbar_y = ttk.Scrollbar(tree_frame, orient=VERTICAL, 
+                                    command=self.tree_sublot.yview)
+        scrollbar_x = ttk.Scrollbar(tree_frame, orient=HORIZONTAL, 
+                                    command=self.tree_sublot.xview)
+        self.tree_sublot.configure(yscrollcommand=scrollbar_y.set, 
+                                   xscrollcommand=scrollbar_x.set)
+        
+        scrollbar_x.pack(side='bottom', fill=X)
+        self.tree_sublot.pack(side=LEFT, fill=BOTH, expand=YES)
+        scrollbar_y.pack(side=RIGHT, fill=Y)
+        
+        # v4.0.6 / v5.5.2: 단일 필터바에 treeview 연결 (재고 리스트와 동일)
+        if hasattr(self, '_tonbag_filter_bar'):
+            self._tonbag_filter_bar.tree = self.tree_sublot
+        
+        # v5.0.2: 컬럼 토글바에 treeview 연결
+        if hasattr(self, '_tonbag_toggle_bar') and self._tonbag_toggle_bar:
+            self._tonbag_toggle_bar.tree = self.tree_sublot
+        
+        # ═══════════════════════════════════════════════════════════════
+        # v5.5.2: 액션/통계 바 (재고 리스트와 동일 — 트리 아래, 재고 통계 바와 같은 스타일)
+        # ═══════════════════════════════════════════════════════════════
+        _tb_bg = ThemeColors.get('bg_secondary', _is_dark_tb)
+        _tb_card = ThemeColors.get('bg_card', _is_dark_tb)
+        _tb_border = ThemeColors.get('border', _is_dark_tb)
+        _tb_text = ThemeColors.get('text_primary', _is_dark_tb)
+        
+        # v5.5.3 patch_04: ttk 프레임 전환 (테마 자동 대응)
+        self._tonbag_stats_action_frame = ttk.Frame(self.tab_tonbag, padding=(5, 3))
+        self._tonbag_stats_action_frame.pack(fill=X, padx=5, pady=(0, 2))
+
+        _inner = ttk.Frame(self._tonbag_stats_action_frame)
+        _inner.pack(fill=X, padx=5)
+
+        btn_frame = ttk.Frame(_inner)
+        btn_frame.pack(side=LEFT)
+        
+        self.btn_tonbag_batch_outbound = ttk.Button(
+            btn_frame, text="📤 일괄 출고",
+            command=self._on_tonbag_batch_outbound,
+            state='disabled'
+        )
+        self.btn_tonbag_batch_outbound.pack(side=LEFT, padx=(0, 5))
+        apply_tooltip(self.btn_tonbag_batch_outbound, '선택한 톤백들을 일괄 출고 처리')
+        
+        self.btn_tonbag_label = ttk.Button(
+            btn_frame, text="🏷️ 라벨 출력",
+            command=self._on_tonbag_print_label,
+            state='disabled'
+        )
+        self.btn_tonbag_label.pack(side=LEFT, padx=5)
+        apply_tooltip(self.btn_tonbag_label, '선택한 톤백의 라벨을 PDF로 출력')
+        
+        btn_tonbag_export = ttk.Button(
+            btn_frame, text="📥 Excel 내보내기",
+            command=lambda: self._on_export_click(option=4)
+        )
+        btn_tonbag_export.pack(side=LEFT, padx=5)
+        apply_tooltip(btn_tonbag_export, '톤백 현황을 Excel 파일로 내보내기')
+        
+        self.btn_tonbag_copy_uid = ttk.Button(
+            btn_frame, text="📋 UID 복사",
+            command=self._on_tonbag_copy_uid,
+            state='disabled'
+        )
+        self.btn_tonbag_copy_uid.pack(side=LEFT, padx=5)
+        apply_tooltip(self.btn_tonbag_copy_uid, '선택한 톤백의 UID를 클립보드에 복사')
+        
+        btn_tonbag_location = ttk.Button(
+            btn_frame, text="📍 위치 업로드",
+            command=self._on_tonbag_location_upload
+        )
+        btn_tonbag_location.pack(side=LEFT, padx=5)
+        apply_tooltip(btn_tonbag_location, '바코드 스캔 Excel로 톤백 위치 일괄 업데이트')
+        
+        self.btn_tonbag_cancel_outbound = ttk.Button(
+            btn_frame, text="↩️ 출고 취소",
+            command=self._on_tonbag_cancel_outbound,
+            state='disabled'
+        )
+        self.btn_tonbag_cancel_outbound.pack(side=LEFT, padx=5)
+        apply_tooltip(self.btn_tonbag_cancel_outbound, '선택한 PICKED 톤백의 출고를 취소하고 재고 복구')
+        
+        ttk.Separator(btn_frame, orient='vertical').pack(side=LEFT, fill=Y, padx=10)
+        
+        self.lbl_tonbag_selection = ttk.Label(btn_frame, text="선택: 0개 | 합계: 0 kg")
+        self.lbl_tonbag_selection.pack(side=LEFT, padx=5)
+        
+        ttk.Separator(btn_frame, orient='vertical').pack(side=LEFT, fill=Y, padx=10)
+        
+        self.lbl_sublot_summary = ttk.Label(btn_frame, text="총: - | 가용: - | 출고: -",
+                                             font=('맑은 고딕', 11))
+        self.lbl_sublot_summary.pack(side=LEFT, padx=5)
+        
+        search_frame = ttk.Frame(_inner)
+        search_frame.pack(side=RIGHT)
+        
+        ttk.Label(search_frame, text="상태:").pack(side=LEFT, padx=(0, 5))
+        self.tonbag_status_var = tk.StringVar(value="전체")
+        sublot_status_combo = ttk.Combobox(
+            search_frame, textvariable=self.tonbag_status_var,
+            values=["전체", "AVAILABLE", "SOLD", "PICKED", "SAMPLE"],
+            state="readonly", width=10
+        )
+        sublot_status_combo.pack(side=LEFT, padx=(0, 10))
+        sublot_status_combo.bind('<<ComboboxSelected>>', self._on_tonbag_filter)
+        
+        self._show_sample_var = tk.BooleanVar(value=True)  # v5.6.1: 샘플 기본 표시
+        self._chk_show_sample = ttk.Checkbutton(
+            search_frame, text="🧪 샘플 표시",
+            variable=self._show_sample_var,
+            command=self._on_tonbag_filter_refresh
+        )
+        self._chk_show_sample.pack(side=LEFT, padx=(0, 10))
+        apply_tooltip(self._chk_show_sample, '샘플 톤백(sub_lt=0, 1kg) 표시/숨김 토글')
+        
+        # v5.5.3 patch_04: 검색 박스 ttk 전환
+        search_box = ttk.Frame(search_frame)
+        search_box.pack(side=LEFT)
+
+        ttk.Label(search_box, text='🔍').pack(side=LEFT, padx=3)
+
+        self.tonbag_search_var = tk.StringVar()
+        self.tonbag_search_var.trace('w', self._on_tonbag_search)
+        tonbag_search_entry = ttk.Entry(search_box, textvariable=self.tonbag_search_var,
+                                         width=15)
+        tonbag_search_entry.pack(side=LEFT, pady=4, padx=(0, 5))
+        
+        # ═══════════════════════════════════════════════════════════════
+        # 하단 NET(Kg) 합계 바 (재고와 동일)
+        # ═══════════════════════════════════════════════════════════════
+        # v5.6.1: FooterTotalBar 제거 — lbl_sublot_summary 1줄로 통합
+        # self._tb_footer = FooterTotalBar(self.tab_tonbag, is_dark=_is_dark_tb)
+        # self._tb_footer.pack(fill=X, padx=5, pady=(0, 2))
+        
+        # 이벤트 바인딩
+        self.tree_sublot.bind('<Double-1>', self._on_tonbag_double_click)
+        self.tree_sublot.bind('<<TreeviewSelect>>', self._on_tonbag_select)
+    
+    def _on_tonbag_select(self, event=None) -> None:
+        """톤백 선택 시 컨텍스트 버튼 활성화"""
+        selection = self.tree_sublot.selection()
+        count = len(selection)
+        
+        # 버튼 상태 업데이트
+        state = 'normal' if count > 0 else 'disabled'
+        if hasattr(self, 'btn_tonbag_batch_outbound'):
+            self.btn_tonbag_batch_outbound.config(state=state)
+        if hasattr(self, 'btn_tonbag_label'):
+            self.btn_tonbag_label.config(state=state)
+        # v3.8.4: 출고 취소 버튼
+        if hasattr(self, 'btn_tonbag_cancel_outbound'):
+            self.btn_tonbag_cancel_outbound.config(state=state)
+        
+        # 선택 정보 업데이트
+        if hasattr(self, 'lbl_tonbag_selection'):
+            total_kg = 0
+            for item_id in selection:
+                values = self.tree_sublot.item(item_id, 'values')
+                if len(values) >= 10:
+                    try:
+                        total_kg += float(str(values[9]).replace(',', ''))  # NET(kg) index 9
+                    except (ValueError, TypeError) as e:
+                        logger.debug(f"{type(e).__name__}: {e}")
+            self.lbl_tonbag_selection.config(text=f"선택: {count}개 | 합계: {total_kg:,.0f} kg")
+    
+    def _on_tonbag_batch_outbound(self) -> None:
+        """선택된 톤백 일괄 출고"""
+        selection = self.tree_sublot.selection()
+        if not selection:
+            return
+        
+        tonbag_list = []
+        for item_id in selection:
+            values = self.tree_sublot.item(item_id, 'values')
+            if len(values) >= 3:
+                # v5.6.3: TONBAG NO = index 2 (MXBG 제거 후); S00 → 0, 숫자 → int
+                raw = str(values[2]).strip().upper()
+                try:
+                    sub_lt = 0 if raw == 'S00' else int(values[2])
+                except (ValueError, TypeError):
+                    sub_lt = 0 if raw == 'S00' else raw
+                tonbag_list.append({
+                    'lot_no': values[1],   # LOT NO (index 1)
+                    'sub_lt': sub_lt,
+                })
+        
+        if tonbag_list:
+            self._show_batch_tonbag_outbound_dialog(tonbag_list)
+    
+    def _show_batch_tonbag_outbound_dialog(self, tonbag_list: list) -> None:
+        """일괄 톤백 출고 다이얼로그"""
+        from ..utils.constants import tk, ttk
+        from ..utils.ui_constants import Spacing
+        
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"일괄 출고 - {len(tonbag_list)}개 톤백")
+        dialog.geometry("400x300")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # 톤백 목록 표시
+        ttk.Label(dialog, text=f"선택된 톤백: {len(tonbag_list)}개", 
+                 font=('맑은 고딕', 18, 'bold')).pack(pady=10)
+        
+        listbox = tk.Listbox(dialog, height=8)
+        for tb in tonbag_list:
+            listbox.insert('end', f"{tb['lot_no']} / {tb['sub_lt']}")
+        listbox.pack(fill='x', padx=20, pady=5)
+        
+        # 출고처 입력
+        dest_frame = ttk.Frame(dialog)
+        dest_frame.pack(fill='x', padx=20, pady=10)
+        
+        ttk.Label(dest_frame, text="출고처:").pack(side='left')
+        dest_var = tk.StringVar()
+        dest_entry = ttk.Entry(dest_frame, textvariable=dest_var, width=25)
+        dest_entry.pack(side='left', padx=10)
+        dest_entry.focus()
+        
+        # 버튼
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(pady=15)
+        
+        def do_batch_outbound():
+            destination = dest_var.get().strip()
+            if not destination:
+                CustomMessageBox.showwarning(self.root, "경고", "출고처를 입력하세요.")
+                return
+            
+            success_count = 0
+            for tb in tonbag_list:
+                try:
+                    result = self.engine.pick_tonbag(tb['lot_no'], tb['sub_lt'], destination)
+                    if result.get('success'):
+                        success_count += 1
+                except (RuntimeError, ValueError) as _e:
+                    logger.debug(f"Suppressed: {_e}")
+            
+            dialog.destroy()
+            self._refresh_tonbag()
+            self._refresh_inventory()
+            CustomMessageBox.showinfo(
+                self.root, "완료", 
+                f"일괄 출고 완료\n\n성공: {success_count}/{len(tonbag_list)}개"
+            )
+        
+        ttk.Button(btn_frame, text="일괄 출고", command=do_batch_outbound, width=12).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="취소", command=dialog.destroy, width=12).pack(side='left', padx=5)
+        
+        dialog.bind('<Return>', lambda e: do_batch_outbound())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
+    
+    def _on_tonbag_print_label(self) -> None:
+        """선택된 톤백 라벨 출력"""
+        selection = self.tree_sublot.selection()
+        if not selection:
+            return
+        
+        CustomMessageBox.showinfo(
+            self.root, "라벨 출력", 
+            f"선택된 {len(selection)}개 톤백의 라벨을 출력합니다.\n\n(기능 구현 예정)"
+        )
+    
+    def _on_tonbag_search(self, *args) -> None:
+        """톤백 검색"""
+        self._refresh_tonbag()
+    
+    def _on_tonbag_filter(self, event=None) -> None:
+        """톤백 상태 필터"""
+        self._refresh_tonbag()
+    
+    def _on_tonbag_filter_apply(self) -> None:
+        """v5.0.2: 헤더 필터바 적용"""
+        self._refresh_tonbag()
+    
+    def _on_tonbag_filter_refresh(self) -> None:
+        """v3.9.5: 샘플 체크박스 변경 시 새로고침"""
+        self._refresh_tonbag()
+    
+    def _refresh_tonbag(self) -> None:
+        """v3.8.9: 톤백 목록 새로고침 — 재고리스트 컬럼 + TONBAG NO"""
+        from ..utils.ui_constants import ThemeColors
+        
+        if not hasattr(self, 'tree_sublot'):
+            return
+        # 트리뷰 초기화
+        for item in self.tree_sublot.get_children():
+            self.tree_sublot.delete(item)
+        
+        search_text = self.tonbag_search_var.get().strip().lower()
+        status_filter = self.tonbag_status_var.get()
+        
+        try:
+            # v3.8.9: JOIN 쿼리 — 재고(inventory) + 톤백(inventory_tonbag)
+            if hasattr(self.engine, 'get_tonbags_with_inventory'):
+                tonbags = self.engine.get_tonbags_with_inventory()
+                # 재고는 있는데 톤백만 비어 있으면 JOIN/스키마 오류 가능 → 단순 톤백 조회 + LOT 정보 보강
+                if not tonbags and hasattr(self.engine, 'get_inventory'):
+                    inv_list = self.engine.get_inventory()
+                    if inv_list:
+                        raw = self.engine.get_tonbags() if hasattr(self.engine, 'get_tonbags') else getattr(self.engine, 'get_all_tonbags', lambda: [])()
+                        inv_by_lot = {str(i.get('lot_no')): i for i in inv_list}
+                        for tb in raw:
+                            lot_no = tb.get('lot_no')
+                            if lot_no and lot_no in inv_by_lot:
+                                i = inv_by_lot[lot_no]
+                                tb = dict(tb)
+                                tb.setdefault('product', i.get('product'))
+                                tb.setdefault('container_no', i.get('container_no'))
+                                tb.setdefault('mxbg_pallet', i.get('mxbg_pallet'))
+                                tb.setdefault('net_weight', i.get('net_weight'))
+                                tb.setdefault('salar_invoice_no', i.get('salar_invoice_no'))
+                                tb.setdefault('ship_date', i.get('ship_date'))
+                                tb.setdefault('arrival_date', i.get('arrival_date'))
+                                tb.setdefault('free_time', i.get('free_time'))
+                                tb.setdefault('warehouse', i.get('warehouse'))
+                                tb.setdefault('customs', i.get('customs'))
+                                tb.setdefault('current_weight', i.get('current_weight'))
+                                tb.setdefault('initial_weight', i.get('initial_weight'))
+                                tb['tonbag_status'] = tb.get('status', 'AVAILABLE')
+                                tonbags.append(tb)
+                        if tonbags:
+                            logger.warning("톤백 리스트: get_tonbags_with_inventory가 비어 있어 get_tonbags+LOT 보강으로 표시합니다. DB 스키마/JOIN 확인 권장.")
+            if not tonbags and hasattr(self.engine, 'get_all_tonbags'):
+                tonbags = self.engine.get_all_tonbags()
+            
+            total_count = 0
+            available_count = 0
+            picked_count = 0
+            _text_color = '#1a1a1a'
+            
+            for tb in tonbags:
+                lot_no = str(tb.get('lot_no', ''))
+                sap_no = str(tb.get('sap_no', ''))
+                bl_no = str(tb.get('bl_no', ''))
+                product = str(tb.get('product', ''))
+                container = str(tb.get('container_no', ''))
+                is_sample = tb.get('is_sample', 0)
+                
+                # v3.9.5: 샘플 필터 (체크박스 OFF면 샘플 숨김)
+                show_sample = getattr(self, '_show_sample_var', None)
+                if is_sample and show_sample and not show_sample.get():
+                    continue
+                
+                # v4.0.8: 샘플 톤백은 product에 [SAMPLE] 추가 — 독립 PRODUCT로 관리
+                if is_sample:
+                    product = f"{product} [SAMPLE]" if product else '[SAMPLE]'
+                
+                # 검색 필터
+                if search_text:
+                    searchable = f"{lot_no} {sap_no} {bl_no} {product} {container}".lower()
+                    if search_text not in searchable:
+                        continue
+                
+                # 상태 필터
+                status = tb.get('tonbag_status', tb.get('status', 'AVAILABLE'))
+                if status_filter != "전체" and status != status_filter:
+                    continue
+                
+                # v5.0.2: 헤더 필터바 조건
+                if hasattr(self, '_tonbag_filter_bar'):
+                    tb_filters = self._tonbag_filter_bar.get_filters()
+                    skip_fb = False
+                    for fk, fv in tb_filters.items():
+                        tv = str(tb.get(fk, '') or '')
+                        if not tv and fk == 'status':
+                            tv = status
+                        if tv != fv:
+                            skip_fb = True
+                            break
+                    if skip_fb:
+                        continue
+                
+                total_count += 1
+                
+                # 상태별 태그
+                if status == 'AVAILABLE':
+                    available_count += 1
+                    tag = 'available'
+                elif status in ('PICKED', 'SOLD'):
+                    picked_count += 1
+                    tag = 'picked'
+                elif status == 'RESERVED':
+                    tag = 'reserved'
+                elif status == 'SHIPPED':
+                    tag = 'shipped'
+                elif status == 'DEPLETED':
+                    tag = 'depleted'
+                else:
+                    tag = ''
+                
+                # 줄무늬
+                row_idx = len(self.tree_sublot.get_children())
+                tags = [tag] if tag else []
+                if row_idx % 2 == 1 and not tag:
+                    tags.append('stripe')
+                
+                # v3.9.0: 21열 값 구성
+                row_num = len(self.tree_sublot.get_children()) + 1
+                # v5.6.3: mxbg 제거 (톤백리스트에서 불필요)
+                tonbag_no = tb.get('tonbag_no', tb.get('sub_lt', ''))
+                
+                # v5.6.1: TONBAG NO 표시 (샘플은 S00 — sub_lt=0과 일치)
+                tonbag_no_print = tonbag_no
+                if is_sample and tonbag_no is not None:
+                    # 샘플: 항상 S00으로 표시
+                    try:
+                        tb_num = int(tonbag_no)
+                        tonbag_no_print = f'S{tb_num:02d}'  # S00
+                    except (ValueError, TypeError):
+                        if str(tonbag_no).upper().startswith('S'):
+                            tonbag_no_print = tonbag_no
+                        else:
+                            tonbag_no_print = f'S{tonbag_no}'
+                
+                location = tb.get('location', '') or ''
+                
+                # v5.6.3: 톤백 개별 무게 — NET/Balance/Inbound 모두 톤백 단위 (query_mixin 보강 필드 우선)
+                try:
+                    tonbag_w = float(
+                        tb.get('tonbag_weight', 0) or tb.get('weight', 0) or 0
+                    )
+                except (ValueError, TypeError):
+                    tonbag_w = 0.0
+                # Balance: 쿼리에서 tonbag_current_weight 반환 시 사용, 없으면 status 기반 계산
+                _tb_current = tb.get('tonbag_current_weight')
+                if _tb_current is not None and _tb_current != '':
+                    try:
+                        tb_balance = float(_tb_current)
+                    except (ValueError, TypeError):
+                        tb_balance = tonbag_w if status not in ('PICKED', 'SOLD', 'SHIPPED', 'DEPLETED') else 0.0
+                else:
+                    tb_balance = 0.0 if status in ('PICKED', 'SOLD', 'SHIPPED', 'DEPLETED') else tonbag_w
+                # Inbound: tonbag_initial_weight 있으면 사용, 없으면 tonbag_w
+                _tb_inbound = tb.get('tonbag_initial_weight')
+                if _tb_inbound is not None and _tb_inbound != '':
+                    try:
+                        tonbag_inbound = float(_tb_inbound)
+                    except (ValueError, TypeError):
+                        tonbag_inbound = tonbag_w
+                else:
+                    tonbag_inbound = tonbag_w
+                if status in ('PICKED', 'SOLD', 'SHIPPED', 'DEPLETED'):
+                    tb_outbound = tonbag_w
+                else:
+                    tb_outbound = 0.0
+                
+                def _fmt(v):
+                    try: return f"{float(v):,.0f}" if v else ''
+                    except (ValueError, TypeError): return str(v) if v else ''
+                
+                # v5.6.3: MXBG 제거, 20열 (기존 21열에서 MXBG 삭제)
+                vals = (
+                    str(row_num),                                   #  1. No.
+                    lot_no,                                         #  2. LOT NO
+                    tonbag_no_print,                                #  3. TONBAG NO
+                    tb.get('tonbag_uid', '') or '',                 #  4. UID
+                    sap_no,                                         #  5. SAP NO
+                    bl_no,                                          #  6. BL NO
+                    container,                                      #  7. CONTAINER
+                    product,                                        #  8. PRODUCT
+                    location,                                       #  9. LOCATION
+                    _fmt(tonbag_w),                                 # 10. NET(Kg) — 톤백 개별
+                    tb.get('salar_invoice_no', '') or '',           # 11. INVOICE NO
+                    tb.get('ship_date', '') or '',                  # 12. SHIP DATE
+                    tb.get('arrival_date', '') or '',               # 13. ARRIVAL
+                    tb.get('free_time', '') or '',                  # 14. FREE TIME
+                    tb.get('warehouse', '') or '',                  # 15. WH
+                    status,                                         # 16. STATUS
+                    tb.get('customs', tb.get('customs_status', '')) or '',  # 17. CUSTOMS
+                    _fmt(tb_balance),                               # 18. Balance(Kg)
+                    _fmt(tonbag_inbound),                           # 19. Inbound(Kg)
+                    _fmt(tb_outbound) if tb_outbound > 0 else '0', # 20. Outbound(Kg)
+                )
+                
+                self.tree_sublot.insert('', 'end', values=vals, tags=tuple(tags))
+            
+            # 태그 색상 적용 (v5.6.1: 다크테마 가시성 수정)
+            _dk = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+            _text_color = '#1a1a1a' if not _dk else '#f0f0f0'
+            self.tree_sublot.tag_configure('available',
+                background=ThemeColors.get('available') if not _dk else '#1b3a2a', foreground=_text_color)
+            self.tree_sublot.tag_configure('picked',
+                background=ThemeColors.get('picked') if not _dk else '#3a1a1a', foreground=_text_color)
+            self.tree_sublot.tag_configure('reserved',
+                background=ThemeColors.get('reserved') if not _dk else '#3a3a1a', foreground=_text_color)
+            self.tree_sublot.tag_configure('shipped',
+                background=ThemeColors.get('shipped') if not _dk else '#1a2a3a', foreground=_text_color)
+            self.tree_sublot.tag_configure('depleted',
+                background='#f5f5f5' if not _dk else '#2a2a2a', foreground='#999999' if not _dk else '#666666')
+            self.tree_sublot.tag_configure('stripe',
+                background=ThemeColors.get('tree_stripe') if not _dk else '#2a2a2a', foreground=_text_color)
+            
+            # 요약 업데이트 (데이터 없을 때 안내 문구)
+            if total_count == 0:
+                self.lbl_sublot_summary.config(
+                    text="총: 0 | 가용: 0 | 출고: 0  (데이터 없음 — 입고▼ 메뉴에서 PDF 등록 후 표시됩니다)"
+                )
+            else:
+                self.lbl_sublot_summary.config(
+                    text=f"총: {total_count:,} | 가용: {available_count:,} | 출고: {picked_count:,}"
+                )
+            
+            # v4.2.2: 테이블 스타일 줄무늬 새로고침
+            try:
+                from ..utils.table_styler import TableStyler
+                TableStyler.refresh_striped_rows(self.tree_sublot)
+            except (ImportError, Exception) as e:
+                logger.debug(f"줄무늬 새로고침 실패: {e}")
+                # Fallback: 기존 방식
+                from ..utils.tree_enhancements import apply_striped_rows
+                _dk2 = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+                apply_striped_rows(self.tree_sublot, is_dark=_dk2)
+            
+            # v4.0.6: 필터 드롭다운 값 업데이트
+            self._update_tb_filter_values(tonbags)
+            
+            # v5.6.1: FooterTotalBar 제거
+            # self._update_tb_footer()
+            
+        except (RuntimeError, ValueError) as e:
+            logger.error(f"톤백 조회 오류: {e}", exc_info=True)
+            self._log(f"⚠️ 톤백 조회 오류: {e}")
+
+    # ═══════════════════════════════════════════════════════
+    # v4.0.6: 톤백 필터바 / 합계바 메서드
+    # ═══════════════════════════════════════════════════════
+    
+    def _update_tb_filter_values(self, tonbags) -> None:
+        """v5.5.2: 톤백 필터 드롭다운 값 업데이트 (단일 필터바 = 재고와 동일 컬럼)"""
+        if not hasattr(self, '_tonbag_filter_bar'):
+            return
+        try:
+            cols = {'lot_no': [], 'sap_no': [], 'bl_no': [], 'container_no': [],
+                    'product': [], 'tonbag_status': []}
+            for tb in tonbags:
+                for c in cols:
+                    val = str(tb.get(c, '') or '')
+                    if not val and c == 'tonbag_status':
+                        val = str(tb.get('status', '') or '')
+                    if val:
+                        cols[c].append(val)
+            for c, vals in cols.items():
+                self._tonbag_filter_bar.update_filter_values(c, vals)
+        except (ValueError, TypeError) as e:
+            logger.debug(f"톤백 필터 값 오류: {e}")
+    
+    def _update_tb_footer(self) -> None:
+        """v4.0.6: 톤백 하단 합계 바"""
+        if not hasattr(self, '_tb_footer'):
+            return
+        try:
+            net_total = 0.0
+            balance_total = 0.0
+            rows = 0
+            for item_id in self.tree_sublot.get_children(''):
+                vals = self.tree_sublot.item(item_id, 'values')
+                rows += 1
+                # NET(Kg) = index 9, Balance(Kg) = index 17 (톤백 20열 기준)
+                try:
+                    net_total += float(str(vals[9]).replace(',', ''))
+                except (ValueError, TypeError, IndexError) as _e:
+                    logger.debug(f"Suppressed: {_e}")
+                try:
+                    balance_total += float(str(vals[17]).replace(',', ''))
+                except (ValueError, TypeError, IndexError) as _e:
+                    logger.debug(f"Suppressed: {_e}")
+            self._tb_footer.update({
+                'rows': rows, 'net_kg': net_total, 'balance_kg': balance_total,
+            })
+        except (ValueError, TypeError) as e:
+            logger.debug(f"톤백 footer 오류: {e}")
+    
+    def _on_tonbag_double_click(self, event) -> None:
+        """톤백 더블클릭 - 수동 출고"""
+        selection = self.tree_sublot.selection()
+        if not selection:
+            return
+        
+        item = self.tree_sublot.item(selection[0])
+        values = item['values']
+        
+        if len(values) >= 16:
+            lot_no = values[1]   # LOT NO (col 2, index 1)
+            sub_lt = values[2]   # TONBAG NO (col 3, index 2)
+            status = values[15]  # v5.6.3: STATUS (col 16, index 15) — MXBG 제거로 -1
+            
+            if status == 'AVAILABLE':
+                self._show_manual_outbound_dialog(lot_no, sub_lt)
+            else:
+                CustomMessageBox.showinfo(self.root, "알림", f"이 톤백은 현재 {status} 상태입니다.")
+    
+    def _show_manual_outbound_dialog(self, lot_no: str, sub_lt: str) -> None:
+        """수동 출고 다이얼로그"""
+        from ..utils.constants import tk, ttk
+        from ..utils.ui_constants import (
+            DialogSize, Spacing, FontScale, center_dialog
+        )
+        
+        # === UI 통일성: 폰트 스케일 ===
+        try:
+            dpi = self.root.winfo_fpixels('1i')
+        except (ImportError, ModuleNotFoundError):
+            dpi = 96
+        fonts = FontScale(dpi)
+        
+        # === UI 통일성: 다이얼로그 크기 표준화 (small) ===
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"수동 출고 - {lot_no}/{sub_lt}")
+        
+        width, height = DialogSize.calculate(self.root, 'small')
+        dialog.geometry(f"{width}x{height}")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # === UI 통일성: 간격 표준화 ===
+        # 정보 표시
+        info_frame = ttk.Frame(dialog, padding=Spacing.MD)
+        info_frame.pack(fill='x')
+        
+        ttk.Label(info_frame, text=f"LOT NO: {lot_no}", font=fonts.body()).pack(anchor='w')
+        ttk.Label(info_frame, text=f"Sub LT: {sub_lt}", font=fonts.body()).pack(anchor='w')
+        
+        # 출고처 입력
+        dest_frame = ttk.Frame(dialog, padding=(Spacing.MD, 0, Spacing.MD, Spacing.SM))
+        dest_frame.pack(fill='x')
+        
+        ttk.Label(dest_frame, text="출고처:", font=fonts.body()).pack(side='left')
+        dest_var = tk.StringVar()
+        dest_entry = ttk.Entry(dest_frame, textvariable=dest_var, width=30)
+        dest_entry.pack(side='left', padx=Spacing.SM)
+        dest_entry.focus()
+        
+        # 버튼
+        btn_frame = ttk.Frame(dialog, padding=Spacing.MD)
+        btn_frame.pack(fill='x')
+        
+        def do_outbound():
+            destination = dest_var.get().strip()
+            if not destination:
+                CustomMessageBox.showwarning(self.root, "경고", "출고처를 입력하세요.")
+                return
+            
+            try:
+                result = self.engine.pick_tonbag(lot_no, sub_lt, destination)
+                if result.get('success'):
+                    CustomMessageBox.showinfo(self.root, "완료", f"출고 처리 완료\n\n{lot_no}/{sub_lt} → {destination}")
+                    dialog.destroy()
+                    self._refresh_tonbag()
+                    self._refresh_inventory()
+                else:
+                    CustomMessageBox.showerror(self.root, "오류", result.get('message', '출고 처리 실패'))
+            except (RuntimeError, ValueError) as e:
+                CustomMessageBox.showerror(self.root, "오류", f"출고 처리 오류: {e}")
+        
+        ttk.Button(btn_frame, text="출고 처리", command=do_outbound, width=12).pack(side='left', padx=Spacing.XS)
+        ttk.Button(btn_frame, text="취소", command=dialog.destroy, width=12).pack(side='left', padx=Spacing.XS)
+        
+        # === UI 통일성: 중앙 배치 ===
+        center_dialog(dialog, self.root)
+        
+        # Enter 키 바인딩, ESC로 닫기
+        dialog.bind('<Return>', lambda e: do_outbound())
+        dialog.bind('<Escape>', lambda e: dialog.destroy())
+
+    def _on_tonbag_cancel_outbound(self) -> None:
+        """v3.8.4: 선택한 톤백 출고 취소 (inventory 복구 포함)"""
+        from ..utils.custom_messagebox import CustomMessageBox
+        
+        selection = self.tree_sublot.selection()
+        if not selection:
+            CustomMessageBox.showwarning(self.root, "선택 필요", "출고 취소할 톤백을 선택하세요.")
+            return
+        
+        # PICKED 상태만 필터
+        cancel_items = []
+        for item_id in selection:
+            values = self.tree_sublot.item(item_id)['values']
+            if len(values) >= 16:
+                status = str(values[15]).strip()  # STATUS (index 15)
+                if status == 'PICKED':
+                    # v5.6.3: TONBAG NO = index 2 (MXBG 제거 후); S00 → 0
+                    raw = str(values[2]).strip().upper()
+                    try:
+                        sub_lt = 0 if raw == 'S00' else int(values[2])
+                    except (ValueError, TypeError):
+                        sub_lt = 0 if raw == 'S00' else 0
+                    cancel_items.append({
+                        'lot_no': str(values[1]),
+                        'sub_lt': sub_lt,
+                    })
+        
+        if not cancel_items:
+            CustomMessageBox.showwarning(self.root, "대상 없음", 
+                "선택한 항목 중 PICKED 상태인 톤백이 없습니다.")
+            return
+        
+        if not CustomMessageBox.askyesno(self.root, "출고 취소 확인",
+            f"{len(cancel_items)}건의 출고를 취소하시겠습니까?\n\n"
+            f"톤백 상태: PICKED → AVAILABLE\n"
+            f"LOT 잔량이 자동 복구됩니다."):
+            return
+        
+        try:
+            if hasattr(self.engine, 'cancel_outbound_bulk'):
+                result = self.engine.cancel_outbound_bulk(cancel_items)
+            else:
+                # Fallback: 개별 처리
+                result = {'success': True, 'cancelled': 0, 'errors': []}
+                for item in cancel_items:
+                    r = self.engine.cancel_outbound_tonbag(item['lot_no'], item['sub_lt'])
+                    if r.get('success'):
+                        result['cancelled'] += 1
+                    else:
+                        result['errors'].extend(r.get('errors', []))
+                result['success'] = result['cancelled'] > 0
+            
+            if result.get('success'):
+                self._log(f"✅ 출고 취소 완료: {result['cancelled']}건")
+                CustomMessageBox.showinfo(self.root, "완료", 
+                    f"출고 취소 완료: {result['cancelled']}건\n재고가 복구되었습니다.")
+                self._refresh_tonbag()
+                if hasattr(self, '_refresh_inventory'):
+                    self._refresh_inventory()
+            else:
+                errs = '\n'.join(result.get('errors', ['알 수 없는 오류']))
+                CustomMessageBox.showerror(self.root, "오류", f"출고 취소 실패:\n{errs}")
+                
+        except (RuntimeError, ValueError) as e:
+            logger.error(f"출고 취소 오류: {e}")
+            CustomMessageBox.showerror(self.root, "오류", f"출고 취소 오류:\n{e}")
+
+    def _on_tonbag_copy_uid(self) -> None:
+        """v4.2.0: 선택한 톤백의 UID를 클립보드에 복사"""
+        from ..utils.custom_messagebox import CustomMessageBox
+        
+        selection = self.tree_sublot.selection()
+        if not selection:
+            CustomMessageBox.showwarning(self.root, "선택 필요", "복사할 톤백을 선택하세요.")
+            return
+        
+        # UID 수집 (tonbag_uid는 4번째 컬럼, 0-based index 3)
+        uid_list = []
+        for item_id in selection:
+            values = self.tree_sublot.item(item_id)['values']
+            if len(values) > 3:
+                uid = str(values[3]).strip()  # tonbag_uid (index 3)
+                if uid and uid != '':
+                    uid_list.append(uid)
+        
+        if not uid_list:
+            CustomMessageBox.showwarning(self.root, "UID 없음", 
+                "선택한 톤백에 UID가 없습니다.\n(마이그레이션 필요)")
+            return
+        
+        # 클립보드에 복사 (줄바꿈으로 구분)
+        clipboard_text = '\n'.join(uid_list)
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(clipboard_text)
+            self.root.update()  # 클립보드 즉시 반영
+            
+            self._log(f"📋 UID 복사 완료: {len(uid_list)}개")
+            CustomMessageBox.showinfo(self.root, "복사 완료", 
+                f"{len(uid_list)}개의 UID가 클립보드에 복사되었습니다.\n\n"
+                f"Excel에 Ctrl+V로 붙여넣으세요.")
+        except (ValueError, TypeError, KeyError, AttributeError) as e:
+            logger.error(f"클립보드 복사 오류: {e}")
+            CustomMessageBox.showerror(self.root, "오류", f"클립보드 복사 실패:\n{e}")
+
+    def _on_tonbag_selection_changed(self, event=None) -> None:
+        """v4.2.0: 톤백 선택 변경 시 버튼 활성화/비활성화 (UID 복사 포함)"""
+        selection = self.tree_sublot.selection()
+        has_selection = len(selection) > 0
+        
+        # 일괄 출고 버튼
+        if hasattr(self, 'btn_tonbag_batch_outbound'):
+            self.btn_tonbag_batch_outbound.config(state='normal' if has_selection else 'disabled')
+        
+        # 출고 취소 버튼
+        if hasattr(self, 'btn_tonbag_cancel_outbound'):
+            self.btn_tonbag_cancel_outbound.config(state='normal' if has_selection else 'disabled')
+        
+        # 라벨 출력 버튼
+        if hasattr(self, 'btn_tonbag_label'):
+            self.btn_tonbag_label.config(state='normal' if has_selection else 'disabled')
+        
+        # v4.2.0: UID 복사 버튼
+        if hasattr(self, 'btn_tonbag_copy_uid'):
+            self.btn_tonbag_copy_uid.config(state='normal' if has_selection else 'disabled')
+        
+        # 선택 정보 업데이트
+        if has_selection and hasattr(self, 'lbl_tonbag_selection'):
+            total_weight = 0
+            for item_id in selection:
+                values = self.tree_sublot.item(item_id)['values']
+                try:
+                    # v5.6.3: NET(Kg) = index 9 (MXBG 제거 후 20열 기준)
+                    w = float(str(values[9]).replace(',', '')) if len(values) > 9 else 0
+                    total_weight += w
+                except (ValueError, IndexError) as _e:
+                    logger.debug(f"tonbag_tab: {_e}")
+            self.lbl_tonbag_selection.config(
+                text=f"선택: {len(selection)}개 | 합계: {total_weight:,.0f} kg")
+        elif hasattr(self, 'lbl_tonbag_selection'):
+            self.lbl_tonbag_selection.config(text="선택: 0개 | 합계: 0 kg")
+    
+    def _on_tonbag_location_upload(self) -> None:
+        """v4.2.3: 톤백 위치 업로드 (바코드 스캔 Excel)"""
+        try:
+            from ..dialogs.tonbag_location_upload import show_tonbag_location_upload_dialog
+            
+            # 다이얼로그 표시 (완료 후 톤백 탭 새로고침)
+            show_tonbag_location_upload_dialog(
+                parent=self.root,
+                engine=self.engine,
+                callback=self._refresh_tonbag
+            )
+            
+        except (ValueError, TypeError, KeyError, AttributeError) as e:
+            logger.error(f"위치 업로드 다이얼로그 표시 실패: {e}")
+            from ..utils.custom_messagebox import CustomMessageBox
+            CustomMessageBox.showerror(self.root, "오류", f"위치 업로드 실패:\n{e}")

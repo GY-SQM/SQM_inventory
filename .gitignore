@@ -1,0 +1,52 @@
+# SQM Inventory Management - .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+venv/
+.venv/
+
+# Database (런타임 생성)
+data/db/*.db
+data/db/*.db-journal
+data/db/*.db-wal
+data/db/*.db-shm
+data/db/backups/
+
+# Logs
+logs/*.log
+logs/*.log.*
+
+# Output (런타임 생성)
+output/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Archive (데드 코드 — 필요 시 포함)
+# _archive/
+
+# Docs build
+docs/build/
+
+# Settings (API 키 포함 가능)
+settings.ini

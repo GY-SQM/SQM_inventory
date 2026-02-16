@@ -1,0 +1,55 @@
+{
+  "recent": [
+    {
+      "query": "잔량 50% 이하",
+      "sql": "\n            SELECT \n                (SELECT COUNT(*) FROM inventory) as total_lots,\n                (SELECT SUM(current_weight)/1000 FROM inventory) as total_mt,\n                (SELECT COUNT(*) FROM inventory_tonbag WHERE status='AVAILABLE') as avail_sublots\n        ",
+      "result_count": 1,
+      "timestamp": "2026-01-17T22:03:17.475615",
+      "use_count": 1
+    },
+    {
+      "query": "SAP 2200001 상세",
+      "sql": "SELECT * FROM inventory WHERE sap_no = '2200001'",
+      "result_count": 74,
+      "timestamp": "2026-01-17T22:03:17.470257",
+      "use_count": 1
+    },
+    {
+      "query": "전체 재고 현황",
+      "sql": "\n                SELECT product, COUNT(*) as lot_count, \n                       SUM(current_weight)/1000 as current_mt\n                FROM inventory GROUP BY product ORDER BY current_mt DESC\n            ",
+      "result_count": 5,
+      "timestamp": "2026-01-17T22:03:17.466622",
+      "use_count": 1
+    },
+    {
+      "query": "LITHIUM CARBONATE 재고",
+      "sql": "\n                    SELECT lot_no, sap_no, bl_no, \n                           current_weight/1000 as current_mt, status\n                    FROM inventory \n                    WHERE product = 'LITHIUM CARBONATE'\n                    AND current_weight > 0\n                    ORDER BY arrival_date DESC\n                ",
+      "result_count": 123,
+      "timestamp": "2026-01-17T22:03:17.462486",
+      "use_count": 1
+    },
+    {
+      "query": "출고 현황",
+      "sql": "\n                SELECT lot_no, sub_lt, weight/1000 as mt, \n                       outbound_date, status\n                FROM inventory_tonbag \n                WHERE status = 'PICKED'\n                ORDER BY outbound_date DESC LIMIT 100\n            ",
+      "result_count": 100,
+      "timestamp": "2026-01-17T22:03:17.453746",
+      "use_count": 1
+    },
+    {
+      "query": "월별 입고 통계",
+      "sql": "\n                SELECT strftime('%Y-%m', arrival_date) as month,\n                       COUNT(*) as lot_count,\n                       SUM(initial_weight)/1000 as inbound_mt,\n                       SUM(current_weight)/1000 as current_mt\n                FROM inventory GROUP BY month ORDER BY month\n            ",
+      "result_count": 10,
+      "timestamp": "2026-01-17T22:03:17.442010",
+      "use_count": 1
+    }
+  ],
+  "counts": {
+    "전체 재고 현황": 3,
+    "lithium carbonate 재고": 2,
+    "월별 입고 통계": 1,
+    "출고 현황": 1,
+    "sap 2200001 상세": 1,
+    "잔량 50% 이하": 1
+  },
+  "updated_at": "2026-01-17T22:03:17.475639"
+}

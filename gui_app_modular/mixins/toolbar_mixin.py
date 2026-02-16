@@ -1,0 +1,1130 @@
+# -*- coding: utf-8 -*-
+from ..utils.custom_messagebox import CustomMessageBox
+"""
+SQM v3.8.4 — 통합 메뉴바
+=========================
+순서: [입고▼] [출고▼] [보고서▼] [🔍검색] │ [파일▼] [설정/도구▼] [도움말▼]
+      ← 업무 메뉴 (좌측) →              │  ← 시스템 메뉴 (우측) →
++ 탭 전환 버튼 (균등 배치)
++ 자동 2줄 전환
+"""
+import sqlite3
+import logging
+import tkinter as tk
+from tkinter import ttk
+from ..utils.ui_constants import ThemeColors
+from utils.ui_debug import log_ui_event, safe_widget_bg  # v5.3.6
+
+logger = logging.getLogger(__name__)
+
+FONT_CANDIDATES = ['NanumSquare', 'NanumSquareRound', '나눔스퀘어', 'Malgun Gothic', '맑은 고딕']
+
+
+def _pick_font(root) -> str:
+    import tkinter.font as tkfont
+    available = tkfont.families()
+    for f in FONT_CANDIDATES:
+        if f in available:
+            return f
+    return '맑은 고딕'
+
+
+class ToolbarMixin:
+    """v3.8.4: 통합 메뉴바 (ThemeColors 통일)"""
+
+    # v5.5.3 patch_01: UI_COLORS 삭제 → style.colors 사용
+
+    def _load_toolbar_colors(self) -> None:
+        """v5.5.3 patch_01: style.colors 기반 단순화 — 모든 테마 자동 대응"""
+        try:
+            import ttkbootstrap as ttk_bs
+            sc = ttk_bs.Style().colors
+            # 툴바 배경: 다크 고정 (테마 무관하게 상단바는 항상 다크)
+            self._tb_bg = '#2c2c2c'
+            self._tb_sep = '#444444'
+            # 텍스트: 비활성=회색, 활성=흰색
+            self._tb_fg_normal = '#999999'
+            self._tb_fg_active = '#ffffff'
+            self._tb_fg_hover = '#cccccc'
+            # 호버 배경: 살짝 밝게
+            self._tb_hover_bg = '#3a3a3a'
+            # 밑줄 색상: 테마의 info 색상 자동 사용
+            self._tb_underline_color = str(sc.info)
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+            self._tb_bg = '#2c2c2c'
+            self._tb_sep = '#444444'
+            self._tb_fg_normal = '#999999'
+            self._tb_fg_active = '#ffffff'
+            self._tb_fg_hover = '#cccccc'
+            self._tb_hover_bg = '#3a3a3a'
+            self._tb_underline_color = '#3498db'
+
+    def _setup_toolbar(self) -> None:
+        self._toolbar_font = _pick_font(self.root)
+        logger.info(f"[v3.8.4] 폰트: {self._toolbar_font}")
+
+        # ThemeColors에서 동적 로드
+        self._load_toolbar_colors()
+
+        # 컨테이너 서픽스 변수 초기화
+        self._container_suffix_var = tk.BooleanVar(value=True)
+
+        self._toolbar_container = tk.Frame(self.root)
+        self._toolbar_container.pack(fill='x')
+
+        # Row1: 메뉴 버튼
+        self._row1 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=5)
+        self._row1.pack(fill='x')
+        
+        # v4.0.0: 오른쪽 버전 배지 (큰 글자)
+        try:
+            from version import __version__, APP_NAME
+            ver_frame = tk.Frame(self._row1, bg=self._tb_bg)
+            ver_frame.pack(side='right', padx=15)
+            tk.Label(ver_frame, text=f"📦 {APP_NAME}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_progress'),
+                     font=('맑은 고딕', 13, 'bold')).pack(side='left')
+            tk.Label(ver_frame, text=f"  v{__version__}", bg=self._tb_bg, fg='#e67e22',
+                     font=('맑은 고딕', 14, 'bold')).pack(side='left')
+        except (ImportError, ModuleNotFoundError) as _e:
+            logger.debug(f'Suppressed: {_e}')
+        # Row2: 탭 버튼 (v3.8.9: 항상 표시)
+        self._row2 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=3)
+        self._row2.pack(fill='x')
+        self._row2_visible = True
+
+        # v3.8.9: 메뉴 버튼 — 왼쪽 정렬, 최대 너비 제한
+        self._menu_frame = tk.Frame(self._row1, bg=self._tb_bg)
+        self._menu_frame.pack(side='left', fill='x')
+
+        # === 7개 메뉴 버튼 (균등) ===
+        self._all_menu_btns = []
+        self._all_dropdown_menus = []  # v5.4.1: theme refresh 대상 tk.Menu들
+        self._build_all_menus()
+
+        # 구분선
+        self._sep_line = tk.Frame(self._row2, bg=self._tb_sep, height=1)
+        self._sep_line.pack(fill='x', padx=10, pady=(0, 3))
+
+        # === 탭 전환 (Row2에 고정, 왼쪽 정렬) ===
+        self._sec_tabs = tk.Frame(self._row2, bg=self._tb_bg)
+        self._sec_tabs.pack(side='left', padx=6)
+        self._build_tab_buttons()
+
+        # v3.8.9: overflow 체크 비활성화 (탭은 항상 row2에 고정)
+        # self.root.bind('<Configure>', self._check_toolbar_overflow)
+        self._tab_index_map = {'inventory': 0, 'tonbag': 1, 'dashboard': 2, 'log': 3}
+        self._active_tab_key = 'inventory'
+
+    # ═══════════════════════════════════════════════════════
+    # 메뉴 생성 헬퍼 (v3.8.4: 항목 간격 확대)
+    # ═══════════════════════════════════════════════════════
+
+    def _create_menu(self, parent=None) -> 'tk.Menu':
+        """간격 넓은 팝업 메뉴 생성 (v3.8.4)"""
+        # v5.4.1: 드롭다운 메뉴 색상(라이트/다크) 강제 고정 — Windows tk_popup 리셋 방지
+        is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        menu_bg = ThemeColors.get('bg_card', is_dark)
+        menu_fg = ThemeColors.get('text_primary', is_dark)
+        menu_abg = ThemeColors.get('bg_hover', is_dark)
+        menu_afg = ThemeColors.get('text_primary', is_dark)
+        menu_dis = ThemeColors.get('text_muted', is_dark)
+        f = self._toolbar_font
+        p = parent or self.root
+        m = tk.Menu(p, tearoff=0, font=(f, 17),
+                    activeborderwidth=3,
+                    borderwidth=3,
+                    relief='flat',
+                    background=menu_bg, foreground=menu_fg,
+                    activebackground=menu_abg, activeforeground=menu_afg,
+                    disabledforeground=menu_dis)
+        # v5.4.1: 일부 Windows/Tk 조합에서 초기 옵션이 덮이는 케이스 대비
+        try:
+            m.config(bg=menu_bg, fg=menu_fg, activebackground=menu_abg, activeforeground=menu_afg,
+                     disabledforeground=menu_dis)
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+            logger.debug(f"Suppressed: {_e}")
+        return m
+
+    def _add_menu_item(self, menu, label: str, command, icon_pad: bool = True) -> None:
+        """여백 포함 메뉴 항목 추가 (위아래 간격 확보)"""
+        # label 앞뒤에 공백 추가하여 간격 확보
+        padded = f"  {label}  " if not label.startswith('  ') else f"{label}  "
+        menu.add_command(label=padded, command=command)
+
+    # ═══════════════════════════════════════════════════════
+    # 7개 메뉴 버튼 (균등 배치)
+    # ═══════════════════════════════════════════════════════
+
+    def _build_all_menus(self) -> None:
+        """v5.5.3 patch_02: 6개 드롭다운 메뉴 + 검색 Outline 버튼 분리"""
+        f = self._toolbar_font
+
+        # ── 6개 드롭다운 메뉴 (동일 스타일) ──
+        menus = [
+            ('📁 파일 ▼',      self._build_file_menu),
+            ('📥 입고 ▼',      self._build_inbound_menu),
+            ('📤 출고 ▼',      self._build_outbound_menu),
+            ('📊 재고 ▼',      self._build_report_menu),
+            ('📝 보고서 ▼',    self._build_customer_report_menu),
+            ('🔧 설정/도구 ▼', self._build_settings_menu),
+            ('❓ 도움말 ▼',    self._build_help_menu),
+        ]
+
+        for text, builder in menus:
+            btn = tk.Label(self._menu_frame, text=text,
+                          font=(f, 11, 'bold'),
+                          bg=self._tb_bg, fg=self._tb_fg_normal,
+                          anchor='center', justify='center',
+                          padx=9, pady=6, cursor='hand2')
+            btn.pack(side='left', padx=2)
+
+            # 밑줄 인디케이터 (숨긴 상태로 생성)
+            underline = tk.Frame(btn, height=2, bg=self._tb_underline_color)
+            btn._underline = underline
+            btn._menu_active = False
+
+            menu = builder()
+            try:
+                self._all_dropdown_menus.append(menu)
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                logger.debug(f"Suppressed: {_e}")
+            btn.bind('<Button-1>', lambda e, m=menu, b=btn: self._show_menu(m, b))
+
+            def make_enter(button):
+                def on_enter(e):
+                    if not button._menu_active:
+                        button.config(fg=self._tb_fg_hover)
+                return on_enter
+
+            def make_leave(button):
+                def on_leave(e):
+                    if not button._menu_active:
+                        button.config(fg=self._tb_fg_normal)
+                return on_leave
+
+            btn.bind('<Enter>', make_enter(btn))
+            btn.bind('<Leave>', make_leave(btn))
+            self._all_menu_btns.append(btn)
+
+        # ── 검색 버튼: Outline 스타일 (오른쪽 독립 배치) ──
+        self._build_search_button()
+
+    def _build_search_button(self) -> None:
+        """v5.5.3 patch_02: 검색 — Outline 버튼 (드롭다운 메뉴가 아님을 시각적으로 구분)
+        
+        ttkbootstrap의 bootstyle='outline-info'를 사용하면:
+          - 테두리 + 텍스트만 info 색상
+          - 배경은 투명
+          - 호버 시 배경이 info 색상으로 채워짐
+          - 테마 변경 시 자동 대응
+        """
+        f = self._toolbar_font
+
+        try:
+            import ttkbootstrap as ttk_bs
+            # ttkbootstrap Outline 버튼 (테마 자동 대응)
+            self._search_btn = ttk_bs.Button(
+                self._menu_frame,
+                text='🔍 검색',
+                bootstyle='outline-info',
+                command=self._show_search_popup,
+                padding=(12, 4),
+            )
+            # 폰트 크기 적용
+            try:
+                self._search_btn.configure(
+                    style=self._create_search_btn_style(f)
+                )
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                logger.debug(f"Suppressed: {_e}")
+        except (ImportError, Exception):
+            # ttkbootstrap 없으면 tk.Label + relief='solid' 폴백
+            self._search_btn = tk.Label(
+                self._menu_frame, text='🔍 검색',
+                font=(f, 13, 'bold'),
+                bg=self._tb_bg, fg=self._tb_underline_color,
+                anchor='center', justify='center',
+                padx=12, pady=4, cursor='hand2',
+                relief='solid', borderwidth=1,
+                highlightbackground=self._tb_underline_color,
+            )
+            self._search_btn.bind('<Button-1>', lambda e: self._show_search_popup())
+
+            def _search_enter(e):
+                self._search_btn.config(bg=self._tb_underline_color, fg='white')
+            def _search_leave(e):
+                self._search_btn.config(bg=self._tb_bg, fg=self._tb_underline_color)
+            self._search_btn.bind('<Enter>', _search_enter)
+            self._search_btn.bind('<Leave>', _search_leave)
+
+        self._search_btn.pack(side='right', padx=(10, 8))
+
+    def _create_search_btn_style(self, font_family: str) -> str:
+        """검색 버튼 전용 스타일 (폰트 크기 조정)"""
+        import ttkbootstrap as ttk_bs
+        style = ttk_bs.Style()
+        style_name = 'Search.TButton'
+        try:
+            style.configure(style_name, font=(font_family, 13, 'bold'))
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+            logger.debug(f"Suppressed: {_e}")
+        return style_name
+
+    def _build_inbound_menu(self) -> 'tk.Menu':
+        f = self._toolbar_font
+        m = self._create_menu()
+        items = [
+            ('📥 PDF 입고 (원스톱)',    lambda: self._safe_call('_on_pdf_inbound')),
+            ('📝 Excel 입고',          lambda: self._safe_call('_bulk_import_inventory_simple')),
+            None,
+            ('📦 톤백 위치 매핑',      lambda: self._safe_call('_import_location_excel')),
+            ('📋 입고현황 불러오기',    lambda: self._safe_call('_bulk_import_inventory')),
+            ('📥 샘플 Excel 다운로드', lambda: self._safe_call('_download_inbound_template')),
+            None,
+            ('🔄 반품 (재입고)',       lambda: self._safe_call('_show_return_dialog')),
+        ]
+        for item in items:
+            if item is None:
+                m.add_separator()
+            else:
+                m.add_command(label=f"  {item[0]}", command=item[1])
+        return m
+
+    def _build_outbound_menu(self) -> 'tk.Menu':
+        f = self._toolbar_font
+        m = self._create_menu()
+        items = [
+            ('📤 빠른 출고',                    lambda: self._safe_call('_on_simple_outbound')),
+            ('📤 심플 엑셀 출고',               lambda: self._safe_call('_on_simple_excel_outbound')),
+            ('📋 출고 Allocation Table',        lambda: self._safe_call('_on_outbound_click')),
+            ('📥 Allocation Table 샘플 다운로드', lambda: self._safe_call('_download_outbound_template')),
+            ('🎲 가상 Allocation Table 생성',   lambda: self._safe_call('_generate_virtual_allocation')),
+            None,
+            ('📋 출고 결과',                     lambda: self._safe_call('_import_outbound_excel')),
+            # v4.0.3: 반품은 입고 메뉴로 이동
+        ]
+        for item in items:
+            if item is None:
+                m.add_separator()
+            else:
+                m.add_command(label=f"  {item[0]}", command=item[1])
+        return m
+
+    def _build_report_menu(self) -> 'tk.Menu':
+        f = self._toolbar_font
+        m = self._create_menu()
+        # v5.0.2: 메뉴 간소화 - 핵심 2개만
+        items = [
+            ('📊 재고리스트 Excel',  lambda: self._on_export_click(option=3)),
+            ('🎒 톤백리스트 Excel',  lambda: self._on_export_click(option=4)),
+            None,
+            ('📋 입출고 이력 조회', lambda: self._safe_call('_show_outbound_history')),
+            ('📊 재고 추이 차트', lambda: self._safe_call('_show_snapshot_chart')),
+            ('📄 거래명세서 생성', lambda: self._safe_call('_generate_outbound_invoice')),
+        ]
+        for item in items:
+            if item is None:
+                m.add_separator()
+            else:
+                m.add_command(label=f"  {item[0]}", command=item[1])
+        return m
+
+    def _build_customer_report_menu(self) -> 'tk.Menu':
+        """v5.5.3: 고객 보고서 메뉴 (양식은 추후 업로드 예정)"""
+        f = self._toolbar_font
+        m = self._create_menu()
+        m.add_command(
+            label="  📝 고객 보고서 생성",
+            command=lambda: self._safe_call('_generate_customer_report')
+        )
+        m.add_command(
+            label="  📂 보고서 양식 관리",
+            command=lambda: self._safe_call('_manage_report_templates')
+        )
+        m.add_separator()
+        m.add_command(
+            label="  📋 보고서 이력 조회",
+            command=lambda: self._safe_call('_show_report_history')
+        )
+        return m
+
+    def _build_file_menu(self) -> 'tk.Menu':
+        f = self._toolbar_font
+        m = self._create_menu()
+        exp = self._create_menu(m)
+        exp.add_command(label="  📋 통관요청 양식", command=lambda: self._on_export_click(option=1))
+        exp.add_command(label="  📊 루비리 양식", command=lambda: self._on_export_click(option=2))
+        exp.add_command(label="  🎒 톤백 현황", command=lambda: self._on_export_click(option=4))
+        exp.add_command(label="  ⭐ 통합 현황", command=lambda: self._on_export_click(option=6))
+        m.add_cascade(label="  💾 내보내기", menu=exp)
+        m.add_separator()
+        bak = self._create_menu(m)
+        bak.add_command(label="  💾 백업 생성", command=lambda: self._on_backup('create'))
+        bak.add_command(label="  🔄 복원", command=lambda: self._on_backup('restore'))
+        bak.add_command(label="  📋 백업 목록", command=lambda: self._on_backup('list'))
+        bak.add_command(label="  ⏰ 자동 백업 설정", command=lambda: self._safe_call('_show_auto_backup_settings'))
+        m.add_cascade(label="  🔐 백업", menu=bak)
+        m.add_separator()
+        # v5.5.3: Gemini API (설정/도구에서 이동)
+        try:
+            from ..utils.constants import HAS_GEMINI
+            if HAS_GEMINI:
+                if not hasattr(self, '_gemini_var'):
+                    self._gemini_var = tk.BooleanVar(value=getattr(self, 'use_gemini', False))
+                api_sub = self._create_menu(m)
+                api_sub.add_checkbutton(
+                    label="  API 사용",
+                    variable=self._gemini_var,
+                    command=lambda: self._safe_call('_toggle_gemini')
+                )
+                api_sub.add_separator()
+                api_sub.add_command(label="  💬 AI 채팅", command=lambda: self._safe_call('_open_ai_chat'))
+                api_sub.add_command(label="  ⚙️ API 설정", command=lambda: self._safe_call('_show_api_settings'))
+                api_sub.add_command(label="  🔬 API 테스트", command=lambda: self._safe_call('_test_gemini_api_connection'))
+                m.add_cascade(label="  🤖 Gemini (API)", menu=api_sub)
+            else:
+                api_sub = self._create_menu(m)
+                api_sub.add_command(label="  ⚙️ API 설정", command=lambda: self._safe_call('_show_api_settings'))
+                api_sub.add_command(label="  🔬 API 테스트", command=lambda: self._safe_call('_test_gemini_api_connection'))
+                m.add_cascade(label="  🤖 Gemini (API)", menu=api_sub)
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+            logger.debug(f"toolbar_mixin: Gemini 메뉴 추가 스킵: {_e}")
+        # v5.5.3: PDF 변환 (설정/도구에서 이동)
+        pdf_sub = self._create_menu(m)
+        pdf_sub.add_command(label="  → Excel", command=lambda: self._safe_call('_convert_pdf_to_excel'))
+        pdf_sub.add_command(label="  → Word", command=lambda: self._safe_call('_convert_pdf_to_word'))
+        pdf_sub.add_separator()
+        pdf_sub.add_command(label="  📁 일괄 변환", command=lambda: self._safe_call('_batch_convert_pdf_excel'))
+        pdf_sub.add_command(label="  🔍 PDF 분석", command=lambda: self._safe_call('_analyze_pdf'))
+        m.add_cascade(label="  📄 PDF 변환", menu=pdf_sub)
+        m.add_separator()
+        m.add_command(label="  ❌ 종료", command=self.root.quit)
+        return m
+
+    def _build_settings_menu(self) -> 'tk.Menu':
+        f = self._toolbar_font
+        m = self._create_menu()
+        # 화면
+        m.add_command(label="━━ 🖥️ 화면 ━━", state='disabled', font=(f, 14, 'bold'))
+        m.add_command(label="  🔄 새로고침 (F5)", command=self._refresh_all_data)
+        # 테마
+        theme = self._create_menu(m)
+        theme.add_command(label="━━ ☀️ Light ━━", state='disabled', font=(f, 14, 'bold'))
+        for t in ['flatly', 'cosmo', 'litera', 'minty', 'journal', 'yeti', 'morph']:
+            theme.add_command(label=f"  ☀️ {t.capitalize()}", command=lambda th=t: self._change_theme(th))
+        theme.add_separator()
+        theme.add_command(label="━━ 🌙 Dark ━━", state='disabled', font=(f, 14, 'bold'))
+        for t in ['darkly', 'cyborg', 'superhero', 'solar', 'vapor']:
+            theme.add_command(label=f"  🌙 {t.capitalize()}", command=lambda th=t: self._change_theme(th))
+        m.add_cascade(label="  🎨 테마 선택", menu=theme)
+        # 글꼴 크기
+        fsize = self._create_menu(m)
+        fsize.add_command(label="  작게 (11pt)", command=lambda: self._change_font_size(11))
+        fsize.add_command(label="  보통 (13pt)", command=lambda: self._change_font_size(13))
+        fsize.add_command(label="  크게 (16pt)", command=lambda: self._change_font_size(16))
+        m.add_cascade(label="  🔤 글꼴 크기", menu=fsize)
+        m.add_separator()
+        # 도구
+        m.add_command(label="━━ 🔧 도구 ━━", state='disabled', font=(f, 14, 'bold'))
+        # 컨테이너 서픽스 옵션
+        m.add_checkbutton(
+            label="  📦 컨테이너 구분 (-1, -2 표시)",
+            variable=self._container_suffix_var,
+            command=self._on_container_suffix_toggle
+        )
+        # v3.8.4: 대시보드 자동 갱신
+        if not hasattr(self, '_auto_refresh_var'):
+            self._auto_refresh_var = tk.BooleanVar(value=False)
+        m.add_checkbutton(
+            label="  🔄 대시보드 자동 갱신 (30초)",
+            variable=self._auto_refresh_var,
+            command=self._on_auto_refresh_toggle
+        )
+        # v3.8.4: 정합성 검사
+        m.add_command(
+            label="  🔍 정합성 검사/복구",
+            command=self._on_integrity_check
+        )
+        # v5.5.3: Gemini API → 📁 파일 메뉴로 이동
+        m.add_separator()
+        # v5.5.3: PDF 변환 → 📁 파일 메뉴로 이동
+        m.add_command(label="  🩺 데이터 정합성 검사", command=lambda: self._safe_call('_run_integrity_check'))
+        return m
+
+    def _build_help_menu(self) -> 'tk.Menu':
+        f = self._toolbar_font
+        m = self._create_menu()
+        
+        # v5.0.2: 버전 자동 표시
+        try:
+            from version import __version__
+            version_label = f"  📝 버전 정보 (v{__version__})"
+        except ImportError:
+            version_label = "  📝 버전 정보"
+        
+        m.add_command(label="  📖 사용법", command=lambda: self._safe_call('_show_help'))
+        m.add_command(label="  ⌨️ 단축키 안내", command=lambda: self._safe_call('_show_shortcuts'))
+        m.add_separator()
+        m.add_command(label="  ℹ️ 시스템 정보", command=lambda: self._safe_call('_show_system_info'))
+        m.add_command(label=version_label, command=lambda: self._safe_call('_show_about'))
+        return m
+
+    # ═══════════════════════════════════════════════════════
+    # 탭 버튼 (균등 배치)
+    # ═══════════════════════════════════════════════════════
+
+    def _build_tab_buttons(self) -> None:
+        """v5.5.3 patch_01: 탭 버튼 — 밑줄+텍스트 스타일 (메뉴와 통일)"""
+        f = self._toolbar_font
+        tab_defs = [
+            ('inventory', '📦 재고리스트', '재고현황 조회'),
+            ('tonbag',    '🎒 톤백리스트', '톤백 단위 현황'),
+            ('dashboard', '📊 통계',       '대시보드'),
+            ('log',       '📝 로그',       '시스템 로그'),
+        ]
+        self._tab_buttons = {}
+        _tab_font_size = 18
+        for key, text, tip in tab_defs:
+            # 래퍼 프레임 (버튼 + 밑줄을 묶음)
+            wrapper = tk.Frame(self._sec_tabs, bg=self._tb_bg)
+            wrapper.pack(side='left', padx=3)
+
+            btn = tk.Label(wrapper, text=text, font=(f, _tab_font_size),
+                          bg=self._tb_bg, fg=self._tb_fg_normal,
+                          anchor='center', justify='center',
+                          padx=9, pady=5, cursor='hand2')
+            btn.pack()
+
+            # 밑줄 (비활성 시 숨김)
+            underline = tk.Frame(wrapper, height=2, bg=self._tb_underline_color)
+            btn._underline = underline
+            btn._wrapper = wrapper
+
+            btn.bind('<Button-1>', lambda e, k=key: self._switch_tab(k))
+            btn.bind('<Enter>', lambda e, b=btn, k=key: self._tab_hover_enter(b, k))
+            btn.bind('<Leave>', lambda e, b=btn, k=key: self._tab_hover_leave(b, k))
+            if tip:
+                self._attach_tooltip(btn, tip)
+            self._tab_buttons[key] = btn
+
+    # ═══════════════════════════════════════════════════════
+    # 자동 2줄 전환
+    # ═══════════════════════════════════════════════════════
+
+    def _check_toolbar_overflow(self, event=None) -> None:
+        try:
+            self.root.update_idletasks()
+
+            win_w = self.root.winfo_width()
+            need_w = self._menu_frame.winfo_reqwidth() + self._sec_tabs.winfo_reqwidth() + 60
+            if need_w > win_w and not self._row2_visible:
+                self._sec_tabs.pack_forget()
+                self._sec_tabs.pack(in_=self._row2, fill='x', expand=True, padx=6)
+                self._row2.pack(fill='x')
+                self._row2_visible = True
+            elif need_w <= win_w and self._row2_visible:
+                self._sec_tabs.pack_forget()
+                self._row2.pack_forget()
+                self._sec_tabs.pack(in_=self._row1, fill='x', expand=True, padx=6, pady=(3, 0))
+                self._row2_visible = False
+        except (RuntimeError, ValueError) as _e:
+            logger.debug(f"{type(_e).__name__}: {_e}")
+        except (RuntimeError, ValueError) as _e:
+            logger.debug(f"toolbar_mixin: {_e}")
+
+    # ═══════════════════════════════════════════════════════
+    # 탭 전환
+    # ═══════════════════════════════════════════════════════
+
+    def _switch_tab(self, tab_key: str):
+        idx = self._tab_index_map.get(tab_key)
+        if idx is not None and hasattr(self, 'notebook'):
+            try:
+                self.notebook.select(idx)
+                self._active_tab_key = tab_key
+                self._highlight_active_tab()
+            except (ValueError, TypeError, AttributeError) as _e:
+                logger.debug(f"{type(_e).__name__}: {_e}")
+            except (ValueError, TypeError, AttributeError) as _e:
+                logger.debug(f"toolbar_mixin: {_e}")
+
+    def _highlight_active_tab(self) -> None:
+        """v5.5.3 patch_01: 밑줄+텍스트로 활성 탭 강조"""
+        _sz = 18
+        for key, btn in self._tab_buttons.items():
+            if key == self._active_tab_key:
+                btn.config(bg=self._tb_bg, fg=self._tb_fg_active,
+                          relief='flat', font=(self._toolbar_font, _sz, 'bold'))
+                btn._underline.config(bg=self._tb_underline_color)
+                btn._underline.pack(fill='x', padx=4, pady=(2, 0))
+            else:
+                btn.config(bg=self._tb_bg, fg=self._tb_fg_normal,
+                          relief='flat', font=(self._toolbar_font, _sz))
+                btn._underline.pack_forget()
+
+    def _tab_hover_enter(self, btn, key: str) -> None:
+        """v5.5.3 patch_01: 호버 — 텍스트 색상만 변경"""
+        if key != self._active_tab_key:
+            btn.config(fg=self._tb_fg_hover)
+
+    def _tab_hover_leave(self, btn, key: str) -> None:
+        """v5.5.3 patch_01: 호버 해제"""
+        if key != self._active_tab_key:
+            btn.config(fg=self._tb_fg_normal)
+
+    # ═══════════════════════════════════════════════════════
+    # 🔍 검색 팝업
+    # ═══════════════════════════════════════════════════════
+
+    def _show_search_popup(self) -> None:
+        """v3.8.9: 검색 팝업 — DB 데이터 로드 + 재고리스트 필터링"""
+        f = self._toolbar_font
+        popup = tk.Toplevel(self.root)
+        popup.title("🔍 검색")
+        popup.geometry("520x420")
+        popup.resizable(True, True)
+        popup.transient(self.root)
+        popup.grab_set()
+
+        popup.update_idletasks()
+        x = self.root.winfo_rootx() + (self.root.winfo_width() // 2) - 260
+        y = self.root.winfo_rooty() + 80
+        popup.geometry(f"+{x}+{y}")
+
+        main = tk.Frame(popup, padx=25, pady=20)
+        main.pack(fill='both', expand=True)
+
+        # v3.8.9: 검색 필터용 안정적 StringVar (팝업 닫혀도 유지)
+        if not hasattr(self, '_search_filter_vars'):
+            self._search_filter_vars = {
+                'sap_no': tk.StringVar(self.root, value='전체'),
+                'bl_no': tk.StringVar(self.root, value='전체'),
+                'lot_no': tk.StringVar(self.root, value='전체'),
+                'status': tk.StringVar(self.root, value='전체'),
+                'date_from': tk.StringVar(self.root, value=''),
+                'date_to': tk.StringVar(self.root, value=''),
+            }
+        
+        svars = self._search_filter_vars
+        _fs = 14
+
+        # 콤보박스: SAP NO, BL NO, LOT NO
+        combos = {}
+        for row_idx, (field, label) in enumerate([
+            ('sap_no', 'SAP NO'), ('bl_no', 'BL NO'), ('lot_no', 'LOT NO')
+        ]):
+            tk.Label(main, text=label, font=(f, _fs, 'bold'), anchor='w'
+                     ).grid(row=row_idx, column=0, sticky='w', pady=6)
+            cb = ttk.Combobox(main, textvariable=svars[field],
+                              state='readonly', width=28, font=(f, _fs))
+            cb.grid(row=row_idx, column=1, sticky='ew', padx=(10, 0), pady=6)
+            combos[field] = cb
+            
+            # v3.8.9: DB에서 값 로드
+            # v5.6.0: SQL 인젝션 방지 — 화이트리스트 검증
+            ALLOWED_FIELDS = {'sap_no', 'bl_no', 'lot_no', 'status', 'product', 'warehouse'}
+            try:
+                if field not in ALLOWED_FIELDS:
+                    logger.warning(f"허용되지 않은 필드: {field}")
+                    continue
+                rows = self.engine.db.fetchall(
+                    f"SELECT DISTINCT {field} FROM inventory "
+                    f"WHERE {field} IS NOT NULL AND {field} != '' "
+                    f"ORDER BY {field} ASC"
+                )
+                vals = ['전체']
+                for r in rows:
+                    v = r.get(field, '') if isinstance(r, dict) else (r[0] if r else '')
+                    if v:
+                        vals.append(str(v))
+                cb['values'] = vals
+                logger.debug(f"검색 팝업 [{field}]: {len(vals)-1}개 로드")
+            except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
+                logger.debug(f"{type(_e).__name__}: {_e}")
+            except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
+                logger.debug(f"검색 팝업 [{field}] 로드 실패: {_e}")
+                cb['values'] = ['전체']
+
+        # Date (Arrival Date 기준)
+        tk.Label(main, text='Arrival Date', font=(f, _fs, 'bold'), anchor='w'
+                 ).grid(row=3, column=0, sticky='w', pady=6)
+        df = tk.Frame(main)
+        df.grid(row=3, column=1, sticky='ew', padx=(10, 0), pady=6)
+        tk.Entry(df, textvariable=svars['date_from'], width=12, font=(f, _fs)
+                 ).pack(side='left')
+        tk.Label(df, text=' ~ ', font=(f, _fs)).pack(side='left')
+        tk.Entry(df, textvariable=svars['date_to'], width=12, font=(f, _fs)
+                 ).pack(side='left')
+        tk.Label(df, text='  (YYYY-MM-DD)', font=(f, 10), fg='gray'
+                 ).pack(side='left', padx=5)
+
+        # 상태
+        tk.Label(main, text='상태', font=(f, _fs, 'bold'), anchor='w'
+                 ).grid(row=4, column=0, sticky='w', pady=6)
+        ttk.Combobox(main, textvariable=svars['status'],
+                     values=['전체', 'AVAILABLE', 'PICKED', 'SHIPPED', 'DEPLETED'],
+                     state='readonly', width=28, font=(f, _fs)
+                     ).grid(row=4, column=1, sticky='ew', padx=(10, 0), pady=6)
+
+        main.columnconfigure(1, weight=1)
+
+        def do_search():
+            """검색 실행 → 재고리스트 필터링"""
+            # _inv_search_combos를 StringVar 기반으로 설정
+            self._inv_search_combos = {}
+            for field in ('sap_no', 'bl_no', 'lot_no'):
+                self._inv_search_combos[field] = (svars[field], None)
+            
+            # Date, Status 반영
+            if hasattr(self, '_date_from_var'):
+                self._date_from_var.set(svars['date_from'].get())
+            if hasattr(self, '_date_to_var'):
+                self._date_to_var.set(svars['date_to'].get())
+            if hasattr(self, 'status_var'):
+                self.status_var.set(svars['status'].get())
+            
+            # 재고리스트 탭으로 이동 + 새로고침
+            try:
+                self.notebook.select(self.tab_inventory)
+            except (AttributeError, RuntimeError) as _e:
+                logger.debug(f"{type(_e).__name__}: {_e}")
+            if hasattr(self, '_refresh_inventory'):
+                self._refresh_inventory()
+            popup.destroy()
+
+        def do_reset():
+            """초기화"""
+            for key in svars:
+                if key in ('date_from', 'date_to'):
+                    svars[key].set('')
+                else:
+                    svars[key].set('전체')
+
+        # v3.8.9: 버튼 크기 통일
+        _btn_font = (f, 13, 'bold')
+        _btn_w = 12
+        bf = tk.Frame(main)
+        bf.grid(row=5, column=0, columnspan=2, pady=(20, 0))
+        tk.Button(bf, text='🔍 검색', font=_btn_font, bg=ThemeColors.get('statusbar_progress'), fg='white',
+                 bd=0, width=_btn_w, pady=8, cursor='hand2',
+                 command=do_search).pack(side='left', padx=8)
+        tk.Button(bf, text='🔄 초기화', font=_btn_font, bg='#95a5a6', fg='white',
+                 bd=0, width=_btn_w, pady=8, cursor='hand2',
+                 command=do_reset).pack(side='left', padx=8)
+
+        popup.bind('<Escape>', lambda e: popup.destroy())
+        popup.bind('<Return>', lambda e: do_search())
+
+    # ═══════════════════════════════════════════════════════
+    # 컨테이너 서픽스
+    # ═══════════════════════════════════════════════════════
+
+    def _on_container_suffix_toggle(self) -> None:
+        """컨테이너 -1, -2 서픽스 표시 토글"""
+        show = self._container_suffix_var.get()
+        self._log(f"📦 컨테이너 구분: {'ON' if show else 'OFF'}")
+        if hasattr(self, '_refresh_inventory'):
+            self._refresh_inventory()
+        if hasattr(self, '_refresh_tonbag'):
+            self._refresh_tonbag()
+
+    def _on_auto_refresh_toggle(self) -> None:
+        """v3.8.4: 대시보드 자동 갱신 30초 토글"""
+        enabled = self._auto_refresh_var.get()
+        self._log(f"🔄 자동 갱신: {'ON (30초)' if enabled else 'OFF'}")
+        if enabled:
+            self._schedule_auto_refresh()
+        
+    def _schedule_auto_refresh(self) -> None:
+        """30초 타이머로 대시보드 갱신 + DB 변경 감지 (v3.8.4)"""
+        if not getattr(self, '_auto_refresh_var', None):
+            return
+        if not self._auto_refresh_var.get():
+            return
+        try:
+            # DB 파일 변경 감지
+            db_changed = self._check_db_modified()
+            if db_changed:
+                if hasattr(self, '_refresh_inventory'):
+                    self._refresh_inventory()
+                if hasattr(self, '_refresh_tonbag'):
+                    self._refresh_tonbag()
+                self._log("🔄 DB 변경 감지 → 자동 새로고침")
+            
+            if hasattr(self, '_refresh_dashboard'):
+                self._refresh_dashboard()
+        except (AttributeError, RuntimeError) as e:
+            logger.debug(f"자동 갱신 오류: {e}")
+        # 30초 후 재호출
+        if hasattr(self, 'root'):
+            self.root.after(30000, self._schedule_auto_refresh)
+
+    def _check_db_modified(self) -> bool:
+        """v3.8.4: DB 파일 수정 시간 비교"""
+        import os
+        try:
+            db_path = getattr(self, 'db_path', None)
+            if not db_path or not os.path.exists(db_path):
+                return False
+            
+            mtime = os.path.getmtime(db_path)
+            last = getattr(self, '_last_db_mtime', 0)
+            
+            if mtime > last:
+                self._last_db_mtime = mtime
+                return last > 0  # 최초 실행 시는 False
+            return False
+        except (OSError, IOError, PermissionError):
+            return False
+
+    def _on_integrity_check(self) -> None:
+        """v3.8.7: 정합성 검사 + 18열 데이터 누락 진단"""
+        from ..utils.custom_messagebox import CustomMessageBox
+        try:
+            from engine_modules.validators import InventoryValidator
+            validator = InventoryValidator(db=self.engine.db)
+            
+            # 1. 기존 정합성 검사
+            result = validator.check_data_integrity()
+            issues = []
+            if result.errors:
+                for e in result.errors:
+                    issues.append(f"🔴 {e}")
+            if result.warnings:
+                for w in result.warnings:
+                    issues.append(f"🟡 {w}")
+            
+            # 2. v3.8.7: 18열 데이터 누락 진단
+            total_cnt = self.engine.db.fetchone("SELECT COUNT(*) AS cnt FROM inventory")
+            total = (total_cnt['cnt'] if total_cnt else 0) if total_cnt else 0
+            
+            if total > 0:
+                key_cols = [
+                    ('lot_no', 'LOT NO'), ('sap_no', 'SAP NO'), ('bl_no', 'BL NO'),
+                    ('container_no', 'CONTAINER'), ('product', 'PRODUCT'),
+                    ('product_code', 'CODE'), ('lot_sqm', 'LOT SQM'),
+                    ('mxbg_pallet', 'MXBG'), ('net_weight', 'NET(Kg)'),
+                    ('gross_weight', 'GROSS(Kg)'), ('salar_invoice_no', 'INVOICE NO'),
+                    ('ship_date', 'SHIP DATE'), ('arrival_date', 'ARRIVAL'),
+                    ('free_time', 'FREE TIME'), ('warehouse', 'WH'),
+                    ('status', 'STATUS'), ('current_weight', 'Balance'),
+                    ('initial_weight', '입고량'),
+                ]
+                
+                issues.append("")
+                issues.append("━━━ 18열 데이터 완성도 ━━━")
+                
+                for col_db, col_label in key_cols:
+                    # v5.6.0: 화이트리스트 검증 (key_cols는 하드코딩이지만 안전장치)
+                    ALLOWED_COLS = {k for k, _ in key_cols}
+                    if col_db not in ALLOWED_COLS:
+                        continue
+                    try:
+                        filled_row = self.engine.db.fetchone(
+                            f"SELECT COUNT(*) AS cnt FROM inventory "
+                            f"WHERE {col_db} IS NOT NULL AND {col_db} != '' AND {col_db} != 0"
+                        )
+                        filled = (filled_row['cnt'] if filled_row else 0) if filled_row else 0
+                        empty = total - filled
+                        pct = filled / total * 100
+                        
+                        if empty > 0:
+                            icon = '🔴' if pct < 50 else ('🟡' if pct < 80 else '🟢')
+                            issues.append(f"{icon} {col_label:12s}: {filled}/{total} ({pct:.0f}%) — {empty}개 누락")
+                        else:
+                            issues.append(f"✅ {col_label:12s}: {total}/{total} (100%)")
+                    except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError):
+                        issues.append(f"⚪ {col_label:12s}: 확인 불가")
+            
+            if not issues:
+                CustomMessageBox.showinfo(self.root, "✅ 정합성 검사", "모든 데이터가 정상입니다.")
+                return
+            
+            msg = "\n".join(issues[:30])
+            if len(issues) > 30:
+                msg += f"\n... 외 {len(issues) - 30}건"
+            
+            # 복구 질문
+            if result.errors or result.warnings:
+                if CustomMessageBox.askyesno(self.root, "⚠️ 정합성 검사 + 18열 진단",
+                    f"{msg}\n\n자동 복구를 실행할까요?"):
+                    
+                    fix_result = validator.fix_data_integrity(dry_run=False)
+                    fixes = fix_result.get('fixes', [])
+                    if fixes:
+                        self._log(f"✅ 정합성 복구: {len(fixes)}건")
+                        CustomMessageBox.showinfo(self.root, "복구 완료",
+                            f"복구 완료: {len(fixes)}건\n\n" + "\n".join(fixes[:10]))
+                        self._refresh_inventory()
+                    else:
+                        CustomMessageBox.showinfo(self.root, "복구", "복구할 항목이 없습니다.")
+            else:
+                CustomMessageBox.showinfo(self.root, "📊 18열 데이터 진단", msg)
+                
+        except (RuntimeError, ValueError) as e:
+            CustomMessageBox.showerror(self.root, "오류", f"정합성 검사 오류:\n{e}")
+
+    # ═══════════════════════════════════════════════════════
+    # 유틸리티
+    # ═══════════════════════════════════════════════════════
+    def _restore_toolbar_chain_bg(self):
+        """v5.3.5: restore toolbar/menu parent frame chain bg to theme bg.
+        Fix for Windows light theme where tk_popup/grab_release refresh resets bg.
+        """
+        for name in ('_toolbar', '_row0', '_row1', '_menu_frame', '_row2', '_sec_tabs'):
+            try:
+                w = getattr(self, name, None)
+                if w and w.winfo_exists():
+                    w.config(bg=self._tb_bg)
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                logger.debug(f"Suppressed: {_e}")
+
+
+
+    
+    def _refresh_toolbar_theme(self) -> None:
+        """v5.4.0: Apply current ThemeColors palette to existing toolbar widgets.
+        Fix: light theme switching leaving toolbar colors stale or mismatched.
+        """
+        try:
+            self._load_toolbar_colors()
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+            logger.debug(f"Suppressed: {_e}")
+
+        # restore container chain bg first
+        try:
+            self._restore_toolbar_chain_bg()
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+            logger.debug(f"Suppressed: {_e}")
+
+        for w in (getattr(self, '_toolbar_container', None), getattr(self, '_row1', None),
+                  getattr(self, '_row2', None), getattr(self, '_menu_frame', None),
+                  getattr(self, '_sec_tabs', None)):
+            try:
+                if w and w.winfo_exists():
+                    w.config(bg=self._tb_bg)
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                logger.debug(f"Suppressed: {_e}")
+
+        # v5.5.3 patch_01: 모든 메뉴 버튼 동일 스타일 적용
+        for b in getattr(self, '_all_menu_btns', []):
+            try:
+                if not b.winfo_exists():
+                    continue
+                b.config(bg=self._tb_bg,
+                         fg=self._tb_fg_active if getattr(b, '_menu_active', False) else self._tb_fg_normal)
+                # 밑줄 색상도 테마에 맞게 갱신
+                if hasattr(b, '_underline') and b._underline.winfo_exists():
+                    b._underline.config(bg=self._tb_underline_color)
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                logger.debug(f"Suppressed: {_e}")
+
+
+        # v5.4.1: 드롭다운 tk.Menu 팔레트도 테마에 맞게 재동기화(화이트 모드 검정 변색 방지)
+        try:
+            is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+            menu_bg = ThemeColors.get('bg_card', is_dark)
+            menu_fg = ThemeColors.get('text_primary', is_dark)
+            menu_abg = ThemeColors.get('bg_hover', is_dark)
+            menu_afg = ThemeColors.get('text_primary', is_dark)
+            menu_dis = ThemeColors.get('text_muted', is_dark)
+            for m in getattr(self, '_all_dropdown_menus', []):
+                try:
+                    if m and m.winfo_exists():
+                        m.config(bg=menu_bg, fg=menu_fg, activebackground=menu_abg, activeforeground=menu_afg, disabledforeground=menu_dis)
+                except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                    logger.debug(f"Suppressed: {_e}")
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+            logger.debug(f"Suppressed: {_e}")
+
+        # v5.5.3 patch_01: 탭 버튼도 테마 갱신
+        try:
+            if hasattr(self, '_tab_buttons'):
+                self._highlight_active_tab()
+                for key, btn in self._tab_buttons.items():
+                    if hasattr(btn, '_wrapper') and btn._wrapper.winfo_exists():
+                        btn._wrapper.config(bg=self._tb_bg)
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+            logger.debug(f"Suppressed: {_e}")
+
+        # v5.5.3 patch_02: 검색 버튼 밑줄 색상 갱신 (폴백 tk.Label용)
+        try:
+            sb = getattr(self, '_search_btn', None)
+            if sb and sb.winfo_exists() and isinstance(sb, tk.Label):
+                sb.config(fg=self._tb_underline_color,
+                          highlightbackground=self._tb_underline_color)
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+            logger.debug(f"Suppressed: {_e}")
+
+        try:
+            self.root.after_idle(lambda: self.root.update_idletasks())
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+            try:
+                self.root.update_idletasks()
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                logger.debug(f"Suppressed: {_e}")
+
+    def _show_menu(self, menu, btn) -> None:
+        """
+        v5.0.9: tk_popup + after()로 확실한 색상 복구
+        
+        Windows White 테마에서 tk_popup() 후 grab_release() 시
+        tkinter가 내부적으로 위젯 배경을 시스템 기본색으로 리셋하는 문제.
+        after()로 지연 복구 + 부모 프레임 배경까지 재설정으로 100% 해결.
+        """
+        # 모든 버튼 비활성
+        for b in self._all_menu_btns:
+            b._menu_active = False
+            try:
+                b.config(fg=self._tb_fg_normal)
+                if hasattr(b, '_underline'):
+                    b._underline.pack_forget()
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                logger.debug(f"Suppressed: {_e}")
+
+        # 현재 버튼만 활성 (밑줄 + 흰색 텍스트)
+        btn._menu_active = True
+        btn.config(fg=self._tb_fg_active)
+        if hasattr(btn, '_underline'):
+            btn._underline.place(relx=0, rely=1.0, relwidth=1.0, anchor='sw')
+        
+        x = btn.winfo_rootx()
+        y = btn.winfo_rooty() + btn.winfo_height()
+        
+        def _restore_all_buttons():
+            """모든 버튼 + 부모 프레임 색상 강제 복구"""
+            try:
+                # v5.3.6: capture before state for anomaly logging
+                _before = {
+                    'tb_bg': getattr(self, '_tb_bg', None),
+                    'menu_frame_bg': safe_widget_bg(getattr(self, '_menu_frame', None)),
+                    'row1_bg': safe_widget_bg(getattr(self, '_row1', None)),
+                }
+
+                # v5.3.5: 상위 체인까지 통째로 bg 복구
+                self._restore_toolbar_chain_bg()
+                # 부모 프레임 배경도 재설정 (White 테마 핵심!)
+                if hasattr(self, '_menu_frame') and self._menu_frame.winfo_exists():
+                    self._menu_frame.config(bg=self._tb_bg)
+                if hasattr(self, '_row1') and self._row1.winfo_exists():
+                    self._row1.config(bg=self._tb_bg)
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                logger.debug(f"[toolbar_mixin] 무시: {_e}")
+            
+            for b in self._all_menu_btns:
+                b._menu_active = False
+                try:
+                    if not b.winfo_exists():
+                        continue
+                    # v5.5.3 patch_01: 텍스트 색상만 복구 (배경 변경 없음)
+                    mx = b.winfo_pointerx() - b.winfo_rootx()
+                    my = b.winfo_pointery() - b.winfo_rooty()
+                    is_hover = (0 <= mx <= b.winfo_width() and
+                               0 <= my <= b.winfo_height())
+                    b.config(fg=self._tb_fg_hover if is_hover else self._tb_fg_normal)
+                    if hasattr(b, '_underline'):
+                        b._underline.pack_forget()
+                except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                    logger.debug(f"Suppressed: {_e}")
+            
+            # 강제 화면 갱신 (White 테마에서 필수)
+            try:
+                self.root.update_idletasks()
+
+                # v5.3.6: detect light theme bg reset and log once per restore call
+                _after = {
+                    'menu_frame_bg': safe_widget_bg(getattr(self, '_menu_frame', None)),
+                    'row1_bg': safe_widget_bg(getattr(self, '_row1', None)),
+                }
+                try:
+                    exp = getattr(self, '_tb_bg', None)
+                    if exp and (_after.get('menu_frame_bg') not in (None, exp) or _after.get('row1_bg') not in (None, exp)):
+                        log_ui_event('UI_BG_ANOMALY_TOOLBAR', {
+                            'expected': exp,
+                            'before': _before,
+                            'after': _after,
+                        })
+                except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                    logger.debug(f"Suppressed: {_e}")
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                logger.debug(f"[toolbar_mixin] 무시: {_e}")
+        
+        try:
+            menu.tk_popup(x, y)
+        finally:
+            try:
+                menu.grab_release()
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+                logger.debug(f"[toolbar_mixin] 무시: {_e}")
+            
+            btn._menu_active = False
+            
+            # v5.3.5: after_idle 1회 + after()로 지연 복구 (50/200/500/1000ms)
+            # White 테마에서 tkinter 내부 갱신이 느릴 수 있으므로 4회 보장
+            try:
+                self.root.after_idle(_restore_all_buttons)
+                self.root.after(50, _restore_all_buttons)
+                self.root.after(200, _restore_all_buttons)
+                self.root.after(500, _restore_all_buttons)
+                self.root.after(1000, _restore_all_buttons)
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+                _restore_all_buttons()
+    
+    def _safe_call(self, method_name: str):
+        """메서드 안전 호출 (존재하지 않으면 경고 메시지)"""
+        fn = getattr(self, method_name, None)
+        if fn and callable(fn):
+            fn()
+        else:
+            logger.warning(f"메서드 미정의: {method_name}")
+            try:
+                CustomMessageBox.warning(None, "기능 준비 중", f"'{method_name}' 기능은 아직 구현되지 않았습니다.")
+            except (ImportError, ModuleNotFoundError) as _e:
+                logger.debug(f"{type(_e).__name__}: {_e}")
+            except (ImportError, ModuleNotFoundError) as _e:
+                logger.debug(f"toolbar_mixin: {_e}")
+
+    def _attach_tooltip(self, widget, text: str):
+        tip_win = None
+        after_id = None
+        def show():
+            nonlocal tip_win
+            if tip_win: return
+            x = widget.winfo_rootx() + 10
+            y = widget.winfo_rooty() + widget.winfo_height() + 5
+            tip_win = tk.Toplevel(widget)
+            tip_win.wm_overrideredirect(True)
+            tip_win.wm_geometry(f"+{x}+{y}")
+            tk.Label(tip_win, text=text, justify='left',
+                     background="#ffffdd", foreground="#333",
+                     relief='solid', borderwidth=1,
+                     font=(self._toolbar_font, 13), padx=10, pady=6,
+                     wraplength=350).pack()
+        def schedule(e):
+            nonlocal after_id
+            cancel(e)
+            after_id = widget.after(400, show)
+        def cancel(e):
+            nonlocal tip_win, after_id
+            if after_id: widget.after_cancel(after_id); after_id = None
+            if tip_win: tip_win.destroy(); tip_win = None
+        widget.bind('<Enter>', schedule, add='+')
+        widget.bind('<Leave>', cancel, add='+')
+        widget.bind('<Button-1>', cancel, add='+')
+
+    def _refresh_all_data(self) -> None:
+        try:
+            for fn in ['_refresh_inventory', '_refresh_tonbag', '_refresh_dashboard']:
+                if hasattr(self, fn): getattr(self, fn)()
+            self._log("🔄 전체 새로고침 완료")
+        except (RuntimeError, OSError) as e:
+            logger.error(f"새로고침: {e}")
+
+    def _change_font_size(self, size: int):
+        try:
+            import tkinter.font as tkfont
+            for name in ["TkDefaultFont", "TkTextFont"]:
+                tkfont.nametofont(name).configure(size=size)
+            self._log(f"🔤 글꼴 크기: {size}pt")
+        except (RuntimeError, ValueError) as e:
+            logger.error(f"글꼴 크기: {e}")
