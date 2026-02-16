@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, date
 from typing import Dict
 
-from engine_modules.constants import SAMPLE_WEIGHT_KG
+from core.constants import SAMPLE_WEIGHT_KG
 
 logger = logging.getLogger(__name__)
 

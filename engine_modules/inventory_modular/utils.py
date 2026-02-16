@@ -11,7 +11,7 @@ Safe parsing and utility functions
 import logging
 from datetime import datetime, date
 from typing import Optional, List, Any, Dict
-from utils.common import normalize_column_name
+from core.types import normalize_column_name
 
 logger = logging.getLogger(__name__)
 

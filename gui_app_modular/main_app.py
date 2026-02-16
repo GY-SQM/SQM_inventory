@@ -403,7 +403,7 @@ class SQMInventoryApp:
     def _save_startup_snapshot(self) -> None:
         """v3.8.4 A6: 프로그램 시작 시 일별 재고 스냅샷 저장"""
         try:
-            from engine_modules.validators import InventoryValidator
+            from core.validators import InventoryValidator
             validator = InventoryValidator(db=self.engine.db)
             result = validator.save_daily_snapshot()
             if result.get('success'):
@@ -417,7 +417,7 @@ class SQMInventoryApp:
             if not self.engine or not hasattr(self.engine, 'db'):
                 return
             
-            from engine_modules.validators import InventoryValidator
+            from core.validators import InventoryValidator
             validator = InventoryValidator(db=self.engine.db)
             result = validator.check_data_integrity()
             

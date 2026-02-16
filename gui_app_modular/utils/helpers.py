@@ -81,14 +81,14 @@ from .formatters import find_column, format_number, format_weight  # noqa: F401
 
 def validate_lot_no(lot_no: str) -> bool:
     """LOT 번호 검증. 단일 소스: engine_modules.validators.validate_lot_no"""
-    from engine_modules.validators import validate_lot_no as _validate_lot_no
+    from core.validators import validate_lot_no as _validate_lot_no
     ok, _ = _validate_lot_no(lot_no)
     return ok
 
 
 def validate_sap_no(sap_no: str) -> bool:
     """SAP NO 검증. 단일 소스: engine_modules.validators.validate_sap_no"""
-    from engine_modules.validators import validate_sap_no as _validate_sap_no
+    from core.validators import validate_sap_no as _validate_sap_no
     ok, _ = _validate_sap_no(sap_no)
     return ok
 

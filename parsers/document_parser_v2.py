@@ -9,7 +9,7 @@ DocumentParserV2 호출은 내부적으로 DocumentParserV3로 위임됩니다.
 """
 import logging
 from typing import Optional, Dict, List, Any
-from utils.common import safe_float
+from core.types import safe_float
 
 logger = logging.getLogger(__name__)
 

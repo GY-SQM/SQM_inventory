@@ -27,7 +27,7 @@ from datetime import datetime, date
 from typing import Optional, List
 
 from ..document_models import InvoiceData
-from utils.common import safe_float
+from core.types import safe_float
 
 logger = logging.getLogger(__name__)
 

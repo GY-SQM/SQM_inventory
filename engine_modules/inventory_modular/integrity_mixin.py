@@ -144,7 +144,7 @@ class IntegrityMixin:
             # ═══ v5.6.0 검증 7: 대원칙 (톤백 단가 = 500kg 또는 1000kg) ═══
             # LOT 총무게 = (톤백수 × 단가) + 샘플 1kg
             if tb_summary and tb_total > 0:
-                from engine_modules.constants import SAMPLE_WEIGHT_KG
+                from core.constants import SAMPLE_WEIGHT_KG
                 SAMPLE_WEIGHT = SAMPLE_WEIGHT_KG
                 VALID_UNIT_WEIGHTS = (500.0, 1000.0)
                 TOLERANCE = 0.5  # 0.5kg 허용

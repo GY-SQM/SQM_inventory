@@ -463,7 +463,7 @@ class SQMDatabase(DatabaseMigrationMixin, DatabaseInterface):
     @staticmethod
     def validate_sap_no(sap_no: str) -> Tuple[bool, str]:
         """SAP NO 유효성 검사. 단일 소스: engine_modules.validators.validate_sap_no"""
-        from engine_modules.validators import validate_sap_no as _validate_sap_no
+        from core.validators import validate_sap_no as _validate_sap_no
         return _validate_sap_no(sap_no)
 
     # =========================================================================

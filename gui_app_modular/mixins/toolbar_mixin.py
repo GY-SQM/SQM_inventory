@@ -798,7 +798,7 @@ class ToolbarMixin:
         """v3.8.7: 정합성 검사 + 18열 데이터 누락 진단"""
         from ..utils.custom_messagebox import CustomMessageBox
         try:
-            from engine_modules.validators import InventoryValidator
+            from core.validators import InventoryValidator
             validator = InventoryValidator(db=self.engine.db)
             
             # 1. 기존 정합성 검사

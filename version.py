@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.8.5'
+__version__ = '5.8.6'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.8.6': '🏗️ v5.8.6: P5-1~4 점진적 core 전환 (config 보강, types/constants/validators → core)',
     '5.8.5': '🎨 v5.8.5: 샘플 톤백 No 표기 S → S0 (숫자와 혼동 방지)',
     '5.8.3': '🏗️ v5.8.3: P4 완료 — core/ 공통 라이브러리 파사드(types, validators, formatters, constants, config, config_logging)',
     '5.8.2': '🏗️ v5.8.2: P3 완료 — run.py 슬림화(run_bootstrap 분리), 진입점 100줄 이하',

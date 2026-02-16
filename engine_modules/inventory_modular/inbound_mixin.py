@@ -20,7 +20,7 @@ import re  # v5.3.0
 logger = logging.getLogger(__name__)
 
 # 비즈니스 기본값
-from engine_modules.constants import DEFAULT_WAREHOUSE, SAMPLE_WEIGHT_KG, STATUS_AVAILABLE, DATE_FORMAT, DATETIME_FORMAT
+from core.constants import DEFAULT_WAREHOUSE, SAMPLE_WEIGHT_KG, STATUS_AVAILABLE, DATE_FORMAT, DATETIME_FORMAT
 
 
 

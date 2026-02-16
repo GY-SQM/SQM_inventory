@@ -324,7 +324,7 @@ CACHE_EXPIRE_SECONDS = 300
 # SQM 비즈니스 기본값 (v5.7.8: engine_modules.constants 단일 소스)
 # ═══════════════════════════════════════════════════════════════
 try:
-    from engine_modules.constants import DEFAULT_WAREHOUSE, DEFAULT_TONBAG_COUNT
+    from core.constants import DEFAULT_WAREHOUSE, DEFAULT_TONBAG_COUNT
 except ImportError:
     DEFAULT_WAREHOUSE = '광양'
     DEFAULT_TONBAG_COUNT = 10

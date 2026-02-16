@@ -13,7 +13,7 @@ Version: 2.5.4
 """
 
 import logging
-from utils.common import safe_float
+from core.types import safe_float
 logger = logging.getLogger(__name__)
 import re
 from datetime import datetime, date

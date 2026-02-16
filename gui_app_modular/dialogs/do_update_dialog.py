@@ -22,7 +22,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-from engine_modules.constants import DEFAULT_WAREHOUSE
+from core.constants import DEFAULT_WAREHOUSE
 
 
 class DOUpdateDialog:

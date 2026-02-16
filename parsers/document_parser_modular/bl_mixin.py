@@ -26,7 +26,7 @@ from datetime import datetime
 from typing import Optional, List
 
 from ..document_models import BLData, ContainerInfo
-from utils.common import safe_float
+from core.types import safe_float
 
 logger = logging.getLogger(__name__)
 

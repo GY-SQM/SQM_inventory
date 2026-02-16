@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-core.config — 설정 진입점 (P4)
-==============================
+core.config — 설정 진입점 (P4, P5-1 보강)
+=========================================
 루트 config 모듈 re-export. from core.config import DB_PATH 등 사용.
 """
 from config import (
@@ -22,6 +22,20 @@ from config import (
     SETTINGS_FILE,
     validate_api_key,
     save_api_key_secure,
+    save_gemini_model,
+    API_KEY_SOURCE,
+    PG_HOST,
+    PG_PORT,
+    PG_DATABASE,
+    PG_USER,
+    PG_PASSWORD,
+    PG_MIN_CONNECTIONS,
+    PG_MAX_CONNECTIONS,
+    SAVE_RAW_GEMINI_RESPONSE,
+    DISABLE_OPENAI_FALLBACK,
+    BACKUP_ENABLED,
+    BACKUP_MAX_COUNT,
+    BACKUP_INTERVAL_HOURS,
 )
 
 __all__ = [
@@ -42,4 +56,18 @@ __all__ = [
     'SETTINGS_FILE',
     'validate_api_key',
     'save_api_key_secure',
+    'save_gemini_model',
+    'API_KEY_SOURCE',
+    'PG_HOST',
+    'PG_PORT',
+    'PG_DATABASE',
+    'PG_USER',
+    'PG_PASSWORD',
+    'PG_MIN_CONNECTIONS',
+    'PG_MAX_CONNECTIONS',
+    'SAVE_RAW_GEMINI_RESPONSE',
+    'DISABLE_OPENAI_FALLBACK',
+    'BACKUP_ENABLED',
+    'BACKUP_MAX_COUNT',
+    'BACKUP_INTERVAL_HOURS',
 ]

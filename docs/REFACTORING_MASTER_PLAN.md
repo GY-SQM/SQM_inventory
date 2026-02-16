@@ -157,6 +157,8 @@ sqm/
 | P2 | preflight / pdf_converter / ui_ops_helper / migrate 스크립트 이동 | ✅ 완료 | 루트 정리 |
 | P3 | run.py 슬림화 (진단·백업 모듈 분리) | ✅ 완료 | run_bootstrap.py 분리, 진입점 ~96줄 |
 | P4 | core/ 도입 여부 결정 및 단계적 이전 | ✅ 완료 | re-export 파사드 (types, validators, formatters, constants, config, config_logging) |
+| P5 | 점진적 core 전환 | — | 기존 from config / engine_modules / utils → from core.xxx 단계적 교체. **가이드**: docs/P5_CORE_MIGRATION_AND_TESTS_GUIDE.md |
+| P5 | 테스트 보강 | — | core/, run_bootstrap, config_logging, file_utils 단위·통합 테스트 추가. **가이드**: 동일 문서 참고. |
 
 ---
 
