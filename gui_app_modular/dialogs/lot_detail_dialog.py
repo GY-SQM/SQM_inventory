@@ -11,7 +11,7 @@ LOT 더블클릭/우클릭 시:
 
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, apply_tooltip
 
 logger = logging.getLogger(__name__)
 
@@ -269,15 +269,17 @@ class LotDetailDialogMixin:
         btn_bar.pack(fill=X, padx=10)
 
         if avail_cnt > 0:
-            ttk.Button(btn_bar, text="📤 빠른 출고",
-                       command=lambda: self._quick_outbound_from_detail(popup, lot_no)
-                       ).pack(side=LEFT, padx=5)
-
-        ttk.Button(btn_bar, text="📋 PDF 출력",
-                   command=lambda: self._export_lot_detail_pdf(lot_no)
-                   ).pack(side=LEFT, padx=5)
-
-        ttk.Button(btn_bar, text="닫기", command=popup.destroy).pack(side=RIGHT, padx=5)
+            _btn_out = ttk.Button(btn_bar, text="📤 빠른 출고",
+                                  command=lambda: self._quick_outbound_from_detail(popup, lot_no))
+            _btn_out.pack(side=LEFT, padx=5)
+            apply_tooltip(_btn_out, "이 LOT의 가용 톤백으로 출고 화면을 엽니다. 수량·출고처 입력 후 출고를 완료할 수 있습니다.")
+        _btn_pdf = ttk.Button(btn_bar, text="📋 PDF 출력",
+                              command=lambda: self._export_lot_detail_pdf(lot_no))
+        _btn_pdf.pack(side=LEFT, padx=5)
+        apply_tooltip(_btn_pdf, "이 LOT의 상세 정보(기본정보·톤백 목록·이력)를 PDF 파일로 저장합니다.")
+        _btn_close = ttk.Button(btn_bar, text="닫기", command=popup.destroy)
+        _btn_close.pack(side=RIGHT, padx=5)
+        apply_tooltip(_btn_close, "LOT 상세 창을 닫습니다.")
 
         popup.bind('<Escape>', lambda e: popup.destroy())
 

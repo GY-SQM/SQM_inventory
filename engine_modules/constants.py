@@ -11,6 +11,7 @@ SQM 재고관리 시스템 — 비즈니스 상수 (v5.6.8)
 
 # ═══════════════════════════════════════════════════════
 # 1. 재고 상태 (inventory.status / inventory_tonbag.status)
+# 출고 흐름: AVAILABLE → (피킹) → PICKED → (확정) → SOLD / 전량 시 DEPLETED
 # ═══════════════════════════════════════════════════════
 STATUS_AVAILABLE = 'AVAILABLE'    # 입고 완료, 출고 가능
 STATUS_PICKED = 'PICKED'          # 출고 예약 (피킹)

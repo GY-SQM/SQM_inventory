@@ -12,7 +12,7 @@ v3.6.0 - UI 통일성 적용
 import os
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, apply_tooltip
 logger = logging.getLogger(__name__)
 
 
@@ -64,7 +64,9 @@ class SettingsDialogMixin:
         info_frame = tk.Frame(body, bg=_bg)
         info_frame.pack(fill=X, pady=(0, 10))
         
-        tk.Label(info_frame, text="현재 API 키:", bg=_bg, fg=_fg, font=('맑은 고딕', 10)).pack(anchor=W)
+        _l1 = tk.Label(info_frame, text="현재 API 키:", bg=_bg, fg=_fg, font=('맑은 고딕', 10))
+        _l1.pack(anchor=W)
+        apply_tooltip(_l1, "현재 로드된 API 키의 마스킹된 표시입니다. 새 키를 입력한 뒤 저장하면 교체됩니다.")
         tk.Label(info_frame, text=f"  {masked}", bg=_bg, fg=ThemeColors.get('statusbar_progress'), font=('맑은 고딕', 10, 'bold')).pack(anchor=W)
         tk.Label(info_frame, text=f"  저장 위치: {source_text}", bg=_bg, fg=_fg, font=('맑은 고딕', 9)).pack(anchor=W)
         tk.Label(info_frame, text=f"  모델: {GEMINI_MODEL}", bg=_bg, fg='gray', font=('맑은 고딕', 9)).pack(anchor=W)
@@ -72,32 +74,46 @@ class SettingsDialogMixin:
         ttk.Separator(body).pack(fill=X, pady=10)
         
         # 모델 변경 (다음 실행부터 적용)
-        tk.Label(body, text="Gemini 모델 (변경 시 저장 후 다음 실행부터 적용):", bg=_bg, fg=_fg, font=('맑은 고딕', 10)).pack(anchor=W)
+        _l_model = tk.Label(body, text="Gemini 모델 (변경 시 저장 후 다음 실행부터 적용):", bg=_bg, fg=_fg, font=('맑은 고딕', 10))
+        _l_model.pack(anchor=W)
+        apply_tooltip(_l_model, "사용할 Gemini 모델명(예: gemini-2.5-flash). 변경 후 저장하면 다음 실행부터 적용됩니다.")
         model_var = tk.StringVar(value=GEMINI_MODEL or "gemini-2.5-flash")
         model_entry = ttk.Entry(body, textvariable=model_var, width=55)
         model_entry.pack(fill=X, pady=5)
+        apply_tooltip(model_entry, "Gemini API 모델 이름을 입력하세요. 예: gemini-2.5-flash, gemini-1.5-pro")
         
         ttk.Separator(body).pack(fill=X, pady=10)
         
         # 새 API 키 입력
-        tk.Label(body, text="새 API 키 입력:", bg=_bg, fg=_fg, font=('맑은 고딕', 10)).pack(anchor=W)
+        _l_key = tk.Label(body, text="새 API 키 입력:", bg=_bg, fg=_fg, font=('맑은 고딕', 10))
+        _l_key.pack(anchor=W)
+        apply_tooltip(_l_key, "Google AI Studio에서 발급한 API 키(AIza로 시작)를 입력한 뒤 저장을 누르세요.")
         key_var = tk.StringVar()
         key_entry = ttk.Entry(body, textvariable=key_var, width=55, show='●')
         key_entry.pack(fill=X, pady=5)
+        apply_tooltip(key_entry, "새 API 키를 입력하세요. '키 표시'를 켜면 입력 내용을 확인할 수 있습니다.")
         
         # 보기/숨김 토글
         show_var = tk.BooleanVar(value=False)
         def toggle_show():
             key_entry.config(show='' if show_var.get() else '●')
-        ttk.Checkbutton(body, text="키 표시", variable=show_var, command=toggle_show).pack(anchor=W)
+        _chk_show = ttk.Checkbutton(body, text="키 표시", variable=show_var, command=toggle_show)
+        _chk_show.pack(anchor=W)
+        apply_tooltip(_chk_show, "체크하면 API 키가 평문으로 보입니다. 입력 확인 후 해제하는 것을 권장합니다.")
         
         # 저장 방식 선택
-        tk.Label(body, text="저장 방식:", bg=_bg, fg=_fg, font=('맑은 고딕', 10)).pack(anchor=W, pady=(10, 0))
+        _l_method = tk.Label(body, text="저장 방식:", bg=_bg, fg=_fg, font=('맑은 고딕', 10))
+        _l_method.pack(anchor=W, pady=(10, 0))
+        apply_tooltip(_l_method, "API 키 저장 위치. 자동은 OS keyring 우선, 실패 시 settings.ini에 저장됩니다.")
         method_var = tk.StringVar(value='auto')
         methods_frame = tk.Frame(body, bg=_bg)
         methods_frame.pack(fill=X, pady=5)
-        ttk.Radiobutton(methods_frame, text="🔒 자동 (keyring 우선)", variable=method_var, value='auto').pack(anchor=W)
-        ttk.Radiobutton(methods_frame, text="📄 settings.ini", variable=method_var, value='ini').pack(anchor=W)
+        _rb_auto = ttk.Radiobutton(methods_frame, text="🔒 자동 (keyring 우선)", variable=method_var, value='auto')
+        _rb_auto.pack(anchor=W)
+        apply_tooltip(_rb_auto, "OS 자격증명(keyring)에 저장을 시도하고, 실패 시 settings.ini에 저장합니다. 권장.")
+        _rb_ini = ttk.Radiobutton(methods_frame, text="📄 settings.ini", variable=method_var, value='ini')
+        _rb_ini.pack(anchor=W)
+        apply_tooltip(_rb_ini, "API 키를 settings.ini 파일에 평문으로 저장합니다. 보안상 주의가 필요합니다.")
         
         result_label = tk.Label(body, text="", bg=_bg, fg=_fg, font=('맑은 고딕', 9))
         result_label.pack(anchor=W, pady=5)
@@ -127,8 +143,12 @@ class SettingsDialogMixin:
         
         btn_frame = tk.Frame(body, bg=_bg)
         btn_frame.pack(fill=X, pady=10)
-        ttk.Button(btn_frame, text="💾 저장", command=save_key, width=12).pack(side=LEFT, padx=5)
-        ttk.Button(btn_frame, text="닫기", command=dialog.destroy, width=12).pack(side=RIGHT, padx=5)
+        _btn_save = ttk.Button(btn_frame, text="💾 저장", command=save_key, width=12)
+        _btn_save.pack(side=LEFT, padx=5)
+        apply_tooltip(_btn_save, "입력한 API 키와 모델을 선택한 저장 방식으로 저장합니다. 다음 실행부터 적용됩니다.")
+        _btn_close = ttk.Button(btn_frame, text="닫기", command=dialog.destroy, width=12)
+        _btn_close.pack(side=RIGHT, padx=5)
+        apply_tooltip(_btn_close, "설정 창을 닫습니다. 저장하지 않은 변경 내용은 반영되지 않습니다.")
         
         dialog.bind('<Escape>', lambda e: dialog.destroy())
     

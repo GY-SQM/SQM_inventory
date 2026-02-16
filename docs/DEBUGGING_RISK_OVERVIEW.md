@@ -122,6 +122,14 @@ invoice = packing.get('salar_invoice_no', '')
 - ~~**safe_date 용도별 정리**~~ → **적용 완료** (helpers.safe_date_to_date, safe_utils.safe_date_str 별칭·docstring).  
 - ~~**메시지박스 통일**~~ → **적용 완료** (직접 messagebox 호출 8곳 → CustomMessageBox).
 
+**v5.7.8 출고 전 필수 정리**  
+- ~~**샘플 1kg 정합성**~~ → crud_mixin에서 `SAMPLE_WEIGHT_KG` 상수 단일 사용.  
+- ~~**상태 체계**~~ → outbound_mixin에서 `STATUS_AVAILABLE`/`STATUS_PICKED`/`STATUS_DEPLETED` 상수 사용, constants에 출고 흐름 주석.  
+- ~~**constants 통합**~~ → GUI constants에서 DEFAULT_WAREHOUSE/DEFAULT_TONBAG_COUNT를 engine re-export.  
+- ~~**config 분할**~~ → SQL 호환 함수를 `config_sql.py`로 분리.  
+- ~~**safe_float 통합**~~ → onestop_inbound 로컬 `_safe_float` 제거, `utils.common.safe_float` 사용.  
+- **validate_lot 출처**: 출고/엔진 코드에서는 `engine_modules.validators.validate_lot_no` 사용 권장 (helpers.validate_lot_no는 GUI 간단 검증용).
+
 ---
 
 ## 6. 전체 디버깅 리스크 요약표

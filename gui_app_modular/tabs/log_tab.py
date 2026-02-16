@@ -10,7 +10,7 @@ v3.6.0 - UI 통일성 적용
 """
 
 import logging
-from ..utils.ui_constants import CustomMessageBox, ThemeColors
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, apply_tooltip
 from datetime import datetime
 from tkinter import END
 
@@ -41,14 +41,20 @@ class LogTabMixin:
         header_frame = ttk.Frame(self.tab_log)
         header_frame.pack(fill=X, pady=(0, Spacing.XS))
         
-        ttk.Label(header_frame, text="Activity Log", font=fonts.body(bold=True)).pack(side=LEFT)
+        _lbl_log = ttk.Label(header_frame, text="Activity Log", font=fonts.body(bold=True))
+        _lbl_log.pack(side=LEFT)
+        apply_tooltip(_lbl_log, "시스템·작업·오류 로그가 시간순으로 표시됩니다. 정보/성공/경고/오류 수준별로 색상이 다릅니다.")
         
         # Buttons
         btn_frame = ttk.Frame(header_frame)
         btn_frame.pack(side=RIGHT)
         
-        ttk.Button(btn_frame, text="Clear", command=self._clear_log).pack(side=LEFT, padx=Spacing.XS)
-        ttk.Button(btn_frame, text="Export", command=self._export_log).pack(side=LEFT, padx=Spacing.XS)
+        _btn_clear = ttk.Button(btn_frame, text="Clear", command=self._clear_log)
+        _btn_clear.pack(side=LEFT, padx=Spacing.XS)
+        apply_tooltip(_btn_clear, "화면에 표시된 로그 내용을 모두 지웁니다. 파일에는 영향을 주지 않습니다.")
+        _btn_export = ttk.Button(btn_frame, text="Export", command=self._export_log)
+        _btn_export.pack(side=LEFT, padx=Spacing.XS)
+        apply_tooltip(_btn_export, "현재 로그를 텍스트 파일로 저장합니다. 저장 위치는 선택 대화상자에서 지정할 수 있습니다.")
         
         # Log text area
         log_frame = ttk.Frame(self.tab_log)

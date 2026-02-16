@@ -19,13 +19,14 @@ import webbrowser
 
 # UI 통일성 모듈 임포트
 try:
-    from ..utils.ui_constants import DialogSize, Spacing, FontScale, center_dialog
+    from ..utils.ui_constants import DialogSize, Spacing, FontScale, center_dialog, apply_tooltip
 except ImportError:
     # 독립 실행 시 폴백
     DialogSize = None
     Spacing = type('Spacing', (), {'XS': 4, 'SM': 8, 'MD': 16, 'LG': 24})()
     FontScale = None
     center_dialog = None
+    apply_tooltip = lambda w, t: None
 
 
 class ShortcutGuideDialog:
@@ -210,19 +211,23 @@ class ShortcutGuideDialog:
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, pady=(Spacing.SM, 0))
         
-        ttk.Button(
+        _btn_manual = ttk.Button(
             button_frame,
             text="📖 전체 매뉴얼 보기",
             command=self._open_manual,
             bootstyle="info-outline"
-        ).pack(side=tk.LEFT)
+        )
+        _btn_manual.pack(side=tk.LEFT)
+        apply_tooltip(_btn_manual, "사용자 매뉴얼 문서를 엽니다. 입고·출고·보고서 등 기능별 사용법이 안내됩니다.")
         
-        ttk.Button(
+        _btn_close_shortcut = ttk.Button(
             button_frame,
             text="닫기",
             command=self.dialog.destroy,
             bootstyle="secondary"
-        ).pack(side=tk.RIGHT)
+        )
+        _btn_close_shortcut.pack(side=tk.RIGHT)
+        apply_tooltip(_btn_close_shortcut, "단축키 가이드 창을 닫습니다. Esc 키로도 닫을 수 있습니다.")
         
         # 팁
         tip_label = ttk.Label(

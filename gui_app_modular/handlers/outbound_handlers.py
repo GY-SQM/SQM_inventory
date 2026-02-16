@@ -11,7 +11,7 @@ Outbound processing: simple outbound, Excel outbound
 import logging
 import sqlite3
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, apply_tooltip
 logger = logging.getLogger(__name__)
 
 
@@ -265,9 +265,15 @@ class OutboundHandlersMixin:
         btn_style_secondary = {"bootstyle": "secondary"} if HAS_TTKBOOTSTRAP else {}
         btn_style_outline = {"bootstyle": "outline"} if HAS_TTKBOOTSTRAP else {}
         
-        ttk.Button(btn_frame, text="Preview", command=on_preview, **btn_style).pack(side=LEFT, padx=5)
-        ttk.Button(btn_frame, text="Execute", command=on_execute, **btn_style_success).pack(side=LEFT, padx=5)
-        ttk.Button(btn_frame, text="Cancel", command=dialog.destroy, **btn_style_secondary).pack(side=RIGHT, padx=5)
+        _bp = ttk.Button(btn_frame, text="Preview", command=on_preview, **btn_style)
+        _bp.pack(side=LEFT, padx=5)
+        apply_tooltip(_bp, "입력한 LOT·수량·출고처로 출고 미리보기를 표시합니다. DB에는 반영되지 않습니다.")
+        _be = ttk.Button(btn_frame, text="Execute", command=on_execute, **btn_style_success)
+        _be.pack(side=LEFT, padx=5)
+        apply_tooltip(_be, "미리보기한 내용으로 실제 출고를 실행합니다. 재고가 차감되고 출고 이력에 기록됩니다.")
+        _bc = ttk.Button(btn_frame, text="Cancel", command=dialog.destroy, **btn_style_secondary)
+        _bc.pack(side=RIGHT, padx=5)
+        apply_tooltip(_bc, "출고 대화상자를 닫습니다. 실행하지 않은 출고는 반영되지 않습니다.")
         
         # Get selected LOT from inventory
         def on_get_selected_lot():
@@ -283,8 +289,10 @@ class OutboundHandlersMixin:
                     lot_text.insert(END, f"{lot_no}, ")
                 lot_text.focus_set()
         
-        ttk.Button(btn_frame, text="Add Selected", command=on_get_selected_lot, 
-                   **btn_style_outline).pack(side=LEFT, padx=20)
+        _badd = ttk.Button(btn_frame, text="Add Selected", command=on_get_selected_lot,
+                           **btn_style_outline)
+        _badd.pack(side=LEFT, padx=20)
+        apply_tooltip(_badd, "재고 리스트에서 선택한 LOT를 출고 목록에 추가합니다. 여러 LOT를 쉼표로 구분해 넣을 수 있습니다.")
         
         # Center dialog
         dialog.update_idletasks()

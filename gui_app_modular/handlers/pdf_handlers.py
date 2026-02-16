@@ -10,7 +10,7 @@ PDF conversion, analysis, and report generation
 
 import os
 import logging
-from ..utils.ui_constants import CustomMessageBox
+from ..utils.ui_constants import CustomMessageBox, apply_tooltip
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -401,8 +401,12 @@ class PDFHandlersMixin:
         
         btn_frame = ttk.Frame(dialog)
         btn_frame.pack(pady=15)
-        ttk.Button(btn_frame, text="📝 생성", command=generate, width=12).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text="취소", command=dialog.destroy, width=10).pack(side='left', padx=5)
+        _b1 = ttk.Button(btn_frame, text="📝 생성", command=generate, width=12)
+        _b1.pack(side='left', padx=5)
+        apply_tooltip(_b1, "입력한 조건(고객·기간)으로 일일 보고서 PDF를 생성합니다. 저장 위치를 선택할 수 있습니다.")
+        _b2 = ttk.Button(btn_frame, text="취소", command=dialog.destroy, width=10)
+        _b2.pack(side='left', padx=5)
+        apply_tooltip(_b2, "대화상자를 닫습니다. 생성하지 않은 보고서는 저장되지 않습니다.")
     
     def _generate_lot_detail_pdf(self, lot_no: str = None) -> None:
         """v4.1.1: LOT 상세 보고서 PDF — 자체 reportlab 생성"""
@@ -495,8 +499,12 @@ class PDFHandlersMixin:
         
         btn_f = ttk.Frame(dialog)
         btn_f.pack(pady=10)
-        ttk.Button(btn_f, text="📤 생성", command=generate, width=12).pack(side='left', padx=5)
-        ttk.Button(btn_f, text="취소", command=dialog.destroy, width=10).pack(side='left', padx=5)
+        _bf1 = ttk.Button(btn_f, text="📤 생성", command=generate, width=12)
+        _bf1.pack(side='left', padx=5)
+        apply_tooltip(_bf1, "선택한 LOT의 상세 정보(톤백·이력 포함)를 PDF 파일로 저장합니다.")
+        _bf2 = ttk.Button(btn_f, text="취소", command=dialog.destroy, width=10)
+        _bf2.pack(side='left', padx=5)
+        apply_tooltip(_bf2, "대화상자를 닫습니다.")
     
     def _generate_daily_pdf_v398(self) -> None:
         """v3.9.8: 일일 재고 현황 PDF"""
@@ -580,5 +588,9 @@ class PDFHandlersMixin:
         
         btn_frame = ttk.Frame(dialog)
         btn_frame.pack(pady=10)
-        ttk.Button(btn_frame, text="📊 생성", command=generate, width=10).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text="취소", command=dialog.destroy, width=10).pack(side='left', padx=5)
+        _bd1 = ttk.Button(btn_frame, text="📊 생성", command=generate, width=10)
+        _bd1.pack(side='left', padx=5)
+        apply_tooltip(_bd1, "현재 재고 기준 일일 재고 현황 PDF를 생성합니다. 저장 위치를 선택할 수 있습니다.")
+        _bd2 = ttk.Button(btn_frame, text="취소", command=dialog.destroy, width=10)
+        _bd2.pack(side='left', padx=5)
+        apply_tooltip(_bd2, "대화상자를 닫습니다.")

@@ -18,17 +18,9 @@ from datetime import datetime
 from engine_modules.constants import DEFAULT_WAREHOUSE
 
 from ..utils.ui_constants import ThemeColors
+from utils.common import safe_float
 
 logger = logging.getLogger(__name__)
-
-def _safe_float(val, default: float = 0.0) -> float:
-    """안전한 float 변환"""
-    if not val:
-        return default
-    try:
-        return float(str(val).replace(',', '').strip())
-    except (ValueError, TypeError):
-        return default
 
 
 # 미리보기 컬럼 정의 — 업로드3: 전 컬럼 가운데 정렬
@@ -762,11 +754,11 @@ class OneStopInboundDialog(InboundDialogBase):
             except (ValueError, TypeError) as _e:
                 logger.debug(f"onestop_inbound: {_e}")
             try:
-                total_net += _safe_float(r['net_weight']) if r['net_weight'] else 0
+                total_net += safe_float(r['net_weight']) if r['net_weight'] else 0
             except (ValueError, TypeError) as _e:
                 logger.debug(f"onestop_inbound: {_e}")
             try:
-                total_gross += _safe_float(r['gross_weight']) if r['gross_weight'] else 0
+                total_gross += safe_float(r['gross_weight']) if r['gross_weight'] else 0
             except (ValueError, TypeError) as _e:
                 logger.debug(f"onestop_inbound: {_e}")
         

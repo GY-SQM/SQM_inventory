@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.7.7'
+__version__ = '5.7.8'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.7.8': '🏗️ v5.7.8: 출고 전 필수 — 샘플 1kg 상수화, 상태 상수(PICKED/SOLD), constants·safe_float·config_sql 분할',
     '5.7.7': '🔖 v5.7.7: 릴리스 태그',
     '5.7.6': '🐛 v5.7.6: 출고 API 디버깅 — import_handlers process_outbound(allocation_data) 시그니처 통일, LOT 전량 출고 시 current_weight 조회',
     '5.7.5': '🎨 v5.7.5: UI·원스톱 입고 개선 — 폰트 위계, 기간 캘린더, 진행 팝업, Invoice/FA·Bill of Lading·Delivery Order, UID 표시, 스탯바 None 수정',

@@ -35,6 +35,10 @@ Usage:
     from engine_modules.inventory_modular import QueryMixin, ExportMixin
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from .engine import SQMInventoryEngineV3, SQMInventoryEngine
 
 # Export all mixins
@@ -54,8 +58,7 @@ try:
     # v5.5.3 P8: outbound_extended_mixin 제거 (죽은 코드)
     # v5.6.7: lot_management_mixin 제거 (빈 placeholder)
 except ImportError as e:
-    import logging
-    logging.getLogger(__name__).warning(f"Mixin import warning: {e}")
+    logger.warning(f"Mixin import warning: {e}")
 
 # Export utilities
 try:
@@ -70,8 +73,7 @@ try:
         normalize_column_name,
     )
 except ImportError as _e:
-    import logging as _logging
-    _logging.getLogger(__name__).debug(f"__init__: {_e}")
+    logger.debug(f"__init__: {_e}")
 
 __all__ = [
     # Main engine

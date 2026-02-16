@@ -17,7 +17,7 @@ v3.6.0 - UI 통일성 적용
 """
 
 import sqlite3
-from ..utils.ui_constants import ThemeColors, FontScale, Spacing, ColumnWidth
+from ..utils.ui_constants import ThemeColors, FontScale, Spacing, ColumnWidth, apply_tooltip
 import logging
 from datetime import datetime
 
@@ -162,6 +162,7 @@ class DashboardTabMixin:
             command=lambda: self._on_export_click(option=6)
         )
         btn_dash_export.pack(side=RIGHT)
+        apply_tooltip(btn_dash_export, "현재 재고·통계 데이터를 Excel(통합현황) 파일로 내보냅니다. 재고 메뉴의 내보내기 옵션 6과 동일합니다.")
         
         middle_frame = ttk.Frame(main_container)
         middle_frame.pack(fill=BOTH, expand=YES, pady=(0, Spacing.MD))
@@ -173,6 +174,7 @@ class DashboardTabMixin:
         # 2-1. 알림 패널 (v3.6.0 개선)
         alert_frame = ttk.LabelFrame(middle_frame, text="⚠️ 알림 및 경고")
         alert_frame.grid(row=0, column=0, sticky='nsew', padx=(0, Spacing.SM))
+        apply_tooltip(alert_frame, "재고 부족, 무결성 경고 등 확인이 필요한 항목이 표시됩니다. 항목을 더블클릭하면 해당 LOT나 화면으로 이동할 수 있습니다.")
         
         # 알림 리스트 (v5.0.7: 콤팩트 - height=6, font=11)
         self.alert_listbox = tk.Listbox(
@@ -198,6 +200,7 @@ class DashboardTabMixin:
         # 2-2. 입출고 추이 (v3.6.0: 빠른 액션 → 차트로 변경)
         chart_frame = ttk.LabelFrame(middle_frame, text="📈 최근 7일 입출고")
         chart_frame.grid(row=0, column=1, sticky='nsew')
+        apply_tooltip(chart_frame, "최근 7일간 일별 입고·출고량을 막대 그래프로 표시합니다. 파란색=입고, 주황색=출고.")
         
         # 간단한 텍스트 기반 차트 (v5.0.7: 콤팩트 - 120px)
         self.chart_canvas = tk.Canvas(chart_frame, bg=_p.get('chart_bg', 'white'), height=120, highlightthickness=0)
@@ -233,17 +236,22 @@ class DashboardTabMixin:
         # 제품별 요약 (전체 너비)
         product_frame = ttk.LabelFrame(bottom_frame, text="📈 제품별 현황")
         product_frame.grid(row=0, column=0, sticky='nsew')
+        apply_tooltip(product_frame, "제품별 LOT 수, 톤백 수, 톤백/샘플 kg, 총 kg 등을 표시합니다. LOT 단위/톤백 상세 전환으로 보기 방식을 바꿀 수 있습니다.")
         
         # v3.8.7: LOT/톤백 전환 라디오 (v5.0.7: 콤팩트 - font=12)
         from ..utils.constants import tk as _tk
         self._dash_radio_frame = _tk.Frame(product_frame)
         self._dash_view_mode = _tk.StringVar(value='lot')
-        _tk.Radiobutton(self._dash_radio_frame, text="📦 LOT 단위", variable=self._dash_view_mode,
+        _rb_lot = _tk.Radiobutton(self._dash_radio_frame, text="📦 LOT 단위", variable=self._dash_view_mode,
                         value='lot', command=self._refresh_dashboard_products,
-                        font=('', 12, 'bold')).pack(side=LEFT, padx=(0, 10))
-        _tk.Radiobutton(self._dash_radio_frame, text="🎒 톤백 상세", variable=self._dash_view_mode,
+                        font=('', 12, 'bold'))
+        _rb_lot.pack(side=LEFT, padx=(0, 10))
+        apply_tooltip(_rb_lot, "제품별로 LOT 수, 톤백 수, 총 kg 등을 요약해서 표시합니다.")
+        _rb_tb = _tk.Radiobutton(self._dash_radio_frame, text="🎒 톤백 상세", variable=self._dash_view_mode,
                         value='tonbag', command=self._refresh_dashboard_products,
-                        font=('', 12)).pack(side=LEFT)
+                        font=('', 12))
+        _rb_tb.pack(side=LEFT)
+        apply_tooltip(_rb_tb, "제품별로 일반 톤백과 샘플 톤백을 구분한 상세 수치를 표시합니다.")
         
         # v4.0.5: 톤백/샘플 구분 컬럼 (v5.0.7: 콤팩트 - height=6)
         columns = ("product", "lots", "tonbag_kg", "tonbag_cnt",

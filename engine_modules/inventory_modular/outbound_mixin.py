@@ -14,6 +14,12 @@ import logging
 from datetime import datetime
 from typing import Dict, Optional
 
+from engine_modules.constants import (
+    STATUS_AVAILABLE,
+    STATUS_DEPLETED,
+    STATUS_PICKED,
+)
+
 from .base import InventoryBaseMixin
 
 logger = logging.getLogger(__name__)
@@ -140,10 +146,10 @@ class OutboundMixin(InventoryBaseMixin):
         remaining_kg = weight_kg
         tonbags = self.db.fetchall(
             """SELECT id, sub_lt, weight FROM inventory_tonbag 
-               WHERE lot_no = ? AND status = 'AVAILABLE'
+               WHERE lot_no = ? AND status = ?
                  AND COALESCE(is_sample, 0) = 0
                ORDER BY sub_lt""",
-            (lot_no,)
+            (lot_no, STATUS_AVAILABLE)
         )
         
         picked_count = 0
@@ -157,14 +163,14 @@ class OutboundMixin(InventoryBaseMixin):
                 
                 self.db.execute(
                     """UPDATE inventory_tonbag SET
-                        status = 'PICKED',
+                        status = ?,
                         picked_to = ?,
                         picked_date = ?,
                         sale_ref = ?,
                         outbound_date = ?,
                         updated_at = ?
                     WHERE id = ?""",
-                    (customer, now, sale_ref, now, now, tb['id'])
+                    (STATUS_PICKED, customer, now, sale_ref, now, now, tb['id'])
                 )
                 remaining_kg -= tb_weight
                 picked_count += 1
@@ -173,7 +179,7 @@ class OutboundMixin(InventoryBaseMixin):
         new_weight = available - weight_kg
         if new_weight < 0:
             new_weight = 0
-        new_status = 'DEPLETED' if new_weight <= 0 else 'AVAILABLE'
+        new_status = STATUS_DEPLETED if new_weight <= 0 else STATUS_AVAILABLE
         
         self.db.execute(
             """UPDATE inventory SET
@@ -213,12 +219,12 @@ class OutboundMixin(InventoryBaseMixin):
                 current_weight = MAX(0, current_weight - ?),
                 picked_weight = picked_weight + ?,
                 status = CASE 
-                    WHEN current_weight - ? <= 0 THEN 'DEPLETED'
+                    WHEN current_weight - ? <= 0 THEN ?
                     ELSE status
                 END,
                 updated_at = ?
             WHERE lot_no = ?""",
-            (weight_kg, weight_kg, weight_kg, now, lot_no)
+            (weight_kg, weight_kg, weight_kg, STATUS_DEPLETED, now, lot_no)
         )
     
 
@@ -247,7 +253,7 @@ class OutboundMixin(InventoryBaseMixin):
                     result['errors'].append(f"톤백 없음: {lot_no}-{sub_lt}")
                     return result
                 
-                if tonbag['status'] != 'PICKED':
+                if tonbag['status'] != STATUS_PICKED:
                     result['errors'].append(f"PICKED 상태가 아님: {lot_no}-{sub_lt} ({tonbag['status']})")
                     return result
                 
@@ -257,14 +263,14 @@ class OutboundMixin(InventoryBaseMixin):
                 # 1. 톤백: PICKED → AVAILABLE
                 self.db.execute("""
                     UPDATE inventory_tonbag SET
-                        status = 'AVAILABLE',
+                        status = ?,
                         picked_to = NULL,
                         picked_date = NULL,
                         pick_ref = NULL,
                         outbound_date = NULL,
                         updated_at = ?
                     WHERE lot_no = ? AND sub_lt = ?
-                """, (now, lot_no, sub_lt))
+                """, (STATUS_AVAILABLE, now, lot_no, sub_lt))
                 
                 # 2. inventory: current_weight 복구
                 self.db.execute("""
@@ -316,8 +322,8 @@ class OutboundMixin(InventoryBaseMixin):
                     tonbag = self.db.fetchone("""
                         SELECT weight, status, picked_to 
                         FROM inventory_tonbag 
-                        WHERE lot_no = ? AND sub_lt = ? AND status = 'PICKED'
-                    """, (lot_no, sub_lt))
+                        WHERE lot_no = ? AND sub_lt = ? AND status = ?
+                    """, (lot_no, sub_lt, STATUS_PICKED))
                     
                     if not tonbag:
                         raise ValueError(f"취소 불가: {lot_no}-{sub_lt}")
@@ -327,10 +333,10 @@ class OutboundMixin(InventoryBaseMixin):
                     
                     self.db.execute("""
                         UPDATE inventory_tonbag SET
-                            status = 'AVAILABLE', picked_to = NULL, picked_date = NULL,
+                            status = ?, picked_to = NULL, picked_date = NULL,
                             pick_ref = NULL, outbound_date = NULL, updated_at = ?
                         WHERE lot_no = ? AND sub_lt = ?
-                    """, (now, lot_no, sub_lt))
+                    """, (STATUS_AVAILABLE, now, lot_no, sub_lt))
                     
                     self.db.execute("""
                         UPDATE inventory SET
@@ -376,11 +382,11 @@ class OutboundMixin(InventoryBaseMixin):
         iw = lot['initial_weight'] or 0
         
         if cw <= 0:
-            new_status = 'DEPLETED'
+            new_status = STATUS_DEPLETED
         elif cw >= iw:
-            new_status = 'AVAILABLE'
+            new_status = STATUS_AVAILABLE
         else:
-            new_status = 'AVAILABLE'  # 부분 출고도 AVAILABLE (잔량 있음)
+            new_status = STATUS_AVAILABLE  # 부분 출고도 AVAILABLE (잔량 있음)
         
         self.db.execute(
             "UPDATE inventory SET status = ? WHERE lot_no = ?",

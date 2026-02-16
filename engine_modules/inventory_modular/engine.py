@@ -105,10 +105,8 @@ except ImportError:
 
 # v5.5.3 P8: OutboundExtendedMixin 제거 (죽은 코드 — 메서드 호출처 0건)
 
-try:
-    from .lot_management_mixin import LotManagementMixin
-except ImportError:
-    LotManagementMixin = object
+# v5.6.7: lot_management_mixin.py 제거 (빈 placeholder) — object로 대체
+LotManagementMixin = object
 
 
 class SQMInventoryEngineV3(

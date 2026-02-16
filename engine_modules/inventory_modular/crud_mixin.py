@@ -13,6 +13,8 @@ import logging
 from datetime import datetime, date
 from typing import Dict
 
+from engine_modules.constants import SAMPLE_WEIGHT_KG
+
 logger = logging.getLogger(__name__)
 
 
@@ -83,8 +85,7 @@ class CRUDMixin:
             
             # Calculate weight per bag (v5.6.0 대원칙: 샘플 1kg 제외 후 균등 분배)
             # LOT 총무게 = (톤백수 × 단가) + 샘플 1kg
-            # → 톤백 단가 = (총무게 - 1kg) / 톤백수
-            SAMPLE_WEIGHT_KG = 1.0
+            # → 톤백 단가 = (총무게 - SAMPLE_WEIGHT_KG) / 톤백수
             weight_per_bag = (net_weight - SAMPLE_WEIGHT_KG) / mxbg_pallet if mxbg_pallet > 0 else 500
             
             with self.db.transaction("IMMEDIATE"):
@@ -123,16 +124,15 @@ class CRUDMixin:
                         ) VALUES (?, ?, ?, ?, 'AVAILABLE', 0, ?)
                     """, (inv_id, lot_no, sub, weight_per_bag, now))
                 
-                # v3.9.1: 샘플 톤백 자동 생성 (sub_lt=0, 1kg, is_sample=1)
-                sample_weight = 1.0  # 1kg (= 0.001 MT)
+                # v3.9.1: 샘플 톤백 자동 생성 (sub_lt=0, SAMPLE_WEIGHT_KG, is_sample=1)
                 self.db.execute("""
                     INSERT INTO inventory_tonbag (
                         inventory_id, lot_no, sub_lt, weight, status,
                         is_sample, created_at
                     ) VALUES (?, ?, 0, ?, 'AVAILABLE', 1, ?)
-                """, (inv_id, lot_no, sample_weight, now))
+                """, (inv_id, lot_no, SAMPLE_WEIGHT_KG, now))
                 
-                logger.info(f"[add_inventory] 샘플 톤백 생성: {lot_no}/0 (1kg)")
+                logger.info(f"[add_inventory] 샘플 톤백 생성: {lot_no}/0 ({SAMPLE_WEIGHT_KG}kg)")
                 
                 # Movement history
                 self.db.execute("""

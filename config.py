@@ -676,60 +676,30 @@ def safe_file_backup(source_path: str, backup_dir: str = None) -> tuple:
 
 
 # =============================================================================
-# v3.6.0: SQL 호환 함수 (PostgreSQL 마이그레이션 준비)
+# v5.7.8: SQL 호환 함수 — config_sql에서 구현, 하위 호환용 래퍼 (출고/리포트 참조)
 # =============================================================================
+from config_sql import (
+    sql_auto_increment as _sql_auto_increment_impl,
+    sql_date_format as _sql_date_format_impl,
+    sql_group_concat as _sql_group_concat_impl,
+    sql_ifnull,
+    sql_current_timestamp,
+)
+
 
 def sql_group_concat(column: str, separator: str = ',') -> str:
-    """
-    v3.6.0: DB 타입에 따른 문자열 집계 함수
-    
-    SQLite: GROUP_CONCAT(column)
-    PostgreSQL: STRING_AGG(column::TEXT, ',')
-    """
-    if DB_TYPE.lower() == 'postgresql':
-        return f"STRING_AGG({column}::TEXT, '{separator}')"
-    return f"GROUP_CONCAT({column}, '{separator}')"
-
-
-def sql_ifnull(column: str, default: str) -> str:
-    """
-    v3.6.0: DB 타입에 따른 NULL 대체 함수
-    
-    SQLite/PostgreSQL 모두 COALESCE 사용 (호환)
-    """
-    return f"COALESCE({column}, {default})"
+    """DB 타입에 따른 문자열 집계. SQLite: GROUP_CONCAT, PostgreSQL: STRING_AGG"""
+    return _sql_group_concat_impl(DB_TYPE, column, separator)
 
 
 def sql_date_format(column: str, format_str: str) -> str:
-    """
-    v3.6.0: DB 타입에 따른 날짜 포맷 함수
-    
-    SQLite: strftime('%Y-%m-%d', column)
-    PostgreSQL: to_char(column, 'YYYY-MM-DD')
-    """
-    if DB_TYPE.lower() == 'postgresql':
-        # SQLite 포맷 → PostgreSQL 포맷 변환
-        pg_format = format_str.replace('%Y', 'YYYY').replace('%m', 'MM').replace('%d', 'DD')
-        pg_format = pg_format.replace('%H', 'HH24').replace('%M', 'MI').replace('%S', 'SS')
-        return f"to_char({column}, '{pg_format}')"
-    return f"strftime('{format_str}', {column})"
-
-
-def sql_current_timestamp() -> str:
-    """v3.6.0: 현재 타임스탬프 (호환)"""
-    return "CURRENT_TIMESTAMP"  # 양쪽 동일
+    """DB 타입에 따른 날짜 포맷. SQLite: strftime, PostgreSQL: to_char"""
+    return _sql_date_format_impl(DB_TYPE, column, format_str)
 
 
 def sql_auto_increment() -> str:
-    """
-    v3.6.0: 자동 증가 컬럼 타입
-    
-    SQLite: INTEGER PRIMARY KEY AUTOINCREMENT
-    PostgreSQL: SERIAL PRIMARY KEY
-    """
-    if DB_TYPE.lower() == 'postgresql':
-        return "SERIAL PRIMARY KEY"
-    return "INTEGER PRIMARY KEY AUTOINCREMENT"
+    """자동 증가 컬럼 타입. SQLite: INTEGER PRIMARY KEY AUTOINCREMENT, PG: SERIAL PRIMARY KEY"""
+    return _sql_auto_increment_impl(DB_TYPE)
 
 
 # 모듈 로드 시 로깅 초기화
