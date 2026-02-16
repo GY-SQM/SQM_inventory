@@ -111,8 +111,8 @@ def show_date_calendar(parent, initial_value: Optional[str], on_choose: Callable
     win.geometry(f"+{parent.winfo_rootx() + 50}+{parent.winfo_rooty() + 80}")
     try:
         win.focus_set()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Suppressed: {e}")
 
 
 def apply_striped_rows(tree, is_dark: bool = False) -> None:
@@ -261,8 +261,8 @@ class HeaderFilterBar:
         try:
             from .ui_constants import apply_tooltip
             apply_tooltip(widget, text)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Suppressed: {e}")
 
     def _get_column_tooltip(self, col_id: str, label: str) -> str:
         """컬럼별 툴팁 문구"""

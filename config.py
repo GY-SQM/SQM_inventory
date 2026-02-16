@@ -61,9 +61,9 @@ logger = logging.getLogger(__name__)
 try:
     from version import __version__, APP_NAME, APP_NAME_EN
 except ImportError:
-    APP_NAME = "SQM 재고관리"
-    APP_NAME_EN = "SQM_Inventory"
-    __version__ = '3.8.8'
+    __version__ = "0.0.0"
+    APP_NAME = "SQM 재고관리 시스템"
+    APP_NAME_EN = "SQM Inventory Management System"
 
 APP_VERSION = __version__  # 하위 호환성 유지
 

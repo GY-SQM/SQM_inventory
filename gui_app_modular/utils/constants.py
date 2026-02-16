@@ -161,8 +161,8 @@ RECENT_FILES_FILE = BASE_DIR / "recent_files.json"
 try:
     from version import __version__, APP_NAME
 except ImportError:
-    __version__ = '3.9.2'
-    APP_NAME = "SQM 재고관리"
+    __version__ = "0.0.0"
+    APP_NAME = "SQM 재고관리 시스템"
 
 # ═══════════════════════════════════════════════════════════════
 # 선택적 모듈 플래그

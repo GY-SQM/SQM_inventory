@@ -1,4 +1,4 @@
 SQM Inventory System
-Version: v5.6.8
-Release Date: 2026-02-15
-Notes: DO 후속 연결 + 데드코드 제거(-1,583줄) + unused import 정리 + 루트 md 정리
+Version: v5.7.7
+Release Date: 2026-02-16
+Notes: 릴리스 태그

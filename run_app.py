@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 try:
     from version import __version__, APP_NAME
 except ImportError:
-    __version__ = "3.9.4"
+    __version__ = "0.0.0"
     APP_NAME = "SQM 재고관리 시스템"
 
 

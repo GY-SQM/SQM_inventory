@@ -124,8 +124,8 @@ class ThemeMixin:
             try:
                 from ..utils.table_styler import TableStyler
                 TableStyler.update_grid_style_for_theme(self.tree_inventory, is_dark)
-            except (ImportError, Exception):
-                pass
+            except (ImportError, Exception) as e:
+                logger.debug(f"Suppressed: {e}")
         
         # 톤백 트리뷰
         if hasattr(self, 'tree_sublot'):
@@ -133,8 +133,8 @@ class ThemeMixin:
             try:
                 from ..utils.table_styler import TableStyler
                 TableStyler.update_grid_style_for_theme(self.tree_sublot, is_dark)
-            except (ImportError, Exception):
-                pass
+            except (ImportError, Exception) as e:
+                logger.debug(f"Suppressed: {e}")
 
         # v5.4.0: toolbar 색상도 테마 변경 즉시 동기화 (White 테마 검정/글씨 꼬임 방지)
         try:

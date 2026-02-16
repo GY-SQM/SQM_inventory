@@ -73,4 +73,8 @@ __all__ = [
     'ShipmentDocuments',
 ]
 
-__version__ = '3.8.7'
+try:
+    from version import __version__ as _ver
+    __version__ = _ver
+except ImportError:
+    __version__ = "0.0.0"

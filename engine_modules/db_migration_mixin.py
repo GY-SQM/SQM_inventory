@@ -16,7 +16,6 @@ v3.9.6 - Extracted from database.py (1,378 lines → 분할)
 import logging
 import re
 import sqlite3
-import configparser  # v5.3.3
 from utils.path_utils import resolve_reports_dir  # v5.3.4
 
 logger = logging.getLogger(__name__)

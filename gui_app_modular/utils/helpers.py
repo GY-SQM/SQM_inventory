@@ -13,34 +13,15 @@ import re
 import logging
 from datetime import date, datetime
 from typing import Optional, List, Any
-from utils.common import normalize_column_name, safe_float, safe_str
+from utils.common import normalize_column_name, safe_float, safe_str, safe_int  # noqa: F401 (re-export)
 
 logger = logging.getLogger(__name__)
 
 
-def safe_int(value: Any, default: int = 0) -> int:
-    """
-    Safe integer conversion
-    
-    Args:
-        value: Value to convert
-        default: Default if conversion fails
-        
-    Returns:
-        Integer value
-    """
-    if value is None:
-        return default
-    try:
-        return int(float(value))
-    except (ValueError, TypeError):
-        return default
-
-
 def safe_date(value: Any, default: Optional[date] = None) -> Optional[date]:
     """
-    Safe date conversion
-    
+    Safe date conversion → date 객체 반환. 문자열(포맷)이 필요하면 safe_utils.safe_date 또는 safe_date_str 사용.
+
     Supports formats:
     - datetime object
     - date object
@@ -89,6 +70,10 @@ def safe_date(value: Any, default: Optional[date] = None) -> Optional[date]:
             continue
     
     return default or date.today()
+
+
+# 용도별 별칭 (DEBUGGING_RISK_OVERVIEW: safe_date 용도별 정리)
+safe_date_to_date = safe_date  # 날짜 객체 필요 시. 문자열 필요 시 safe_utils.safe_date_str
 
 
 def format_weight(weight_kg: float, unit: str = 'MT') -> str:

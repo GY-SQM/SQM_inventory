@@ -69,8 +69,8 @@ class ColumnToggleBar:
         try:
             from .ui_constants import apply_tooltip
             apply_tooltip(widget, text)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Suppressed: {e}")
 
     def _toggle_column(self, col_id: str, var: tk.BooleanVar) -> None:
         """

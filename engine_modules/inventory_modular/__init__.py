@@ -101,4 +101,7 @@ __all__ = [
     'normalize_column_name',
 ]
 
-__version__ = '3.8.7'
+try:
+    from version import __version__
+except ImportError:
+    __version__ = "0.0.0"

@@ -323,8 +323,24 @@ class ImportHandlersMixin:
                         continue
                     
                     destination = safe_str(row.get('destination', row.get('customer', '')))
-                    
-                    result = self.engine.process_outbound(lot_no, destination)
+
+                    # v5.7.6: process_outbound(allocation_data) 시그니처 통일 — Excel에 무게 없으면 LOT 전량 출고
+                    lot_row = self.engine.db.fetchone(
+                        "SELECT current_weight FROM inventory WHERE lot_no = ?", (lot_no,)
+                    )
+                    if not lot_row:
+                        errors.append(f"행 {idx+2}: LOT 없음 — {lot_no}")
+                        continue
+                    weight_kg = float(lot_row.get('current_weight') or 0)
+                    if weight_kg <= 0:
+                        errors.append(f"행 {idx+2}: 가용 재고 0 — {lot_no}")
+                        continue
+                    allocation_data = [{
+                        'lot_no': lot_no,
+                        'weight_kg': weight_kg,
+                        'customer': destination,
+                    }]
+                    result = self.engine.process_outbound(allocation_data)
                     if result.get('success'):
                         processed += 1
                     else:

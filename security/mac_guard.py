@@ -112,18 +112,19 @@ def verify_pc(show_gui_error: bool = True) -> bool:
             if show_gui_error:
                 try:
                     import tkinter as tk
-                    from tkinter import messagebox
+                    from gui_app_modular.utils.custom_messagebox import CustomMessageBox
                     root = tk.Tk()
                     root.withdraw()
-                    messagebox.showwarning(
+                    CustomMessageBox.showwarning(
+                        root,
                         "PC 인증 경고",
                         f"PC 정보가 일부 변경되었습니다.\n\n"
                         f"일치: {matched}\n불일치: {missing}\n\n"
                         f"프로그램은 실행되지만 관리자에게 업데이트를 요청하세요."
                     )
                     root.destroy()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Suppressed: {e}")
             return True
     
     # 둘 다 불일치 → 차단
@@ -132,18 +133,19 @@ def verify_pc(show_gui_error: bool = True) -> bool:
     if show_gui_error:
         try:
             import tkinter as tk
-            from tkinter import messagebox
+            from gui_app_modular.utils.custom_messagebox import CustomMessageBox
             root = tk.Tk()
             root.withdraw()
-            messagebox.showerror(
+            CustomMessageBox.showerror(
+                root,
                 "접근 차단",
                 f"이 PC에서는 SQM 재고관리 시스템을 실행할 수 없습니다.\n\n"
                 f"MAC: {current_mac}\n"
                 f"관리자에게 문의하세요."
             )
             root.destroy()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Suppressed: {e}")
     
     return False
 

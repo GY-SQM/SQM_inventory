@@ -165,7 +165,9 @@ class CustomMenuBar:
         
         self._add_separator(tools_menu)
         
-        # v4.0.3: 반품은 파일 → 입고 메뉴로 이동
+        # D/O 후속 연결 (입고 후 D/O 나중에 도착 시 LOT에 도착일/Free Time 보충)
+        self._add_command(tools_menu, "📋 D/O 후속 연결", self.app._on_do_update)
+        self._add_separator(tools_menu)
         
         # PDF 변환
         pdf_sub = self._add_submenu(tools_menu, "📄 PDF 변환")

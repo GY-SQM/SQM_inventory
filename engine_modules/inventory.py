@@ -91,4 +91,7 @@ __all__ = [
     'HAS_VALIDATORS',
 ]
 
-__version__ = '3.8.7'
+try:
+    from version import __version__
+except ImportError:
+    __version__ = "0.0.0"

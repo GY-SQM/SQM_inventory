@@ -441,8 +441,8 @@ class OneStopInboundDialog(InboundDialogBase):
         try:
             if getattr(self, '_progress_popup', None) and self._progress_popup.winfo_exists():
                 self._progress_popup.destroy()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Suppressed: {e}")
         self._progress_popup = None
         self._progress_popup_label = None
         self._progress_popup_bar = None
@@ -791,8 +791,8 @@ class OneStopInboundDialog(InboundDialogBase):
             x = self.dialog.winfo_rootx() + max(0, (self.dialog.winfo_width() - 900) // 2)
             y = self.dialog.winfo_rooty() + max(0, (self.dialog.winfo_height() - 520) // 2)
             win.geometry(f"900x520+{x}+{y}")
-        except tk.TclError:
-            pass
+        except tk.TclError as e:
+            logger.debug(f"Suppressed: {e}")
         top = ttk.Frame(win, padding=12)
         top.pack(fill=tk.BOTH, expand=True)
         ttk.Label(top, text="파싱이 완료되었습니다. 아래 내용이 맞는지 확인하세요.",
@@ -889,8 +889,12 @@ class OneStopInboundDialog(InboundDialogBase):
                     "Delivery Order(인도지시서)는 선택사항이며, 나중에 [📋 D/O 후속 연결] 메뉴로 보충할 수 있습니다."
                 )
             except (ImportError, ModuleNotFoundError):
-                from tkinter import messagebox
-                messagebox.showwarning("필수 서류 누락", "Packing List, Invoice/FA, Bill of Lading 3종 모두 필요합니다.")
+                from ..utils.ui_constants import CustomMessageBox
+                CustomMessageBox.showwarning(
+                    self.dialog,
+                    "필수 서류 누락",
+                    "Packing List, Invoice/FA, Bill of Lading 3종 모두 필요합니다."
+                )
             return
 
         # v3.8.8: 중복 LOT 사전 체크

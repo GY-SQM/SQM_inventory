@@ -136,8 +136,8 @@ class MenuMixin:
             command=self._on_container_suffix_toggle
         )
         tools_menu.add_separator()
-        
-        # v4.0.3: 반품은 입고 메뉴(📥 업로드)로 이동
+        tools_menu.add_command(label="📋 D/O 후속 연결", command=self._on_do_update)
+        tools_menu.add_separator()
         
         pdf_menu = tk.Menu(tools_menu, tearoff=0)
         tools_menu.add_cascade(label="📄 PDF 변환", menu=pdf_menu)

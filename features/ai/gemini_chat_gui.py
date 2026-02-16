@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 import tkinter as tk
-from tkinter import ttk, scrolledtext, filedialog, messagebox
+from tkinter import ttk, scrolledtext, filedialog
 
 from gui_app_modular.utils.custom_messagebox import CustomMessageBox
 
@@ -388,7 +388,8 @@ class GeminiChatWindow:
     
     def _clear_chat(self):
         """대화 지우기"""
-        if messagebox.askyesno("확인", "대화 내용을 모두 지우시겠습니까?"):
+        parent = getattr(self, 'root', self.parent)
+        if CustomMessageBox.askyesno(parent, "확인", "대화 내용을 모두 지우시겠습니까?"):
             self.chat_text.config(state=tk.NORMAL)
             self.chat_text.delete(1.0, tk.END)
             self.chat_text.config(state=tk.DISABLED)

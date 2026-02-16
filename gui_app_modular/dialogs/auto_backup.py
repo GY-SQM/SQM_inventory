@@ -405,19 +405,21 @@ class AutoBackupSettingsDialog:
     
     def _do_instant_backup(self) -> None:
         """v3.9.7: 즉시 백업 실행"""
-        import tkinter.messagebox as messagebox
-        
         if self.scheduler and hasattr(self.scheduler, 'engine'):
             try:
                 result = self.scheduler.engine.create_backup("manual_instant")
                 if result and result.get('success'):
-                    messagebox.showinfo("백업 완료", 
-                                       f"백업이 생성되었습니다.\n\n{result.get('path', '')}")
+                    CustomMessageBox.showinfo(
+                        self.root, "백업 완료",
+                        f"백업이 생성되었습니다.\n\n{result.get('path', '')}"
+                    )
                     self._load_backup_list()
                 else:
-                    messagebox.showwarning("백업 실패", 
-                                          result.get('error', '알 수 없는 오류'))
+                    CustomMessageBox.showwarning(
+                        self.root, "백업 실패",
+                        result.get('error', '알 수 없는 오류')
+                    )
             except (RuntimeError, ValueError) as e:
                 CustomMessageBox.show_detailed_error(self.root, "오류", str(e), exception=e)
         else:
-            messagebox.showinfo("안내", "엔진이 초기화되지 않았습니다.")
+            CustomMessageBox.showinfo(self.root, "안내", "엔진이 초기화되지 않았습니다.")

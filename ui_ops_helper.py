@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Tkinter 임포트
 try:
     import tkinter as tk
-    from tkinter import ttk, messagebox, scrolledtext
+    from tkinter import ttk, scrolledtext
     HAS_TK = True
 except ImportError:
     HAS_TK = False
@@ -115,8 +115,7 @@ class ErrorDialog:
             def copy_log():
                 parent.clipboard_clear()
                 parent.clipboard_append(details)
-                messagebox.showinfo("복사 완료", "로그가 클립보드에 복사되었습니다.", 
-                                   parent=dialog)
+                CustomMessageBox.showinfo(dialog, "복사 완료", "로그가 클립보드에 복사되었습니다.")
             
             ttk.Button(left_btns, text="📋 로그 복사", 
                        command=copy_log).pack(side='left', padx=(0, 5))

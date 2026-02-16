@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def safe_date(val: Any, default: str = '', output_format: str = '%Y-%m-%d') -> str:
-    """안전한 날짜 변환"""
+    """안전한 날짜 변환 → 문자열 반환 (포맷 지정). 날짜 객체가 필요하면 helpers.safe_date_to_date 사용."""
     if val is None:
         return default
     
@@ -58,6 +58,10 @@ def safe_date(val: Any, default: str = '', output_format: str = '%Y-%m-%d') -> s
         logger.debug(f"Suppressed: {_e}")
     
     return default
+
+
+# 용도별 별칭 (DEBUGGING_RISK_OVERVIEW: safe_date 용도별 정리)
+safe_date_str = safe_date  # 문자열 필요 시. 날짜 객체 필요 시 helpers.safe_date_to_date
 
 
 def find_column(df_columns: list, candidates: list, default: Optional[str] = None) -> Optional[str]:
