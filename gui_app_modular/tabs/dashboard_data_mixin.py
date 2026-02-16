@@ -6,7 +6,7 @@ SQM v4.0.1 — 대시보드 데이터/차트 Mixin
 dashboard_tab.py에서 분리:
 - 알림 수집
 - 통계 조회
-- 차트 그리기 (바차트, 도넛차트)
+- 차트 그리기 (바차트)
 - 자동 갱신
 """
 import sqlite3
@@ -35,9 +35,7 @@ class DashboardDataMixin:
                     'lot_no': lot['lot_no']
                 })
             
-            # 2. 장기 미출고 알림 — v5.6.0 삭제 (사장님 지시)
-            # old_lots = self._get_old_inventory_lots()
-            
+            # 2. 장기 체류 LOT 경고 — 삭제됨 (사장님 지시)
             # 3. 톤백 무결성 경고
             integrity_issues = self._check_tonbag_integrity_quick()
             if integrity_issues > 0:
@@ -250,41 +248,6 @@ class DashboardDataMixin:
             
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             logger.error(f"재고 부족 조회 오류: {e}")
-            return []
-    
-        finally:
-            if cursor:
-                try:
-                    cursor.close()
-                except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
-                    logger.debug(f"{type(_e).__name__}: {_e}")
-                except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
-                    logger.debug(f"dashboard_tab: {_e}")
-    def _get_old_inventory_lots(self, days: int = 30) -> List[Dict]:
-        """장기 미출고 LOT 조회"""
-        try:
-            cursor = None
-            conn = self.engine.get_connection()
-            cursor = conn.cursor()
-            
-            cutoff = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
-            
-            cursor.execute('''
-                SELECT lot_no, arrival_date,
-                       CAST(julianday('now') - julianday(arrival_date) AS INTEGER) as days
-                FROM inventory 
-                WHERE status = 'AVAILABLE' 
-                  AND current_weight > 0
-                  AND DATE(arrival_date) < DATE(?)
-                ORDER BY arrival_date ASC
-                LIMIT 10
-            ''', (cutoff,))
-            
-            return [{'lot_no': row[0], 'date': row[1], 'days': row[2]} 
-                    for row in cursor.fetchall()]
-            
-        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
-            logger.error(f"장기 미출고 조회 오류: {e}")
             return []
     
         finally:
@@ -517,86 +480,6 @@ class DashboardDataMixin:
         except (AttributeError, RuntimeError) as e:
             logger.error(f"차트 새로고침 오류: {e}")
     
-    # ═══════════════════════════════════════════════════════
-    # U6: 제품별 도넛차트
-    # ═══════════════════════════════════════════════════════
-    
-    def _refresh_product_pie_chart(self) -> None:
-        """제품별 재고 도넛차트 그리기"""
-        if not hasattr(self, 'pie_canvas'):
-            return
-        
-        
-        try:
-            self.pie_canvas.delete('all')
-            self.pie_canvas.update_idletasks()
-            
-            w = self.pie_canvas.winfo_width() or 200
-            h = self.pie_canvas.winfo_height() or 180
-            
-            # 제품별 재고 조회
-            products = self.engine.db.fetchall("""
-                SELECT product, SUM(current_weight) AS total_kg
-                FROM inventory WHERE status != 'DEPLETED'
-                GROUP BY product ORDER BY total_kg DESC LIMIT 8
-            """)
-            
-            if not products:
-                self.pie_canvas.create_text(w//2, h//2, text="데이터 없음",
-                                           fill='#999', font=('맑은 고딕', 13))
-                return
-            
-            total = sum((p['total_kg'] or 0) for p in products)
-            if total <= 0:
-                return
-            
-            # 색상 팔레트
-            colors = ['#3498db', '#2ecc71', '#e67e22', '#9b59b6', 
-                      '#1abc9c', '#e74c3c', '#f39c12', '#34495e']
-            
-            cx, cy = w // 2, h // 2 - 10
-            r_outer = min(cx, cy) - 15
-            r_inner = r_outer * 0.55  # 도넛 안쪽
-            
-            start_angle = 90
-            
-            for i, prod in enumerate(products):
-                kg = prod['total_kg'] or 0
-                pct = kg / total if total > 0 else 0
-                extent = pct * 360
-                color = colors[i % len(colors)]
-                
-                # 파이 조각
-                self.pie_canvas.create_arc(
-                    cx - r_outer, cy - r_outer, cx + r_outer, cy + r_outer,
-                    start=start_angle, extent=-extent,
-                    fill=color, outline='white', width=2
-                )
-                
-                # 범례 텍스트 (우측)
-                ly = 12 + i * 18
-                self.pie_canvas.create_rectangle(5, ly, 15, ly + 10, fill=color, outline='')
-                label = f"{prod['product'] or '?'} {pct*100:.0f}%"
-                self.pie_canvas.create_text(20, ly + 5, text=label, anchor='w',
-                                           fill='#333', font=('맑은 고딕', 13))
-                
-                start_angle -= extent
-            
-            # 도넛 중앙 원 (흰색)
-            self.pie_canvas.create_oval(
-                cx - r_inner, cy - r_inner, cx + r_inner, cy + r_inner,
-                fill='white', outline='white'
-            )
-            
-            # 중앙 텍스트
-            self.pie_canvas.create_text(cx, cy - 8, text=f"{total/1000:,.0f}",
-                                       font=('맑은 고딕', 18, 'bold'), fill='#2c3e50')
-            self.pie_canvas.create_text(cx, cy + 10, text="MT",
-                                       font=('맑은 고딕', 12), fill='#999')
-            
-        except (ValueError, TypeError, AttributeError) as e:
-            logger.debug(f"파이차트 오류: {e}")
-
     def _get_weekly_io_data(self) -> List[Dict]:
         """최근 7일 입출고 데이터 조회"""
         try:

@@ -10,7 +10,7 @@ v3.6.0 - UI 통일성 적용
 
 앱 시작 시 첫 화면으로 표시되는 대시보드
 - 요약 카드 (총 재고, LOT 수, 금일 입출고)
-- 알림 패널 (재고 부족, 장기 미출고, 무결성 경고)
+- 알림 패널 (재고 부족, 무결성 경고)
 - 차트 (최근 입출고 추이)
 - 빠른 액션 버튼
 - 자동 새로고침
@@ -167,7 +167,7 @@ class DashboardTabMixin:
         middle_frame.pack(fill=BOTH, expand=YES, pady=(0, Spacing.MD))
         middle_frame.columnconfigure(0, weight=2)
         middle_frame.columnconfigure(1, weight=1)
-        middle_frame.columnconfigure(2, weight=1)  # U6: 도넛차트
+        middle_frame.columnconfigure(2, weight=1)
         middle_frame.rowconfigure(0, weight=1)
         
         # 2-1. 알림 패널 (v3.6.0 개선)
@@ -213,10 +213,7 @@ class DashboardTabMixin:
         tk.Label(legend_frame, text="■", fg=_p.get('warning', '#e67e22'), bg=_chart_bg, font=('', 11)).pack(side=LEFT)
         tk.Label(legend_frame, text="출고", bg=_chart_bg, font=('맑은 고딕', 10)).pack(side=LEFT, padx=(2, 0))
         
-        # U6: 제품별 도넛차트 — v5.6.0 삭제 (사장님 지시)
-        # pie_frame = ttk.LabelFrame(middle_frame, text="🥧 제품별 재고 비율")
-        # pie_frame.grid(row=0, column=2, sticky='nsew', padx=(Spacing.XS, 0))
-        # self.pie_canvas = tk.Canvas(pie_frame, ...)
+        # 제품별 재고 비율 도넛차트 — 삭제됨 (사장님 지시)
         
     def _setup_dash_tonbag_table(self, ctx) -> None:
         """섹션 3: 하단 제품별 요약 + 최근 활동"""
@@ -394,8 +391,6 @@ class DashboardTabMixin:
             self._refresh_dashboard_alerts()
             self._refresh_dashboard_products()
             self._refresh_dashboard_chart()
-            # v5.6.0: 제품별 도넛차트 삭제
-            # self._refresh_product_pie_chart()
             
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             if hasattr(self, 'dashboard_status'):
