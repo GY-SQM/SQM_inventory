@@ -45,13 +45,13 @@ GUI 모드
 
 .. code-block:: bash
 
-    python main.py
+    python run.py
 
 또는
 
 .. code-block:: bash
 
-    python -m gui_modular
+    python -m gui_app_modular
 
 CLI 모드
 ^^^^^^^^

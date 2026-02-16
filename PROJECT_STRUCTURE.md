@@ -6,8 +6,8 @@
 
 ```
 sqm_v3.1/
-├── main.py              ★ 엔트리포인트
-├── gui_app.py           ★ GUI Facade
+├── run.py               ★ 엔트리포인트 (유일)
+├── SQM_실행.bat         Windows 실행 (run.py 호출)
 ├── core.py              ★ Core Facade  
 ├── engine.py            ★ 비즈니스 로직
 ├── config.py            설정

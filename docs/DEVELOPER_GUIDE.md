@@ -96,7 +96,7 @@ source venv/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 
 # 4. 실행 테스트
-python main.py
+python run.py
 ```
 
 ### 2.3 requirements.txt 주요 패키지
@@ -127,7 +127,8 @@ pytest>=7.4.0        # 테스트
 
 ```
 sqm_v3.2/
-├── main.py                 ★ 진입점
+├── run.py                   ★ 진입점 (유일)
+├── SQM_실행.bat             Windows 실행
 ├── gui_app_modular/        ★★★ GUI 모듈 (핵심)
 │   ├── main_app.py         메인 앱 클래스
 │   ├── mixins/             기능별 믹스인

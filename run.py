@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SQM 재고관리 시스템 - 메인 실행 파일 (★ 유일한 진입점 ★)
+SQM 재고관리 시스템 - 메인 실행 파일 (★ 유일한 엔트리 포인트 ★)
 
 ★★★ v2.8.0: 이 파일이 프로그램의 유일한 진입점입니다 ★★★
+★★★ python -m gui_app_modular 도 이 main()으로 위임됩니다. ★★★
 
 사용법:
-    python run_app.py              # GUI 실행 (기본)
-    python run_app.py --cli        # CLI 테스트 모드
-    python run_app.py --backup     # 백업만 실행
-    python run_app.py --check      # 시스템 점검만 실행
-    python run_app.py --version    # 버전 정보
+    python run.py              # GUI 실행 (기본)
+    python -m gui_app_modular   # 위와 동일 (run.main() 호출)
+    python run.py --cli        # CLI 테스트 모드
+    python run.py --backup     # 백업만 실행
+    python run.py --check      # 시스템 점검만 실행
+    python run.py --version    # 버전 정보
 
 다른 파일 설명:
-    - main.py: 레거시 (run_app.py 사용 권장)
-    - gui_app.py: GUI 클래스 정의 (직접 실행 비권장)
+    - gui_app_modular/__main__.py: run.main() 호출만 수행 (엔트리 1곳 유지)
+    - gui_app_modular/main_app.py: 앱 클래스 정의 (직접 실행 시 부트스트랩 생략, 개발용)
 
 Author: Ruby
 """
@@ -332,7 +334,7 @@ def main():
                 print("[PC Guard] 이 PC에서는 실행이 차단되었습니다.")
                 sys.exit(99)
         except ImportError as _e:
-            logger.debug(f"[run_app] 무시: {_e}")
+            logger.debug(f"[run] 무시: {_e}")
 
     print("=" * 60)
     print(f"  {APP_NAME} v{__version__}")

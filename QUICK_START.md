@@ -15,12 +15,12 @@ cd sqm_v419_final
 
 ### 실행
 ```bash
-python run_app.py
+python run.py
 ```
 
 **또는** Windows에서:
 ```
-run_app.py 더블클릭
+run.py 더블클릭 (또는 SQM_실행.bat)
 ```
 
 ---

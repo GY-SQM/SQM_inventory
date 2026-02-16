@@ -26,7 +26,7 @@
 
 | 항목 | 적용 내용 |
 |------|-----------|
-| **버전 fallback 단일화** | run_app, gui_app_modular/utils/constants, config, parsers/document_parser_modular/__init__, engine_modules/inventory_modular/__init__, engine_modules/inventory.py — import 실패 시 `__version__ = "0.0.0"`, APP_NAME 통일. version.py 단일 소스 참조. |
+| **버전 fallback 단일화** | run, gui_app_modular/utils/constants, config, parsers/document_parser_modular/__init__, engine_modules/inventory_modular/__init__, engine_modules/inventory.py — import 실패 시 `__version__ = "0.0.0"`, APP_NAME 통일. version.py 단일 소스 참조. |
 | **safe_int 중복 제거** | gui_app_modular/utils/helpers.py — 로컬 safe_int 구현 삭제, `from utils.common import safe_int` re-export. |
 | **unused import** | engine_modules/db_migration_mixin.py — `import configparser` 제거 (미사용). |
 | **safe_date 용도별 정리** | helpers: docstring + 별칭 `safe_date_to_date = safe_date` (날짜 객체). safe_utils: docstring + 별칭 `safe_date_str = safe_date` (문자열). 서로 docstring으로 상호 참조. |

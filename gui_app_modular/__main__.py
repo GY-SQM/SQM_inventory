@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-SQM 재고관리 시스템 - 패키지 진입점
-====================================
+SQM 재고관리 시스템 - 패키지 실행 시 진입점 (run으로 위임)
+=========================================================
 
-사용법:
-    python -m gui_app_modular          # GUI 실행
-    python -m gui_app_modular --db DB경로  # DB 지정 실행
+★ 공식 엔트리 포인트는 루트의 run.py 1곳입니다. ★
 
-v3.8.8: 유일한 진입점으로 통일
+사용법 (동일한 부트스트랩: 점검, MAC Guard, 자동 백업 후 GUI):
+    python run.py
+    python -m gui_app_modular
+
+둘 다 run.main()을 호출하여 동일한 경로로 실행됩니다.
 """
 
-from .main_app import main
-
 if __name__ == '__main__':
-    main()
+    import run
+    run.main()

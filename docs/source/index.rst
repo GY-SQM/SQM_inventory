@@ -53,7 +53,7 @@ SQM 재고관리 시스템은 Python 기반의 재고 관리 애플리케이션�
 
 실행::
 
-    python main.py
+    python run.py
 
 인덱스
 ======

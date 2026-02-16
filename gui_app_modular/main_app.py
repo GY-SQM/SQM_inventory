@@ -693,18 +693,19 @@ class SQMInventoryAppFull(
 
 
 def main():
-    """Main entry point"""
+    """GUI 전용 진입 (부트스트랩 없음). 정식 실행은 run.py 또는 python -m gui_app_modular 사용."""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='SQM Inventory Management System')
     parser.add_argument('--db', type=str, help='Database path')
     parser.add_argument('--theme', type=str, default='flatly', help='UI theme (default: flatly)')
     args = parser.parse_args()
-    
+
     app = SQMInventoryAppFull(db_path=args.db)
     app.run()
 
 
+# 개발/테스트용: 이 파일 직접 실행 시 환경 점검·MAC Guard·자동 백업 생략
 if __name__ == '__main__':
     main()
 

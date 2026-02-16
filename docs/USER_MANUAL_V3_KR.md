@@ -68,9 +68,9 @@ SQM 재고관리 시스템은 리튬카보네이트(Lithium Carbonate)와 니켈
 pip install -r requirements.txt
 
 # 3. 실행
-python main.py
+python run.py
 # 또는
-run.bat  # Windows 배치 파일
+SQM_실행.bat  # Windows 배치 파일
 ```
 
 ### 2.3 첫 실행 설정

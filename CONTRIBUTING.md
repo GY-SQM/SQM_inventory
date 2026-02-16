@@ -144,7 +144,7 @@ v메이저.마이너.패치
 
 ```
 sqm/
-├── run_app.py              ← 진입점
+├── run.py                  ← 진입점
 ├── version.py              ← 버전 (Single Source of Truth)
 ├── config.py               ← 설정 관리
 ├── engine.py               ← 엔진 초기화

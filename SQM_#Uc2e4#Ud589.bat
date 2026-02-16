@@ -13,9 +13,9 @@ if %ERRORLEVEL% neq 0 (
 :: 작업 디렉토리 설정
 cd /d "%~dp0"
 
-:: ★★★ 유일한 진입점: run_app.py ★★★
-if exist "run_app.py" (
-    python run_app.py %*
+:: ★★★ 유일한 진입점: run.py ★★★
+if exist "run.py" (
+    python run.py %*
 ) else (
     python -m gui_app_modular %*
 )

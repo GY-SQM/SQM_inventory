@@ -8,10 +8,10 @@
 
 ```batch
 # Windows에서 실행
-run.bat
+SQM_실행.bat
 
 # 또는
-python main.py
+python run.py
 ```
 
 ---

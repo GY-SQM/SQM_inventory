@@ -45,7 +45,7 @@
 
 - **단일 소스**: `version.py` (`__version__`, `APP_NAME`, `APP_NAME_EN`).
 - **Fallback 분산**:  
-  - `run_app.py`, `config.py`, `gui_app_modular/utils/constants.py`, `engine_modules/__init__.py`, `parsers/__init__.py` 등에서 import 실패 시 각각 다른 fallback 값 사용 (예: 3.8.7, 3.9.2, 3.9.4, 3.9.8 등).
+  - `run.py`, `config.py`, `gui_app_modular/utils/constants.py`, `engine_modules/__init__.py`, `parsers/__init__.py` 등에서 import 실패 시 각각 다른 fallback 값 사용 (예: 3.8.7, 3.9.2, 3.9.4, 3.9.8 등).
 - **권장**:  
   - 버전/앱명은 `version.py`만 참조.  
   - Fallback이 꼭 필요하면 한 곳(예: `config.py` 또는 `version.py` 내부)에서만 정의하고 나머지는 그곳을 import.

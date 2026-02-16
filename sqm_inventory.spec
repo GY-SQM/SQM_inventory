@@ -7,7 +7,7 @@ SQM 재고관리 시스템 - PyInstaller 설정
 block_cipher = None
 
 a = Analysis(
-    ['main.py'],
+    ['run.py'],
     pathex=[],
     binaries=[],
     datas=[

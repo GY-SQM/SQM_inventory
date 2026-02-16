@@ -59,7 +59,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| **버전** | `version.py`가 원천이나, fallback이 run_app, config, constants, engine_modules, parsers 등에 분산·값 상이(3.8.7~3.9.8). |
+| **버전** | `version.py`가 원천이나, fallback이 run, config, constants, engine_modules, parsers 등에 분산·값 상이(3.8.7~3.9.8). |
 | **상수** | DEFAULT_WAREHOUSE, DEFAULT_TONBAG_COUNT 등이 engine_modules.constants와 gui_app_modular.utils.constants에 중복. |
 | **권장** | 버전/앱명은 version.py만 참조; 비즈니스 상수는 engine_modules.constants를 단일 소스로 사용. |
 
@@ -180,7 +180,7 @@ invoice = packing.get('salar_invoice_no', '')
 | **함수** | **safe_int** | `utils/common.py`(단일 소스) + `gui_app_modular/utils/helpers.py`(별도 구현). helpers는 int(float(value))만 사용. |
 | | **safe_date** | `helpers.py` → `Optional[date]` / `safe_utils.py` → `str` (포맷 지정). 시그니처·반환 타입 상이. |
 | | **_safe_float (로컬)** | `onestop_inbound.py`에 `_safe_float()` 로컬 함수 — utils.common.safe_float와 역할 중복. |
-| **버전/앱명** | **__version__ / APP_NAME** | `version.py`(5.7.7)가 원천. fallback: run_app(3.9.4), gui_app_modular/utils/constants(3.9.2), parsers/__init__(3.8.7). |
+| **버전/앱명** | **__version__ / APP_NAME** | `version.py`(5.7.7)가 원천. fallback: run(3.9.4), gui_app_modular/utils/constants(3.9.2), parsers/__init__(3.8.7). |
 | **상수** | **DEFAULT_WAREHOUSE** | `engine_modules.constants` + `gui_app_modular.utils.constants`(327라인) 중복 정의. 엔진/onestop은 engine에서 import. |
 | **메시지 박스** | **CustomMessageBox vs messagebox** | 대부분 CustomMessageBox 사용. **직접 messagebox 호출**: onestop_inbound(1), auto_backup(3), mac_guard(2), gemini_chat_gui(1), ui_ops_helper(1). CustomMessageBox 내부에서 messagebox 호출하는 것은 설계상 정상. |
 | **용어(참고)** | **lot_no / lot_number / lotno** | DB·엔진은 lot_no. `lot_numbers`는 Invoice 등에서 "LOT 번호 리스트" 의미로 사용(의도적). 컬럼 매핑/엑셀에서 lotno 별칭 사용. |

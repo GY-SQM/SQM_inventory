@@ -33,7 +33,7 @@ v5.7.6 출고 API 디버깅과 v5.7.7 코드 품질·통일 작업을 반영한 
 
 ### 2. 버전 fallback 단일화
 - **version.py** 단일 소스. import 실패 시 fallback을 `__version__ = "0.0.0"`, `APP_NAME = "SQM 재고관리 시스템"`으로 통일.
-- **수정 파일**: `run_app.py`, `gui_app_modular/utils/constants.py`, `config.py`, `parsers/document_parser_modular/__init__.py`, `engine_modules/inventory_modular/__init__.py`, `engine_modules/inventory.py`
+- **수정 파일**: `run.py`, `gui_app_modular/utils/constants.py`, `config.py`, `parsers/document_parser_modular/__init__.py`, `engine_modules/inventory_modular/__init__.py`, `engine_modules/inventory.py`
 
 ### 3. safe_int 중복 제거
 - `gui_app_modular/utils/helpers.py`에서 로컬 `safe_int` 구현 제거, `utils.common.safe_int` re-export로 통일.
@@ -67,7 +67,7 @@ v5.7.6 출고 API 디버깅과 v5.7.7 코드 품질·통일 작업을 반영한 
 | gui_app_modular/handlers/import_handlers.py | process_outbound(allocation_data) 시그니처 통일 |
 | gui_app_modular/mixins/custom_menubar.py | 도구 메뉴 D/O 후속 연결 추가 |
 | gui_app_modular/mixins/menu_mixin.py | 도구 메뉴 D/O 후속 연결 추가 |
-| run_app.py, config.py, gui_app_modular/utils/constants.py | 버전 fallback 0.0.0·APP_NAME 통일 |
+| run.py, config.py, gui_app_modular/utils/constants.py | 버전 fallback 0.0.0·APP_NAME 통일 |
 | parsers/document_parser_modular/__init__.py | version.py 참조 |
 | engine_modules/inventory_modular/__init__.py, engine_modules/inventory.py | version.py 참조 |
 | gui_app_modular/utils/helpers.py | safe_int 제거·re-export, safe_date docstring·safe_date_to_date 별칭 |

@@ -37,7 +37,7 @@ cd sqm_v3.0
 pip install -r requirements.txt
 
 # 3. 실행
-python main.py
+python run.py
 ```
 
 ### 1.3 첫 실행

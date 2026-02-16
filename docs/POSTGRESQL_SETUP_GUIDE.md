@@ -170,7 +170,7 @@ print("PostgreSQL 연결 성공!")
 ### SQM 실행
 
 ```bash
-python main.py
+python run.py
 ```
 
 정상이면 다음 메시지 표시:

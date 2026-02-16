@@ -61,7 +61,7 @@ hotfix_v423_1\files\gui_app_modular\utils\table_styler.py
 
 ### Step 3: 프로그램 재시작
 ```
-run_app.py 실행
+run.py 실행
 → 정상 작동 확인
 ```
 
