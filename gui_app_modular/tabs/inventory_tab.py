@@ -89,11 +89,13 @@ class InventoryTabMixin:
         self._inv_filter_bar = HeaderFilterBar(
             self.tab_inventory, None, inv_filter_cols,
             on_filter=self._on_inv_filter_apply,
-            is_dark=_is_dark_filter
+            is_dark=_is_dark_filter,
+            date_from_var=self._date_from_var,
+            date_to_var=self._date_to_var,
         )
         self._inv_filter_bar.pack(fill=X, padx=5, pady=(0, 2))
-        
-        # v5.0.2: 컬럼 토글 + 표시 모드 바
+
+        # v5.0.2: 컬럼 토글 바 (v5.7.5: 표시 모드 제거)
         try:
             from ..utils.column_toggle import ColumnToggleBar
             
@@ -128,11 +130,11 @@ class InventoryTabMixin:
         # 모든 18열로 생성
         all_col_ids = [c[0] for c in INVENTORY_COLUMNS]
         
-        # v3.8.9: 트리뷰 스타일 — 테마 인식 (글자 흐림 수정)
+        # v3.8.9: 트리뷰 스타일 — 테마 인식 (글자 흐림 수정) | v5.7.5: 가독성 위해 폰트 14로 확대
         import tkinter.font as tkfont
         _style = ttk.Style()
-        _inv_font = tkfont.Font(family='맑은 고딕', size=12)
-        _inv_head_font = tkfont.Font(family='맑은 고딕', size=12, weight='bold')
+        _inv_font = tkfont.Font(family='맑은 고딕', size=14)
+        _inv_head_font = tkfont.Font(family='맑은 고딕', size=14, weight='bold')
         _row_h = _inv_font.metrics('linespace') + 6
         
         _is_dark_tv = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
@@ -203,18 +205,7 @@ class InventoryTabMixin:
         v_scroll.pack(side=RIGHT, fill=Y)
         h_scroll.pack(side='bottom', fill=X)
 
-        # ═══════════════════════════════════════════════════════
-        # v5.6.1 patch: 하단 요약바 1줄 통합 (정렬 일관, FooterTotalBar 제거)
-        # ═══════════════════════════════════════════════════════
-        self._inv_stats_frame = ttk.Frame(self.tab_inventory, padding=(8, 5))
-        self._inv_stats_frame.pack(fill=X, padx=5, pady=(0, 2))
-        _sum_font = ('맑은 고딕', 11)
-        self._inv_summary_label = ttk.Label(
-            self._inv_stats_frame,
-            text="📦 LOT: -  🎒 톤백: -  📥 입고: -  💰 잔량: -  📤 출고: -  ✅ 가용: -  ❌ 소진: -  |  📊 출고율: 0.0%",
-            font=_sum_font
-        )
-        self._inv_summary_label.pack(side=LEFT)
+        # v5.7.5: 하단 요약바 제거 (LOT/톤백/입고/잔량/출고/가용/소진/출고율)
 
         # 테마 색상
         self._apply_inventory_theme_colors()
@@ -390,7 +381,7 @@ class InventoryTabMixin:
             tree.heading(col, text=text)
             tree.column(col, width=w, anchor='center')
         
-        status_icons = {'AVAILABLE': '✅ 가용', 'PICKED': '📤 출고'}
+        status_icons = {'AVAILABLE': '✅ 가용', 'PICKED': 'Sold', 'SOLD': 'Sold'}
         
         for i, tb in enumerate(tonbags):
             status_text = status_icons.get(tb['status'], tb['status'] or '')
@@ -497,8 +488,22 @@ class InventoryTabMixin:
             self.tree_inventory.delete(item)
 
         search_text = self.search_var.get().strip().lower()
-        status_filter = self.status_var.get()
-        
+        # v5.7.5: STATUS는 헤더 필터바에서 "전체 (N)" / "Available (M)" / "Sold (K)" 중 하나
+        status_filter_raw = '전체'
+        if hasattr(self, '_inv_filter_bar') and 'status' in getattr(self._inv_filter_bar, 'filter_vars', {}):
+            status_filter_raw = (self._inv_filter_bar.get_filters().get('status') or
+                                 self._inv_filter_bar.filter_vars['status'].get() or '전체')
+        if not isinstance(status_filter_raw, str):
+            status_filter_raw = str(status_filter_raw or '전체')
+        if not status_filter_raw.strip() or status_filter_raw.startswith('전체'):
+            status_filter_normalized = None
+        elif 'Available' in status_filter_raw or status_filter_raw.strip() == 'AVAILABLE':
+            status_filter_normalized = 'AVAILABLE'
+        elif 'Sold' in status_filter_raw or status_filter_raw.strip() in ('PICKED', 'SOLD'):
+            status_filter_normalized = 'PICKED'
+        else:
+            status_filter_normalized = status_filter_raw.strip()
+
         # 콤보 검색 조건
         combo_filters = {}
         if hasattr(self, '_inv_search_combos'):
@@ -506,10 +511,11 @@ class InventoryTabMixin:
                 val = var.get()
                 if val and val != '전체':
                     combo_filters[field] = val
-        
-        # v4.0.6: 헤더 필터바 조건
+        # v4.0.6: 헤더 필터바 조건 (status는 위에서 별도 처리하므로 제외)
         if hasattr(self, '_inv_filter_bar'):
-            combo_filters.update(self._inv_filter_bar.get_filters())
+            for k, v in self._inv_filter_bar.get_filters().items():
+                if k != 'status':
+                    combo_filters[k] = v
         
         # Date 기간 조건
         date_from = ''
@@ -533,10 +539,13 @@ class InventoryTabMixin:
                     if search_text not in searchable:
                         continue
 
-                # 상태 필터
+                # 상태 필터 (v5.7.5: 전체 / Available / Sold 3종, Sold = PICKED·SOLD)
                 status = item.get('status', 'AVAILABLE')
-                if status_filter != "전체" and status != status_filter:
-                    continue
+                if status_filter_normalized:
+                    if status_filter_normalized == 'AVAILABLE' and status != 'AVAILABLE':
+                        continue
+                    if status_filter_normalized == 'PICKED' and status not in ('PICKED', 'SOLD'):
+                        continue
                 
                 # 콤보 검색 필터 + 헤더 필터바
                 skip = False
@@ -607,7 +616,8 @@ class InventoryTabMixin:
                     elif col_id == 'status':
                         status_icons = {
                             'AVAILABLE': '✅ 가용',
-                            'PICKED': '📤 출고',
+                            'PICKED': 'Sold',
+                            'SOLD': 'Sold',
                             'RESERVED': '🔒 예약',
                             'SHIPPED': '🚢 선적',
                             'DEPLETED': '❌ 소진',
@@ -708,12 +718,7 @@ class InventoryTabMixin:
                     # widget의 변수를 가져와서 새로운 command 설정
                     # (기존 코드 구조상 동적으로 재설정하기 어려우므로 스킵)
                     pass
-                # Radiobutton인 경우 command 재설정
-                elif isinstance(widget, tk.Radiobutton):
-                    mode = widget.cget('value')
-                    widget.configure(
-                        command=lambda m=mode: TableStyler.set_row_height(tree, m)
-                    )
+                # v5.7.5: 표시 모드 제거로 Radiobutton 없음 — 스킵
         except (ValueError, TypeError, KeyError, AttributeError) as e:
             logger.debug(f"스타일 툴바 업데이트 실패: {e}")
 
@@ -749,10 +754,17 @@ class InventoryTabMixin:
                 current_mt = (stats.get('total_current', 0) or 0) / 1000
                 picked_mt = (stats.get('total_picked', 0) or 0) / 1000
             if tb_stats:
-                tb_total = tb_stats.get('total', 0) or 0
-                tb_avail = tb_stats.get('avail', 0) or 0
+                tb_total = tb_stats.get('total') or 0
+                tb_avail = tb_stats.get('avail') or 0
+            # None 방지 (DB 빈 상태 시 SUM/COUNT가 NULL 반환 가능)
+            total_lots = total_lots or 0
+            avail_lots = avail_lots or 0
+            depleted = depleted or 0
+            initial_mt = initial_mt or 0.0
+            current_mt = current_mt or 0.0
+            picked_mt = picked_mt or 0.0
             pct = ( (initial_mt - current_mt) / initial_mt * 100 ) if initial_mt > 0 else 0
-            pct = max(0, min(100, pct))
+            pct = max(0, min(100, pct or 0))
             line = (
                 f"📦 LOT: {total_lots:,}  🎒 톤백: {tb_avail:,}/{tb_total:,}  "
                 f"📥 입고: {initial_mt:,.1f} MT  💰 잔량: {current_mt:,.1f} MT  "
@@ -771,7 +783,7 @@ class InventoryTabMixin:
         self._refresh_inventory()
     
     def _update_inv_filter_values(self, inventory) -> None:
-        """v4.0.6: 필터 드롭다운에 실제 데이터 값 채우기"""
+        """v4.0.6: 필터 드롭다운에 실제 데이터 값 채우기. v5.7.5: STATUS는 전체/Available/Sold 3종 + 개수 표시."""
         if not hasattr(self, '_inv_filter_bar'):
             return
         try:
@@ -781,12 +793,27 @@ class InventoryTabMixin:
             }
             for item in inventory:
                 for col in filter_cols:
+                    if col == 'status':
+                        continue
                     val = str(item.get(col, '') or '')
                     if val:
                         filter_cols[col].append(val)
-            
+
+            cnt_total = len(inventory)
+            cnt_avail = sum(1 for i in inventory if (i.get('status') or '') == 'AVAILABLE')
+            cnt_sold = sum(1 for i in inventory if (i.get('status') or '') in ('PICKED', 'SOLD'))
+            status_values = [f"전체 ({cnt_total})", f"Available ({cnt_avail})", f"Sold ({cnt_sold})"]
+
             for col, vals in filter_cols.items():
-                self._inv_filter_bar.update_filter_values(col, vals)
+                if col == 'status':
+                    combo = self._inv_filter_bar.filter_combos.get('status')
+                    if combo:
+                        combo['values'] = status_values
+                        cur = self._inv_filter_bar.filter_vars['status'].get()
+                        if cur not in status_values and status_values:
+                            self._inv_filter_bar.filter_vars['status'].set(status_values[0])
+                else:
+                    self._inv_filter_bar.update_filter_values(col, vals)
         except (ValueError, TypeError) as e:
             logger.debug(f"필터 값 업데이트 오류: {e}")
     
@@ -908,10 +935,15 @@ class InventoryTabMixin:
             btn_frame.pack(pady=10)
             
             from ..utils.constants import ttk
-            ttk.Button(btn_frame, text="📁 파일 선택 입고", 
-                       command=lambda: self._on_open_file()).pack(side='left', padx=5)
-            ttk.Button(btn_frame, text="📝 수동 입고",
-                       command=lambda: self._on_new_inbound()).pack(side='left', padx=5)
+            from ..utils.ui_constants import apply_tooltip
+            _btn_file = ttk.Button(btn_frame, text="📁 파일 선택 입고",
+                                   command=lambda: self._on_open_file())
+            _btn_file.pack(side='left', padx=5)
+            apply_tooltip(_btn_file, "데이터베이스 파일(.db)을 선택하여 열거나, 입고용 PDF/엑셀 파일을 선택합니다.")
+            _btn_manual = ttk.Button(btn_frame, text="📝 수동 입고",
+                                    command=lambda: self._on_new_inbound())
+            _btn_manual.pack(side='left', padx=5)
+            apply_tooltip(_btn_manual, "입고 메뉴의 원스톱 입고 또는 수동 입력으로 새 LOT/톤백을 등록합니다.")
         except (ImportError, ModuleNotFoundError) as _e:
             logger.debug(f"empty_hint: {_e}")
     
@@ -981,12 +1013,8 @@ class InventoryTabMixin:
                 product_values = ['전체'] + [dict(row)['product'] for row in products if row]
                 self._inv_filter_bar.product_combo['values'] = product_values
             
-            # STATUS 목록
-            if hasattr(self, '_inv_filter_bar') and hasattr(self._inv_filter_bar, 'status_combo'):
-                self._inv_filter_bar.status_combo['values'] = [
-                    '전체', 'AVAILABLE', 'RESERVED', 'SHIPPED', 'RETURNED'
-                ]
-            
+            # STATUS 목록은 v5.7.5에서 _update_inv_filter_values에서 전체/Available/Sold(개수)로 설정
+
             logger.debug("✅ 필터 드롭다운 채우기 완료")
         
         except (ValueError, TypeError, KeyError, AttributeError) as e:

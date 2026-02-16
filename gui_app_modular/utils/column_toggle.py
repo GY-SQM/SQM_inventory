@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-SQM v5.5.3 — 컬럼 표시/숨김 + 표시 모드 위젯
-================================================
+SQM v5.5.3 — 컬럼 표시/숨김 위젯
+================================
 v5.5.3 patch_03: tk→ttk 전환으로 테마 자동 대응
+v5.7.5: 표시 모드(컬럼/본문/날짜) 제거 — 행 높이 선택 UI 삭제
 """
 
 import logging
@@ -44,8 +45,10 @@ class ColumnToggleBar:
         left_frame = ttk.Frame(self.frame)
         left_frame.pack(side='left', fill='x', expand=True)
 
-        ttk.Label(left_frame, text="표시 컬럼:",
-                  font=('맑은 고딕', 9, 'bold')).pack(side='left', padx=(0, 10))
+        _lbl_col = ttk.Label(left_frame, text="표시 컬럼:",
+                             font=('맑은 고딕', 9, 'bold'))
+        _lbl_col.pack(side='left', padx=(0, 10))
+        self._apply_tooltip_safe(_lbl_col, "체크 해제 시 해당 컬럼이 목록에서 숨겨집니다. 체크하면 다시 표시됩니다.")
 
         for col_id, label in toggle_columns:
             var = tk.BooleanVar(value=True)
@@ -57,50 +60,44 @@ class ColumnToggleBar:
             )
             chk.pack(side='left', padx=5)
             self.toggle_vars[col_id] = var
-
-        # 오른쪽: "표시 모드:" + 라디오 버튼
-        right_frame = ttk.Frame(self.frame)
-        right_frame.pack(side='right', padx=10)
-
-        ttk.Label(right_frame, text="표시 모드:",
-                  font=('맑은 고딕', 9)).pack(side='left', padx=(0, 10))
-
-        self.mode_var = tk.StringVar(value="compact")
-
-        modes = [
-            ("컬럼", "compact"),
-            ("본문", "normal"),
-            ("날짜", "comfortable")
-        ]
-
-        for label, value in modes:
-            rb = ttk.Radiobutton(
-                right_frame,
-                text=label,
-                variable=self.mode_var,
-                value=value,
-                command=self._change_mode
-            )
-            rb.pack(side='left', padx=5)
+            self._apply_tooltip_safe(chk, f"'{label}' 컬럼 표시/숨김. 해제 시 목록에서 이 컬럼이 사라집니다.")
 
     def pack(self, **kwargs):
         self.frame.pack(**kwargs)
 
+    def _apply_tooltip_safe(self, widget, text: str) -> None:
+        try:
+            from .ui_constants import apply_tooltip
+            apply_tooltip(widget, text)
+        except Exception:
+            pass
+
     def _toggle_column(self, col_id: str, var: tk.BooleanVar) -> None:
-        """컬럼 표시/숨김"""
+        """
+        컬럼 표시/숨김.
+        v5.7.4: displaycolumns가 ('#all',) 튜플로 오는 경우 정규화·필터링하여
+        Invalid column index #all 에러 방지 (재고 리스트·톤백 리스트 공통).
+        """
         if not self.tree:
             logger.warning("Treeview가 연결되지 않음")
             return
 
         try:
-            current_display = self.tree['displaycolumns']
-
-            if not current_display or current_display == '' or current_display == '#all':
-                current_display = list(self.tree['columns'])
-            else:
-                current_display = list(current_display)
-
+            raw = self.tree['displaycolumns']
             all_cols = list(self.tree['columns'])
+
+            # 빈값, 문자열 '#all', 튜플 ('#all',) 등 모두 실제 컬럼 목록으로 정규화
+            if not raw or raw == '' or raw == '#all':
+                current_display = list(all_cols)
+            elif getattr(raw, '__iter__', None) and len(raw) == 1 and raw[0] == '#all':
+                current_display = list(all_cols)
+            else:
+                current_display = list(raw)
+
+            # Tk가 반환한 값에 '#all'이 섞여 있으면 제거 (Invalid column index #all 방지)
+            current_display = [c for c in current_display if c != '#all']
+            if not current_display:
+                current_display = list(all_cols)
 
             if var.get():
                 # 체크 → 표시
@@ -116,25 +113,15 @@ class ColumnToggleBar:
                 if col_id in current_display:
                     current_display.remove(col_id)
 
+            # 빈 tuple은 사용하지 않음: 최소 한 컬럼은 유지
+            if not current_display:
+                current_display = list(all_cols)
+
             self.tree['displaycolumns'] = tuple(current_display)
             logger.debug(f"컬럼 토글: {col_id} → {'표시' if var.get() else '숨김'}")
 
         except (ValueError, TypeError, AttributeError) as e:
-            logger.error(f"컬럼 토글 오류: {e}")
-
-    def _change_mode(self) -> None:
-        """표시 모드 변경"""
-        if not self.tree:
-            return
-
-        mode = self.mode_var.get()
-        heights = {"compact": 24, "normal": 28, "comfortable": 32}
-
-        try:
-            style = ttk.Style()
-            style.configure("Treeview", rowheight=heights.get(mode, 28))
-        except (ValueError, TypeError, AttributeError) as e:
-            logger.error(f"모드 변경 오류: {e}")
+            logger.debug(f"컬럼 토글 오류(무시): {e}")
 
     def get_visible_columns(self) -> List[str]:
         """현재 표시 중인 컬럼 목록"""

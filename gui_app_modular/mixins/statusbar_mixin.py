@@ -195,10 +195,10 @@ class StatusBarMixin:
                 FROM inventory_tonbag
                 WHERE COALESCE(is_sample, 0) = 0
             """)
-            lots = stats['lots'] if stats else 0
-            weight_mt = (stats['total_kg'] or 0) / 1000 if stats else 0
-            tb_total = tb_stats['total'] if tb_stats else 0
-            tb_avail = tb_stats['avail'] if tb_stats else 0
+            lots = (stats.get('lots') or 0) if stats else 0
+            weight_mt = ((stats.get('total_kg') or 0) / 1000) if stats else 0.0
+            tb_total = (tb_stats.get('total') or 0) if tb_stats else 0
+            tb_avail = (tb_stats.get('avail') or 0) if tb_stats else 0
             
             self._inv_summary_var.set(
                 f"📦 LOT: {lots:,} | 🎒 톤백: {tb_avail:,}/{tb_total:,} | 💰 재고: {weight_mt:,.1f} MT"

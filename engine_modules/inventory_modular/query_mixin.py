@@ -113,6 +113,7 @@ class QueryMixin:
                     i.lot_no, i.sap_no, i.bl_no, i.container_no,
                     i.product, i.mxbg_pallet, 
                     t.sub_lt AS tonbag_no,
+                    t.tonbag_uid,
                     t.location,
                     t.is_sample,
                     i.net_weight, i.salar_invoice_no,

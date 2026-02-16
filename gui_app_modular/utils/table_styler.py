@@ -30,6 +30,8 @@ class TableStyler:
         'row_odd': '#f5f5f5',
         'row_even_selected': '#e3f2fd',
         'row_odd_selected': '#bbdefb',
+        # v5.7.5: 선택 행 글자색 — 연한 배경에서도 데이터가 보이도록 진한색
+        'row_selected_fg': '#1a1a1a',
         
         # 헤더
         'header_bg': '#1976d2',
@@ -47,6 +49,7 @@ class TableStyler:
         'row_odd': '#2a2a2a',
         'row_even_selected': '#2a3a4a',
         'row_odd_selected': '#253545',
+        'row_selected_fg': '#e0e0e0',
         'header_bg': '#333333',
         'header_fg': '#f0f0f0',
         'border': '#555555',
@@ -93,11 +96,16 @@ class TableStyler:
             relief='solid'
         )
         
+        # v5.7.5: 선택 행 foreground 명시 — 연한 배경에서 글자가 사라지는 현상 수정
+        selected_fg = colors.get('row_selected_fg', '#1a1a1a' if not is_dark else '#e0e0e0')
         style.map(
             style_name,
             background=[
                 ('selected', colors['row_even_selected']),
                 ('!selected', colors['row_odd'])
+            ],
+            foreground=[
+                ('selected', selected_fg),
             ]
         )
         
@@ -132,12 +140,16 @@ class TableStyler:
                 borderwidth=1,
                 relief='solid'
             )
-            # 행 배경 맵도 갱신 (안 하면 흰색/연회색으로 남음)
+            # 행 배경·선택 행 글자색 맵 갱신 (v5.7.5: selected foreground로 선택 시 가독성 유지)
+            _sel_fg = colors.get('row_selected_fg', '#1a1a1a' if not is_dark else '#e0e0e0')
             style.map(
                 style_name,
                 background=[
                     ('selected', colors['row_even_selected']),
                     ('!selected', colors['row_odd'])
+                ],
+                foreground=[
+                    ('selected', _sel_fg),
                 ]
             )
             style.configure(
@@ -272,31 +284,7 @@ class TableStyler:
                 )
                 cb.pack(side=tk.LEFT, padx=2)
         
-        # 구분선
-        ttk.Separator(toolbar, orient='vertical').pack(side=tk.LEFT, fill=tk.Y, padx=10)
-        
-        # 오른쪽: 표시 모드
-        tk.Label(
-            toolbar,
-            text="표시 모드:",
-            bg='#f0f0f0',
-            font=('맑은 고딕', 9)
-        ).pack(side=tk.LEFT, padx=5)
-        
-        mode_var = tk.StringVar(value='normal')
-        
-        for mode, label in [('compact', '컴팩트'), ('normal', '보통'), ('comfortable', '넓게')]:
-            rb = tk.Radiobutton(
-                toolbar,
-                text=label,
-                variable=mode_var,
-                value=mode,
-                command=lambda m=mode: cls.set_row_height(treeview, m),
-                bg='#f0f0f0',
-                font=('맑은 고딕', 9)
-            )
-            rb.pack(side=tk.LEFT, padx=2)
-        
+        # v5.7.5: 표시 모드(컬럼/본문/날짜) UI 제거 — 행 높이는 기본(normal) 고정
         return toolbar
     
     @classmethod

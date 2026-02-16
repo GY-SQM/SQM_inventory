@@ -31,38 +31,42 @@ def _safe_float(val, default: float = 0.0) -> float:
         return default
 
 
-# 미리보기 18열 헤더 정의 (v3.8.8: 재고탭과 헤더명 통일)
+# 미리보기 컬럼 정의 — 업로드3: 전 컬럼 가운데 정렬
 PREVIEW_COLUMNS = [
     ("no",               "NO",               50,  "center"),
     ("sap_no",           "SAP NO",          110,  "center"),
     ("bl_no",            "BL NO",           150,  "center"),
     ("container_no",     "CONTAINER",       130,  "center"),
-    ("product",          "PRODUCT",         180,  "w"),
+    ("product",          "PRODUCT",         180,  "center"),
     ("product_code",     "CODE",            100,  "center"),
     ("lot_no",           "LOT NO",          110,  "center"),
     ("lot_sqm",          "LOT SQM",          80,  "center"),
     ("mxbg_pallet",      "MXBG",             70,  "center"),
-    ("tonbag_count",     "TONBAG",            70,  "center"),
-    ("net_weight",       "NET(Kg)",           90,  "e"),
-    ("gross_weight",     "GROSS(kg)",         90,  "e"),
+    ("net_weight",       "NET(Kg)",          90,  "center"),
+    ("gross_weight",     "GROSS(kg)",         90,  "center"),
     ("salar_invoice_no", "INVOICE NO",      120,  "center"),
     ("ship_date",        "SHIP DATE",        90,  "center"),
-    ("arrival_date",     "ARRIVAL",           90,  "center"),
+    ("arrival_date",     "ARRIVAL",          90,  "center"),
     ("free_time",        "FREE TIME",        80,  "center"),
-    ("warehouse",        "WH",              100,  "w"),
+    ("warehouse",        "WH",              100,  "center"),
     ("status",           "STATUS",           80,  "center"),
 ]
 
-# 4종 서류 정의 (v3.8.7: 동그라미 번호 순서)
+# 4종 서류 정의 (v3.8.7: 동그라미 번호 순서) — v5.7.5: Invoice/FA, Bill of Lading, Delivery Order
 DOC_TYPES = [
     ('PACKING_LIST', '① Packing List (포장명세서)', True),
-    ('INVOICE',      '② Invoice / Factura (송장)',  True),
-    ('BL',           '③ B/L (선하증권)',            True),
-    ('DO',           '④ D/O (인도지시서) (선택사항)', False),
+    ('INVOICE',      '② Invoice, FA (송장)',        True),
+    ('BL',           '③ Bill of Lading (선하증권)', True),
+    ('DO',           '④ Delivery Order (인도지시서) (선택사항)', False),
 ]
 
 
 from .inbound_dialog_base import InboundDialogBase
+
+# v5.7.5: 진행률 팝업 조정 — 업로드2: 창·폰트 더 키움
+PROGRESS_POPUP_WIDTH = 880
+PROGRESS_POPUP_HEIGHT = 380
+PROGRESS_POPUP_CLOSE_DELAY_MS = 1600
 
 
 class OneStopInboundDialog(InboundDialogBase):
@@ -161,16 +165,16 @@ class OneStopInboundDialog(InboundDialogBase):
         short_names = {
             'PACKING_LIST': '① Packing List',
             'INVOICE':      '② Invoice, FA',
-            'BL':           '③ BL',
-            'DO':           '④ DO',
+            'BL':           '③ Bill of Lading',
+            'DO':           '④ Delivery Order',
         }
         
-        # v3.8.9: 서류별 상세 툴팁
+        # v3.8.9: 서류별 상세 툴팁 — v5.7.5: Invoice/FA, Bill of Lading, Delivery Order
         _tooltips = {
             'PACKING_LIST': '📦 Packing List (포장명세서)\n\n• LOT번호, 제품명, 수량, 중량 정보 추출\n• 필수 서류 — 없으면 입고 불가\n• PDF 또는 Excel 파일 지원',
-            'INVOICE':      '📑 Invoice / Factura (송장)\n\n• SAP번호, 단가, 총금액 정보 추출\n• 필수 서류 — 없으면 SAP번호 누락\n• PDF 파일 지원',
-            'BL':           '🚢 B/L (선하증권)\n\n• BL번호, 선박명, 출항일, 도착일 추출\n• 필수 서류 — 없으면 선적 정보 누락\n• PDF 파일 지원',
-            'DO':           '📋 D/O (인도지시서)\n\n• 인도 장소, Free Time 정보 추출\n• 선택 서류 — 없어도 입고 가능\n• PDF 파일 지원',
+            'INVOICE':      '📑 Invoice, FA (송장)\n\n• SAP번호, 단가, 총금액 정보 추출\n• 필수 서류 — 없으면 SAP번호 누락\n• PDF 파일 지원',
+            'BL':           '🚢 Bill of Lading (선하증권)\n\n• BL번호, 선박명, 출항일, 도착일 추출\n• 필수 서류 — 없으면 선적 정보 누락\n• PDF 파일 지원',
+            'DO':           '📋 Delivery Order (인도지시서)\n\n• 인도 장소, Free Time 정보 추출\n• 선택 서류 — 없어도 입고 가능\n• PDF 파일 지원',
         }
         
         for idx, (doc_type, doc_name, required) in enumerate(DOC_TYPES):
@@ -211,7 +215,7 @@ class OneStopInboundDialog(InboundDialogBase):
         )
         self.btn_parse.grid(row=0, column=4, padx=(6, 2))
         self._attach_doc_tooltip(self.btn_parse,
-            "선택한 서류를 분석합니다\n\n• Packing List → LOT, 수량, 중량 추출\n• Invoice → SAP번호, 금액 추출\n• B/L → BL번호, 선박, 일정 추출\n• D/O → 인도장소, Free Time 추출")
+            "선택한 서류를 분석합니다\n\n• Packing List → LOT, 수량, 중량 추출\n• Invoice, FA → SAP번호, 금액 추출\n• Bill of Lading → BL번호, 선박, 일정 추출\n• Delivery Order → 인도장소, Free Time 추출")
         
         self.parse_hint = ttk.Label(
             file_frame, text="",
@@ -219,37 +223,18 @@ class OneStopInboundDialog(InboundDialogBase):
         )
         self.parse_hint.grid(row=0, column=5, padx=(2, 4), sticky='w')
         
-        # ═══════════════════════════════════════════════════════════
-        # 2. 프로그레스 바 + 상태 (v3.8.7: 왼쪽 정렬, 전체 폭)
-        # ═══════════════════════════════════════════════════════════
-        progress_frame = ttk.Frame(main)
-        progress_frame.pack(fill=X, pady=(0, 3))
-        
-        self.status_var = tk.StringVar(value="")
-        ttk.Label(progress_frame, textvariable=self.status_var,
-                  font=('맑은 고딕', 13, 'bold')).pack(side=LEFT)
-        
-        self.progress_pct = tk.StringVar(value="")
-        ttk.Label(progress_frame, textvariable=self.progress_pct,
-                  font=('맑은 고딕', 12)).pack(side=LEFT, padx=(8, 4))
-        
+        # v5.7.5: 프로그레스 바는 평소 숨김 — 파싱/업로드 시작 시 팝업으로만 표시
         self.progress_var = tk.DoubleVar(value=0)
-        # v3.8.8: 프로그레스 바 밝은 노란색
-        _ps = ttk.Style()
-        _ps.configure('Yellow.Horizontal.TProgressbar',
-                       troughcolor='#333333', background='#f1c40f',
-                       thickness=18)
-        self.progress_bar = ttk.Progressbar(
-            progress_frame, variable=self.progress_var,
-            maximum=100, mode='determinate',
-            style='Yellow.Horizontal.TProgressbar'
-        )
-        self.progress_bar.pack(side=LEFT, fill=X, expand=True, padx=(0, 10))
+        self.status_var = tk.StringVar(value="")
+        self._progress_popup = None
+        self._progress_popup_label = None
+        self._progress_popup_bar = None
         
         # ═══════════════════════════════════════════════════════════
-        # 3. 미리보기 테이블 (v3.8.7: 폰트 20% 확대)
+        # 2. 미리보기 테이블 (v3.8.7: 폰트 20% 확대)
         # ═══════════════════════════════════════════════════════════
-        tree_frame = ttk.LabelFrame(main, text="📊 미리보기 (확인 후 업로드)", padding=4)
+        # v5.7.5: "업로드 2" 삭제 — "(확인 후 업로드)" 문구 제거
+        tree_frame = ttk.LabelFrame(main, text="📊 미리보기", padding=4)
         tree_frame.pack(fill=BOTH, expand=YES, pady=(0, 3))
         
         # ★ v3.8.7: 미리보기 Treeview 폰트 20% 확대 (기본 9pt → 11pt)
@@ -284,47 +269,52 @@ class OneStopInboundDialog(InboundDialogBase):
         self.tree.pack(side=LEFT, fill=BOTH, expand=YES)
         scrollbar_y.pack(side=RIGHT, fill=Y)
         
-        # 합계행
-        self.summary_var = tk.StringVar(value="")
-        ttk.Label(main, textvariable=self.summary_var,
-                  font=('맑은 고딕', 13, 'bold'),
-                  foreground='#4fc3f7').pack(fill=X, pady=(2, 0))
-        
         # ═══════════════════════════════════════════════════════════
-        # 4. 하단 버튼
+        # 4. 하단 한 줄 — 업로드5: 폰트 통일(15), 업로드6: 합계 가운데 배치
+        # [엑셀][DB 업로드]  (합계: ... 가운데)  [취소]
         # ═══════════════════════════════════════════════════════════
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=X, pady=(8, 0))
         
         _font = getattr(self, '_toolbar_font', '맑은 고딕') if hasattr(self, '_toolbar_font') else '맑은 고딕'
+        _btn_font_size = 15
+        _blue = ThemeColors.get('info')
+        _red = ThemeColors.get('statusbar_icon_err')
         
-        # 우측: DB 업로드 (맨 오른쪽)
-        self.btn_upload = tk.Button(
-            btn_frame, text="📤 DB 업로드",
-            command=self._on_upload, state='disabled',
-            font=(_font, 17, 'bold'), bg=ThemeColors.get('statusbar_icon_err'), fg='white',
-            padx=20, pady=8, cursor='hand2', bd=0
-        )
-        self.btn_upload.pack(side=RIGHT, padx=(5, 0))
-        self._attach_doc_tooltip(self.btn_upload,
-            "미리보기 데이터를 DB에 저장합니다\n\n• 저장 후 재고리스트에 자동 반영\n• 중복 LOT는 자동 스킵\n• 저장 완료 후 재고리스트 화면 표시")
-        
-        # 우측: 취소 (DB 업로드 왼쪽)
-        tk.Button(
-            btn_frame, text="❌ 취소",
-            command=self._on_cancel,
-            font=(_font, 17, 'bold'), bg=ThemeColors.get('statusbar_icon_warn'), fg='white',
-            padx=20, pady=8, cursor='hand2', bd=0
-        ).pack(side=RIGHT, padx=(5, 0))
-        
-        # v3.8.8: 좌측: Excel 내보내기 (큰 글씨)
+        # 왼쪽: Excel 내보내기 (파란색, 폰트 15)
         self.btn_excel = tk.Button(
             btn_frame, text="📥 Excel 내보내기",
             command=self._export_to_excel, state='disabled',
-            font=(_font, 15, 'bold'), bg=ThemeColors.get('badge_db'), fg='white',
+            font=(_font, _btn_font_size, 'bold'), bg=_blue, fg='white',
             padx=15, pady=6, cursor='hand2', bd=0
         )
         self.btn_excel.pack(side=LEFT, padx=(0, 5))
+        
+        # DB 업로드 (파란색, 같은 폰트)
+        self.btn_upload = tk.Button(
+            btn_frame, text="📤 DB 업로드",
+            command=self._on_upload, state='disabled',
+            font=(_font, _btn_font_size, 'bold'), bg=_blue, fg='white',
+            padx=20, pady=8, cursor='hand2', bd=0
+        )
+        self.btn_upload.pack(side=LEFT, padx=(5, 0))
+        self._attach_doc_tooltip(self.btn_upload,
+            "미리보기 데이터를 DB에 저장합니다\n\n• 저장 후 재고리스트에 자동 반영\n• 중복 LOT는 자동 스킵\n• 저장 완료 후 재고리스트 화면 표시")
+        
+        # 가운데: 합계 (업로드6: 버튼과 같은 선상 가운데)
+        self.summary_var = tk.StringVar(value="")
+        _summary_lbl = ttk.Label(btn_frame, textvariable=self.summary_var,
+                                font=('맑은 고딕', 13, 'bold'),
+                                foreground='#4fc3f7')
+        _summary_lbl.pack(side=LEFT, fill=X, expand=True, padx=10)
+        
+        # 오른쪽: 취소 (빨간색, 같은 폰트 15)
+        tk.Button(
+            btn_frame, text="❌ 취소",
+            command=self._on_cancel,
+            font=(_font, _btn_font_size, 'bold'), bg=_red, fg='white',
+            padx=20, pady=8, cursor='hand2', bd=0
+        ).pack(side=RIGHT, padx=(5, 0))
     
     # ═══════════════════════════════════════════════════════════
     # 파일 선택
@@ -334,9 +324,9 @@ class OneStopInboundDialog(InboundDialogBase):
         """서류별 파일 선택"""
         type_names = {
             'PACKING_LIST': 'Packing List',
-            'INVOICE': 'Invoice / Factura',
-            'BL': 'B/L (선하증권)',
-            'DO': 'D/O (인도지시서)',
+            'INVOICE': 'Invoice, FA',
+            'BL': 'Bill of Lading',
+            'DO': 'Delivery Order',
         }
         
         file_path = filedialog.askopenfilename(
@@ -408,6 +398,7 @@ class OneStopInboundDialog(InboundDialogBase):
             self._update_progress(0, f"ℹ️ {', '.join(missing_optional)} 미선택 — 해당 정보 생략")
         
         self.btn_parse.config(state='disabled')
+        self._show_progress_popup()
         
         thread = threading.Thread(
             target=self._parse_thread,
@@ -415,12 +406,63 @@ class OneStopInboundDialog(InboundDialogBase):
         )
         thread.start()
     
+    def _show_progress_popup(self) -> None:
+        """v5.7.5: 파싱/업로드 시 화면 중앙에 큰 진행률 팝업 표시"""
+        if getattr(self, '_progress_popup', None) and self._progress_popup.winfo_exists():
+            return
+        popup = tk.Toplevel(self.dialog)
+        popup.title("작업 진행 중")
+        popup.resizable(False, False)
+        popup.transient(self.dialog)
+        w, h = PROGRESS_POPUP_WIDTH, PROGRESS_POPUP_HEIGHT
+        try:
+            x = self.dialog.winfo_rootx() + (self.dialog.winfo_width() - w) // 2
+            y = self.dialog.winfo_rooty() + (self.dialog.winfo_height() - h) // 2
+        except tk.TclError:
+            x, y = 200, 200
+        popup.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")
+        frame = ttk.Frame(popup, padding=28)
+        frame.pack(fill=tk.BOTH, expand=True)
+        lbl = ttk.Label(frame, text="준비 중...", font=('맑은 고딕', 18, 'bold'))
+        lbl.pack(anchor='w', pady=(0, 14))
+        _ps = ttk.Style()
+        _ps.configure('Popup.Horizontal.TProgressbar', troughcolor='#333333', background='#f1c40f', thickness=26)
+        bar = ttk.Progressbar(frame, maximum=100, mode='determinate', style='Popup.Horizontal.TProgressbar')
+        bar.pack(fill=tk.X, pady=(0, 10))
+        pct_lbl = ttk.Label(frame, text="0%", font=('맑은 고딕', 16))
+        pct_lbl.pack(anchor='w')
+        self._progress_popup = popup
+        self._progress_popup_label = lbl
+        self._progress_popup_bar = bar
+        self._progress_popup_pct = pct_lbl
+
+    def _hide_progress_popup(self) -> None:
+        """진행률 팝업 닫기"""
+        try:
+            if getattr(self, '_progress_popup', None) and self._progress_popup.winfo_exists():
+                self._progress_popup.destroy()
+        except Exception:
+            pass
+        self._progress_popup = None
+        self._progress_popup_label = None
+        self._progress_popup_bar = None
+        self._progress_popup_pct = None
+
     def _update_progress(self, pct: int, message: str):
-        """프로그레스 바 업데이트 (스레드 안전)"""
+        """프로그레스 바 업데이트 (스레드 안전) — 팝업이 있으면 팝업에 반영"""
         def _update():
             self.progress_var.set(pct)
-            self.progress_pct.set(f"{pct}%" if pct > 0 else "")
             self.status_var.set(message)
+            if getattr(self, '_progress_popup_bar', None) and self._progress_popup_bar.winfo_exists():
+                self._progress_popup_bar['value'] = pct
+                if self._progress_popup_label:
+                    self._progress_popup_label.config(text=message)
+                if getattr(self, '_progress_popup_pct', None):
+                    self._progress_popup_pct.config(text=f"{pct}%" if pct >= 0 else "")
+            # 완료 또는 오류 시 잠시 후 팝업 닫기
+            if pct >= 100 or (pct == 0 and message.strip().startswith("❌")):
+                if self.dialog and self.dialog.winfo_exists():
+                    self.dialog.after(PROGRESS_POPUP_CLOSE_DELAY_MS, self._hide_progress_popup)
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(0, _update)
     
@@ -459,12 +501,19 @@ class OneStopInboundDialog(InboundDialogBase):
             bl_result = None
             do_result = None
             
+            # v5.7.5: 현재 파싱 중인 서류 이름 표시
+            doc_type_display = {
+                'PACKING_LIST': 'Packing List',
+                'INVOICE': 'Invoice, FA',
+                'BL': 'Bill of Lading',
+                'DO': 'Delivery Order',
+            }
             for idx, (doc_type, file_path) in enumerate(to_parse):
                 fname = os.path.basename(file_path)
                 icon = icons.get(doc_type, '📄')
                 pct = int(10 + 70 * idx / total)
-                
-                self._update_progress(pct, f"{icon} [{idx+1}/{total}] {doc_type} 파싱: {fname}")
+                doc_name = doc_type_display.get(doc_type, doc_type)
+                self._update_progress(pct, f"현재 파싱 중: {doc_name} — {fname}")
                 self._log_safe(f"{icon} {doc_type} 파싱: {fname}")
                 
                 try:
@@ -578,23 +627,25 @@ class OneStopInboundDialog(InboundDialogBase):
             _gw = getattr(lot, 'gross_weight_kg', None)
             row['gross_weight'] = f"{float(_gw):,.3f}" if _gw else ''
             
-            # v3.8.8: B/L ship_date 우선, Invoice는 폴백
+            # v3.8.8: B/L ship_date 우선, Invoice 폴백 — 업로드3/4: 파싱값으로 채움 (날짜는 YYYY-MM-DD)
             if bl:
                 row['bl_no'] = self._format_bl(getattr(bl, 'bl_no', '') or '')
                 _sd = getattr(bl, 'ship_date', None)
                 if _sd:
-                    row['ship_date'] = str(_sd)
+                    row['ship_date'] = str(_sd)[:10] if len(str(_sd)) >= 10 else str(_sd)
             
             if invoice:
                 row['salar_invoice_no'] = getattr(invoice, 'salar_invoice_no', '') or ''
-                if not row['ship_date']:
+                if not (row.get('ship_date') or '').strip():
                     _id = getattr(invoice, 'invoice_date', None)
                     if _id:
-                        row['ship_date'] = str(_id)
+                        row['ship_date'] = str(_id)[:10] if len(str(_id)) >= 10 else str(_id)
                 if not row['sap_no']:
                     row['sap_no'] = getattr(invoice, 'sap_no', '') or ''
             
             self._fill_do(row, do)
+            if not (row.get('warehouse') or '').strip():
+                row['warehouse'] = DEFAULT_WAREHOUSE
             row['status'] = 'AVAILABLE'
             self.preview_data.append(row)
     
@@ -618,10 +669,10 @@ class OneStopInboundDialog(InboundDialogBase):
         if not row.get('bl_no') and getattr(do, 'bl_no', None):
             row['bl_no'] = str(getattr(do, 'bl_no', ''))
         
-        # arrival_date
+        # arrival_date (업로드3/4: D/O 파싱값으로 채움, YYYY-MM-DD)
         arr = getattr(do, 'arrival_date', None)
         if arr and str(arr) != 'None':
-            row['arrival_date'] = str(arr)
+            row['arrival_date'] = str(arr)[:10] if len(str(arr)) >= 10 else str(arr)
         
         # warehouse
         wh = getattr(do, 'warehouse_name', '') or getattr(do, 'warehouse', '')
@@ -635,7 +686,7 @@ class OneStopInboundDialog(InboundDialogBase):
                 # free_time_date 추출 (첫 번째 컨테이너)
                 ft_date_str = ''
                 for ft in ft_infos:
-                    ftd = getattr(ft, 'free_time_date', '') if not isinstance(ft, dict) else ft.get('free_time_date', '')
+                    ftd = (getattr(ft, 'free_time_date', '') or getattr(ft, 'free_time_until', '')) if not isinstance(ft, dict) else (ft.get('free_time_date') or ft.get('free_time_until') or '')
                     if ftd and str(ftd) != 'None':
                         ft_date_str = str(ftd)[:10]
                         break
@@ -647,6 +698,13 @@ class OneStopInboundDialog(InboundDialogBase):
                     row['free_time'] = str(max(0, days))
             except (ValueError, TypeError) as e:
                 logging.getLogger(__name__).debug(f"free_time 계산 실패: {e}")
+        # 업로드4: free_time 일수만 있는 경우 (DO.free_time.storage_free_days)
+        if not (row.get('free_time') or '').strip():
+            ft_single = getattr(do, 'free_time', None)
+            if ft_single is not None:
+                days_val = getattr(ft_single, 'storage_free_days', None) or (ft_single.get('storage_free_days') if isinstance(ft_single, dict) else None)
+                if days_val is not None:
+                    row['free_time'] = str(int(days_val))
     
     # ═══════════════════════════════════════════════════════════
     # 미리보기 표시
@@ -673,6 +731,9 @@ class OneStopInboundDialog(InboundDialogBase):
                 self.btn_upload.config(state='disabled')
             if self.preview_data:
                 self.btn_excel.config(state='normal')
+            # 파싱 완료 후 결과 확인 큰 창 → 맞으면 버튼 팝업
+            if self.preview_data:
+                self.dialog.after(300, self._show_parsing_result_confirmation)
         
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(0, _update)
@@ -717,6 +778,94 @@ class OneStopInboundDialog(InboundDialogBase):
             f"Gross {total_gross:,.0f} kg"
         )
     
+    def _show_parsing_result_confirmation(self) -> None:
+        """파싱 완료 후 결과를 크게 창으로 띄우고, 맞으면 버튼 팝업으로 이어짐"""
+        if not self.dialog or not self.dialog.winfo_exists() or not self.preview_data:
+            return
+        win = tk.Toplevel(self.dialog)
+        win.title("파싱 결과 확인")
+        win.geometry("900x520")
+        win.transient(self.dialog)
+        win.grab_set()
+        try:
+            x = self.dialog.winfo_rootx() + max(0, (self.dialog.winfo_width() - 900) // 2)
+            y = self.dialog.winfo_rooty() + max(0, (self.dialog.winfo_height() - 520) // 2)
+            win.geometry(f"900x520+{x}+{y}")
+        except tk.TclError:
+            pass
+        top = ttk.Frame(win, padding=12)
+        top.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(top, text="파싱이 완료되었습니다. 아래 내용이 맞는지 확인하세요.",
+                  font=('맑은 고딕', 14, 'bold')).pack(anchor='w', pady=(0, 8))
+        summary = self.summary_var.get()
+        if summary:
+            ttk.Label(top, text=summary, font=('맑은 고딕', 12),
+                      foreground='#4fc3f7').pack(anchor='w', pady=(0, 8))
+        tree_frame = ttk.Frame(top)
+        tree_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        cols = tuple(c[0] for c in PREVIEW_COLUMNS)
+        tree = ttk.Treeview(tree_frame, columns=cols, show='headings', height=12)
+        for col_id, header, w, _ in PREVIEW_COLUMNS:
+            tree.heading(col_id, text=header)
+            tree.column(col_id, width=min(w, 120))
+        vsb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
+        hsb = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=tree.xview)
+        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        for row in self.preview_data[:50]:
+            tree.insert('', tk.END, values=tuple(row.get(c[0], '') for c in PREVIEW_COLUMNS))
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        hsb.pack(side=tk.BOTTOM, fill=tk.X)
+        if len(self.preview_data) > 50:
+            ttk.Label(top, text=f"(상위 50건만 표시, 전체 {len(self.preview_data)}건)",
+                      font=('맑은 고딕', 9)).pack(anchor='w')
+        def on_ok():
+            win.destroy()
+            self._show_action_buttons_popup()
+        def on_no():
+            win.destroy()
+        btn_f = ttk.Frame(top)
+        btn_f.pack(fill=tk.X, pady=(12, 0))
+        ttk.Button(btn_f, text="맞음 — 다음 단계", command=on_ok).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_f, text="아니오", command=on_no).pack(side=tk.LEFT)
+    
+    def _show_action_buttons_popup(self) -> None:
+        """맞음 선택 시 하단 파란 2개·빨간 1개를 팝업으로 표시"""
+        if not self.dialog or not self.dialog.winfo_exists():
+            return
+        pop = tk.Toplevel(self.dialog)
+        pop.title("다음 작업 선택")
+        pop.resizable(False, False)
+        pop.transient(self.dialog)
+        try:
+            x = self.dialog.winfo_rootx() + (self.dialog.winfo_width() - 420) // 2
+            y = self.dialog.winfo_rooty() + (self.dialog.winfo_height() - 80) // 2
+            pop.geometry(f"420x80+{max(0, x)}+{max(0, y)}")
+        except tk.TclError:
+            pop.geometry("420x80")
+        f = ttk.Frame(pop, padding=12)
+        f.pack(fill=tk.BOTH, expand=True)
+        _font = getattr(self, '_toolbar_font', '맑은 고딕')
+        _blue = ThemeColors.get('info')
+        _red = ThemeColors.get('statusbar_icon_err')
+        def do_excel():
+            pop.destroy()
+            self._export_to_excel()
+        def do_upload():
+            pop.destroy()
+            self._on_upload()
+        def do_cancel():
+            pop.destroy()
+        tk.Button(f, text="📥 Excel 내보내기", command=do_excel,
+                  font=(_font, 15, 'bold'), bg=_blue, fg='white',
+                  padx=15, pady=6, cursor='hand2', bd=0).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Button(f, text="📤 DB 업로드", command=do_upload,
+                  font=(_font, 15, 'bold'), bg=_blue, fg='white',
+                  padx=15, pady=6, cursor='hand2', bd=0).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Button(f, text="❌ 취소", command=do_cancel,
+                  font=(_font, 15, 'bold'), bg=_red, fg='white',
+                  padx=15, pady=6, cursor='hand2', bd=0).pack(side=tk.LEFT)
+    
     # ═══════════════════════════════════════════════════════════
     # DB 업로드
     # ═══════════════════════════════════════════════════════════
@@ -734,14 +883,14 @@ class OneStopInboundDialog(InboundDialogBase):
                     self.dialog, "필수 서류 누락",
                     "DB 업로드를 하려면 다음 3종 서류가 모두 필요합니다:\n\n"
                     "  • ① Packing List (포장명세서)\n"
-                    "  • ② Invoice / Factura (송장)\n"
-                    "  • ③ B/L (선하증권)\n\n"
+                    "  • ② Invoice, FA (송장)\n"
+                    "  • ③ Bill of Lading (선하증권)\n\n"
                     f"누락: {', '.join(missing)}\n\n"
-                    "D/O(인도지시서)는 선택사항이며, 나중에 [📋 D/O 후속 연결] 메뉴로 보충할 수 있습니다."
+                    "Delivery Order(인도지시서)는 선택사항이며, 나중에 [📋 D/O 후속 연결] 메뉴로 보충할 수 있습니다."
                 )
             except (ImportError, ModuleNotFoundError):
                 from tkinter import messagebox
-                messagebox.showwarning("필수 서류 누락", "Packing List, Invoice, B/L 3종 모두 필요합니다.")
+                messagebox.showwarning("필수 서류 누락", "Packing List, Invoice/FA, Bill of Lading 3종 모두 필요합니다.")
             return
 
         # v3.8.8: 중복 LOT 사전 체크
@@ -801,6 +950,7 @@ class OneStopInboundDialog(InboundDialogBase):
         except (RuntimeError, ValueError) as _e:
             logger.debug(f'Suppressed: {_e}')
         
+        self._show_progress_popup()
         thread = threading.Thread(target=self._upload_thread, daemon=True)
         thread.start()
     
@@ -945,6 +1095,14 @@ class OneStopInboundDialog(InboundDialogBase):
                         logger.debug(f'Suppressed: {_e}')
                 
                 # PackingData 호환 dict
+                # v5.7.5: TONBAG(tonbag_count) 빈 값 허용 — 미입력 시 mxbg_pallet 사용
+                _tonbag = getattr(lot, 'tonbag_count', None)
+                if _tonbag is None or (isinstance(_tonbag, str) and str(_tonbag).strip() == ''):
+                    _tonbag = getattr(lot, 'mxbg_pallet', 10) or 10
+                try:
+                    _tonbag = int(float(_tonbag))
+                except (TypeError, ValueError):
+                    _tonbag = getattr(lot, 'mxbg_pallet', 10) or 10
                 # v3.8.8: free_time 계산 (None 안전 처리)
                 _arrival_raw = getattr(do, 'arrival_date', None) if do else None
                 _arrival = str(_arrival_raw) if _arrival_raw and str(_arrival_raw) != 'None' else ''
@@ -986,6 +1144,7 @@ class OneStopInboundDialog(InboundDialogBase):
                     'net_weight': getattr(lot, 'net_weight_kg', 0) or 0,
                     'gross_weight': getattr(lot, 'gross_weight_kg', 0) or 0,
                     'mxbg_pallet': getattr(lot, 'mxbg_pallet', 10) or 10,
+                    'tonbag_count': _tonbag,
                     'salar_invoice_no': getattr(invoice, 'salar_invoice_no', '') if invoice else '',
                     'ship_date': str(getattr(bl, 'ship_date', '')) if bl and getattr(bl, 'ship_date', None) else (
                         str(getattr(invoice, 'invoice_date', '')) if invoice and getattr(invoice, 'invoice_date', None) else ''

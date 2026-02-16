@@ -159,20 +159,31 @@ class ToolbarMixin:
         """v5.5.3 patch_02: 6개 드롭다운 메뉴 + 검색 Outline 버튼 분리"""
         f = self._toolbar_font
 
-        # ── 6개 드롭다운 메뉴 (동일 스타일) ──
+        # ── 7개 드롭다운 메뉴 (동일 스타일) + 상세 툴팁 ──
         menus = [
-            ('📁 파일 ▼',      self._build_file_menu),
-            ('📥 입고 ▼',      self._build_inbound_menu),
-            ('📤 출고 ▼',      self._build_outbound_menu),
-            ('📊 재고 ▼',      self._build_report_menu),
-            ('📝 보고서 ▼',    self._build_customer_report_menu),
-            ('🔧 설정/도구 ▼', self._build_settings_menu),
-            ('❓ 도움말 ▼',    self._build_help_menu),
+            ('📁 파일 ▼',      self._build_file_menu,
+             '파일 메뉴: 데이터베이스 열기/저장/백업, 설정 파일, 최근 파일, 종료 등 파일 관련 기능'),
+            ('📥 입고 ▼',      self._build_inbound_menu,
+             '입고 메뉴: 원스톱 입고(PDF/엑셀), 로케이션 업로드, 입고 이력 조회 등 입고 처리 기능'),
+            ('📤 출고 ▼',      self._build_outbound_menu,
+             '출고 메뉴: 선택 출고, 출고 템플릿, 출고 이력, 반품(재입고) 등 출고·반품 관련 기능'),
+            ('📊 재고 ▼',      self._build_report_menu,
+             '재고 메뉴: 재고 현황·통계, 대시보드, LOT/톤백 조회, 엑셀 내보내기 등 재고 조회·보고 기능'),
+            ('📝 보고서 ▼',    self._build_customer_report_menu,
+             '보고서 메뉴: 고객별·기간별 보고서, PDF/엑셀 출력 등 보고서 생성·출력 기능'),
+            ('🔧 설정/도구 ▼', self._build_settings_menu,
+             '설정/도구 메뉴: API 키·테마 설정, 데이터 검증, 마이그레이션, 개발자 도구 등'),
+            ('❓ 도움말 ▼',    self._build_help_menu,
+             '도움말 메뉴: 단축키, 사용 안내, 정보·버전, 로그 보기 등'),
         ]
 
-        for text, builder in menus:
+        for item in menus:
+            text = item[0]
+            builder = item[1]
+            tooltip = item[2] if len(item) > 2 else ""
+            # v5.7.5: 상단 메뉴가 가장 크게 — 14pt bold (탭보다 큼)
             btn = tk.Label(self._menu_frame, text=text,
-                          font=(f, 11, 'bold'),
+                          font=(f, 14, 'bold'),
                           bg=self._tb_bg, fg=self._tb_fg_normal,
                           anchor='center', justify='center',
                           padx=9, pady=6, cursor='hand2')
@@ -205,9 +216,10 @@ class ToolbarMixin:
             btn.bind('<Enter>', make_enter(btn))
             btn.bind('<Leave>', make_leave(btn))
             self._all_menu_btns.append(btn)
+            if tooltip:
+                self._attach_tooltip(btn, tooltip)
 
-        # ── 검색 버튼: Outline 스타일 (오른쪽 독립 배치) ──
-        self._build_search_button()
+        # v5.7.5: 검색 버튼 UI 제거 (메뉴 끝 검색 버튼 삭제)
 
     def _build_search_button(self) -> None:
         """v5.5.3 patch_02: 검색 — Outline 버튼 (드롭다운 메뉴가 아님을 시각적으로 구분)
@@ -477,13 +489,18 @@ class ToolbarMixin:
         """v5.5.3 patch_01: 탭 버튼 — 밑줄+텍스트 스타일 (메뉴와 통일)"""
         f = self._toolbar_font
         tab_defs = [
-            ('inventory', '📦 재고리스트', '재고현황 조회'),
-            ('tonbag',    '🎒 톤백리스트', '톤백 단위 현황'),
-            ('dashboard', '📊 통계',       '대시보드'),
-            ('log',       '📝 로그',       '시스템 로그'),
+            ('inventory', '📦 재고리스트',
+             'LOT 단위 재고 현황. 필터·기간·상태로 검색하고, 더블클릭 시 LOT 상세·톤백 목록을 볼 수 있습니다.'),
+            ('tonbag',    '🎒 톤백리스트',
+             '톤백 단위 현황. 선택 후 일괄 출고·라벨 출력·위치 업로드 등이 가능합니다.'),
+            ('dashboard', '📊 통계',
+             '제품별·기간별 입출고 통계, 알림, 최근 7일 차트 등 대시보드를 표시합니다.'),
+            ('log',       '📝 로그',
+             '시스템·작업 로그를 확인합니다. 오류 추적이나 동작 확인에 사용하세요.'),
         ]
         self._tab_buttons = {}
-        _tab_font_size = 18
+        # v5.7.5: 탭(재고리스트/톤백리스트 등)은 상단 메뉴보다 작게 — 11pt
+        _tab_font_size = 11
         for key, text, tip in tab_defs:
             # 래퍼 프레임 (버튼 + 밑줄을 묶음)
             wrapper = tk.Frame(self._sec_tabs, bg=self._tb_bg)

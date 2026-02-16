@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.7.3'
+__version__ = '5.7.5'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.7.5': '🎨 v5.7.5: UI·원스톱 입고 개선 — 폰트 위계, 기간 캘린더, 진행 팝업, Invoice/FA·Bill of Lading·Delivery Order, UID 표시, 스탯바 None 수정',
+    '5.7.4': '🐛 v5.7.4: 표시 컬럼 체크 해제 시 Invalid column index #all 수정 — 재고/톤백 리스트 공통 (displaycolumns #all 정규화)',
     '5.7.3': '🐛 v5.7.3: Excel 입고 — add_inventory_from_dict 추가 (CRUDMixin), GUI tonbags 호환',
     '5.7.2': '🔧 v5.7.2: 크로스 검증 샘플 포함 합산 — 정합성 경고 0건 (5001=500×10+1)',
     '5.7.1': '🐛 v5.7.1: 톤백 무게 정합성 — per_bag=(총무게-1)/톤백수 주석 강화, NET/Balance/Inbound 톤백 개별 무게만 사용',

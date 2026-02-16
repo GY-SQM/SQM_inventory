@@ -37,7 +37,11 @@ class TonbagTabMixin:
         try:
             from ..utils.tree_enhancements import HeaderFilterBar
             
-            # 재고 리스트와 동일: LOT NO, SAP NO, BL NO, CONTAINER, PRODUCT, STATUS + 초기화
+            if not hasattr(self, '_date_from_var'):
+                self._date_from_var = tk.StringVar()
+            if not hasattr(self, '_date_to_var'):
+                self._date_to_var = tk.StringVar()
+            # 재고 리스트와 동일: LOT NO, SAP NO, BL NO, CONTAINER, PRODUCT, STATUS + 기간 + 초기화
             tonbag_filter_cols = [
                 ('lot_no',       'LOT NO',     120),
                 ('sap_no',       'SAP NO',     120),
@@ -49,13 +53,15 @@ class TonbagTabMixin:
             self._tonbag_filter_bar = HeaderFilterBar(
                 self.tab_tonbag, None, tonbag_filter_cols,
                 on_filter=self._on_tonbag_filter_apply,
-                is_dark=_is_dark_filter
+                is_dark=_is_dark_filter,
+                date_from_var=self._date_from_var,
+                date_to_var=self._date_to_var,
             )
             self._tonbag_filter_bar.pack(fill=X, padx=5, pady=(0, 2))
         except (ImportError, AttributeError) as e:
             logger.debug(f"HeaderFilterBar 로딩 실패: {e}")
         
-        # v5.0.2: 컬럼 토글 + 표시 모드 바
+        # v5.0.2: 컬럼 토글 바 (v5.7.5: 표시 모드 제거)
         try:
             from ..utils.column_toggle import ColumnToggleBar
             
@@ -88,11 +94,11 @@ class TonbagTabMixin:
         tree_frame.pack(fill=BOTH, expand=YES, padx=5, pady=5)
         self._tonbag_tree_frame = tree_frame
         
-        # v3.8.9: 재고리스트와 동일 컬럼 + TONBAG NO 추가 (MXBG 다음)
+        # v3.8.9: 재고리스트와 동일 컬럼 + TONBAG NO 추가 (MXBG 다음) | v5.7.5: 가독성 위해 폰트 14로 확대
         import tkinter.font as tkfont
         _style = ttk.Style()
-        _tb_font = tkfont.Font(family='맑은 고딕', size=12)
-        _tb_head_font = tkfont.Font(family='맑은 고딕', size=12, weight='bold')
+        _tb_font = tkfont.Font(family='맑은 고딕', size=14)
+        _tb_head_font = tkfont.Font(family='맑은 고딕', size=14, weight='bold')
         _tb_row_h = _tb_font.metrics('linespace') + 6
         
         _is_dark_tb = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
@@ -255,24 +261,24 @@ class TonbagTabMixin:
         self.lbl_tonbag_selection = ttk.Label(btn_frame, text="선택: 0개 | 합계: 0 kg")
         self.lbl_tonbag_selection.pack(side=LEFT, padx=5)
         
-        ttk.Separator(btn_frame, orient='vertical').pack(side=LEFT, fill=Y, padx=10)
-        
-        self.lbl_sublot_summary = ttk.Label(btn_frame, text="총: - | 가용: - | 출고: -",
-                                             font=('맑은 고딕', 11))
-        self.lbl_sublot_summary.pack(side=LEFT, padx=5)
-        
+        # v5.7.5: 하단 요약 라벨(총/가용/출고) 제거
+
         search_frame = ttk.Frame(_inner)
         search_frame.pack(side=RIGHT)
         
-        ttk.Label(search_frame, text="상태:").pack(side=LEFT, padx=(0, 5))
-        self.tonbag_status_var = tk.StringVar(value="전체")
-        sublot_status_combo = ttk.Combobox(
+        # v5.7.5: STATUS = 전체 / Available / Sold 3종, 개수 표시 (Sold = 기존 Picked 표기 변경)
+        _lbl_status = ttk.Label(search_frame, text="상태:")
+        _lbl_status.pack(side=LEFT, padx=(0, 5))
+        apply_tooltip(_lbl_status, "톤백 상태로 필터: 전체 / Available(판매 가능) / Sold(출고 완료). 괄호 안 숫자는 해당 개수.")
+        self.tonbag_status_var = tk.StringVar(value="전체 (0)")
+        self._sublot_status_combo = ttk.Combobox(
             search_frame, textvariable=self.tonbag_status_var,
-            values=["전체", "AVAILABLE", "SOLD", "PICKED", "SAMPLE"],
-            state="readonly", width=10
+            values=["전체 (0)", "Available (0)", "Sold (0)"],
+            state="readonly", width=14
         )
-        sublot_status_combo.pack(side=LEFT, padx=(0, 10))
-        sublot_status_combo.bind('<<ComboboxSelected>>', self._on_tonbag_filter)
+        self._sublot_status_combo.pack(side=LEFT, padx=(0, 10))
+        self._sublot_status_combo.bind('<<ComboboxSelected>>', self._on_tonbag_filter)
+        apply_tooltip(self._sublot_status_combo, "전체 / Available / Sold 중 선택하면 목록이 해당 상태만 표시됩니다. 숫자는 현재 데이터 기준 개수.")
         
         self._show_sample_var = tk.BooleanVar(value=True)  # v5.6.1: 샘플 기본 표시
         self._chk_show_sample = ttk.Checkbutton(
@@ -287,14 +293,18 @@ class TonbagTabMixin:
         search_box = ttk.Frame(search_frame)
         search_box.pack(side=LEFT)
 
-        ttk.Label(search_box, text='🔍').pack(side=LEFT, padx=3)
-
+        _lbl_search = ttk.Label(search_box, text='🔍')
+        _lbl_search.pack(side=LEFT, padx=3)
+        apply_tooltip(_lbl_search, "LOT NO, SAP NO, BL NO, 제품명, CONTAINER 등에 포함된 글자로 실시간 필터. 입력 시마다 목록이 갱신됩니다.")
         self.tonbag_search_var = tk.StringVar()
         self.tonbag_search_var.trace('w', self._on_tonbag_search)
         tonbag_search_entry = ttk.Entry(search_box, textvariable=self.tonbag_search_var,
                                          width=15)
         tonbag_search_entry.pack(side=LEFT, pady=4, padx=(0, 5))
-        
+        apply_tooltip(tonbag_search_entry, "검색어 입력 시 LOT NO·SAP NO·BL NO·제품명·CONTAINER에서 해당 글자가 포함된 행만 표시됩니다.")
+
+        # 기간 필터는 HeaderFilterBar 안에 STATUS와 초기화 사이에 통합됨 (v5.7.5)
+
         # ═══════════════════════════════════════════════════════════════
         # 하단 NET(Kg) 합계 바 (재고와 동일)
         # ═══════════════════════════════════════════════════════════════
@@ -494,12 +504,51 @@ class TonbagTabMixin:
                             logger.warning("톤백 리스트: get_tonbags_with_inventory가 비어 있어 get_tonbags+LOT 보강으로 표시합니다. DB 스키마/JOIN 확인 권장.")
             if not tonbags and hasattr(self.engine, 'get_all_tonbags'):
                 tonbags = self.engine.get_all_tonbags()
-            
+            if not tonbags:
+                tonbags = []
+
+            # v5.7.5: STATUS 옵션별 개수 (전체 / Available / Sold)
+            _cnt_total = _cnt_avail = _cnt_sold = 0
+            _show_sample = getattr(self, '_show_sample_var', None)
+            for _tb in tonbags:
+                if _tb.get('is_sample', 0) and _show_sample and not _show_sample.get():
+                    continue
+                _cnt_total += 1
+                _st = _tb.get('tonbag_status', _tb.get('status', 'AVAILABLE'))
+                if _st == 'AVAILABLE':
+                    _cnt_avail += 1
+                elif _st in ('PICKED', 'SOLD'):
+                    _cnt_sold += 1
+            if hasattr(self, '_sublot_status_combo'):
+                self._sublot_status_combo['values'] = [
+                    f"전체 ({_cnt_total})", f"Available ({_cnt_avail})", f"Sold ({_cnt_sold})"
+                ]
+                _cur = self.tonbag_status_var.get()
+                if _cur not in self._sublot_status_combo['values'] and self._sublot_status_combo['values']:
+                    self.tonbag_status_var.set(self._sublot_status_combo['values'][0])
+
+            # 상태 필터 정규화
+            _raw = (status_filter or '').strip()
+            if not _raw or _raw.startswith('전체'):
+                status_filter_normalized = None
+            elif 'Available' in _raw or _raw == 'AVAILABLE':
+                status_filter_normalized = 'AVAILABLE'
+            elif 'Sold' in _raw or _raw in ('PICKED', 'SOLD'):
+                status_filter_normalized = 'PICKED'
+            else:
+                status_filter_normalized = _raw
+
+            # v5.7.5: 기간(날짜 범위) — 루프 밖에서 한 번만 읽기
+            _df = getattr(self, '_date_from_var', None)
+            _dt = getattr(self, '_date_to_var', None)
+            date_from = (_df.get().strip().replace('-', '') if _df else '')
+            date_to = (_dt.get().strip().replace('-', '') if _dt else '')
+
             total_count = 0
             available_count = 0
             picked_count = 0
             _text_color = '#1a1a1a'
-            
+
             for tb in tonbags:
                 lot_no = str(tb.get('lot_no', ''))
                 sap_no = str(tb.get('sap_no', ''))
@@ -513,20 +562,31 @@ class TonbagTabMixin:
                 if is_sample and show_sample and not show_sample.get():
                     continue
                 
-                # v4.0.8: 샘플 톤백은 product에 [SAMPLE] 추가 — 독립 PRODUCT로 관리
+                # v4.0.8/v5.7.5: 샘플 톤백은 제품명 뒤 (S) 표기 — 짧게 표시
                 if is_sample:
-                    product = f"{product} [SAMPLE]" if product else '[SAMPLE]'
+                    product = f"{product} (S)" if product else "(S)"
                 
                 # 검색 필터
                 if search_text:
                     searchable = f"{lot_no} {sap_no} {bl_no} {product} {container}".lower()
                     if search_text not in searchable:
                         continue
+
+                # v5.7.5: 기간(날짜 범위) 필터 — 지정한 경우에만 적용 (arrival_date 기준)
+                if date_from or date_to:
+                    arrival = str(tb.get('arrival_date', '') or '').replace('-', '')
+                    if date_from and arrival and arrival < date_from:
+                        continue
+                    if date_to and arrival and arrival > date_to:
+                        continue
                 
-                # 상태 필터
+                # 상태 필터 (v5.7.5: 전체 / Available / Sold)
                 status = tb.get('tonbag_status', tb.get('status', 'AVAILABLE'))
-                if status_filter != "전체" and status != status_filter:
-                    continue
+                if status_filter_normalized:
+                    if status_filter_normalized == 'AVAILABLE' and status != 'AVAILABLE':
+                        continue
+                    if status_filter_normalized == 'PICKED' and status not in ('PICKED', 'SOLD'):
+                        continue
                 
                 # v5.0.2: 헤더 필터바 조건
                 if hasattr(self, '_tonbag_filter_bar'):
@@ -612,12 +672,20 @@ class TonbagTabMixin:
                     try: return f"{float(v):,.0f}" if v else ''
                     except (ValueError, TypeError): return str(v) if v else ''
                 
-                # v5.6.3: MXBG 제거, 20열 (기존 21열에서 MXBG 삭제)
+                # UID: DB의 tonbag_uid 사용, 공란 시 lot_no-S0 / lot_no-sub_lt 로 표시 (업로드5)
+                _uid = (tb.get('tonbag_uid') or '').strip()
+                if not _uid:
+                    _sub = tb.get('sub_lt', tb.get('tonbag_no', ''))
+                    if tb.get('is_sample') or _sub == 0 or _sub == '0' or _sub == 'S00':
+                        _uid = f"{lot_no}-S0"
+                    else:
+                        _uid = f"{lot_no}-{_sub}"
+                # v5.6.3: MXBG 제거, 20열
                 vals = (
                     str(row_num),                                   #  1. No.
                     lot_no,                                         #  2. LOT NO
                     tonbag_no_print,                                #  3. TONBAG NO
-                    tb.get('tonbag_uid', '') or '',                 #  4. UID
+                    _uid,                                           #  4. UID
                     sap_no,                                         #  5. SAP NO
                     bl_no,                                          #  6. BL NO
                     container,                                      #  7. CONTAINER
@@ -629,7 +697,7 @@ class TonbagTabMixin:
                     tb.get('arrival_date', '') or '',               # 13. ARRIVAL
                     tb.get('free_time', '') or '',                  # 14. FREE TIME
                     tb.get('warehouse', '') or '',                  # 15. WH
-                    status,                                         # 16. STATUS
+                    ('Sold' if status in ('PICKED', 'SOLD') else status),  # 16. STATUS (v5.7.5: Picked→Sold 표기)
                     tb.get('customs', tb.get('customs_status', '')) or '',  # 17. CUSTOMS
                     _fmt(tb_balance),                               # 18. Balance(Kg)
                     _fmt(tonbag_inbound),                           # 19. Inbound(Kg)
@@ -654,16 +722,8 @@ class TonbagTabMixin:
             self.tree_sublot.tag_configure('stripe',
                 background=ThemeColors.get('tree_stripe') if not _dk else '#2a2a2a', foreground=_text_color)
             
-            # 요약 업데이트 (데이터 없을 때 안내 문구)
-            if total_count == 0:
-                self.lbl_sublot_summary.config(
-                    text="총: 0 | 가용: 0 | 출고: 0  (데이터 없음 — 입고▼ 메뉴에서 PDF 등록 후 표시됩니다)"
-                )
-            else:
-                self.lbl_sublot_summary.config(
-                    text=f"총: {total_count:,} | 가용: {available_count:,} | 출고: {picked_count:,}"
-                )
-            
+            # v5.7.5: 하단 요약 라벨 제거로 업데이트 생략
+
             # v4.2.2: 테이블 스타일 줄무늬 새로고침
             try:
                 from ..utils.table_styler import TableStyler
