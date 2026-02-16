@@ -90,9 +90,9 @@ class LotDetailDialogMixin:
         FONT_WEIGHT = ('맑은 고딕', 11, 'bold')
 
         tk.Label(header, text=f"📦 {lot_no}", font=FONT_TITLE,
-                 bg=header_bg, fg=ThemeColors.get('bg_card')).pack(side=LEFT)
+                 bg=header_bg, fg=fg).pack(side=LEFT)
         tk.Label(header, text=f"  |  {product}  |  {s_icon} {status}",
-                 font=FONT_SUBTITLE, bg=header_bg, fg=ThemeColors.get('arrow_separator')).pack(side=LEFT, padx=10)
+                 font=FONT_SUBTITLE, bg=header_bg, fg=fg).pack(side=LEFT, padx=10)
 
         # ── 정보 카드 행 (v5.6.9: 정렬/간격 통일) ──
         info_bar = tk.Frame(popup, bg=card_bg, padx=12, pady=10)
@@ -106,10 +106,11 @@ class LotDetailDialogMixin:
             ('ARRIVAL', lot_info.get('arrival_date', '-') or '-'),
             ('창고', lot_info.get('warehouse', '-') or '-'),
         ]
+        _label_fg = fg if is_dark else ThemeColors.get('text_secondary')
         for c, (label, value) in enumerate(info_items):
             f = tk.Frame(info_bar, bg=card_bg)
             f.grid(row=0, column=c, padx=(0, 20), sticky='w')
-            tk.Label(f, text=label, font=FONT_LABEL, bg=card_bg, fg=ThemeColors.get('text_secondary')).pack(anchor='w')
+            tk.Label(f, text=label, font=FONT_LABEL, bg=card_bg, fg=_label_fg).pack(anchor='w')
             tk.Label(f, text=str(value), font=FONT_VALUE, bg=card_bg, fg=fg).pack(anchor='w')
 
         # ── 중량 카드 ──
@@ -126,8 +127,8 @@ class LotDetailDialogMixin:
         for label, value, color in weight_items:
             f = tk.Frame(weight_bar, bg=card_bg)
             f.pack(side=LEFT, padx=(0, 28))
-            tk.Label(f, text=label, font=FONT_LABEL, bg=card_bg, fg=ThemeColors.get('text_secondary')).pack(anchor='w')
-            tk.Label(f, text=value, font=FONT_WEIGHT, bg=card_bg, fg=color).pack(anchor='w')
+            tk.Label(f, text=label, font=FONT_LABEL, bg=card_bg, fg=_label_fg).pack(anchor='w')
+            tk.Label(f, text=value, font=FONT_WEIGHT, bg=card_bg, fg=fg if is_dark else color).pack(anchor='w')
 
         # ═══════════════════════════════════════════
         # 2. 중단 — Notebook (톤백 + 이력)
@@ -190,15 +191,16 @@ class LotDetailDialogMixin:
             if is_sample:
                 tag = 'sample'
 
+            tb_no_disp = 'S' if (is_sample or sub_lt == 0) else sub_lt
             tb_tree.insert('', END, values=(
-                idx, sub_lt, f'{weight:,.1f}', st, tb_type, loc, p_to, p_date, o_date
+                idx, tb_no_disp, f'{weight:,.1f}', st, tb_type, loc, p_to, p_date, o_date
             ), tags=(tag,))
 
         tb_tree.tag_configure('available', background=ThemeColors.get('available') if not is_dark else '#1b3a2a', foreground=fg)
         tb_tree.tag_configure('picked', background=ThemeColors.get('picked') if not is_dark else '#3a1a1a', foreground=fg)
         tb_tree.tag_configure('shipped', background=ThemeColors.get('shipped') if not is_dark else '#1a2a3a', foreground=fg)
-        tb_tree.tag_configure('depleted', background='#f5f5f5', foreground='#999999')
-        tb_tree.tag_configure('sample', background='#e0f7fa' if not is_dark else '#1a3a3a', foreground='#006064' if not is_dark else '#80cbc4')
+        tb_tree.tag_configure('depleted', background='#f5f5f5' if not is_dark else '#2a2a2a', foreground=fg)
+        tb_tree.tag_configure('sample', background='#e0f7fa' if not is_dark else '#1a3a3a', foreground=fg)
 
         # 톤백 요약 바
         tb_summary = tk.Frame(tab_tonbag, bg=card_bg, pady=5)

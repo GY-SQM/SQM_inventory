@@ -343,7 +343,8 @@ class InventoryValidator:
         if null_fields and null_fields['cnt'] > 0:
             errors.append(f"필수 필드 누락: {null_fields['cnt']}건")
         
-        # 4. v3.8.4: inventory↔tonbag 크로스 검증 (중량) — 샘플 톤백 제외
+        # 4. v3.8.4: inventory↔tonbag 크로스 검증 (중량)
+        # v5.7.2: 샘플 포함 합산 — is_sample 조건 넣지 않음 (대원칙 5001 = 500×10 + 1)
         try:
             cross_check = self.db.fetchall("""
                 SELECT 
@@ -353,7 +354,7 @@ class InventoryValidator:
                 FROM inventory i
                 LEFT JOIN (
                     SELECT lot_no, SUM(weight) AS tonbag_avail_weight
-                    FROM inventory_tonbag 
+                    FROM inventory_tonbag
                     WHERE status = 'AVAILABLE'
                     GROUP BY lot_no
                 ) t ON i.lot_no = t.lot_no

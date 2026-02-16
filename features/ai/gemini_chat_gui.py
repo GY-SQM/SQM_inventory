@@ -1,21 +1,23 @@
 # -*- coding: utf-8 -*-
-import logging
-from gui_app_modular.utils.custom_messagebox import CustomMessageBox
-logger = logging.getLogger(__name__)
 """
 SQM 재고관리 - Gemini AI 채팅 GUI (v2.9.43)
 
 대화형 재고 조회 + Excel/PDF 내보내기 GUI
 """
 import logging
-import sqlite3
 import os
+import sqlite3
 import sys
+import threading
+from datetime import datetime
 from pathlib import Path
+
 import tkinter as tk
 from tkinter import ttk, scrolledtext, filedialog, messagebox
-from datetime import datetime
-import threading
+
+from gui_app_modular.utils.custom_messagebox import CustomMessageBox
+
+logger = logging.getLogger(__name__)
 
 # 프로젝트 루트 추가
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

@@ -159,7 +159,25 @@ class CRUDMixin:
                 'tonbags_created': 0,
                 'message': str(e)
             }
-    
+
+    def add_inventory_from_dict(self, data: dict) -> Dict:
+        """v5.7.3: Excel 입고용 — dict를 받아 add_inventory(**data) 호출, 반환에 tonbags 키 추가 (GUI 호환)"""
+        if not isinstance(data, dict):
+            return {'success': False, 'lot_no': '', 'tonbags_created': 0, 'tonbags': 0, 'message': 'data must be dict'}
+        # add_inventory가 받지 않는 키 제거 (location, remark, status는 INSERT에 없음)
+        allowed = {
+            'lot_no', 'sap_no', 'bl_no', 'container_no', 'product', 'product_code',
+            'mxbg_pallet', 'net_weight', 'gross_weight', 'warehouse', 'arrival_date', 'stock_date',
+            'lot_sqm', 'salar_invoice_no', 'ship_date', 'free_time', 'initial_weight', 'current_weight',
+        }
+        kwargs = {k: v for k, v in data.items() if k in allowed}
+        result = self.add_inventory(**kwargs)
+        if result.get('success'):
+            result['tonbags'] = result.get('tonbags_created', 0)
+        else:
+            result['tonbags'] = 0
+        return result
+
     def delete_inventory(self, lot_no: str, force: bool = False, 
                          confirmed: bool = False) -> Dict:
         """

@@ -156,9 +156,9 @@ class InboundMixin(InventoryBaseMixin):
                         total_w = self._safe_parse_float(
                             packing.get('net_weight')
                         )
-                        # v5.6.3: 대원칙 — 샘플 1kg 차감 후 톤백 수로 나누기
-                        # LOT 총무게 = (톤백수 × 단가) + 샘플 1kg
-                        # → per_bag = (총무게 - 1) / 톤백수
+                        # v5.7.1 핵심: 대원칙 5001 = 500×10 + 1 → 샘플 1kg 차감 후 나눔
+                        # 잘못된 식: per_bag = total_w / bag_count  → 5001/10 = 500.1 (정합성 깨짐)
+                        # 올바른 식: per_bag = (total_w - 1) / bag_count → 5000/10 = 500.0
                         sample_kg = SAMPLE_WEIGHT_KG
                         per_bag = (total_w - sample_kg) / bag_count if bag_count else 0
                         tonbags = [

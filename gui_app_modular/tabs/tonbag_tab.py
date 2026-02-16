@@ -343,12 +343,12 @@ class TonbagTabMixin:
         for item_id in selection:
             values = self.tree_sublot.item(item_id, 'values')
             if len(values) >= 3:
-                # v5.6.3: TONBAG NO = index 2 (MXBG 제거 후); S00 → 0, 숫자 → int
+                # TONBAG NO = index 2; 샘플 표기 'S'/'S0'/'S00' → sub_lt 0
                 raw = str(values[2]).strip().upper()
                 try:
-                    sub_lt = 0 if raw == 'S00' else int(values[2])
+                    sub_lt = 0 if raw in ('S', 'S0', 'S00') else int(values[2])
                 except (ValueError, TypeError):
-                    sub_lt = 0 if raw == 'S00' else raw
+                    sub_lt = 0 if raw in ('S', 'S0', 'S00') else 0
                 tonbag_list.append({
                     'lot_no': values[1],   # LOT NO (index 1)
                     'sub_lt': sub_lt,
@@ -374,7 +374,8 @@ class TonbagTabMixin:
         
         listbox = tk.Listbox(dialog, height=8)
         for tb in tonbag_list:
-            listbox.insert('end', f"{tb['lot_no']} / {tb['sub_lt']}")
+            disp = 'S' if tb['sub_lt'] == 0 else tb['sub_lt']
+            listbox.insert('end', f"{tb['lot_no']} / {disp}")
         listbox.pack(fill='x', padx=20, pady=5)
         
         # 출고처 입력
@@ -570,29 +571,21 @@ class TonbagTabMixin:
                 # v5.6.3: mxbg 제거 (톤백리스트에서 불필요)
                 tonbag_no = tb.get('tonbag_no', tb.get('sub_lt', ''))
                 
-                # v5.6.1: TONBAG NO 표시 (샘플은 S00 — sub_lt=0과 일치)
+                # v5.6.1: TONBAG NO 표시 (샘플은 'S'로 통일 — S0/S00 혼용 제거)
                 tonbag_no_print = tonbag_no
-                if is_sample and tonbag_no is not None:
-                    # 샘플: 항상 S00으로 표시
-                    try:
-                        tb_num = int(tonbag_no)
-                        tonbag_no_print = f'S{tb_num:02d}'  # S00
-                    except (ValueError, TypeError):
-                        if str(tonbag_no).upper().startswith('S'):
-                            tonbag_no_print = tonbag_no
-                        else:
-                            tonbag_no_print = f'S{tonbag_no}'
+                if is_sample:
+                    tonbag_no_print = 'S'
                 
                 location = tb.get('location', '') or ''
                 
-                # v5.6.3: 톤백 개별 무게 — NET/Balance/Inbound 모두 톤백 단위 (query_mixin 보강 필드 우선)
+                # v5.7.1: NET/Balance/Inbound = 톤백 개별 무게만 사용 (LOT 총무게 net_weight 사용 금지)
                 try:
                     tonbag_w = float(
                         tb.get('tonbag_weight', 0) or tb.get('weight', 0) or 0
                     )
                 except (ValueError, TypeError):
                     tonbag_w = 0.0
-                # Balance: 쿼리에서 tonbag_current_weight 반환 시 사용, 없으면 status 기반 계산
+                # Balance: tonbag_current_weight (쿼리 보강) 또는 status 기반
                 _tb_current = tb.get('tonbag_current_weight')
                 if _tb_current is not None and _tb_current != '':
                     try:
@@ -750,10 +743,14 @@ class TonbagTabMixin:
         item = self.tree_sublot.item(selection[0])
         values = item['values']
         
-        if len(values) >= 16:
+        if len(values) >= 17:
             lot_no = values[1]   # LOT NO (col 2, index 1)
-            sub_lt = values[2]   # TONBAG NO (col 3, index 2)
-            status = values[15]  # v5.6.3: STATUS (col 16, index 15) — MXBG 제거로 -1
+            raw_tb = str(values[2]).strip().upper()
+            try:
+                sub_lt = 0 if raw_tb in ('S', 'S0', 'S00') else int(values[2])
+            except (ValueError, TypeError):
+                sub_lt = 0
+            status = values[16]  # STATUS (index 16); values[15]=WH(창고)
             
             if status == 'AVAILABLE':
                 self._show_manual_outbound_dialog(lot_no, sub_lt)
@@ -789,7 +786,7 @@ class TonbagTabMixin:
         info_frame.pack(fill='x')
         
         ttk.Label(info_frame, text=f"LOT NO: {lot_no}", font=fonts.body()).pack(anchor='w')
-        ttk.Label(info_frame, text=f"Sub LT: {sub_lt}", font=fonts.body()).pack(anchor='w')
+        ttk.Label(info_frame, text=f"톤백 NO: {sub_lt if sub_lt != 0 else 'S'}", font=fonts.body()).pack(anchor='w')
         
         # 출고처 입력
         dest_frame = ttk.Frame(dialog, padding=(Spacing.MD, 0, Spacing.MD, Spacing.SM))
@@ -846,15 +843,15 @@ class TonbagTabMixin:
         cancel_items = []
         for item_id in selection:
             values = self.tree_sublot.item(item_id)['values']
-            if len(values) >= 16:
-                status = str(values[15]).strip()  # STATUS (index 15)
+            if len(values) >= 17:
+                status = str(values[16]).strip()  # STATUS (index 16); values[15]=WH
                 if status == 'PICKED':
-                    # v5.6.3: TONBAG NO = index 2 (MXBG 제거 후); S00 → 0
+                    # TONBAG NO = index 2; 샘플 'S'/'S0'/'S00' → sub_lt 0
                     raw = str(values[2]).strip().upper()
                     try:
-                        sub_lt = 0 if raw == 'S00' else int(values[2])
+                        sub_lt = 0 if raw in ('S', 'S0', 'S00') else int(values[2])
                     except (ValueError, TypeError):
-                        sub_lt = 0 if raw == 'S00' else 0
+                        sub_lt = 0 if raw in ('S', 'S0', 'S00') else 0
                     cancel_items.append({
                         'lot_no': str(values[1]),
                         'sub_lt': sub_lt,

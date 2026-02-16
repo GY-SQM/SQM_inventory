@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.6.9'
+__version__ = '5.7.3'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.7.3': '🐛 v5.7.3: Excel 입고 — add_inventory_from_dict 추가 (CRUDMixin), GUI tonbags 호환',
+    '5.7.2': '🔧 v5.7.2: 크로스 검증 샘플 포함 합산 — 정합성 경고 0건 (5001=500×10+1)',
+    '5.7.1': '🐛 v5.7.1: 톤백 무게 정합성 — per_bag=(총무게-1)/톤백수 주석 강화, NET/Balance/Inbound 톤백 개별 무게만 사용',
+    '5.7.0': '📥 v5.7.0: 입고 Gate-1 강화 — PL+FA+BL 필수 3종 없으면 DB 업로드 차단, D/O 후속 연결 정책 명확화',
     '5.6.9': '🎨 v5.6.9: 로케이션 엑셀 양식 확정, 다크 테마 가시성, LOT 상세/하단 요약 스타일 통일, Avail 동적 로직 명시',
     '5.6.8': '🏗️ v5.6.8: 상수파일 분리 + 핵심 테스트 11개 + 데드테이블 마킹 + 타입힌트 보강',
     '5.6.7': '🧹 v5.6.7: DO 후속 연결 + 데드코드 제거(inbound_preview/PG/picking_parser/-1,583줄) + unused import 정리 + 루트 md 정리',

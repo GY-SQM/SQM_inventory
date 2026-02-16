@@ -666,12 +666,23 @@ class OneStopInboundDialog(InboundDialogBase):
             
             self._update_summary()
             
-            if self.preview_data:
+            # v5.7.0: 필수 3종(PL+FA+BL) 모두 있을 때만 DB 업로드 허용
+            if self.preview_data and self._has_required_docs():
                 self.btn_upload.config(state='normal')
+            else:
+                self.btn_upload.config(state='disabled')
+            if self.preview_data:
                 self.btn_excel.config(state='normal')
         
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(0, _update)
+    
+    def _has_required_docs(self) -> bool:
+        """필수 서류 3종(Packing List, Invoice, B/L)이 모두 선택·파싱되었는지 확인"""
+        for doc_type, _name, required in DOC_TYPES:
+            if required and doc_type not in self.file_paths:
+                return False
+        return True
     
     def _update_summary(self) -> None:
         """합계행"""
@@ -714,7 +725,25 @@ class OneStopInboundDialog(InboundDialogBase):
         """DB 업로드 (v3.8.8: 중복 LOT 사전 경고 + 위젯 안전 처리)"""
         if not self.preview_data:
             return
-        
+        # v5.7.0: 필수 3종(PL+FA+BL) 없으면 업로드 차단
+        if not self._has_required_docs():
+            missing = [name for (dt, name, req) in DOC_TYPES if req and dt not in self.file_paths]
+            try:
+                from ..utils.custom_messagebox import CustomMessageBox
+                CustomMessageBox.showwarning(
+                    self.dialog, "필수 서류 누락",
+                    "DB 업로드를 하려면 다음 3종 서류가 모두 필요합니다:\n\n"
+                    "  • ① Packing List (포장명세서)\n"
+                    "  • ② Invoice / Factura (송장)\n"
+                    "  • ③ B/L (선하증권)\n\n"
+                    f"누락: {', '.join(missing)}\n\n"
+                    "D/O(인도지시서)는 선택사항이며, 나중에 [📋 D/O 후속 연결] 메뉴로 보충할 수 있습니다."
+                )
+            except (ImportError, ModuleNotFoundError):
+                from tkinter import messagebox
+                messagebox.showwarning("필수 서류 누락", "Packing List, Invoice, B/L 3종 모두 필요합니다.")
+            return
+
         # v3.8.8: 중복 LOT 사전 체크
         dup_lots = []
         if hasattr(self.engine, '_check_lot_exists') or hasattr(self.engine, 'db'):
@@ -789,7 +818,16 @@ class OneStopInboundDialog(InboundDialogBase):
                 self._update_progress(0, "❌ Packing List 없음")
                 self._enable_buttons()
                 return
-            
+            # v5.7.0: 필수 3종(PL+FA+BL) 없으면 업로드 중단 — 중복/부분 업로드 방지
+            if not invoice:
+                self._update_progress(0, "❌ FA(송장) 필수 — 3종(PL+FA+BL) 모두 필요")
+                self._enable_buttons()
+                return
+            if not bl:
+                self._update_progress(0, "❌ B/L(선하증권) 필수 — 3종(PL+FA+BL) 모두 필요")
+                self._enable_buttons()
+                return
+
             success, failed_rows = self._save_to_db(pl, invoice, bl, do)
             
             if success:

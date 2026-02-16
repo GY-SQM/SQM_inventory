@@ -75,7 +75,7 @@ class InventoryTabMixin:
         # ═══════════════════════════════════════════════════════
         # v4.0.6: 헤더 필터 바
         # ═══════════════════════════════════════════════════════
-        from ..utils.tree_enhancements import HeaderFilterBar, FooterTotalBar, apply_striped_rows
+        from ..utils.tree_enhancements import HeaderFilterBar, apply_striped_rows
         
         _is_dark_filter = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         inv_filter_cols = [
@@ -204,41 +204,17 @@ class InventoryTabMixin:
         h_scroll.pack(side='bottom', fill=X)
 
         # ═══════════════════════════════════════════════════════
-        # v5.5.3 patch_04: 재고 합계 통계 바 (ttk 전환 — 테마 자동 대응)
-        # ═══════════════════════════════════════════════════════
-        # v5.6.1 patch: 하단 요약바 — 깔끔한 1줄 통합
+        # v5.6.1 patch: 하단 요약바 1줄 통합 (정렬 일관, FooterTotalBar 제거)
         # ═══════════════════════════════════════════════════════
         self._inv_stats_frame = ttk.Frame(self.tab_inventory, padding=(8, 5))
         self._inv_stats_frame.pack(fill=X, padx=5, pady=(0, 2))
-
-        # v5.6.9: 하단 요약바 폰트/간격 통일
-        _sf = ('맑은 고딕', 11)
-        _vf = ('맑은 고딕', 11, 'bold')
-
-        def _add_stat(parent, icon_text, font_l=_sf, font_v=_vf):
-            ttk.Label(parent, text=icon_text, font=font_l).pack(side=LEFT, padx=(10, 2))
-            lbl = ttk.Label(parent, text="-", font=font_v)
-            lbl.pack(side=LEFT, padx=(0, 10))
-            return lbl
-
-        self._inv_stat_lots     = _add_stat(self._inv_stats_frame, "📦 LOT:")
-        self._inv_stat_tonbags  = _add_stat(self._inv_stats_frame, "🎒 톤백:")
-        self._inv_stat_initial  = _add_stat(self._inv_stats_frame, "📥 입고:")
-        self._inv_stat_current  = _add_stat(self._inv_stats_frame, "💰 잔량:")
-        self._inv_stat_picked   = _add_stat(self._inv_stats_frame, "📤 출고:")
-        self._inv_stat_avail    = _add_stat(self._inv_stats_frame, "✅ 가용:")
-        self._inv_stat_depleted = _add_stat(self._inv_stats_frame, "❌ 소진:")
-
-        ttk.Separator(self._inv_stats_frame, orient='vertical').pack(side=LEFT, fill=Y, padx=8)
-        ttk.Label(self._inv_stats_frame, text="📊 출고율:", font=_sf).pack(side=LEFT, padx=(0, 2))
-        self._inv_progress_canvas = tk.Canvas(self._inv_stats_frame,
-                                               width=100, height=14, bg='#3d3d3d',
-                                               highlightthickness=0)
-        self._inv_progress_canvas.pack(side=LEFT, padx=(0, 4))
-        self._inv_stat_progress = tk.Label(self._inv_stats_frame, text="0.0%",
-                                            font=_vf,
-                                            fg=ThemeColors.get('statusbar_icon_ok'))
-        self._inv_stat_progress.pack(side=LEFT)
+        _sum_font = ('맑은 고딕', 11)
+        self._inv_summary_label = ttk.Label(
+            self._inv_stats_frame,
+            text="📦 LOT: -  🎒 톤백: -  📥 입고: -  💰 잔량: -  📤 출고: -  ✅ 가용: -  ❌ 소진: -  |  📊 출고율: 0.0%",
+            font=_sum_font
+        )
+        self._inv_summary_label.pack(side=LEFT)
 
         # 테마 색상
         self._apply_inventory_theme_colors()
@@ -742,12 +718,10 @@ class InventoryTabMixin:
             logger.debug(f"스타일 툴바 업데이트 실패: {e}")
 
     def _refresh_inv_stats(self) -> None:
-        """v3.8.7: 재고 탭 하단 통계 합계 갱신"""
-        if not hasattr(self, '_inv_stat_lots'):
+        """v3.8.7: 재고 탭 하단 통계 — v5.6.1: 1줄 요약 라벨로 갱신"""
+        if not hasattr(self, '_inv_summary_label'):
             return
-        
         try:
-            # LOT 통계
             stats = self.engine.db.fetchone("""
                 SELECT 
                     COUNT(*) AS total_lots,
@@ -758,15 +732,15 @@ class InventoryTabMixin:
                     COALESCE(SUM(picked_weight), 0) AS total_picked
                 FROM inventory
             """)
-            
-            # 톤백 통계 (v3.9.4: 샘플 제외)
             tb_stats = self.engine.db.fetchone("""
                 SELECT COUNT(*) AS total,
                        SUM(CASE WHEN status='AVAILABLE' THEN 1 ELSE 0 END) AS avail
                 FROM inventory_tonbag
                 WHERE COALESCE(is_sample, 0) = 0
             """)
-            
+            total_lots = avail_lots = depleted = 0
+            initial_mt = current_mt = picked_mt = 0.0
+            tb_avail = tb_total = 0
             if stats:
                 total_lots = stats.get('total_lots', 0) or 0
                 avail_lots = stats.get('avail_lots', 0) or 0
@@ -774,32 +748,17 @@ class InventoryTabMixin:
                 initial_mt = (stats.get('total_initial', 0) or 0) / 1000
                 current_mt = (stats.get('total_current', 0) or 0) / 1000
                 picked_mt = (stats.get('total_picked', 0) or 0) / 1000
-                
-                self._inv_stat_lots.config(text=f"{total_lots:,}")
-                self._inv_stat_initial.config(text=f"{initial_mt:,.1f} MT")
-                self._inv_stat_current.config(text=f"{current_mt:,.1f} MT")
-                self._inv_stat_picked.config(text=f"{picked_mt:,.1f} MT")
-                self._inv_stat_avail.config(text=f"{avail_lots:,}")
-                self._inv_stat_depleted.config(text=f"{depleted:,}")
-                
-                # v3.9.5: 출고 진행률 바 업데이트
-                if hasattr(self, '_inv_progress_canvas') and initial_mt > 0:
-                    out_mt = initial_mt - current_mt
-                    pct = (out_mt / initial_mt * 100) if initial_mt > 0 else 0
-                    pct = max(0, min(100, pct))
-                    
-                    self._inv_progress_canvas.delete('all')
-                    fill_w = int(120 * pct / 100)
-                    color = ThemeColors.get('badge_db') if pct < 50 else ('#e67e22' if pct < 90 else ThemeColors.get('statusbar_icon_err'))
-                    self._inv_progress_canvas.create_rectangle(0, 0, fill_w, 16, fill=color, outline='')
-                    
-                    self._inv_stat_progress.config(text=f"{pct:.1f}%", fg=color)
-            
             if tb_stats:
                 tb_total = tb_stats.get('total', 0) or 0
                 tb_avail = tb_stats.get('avail', 0) or 0
-                self._inv_stat_tonbags.config(text=f"{tb_avail:,}/{tb_total:,}")
-                
+            pct = ( (initial_mt - current_mt) / initial_mt * 100 ) if initial_mt > 0 else 0
+            pct = max(0, min(100, pct))
+            line = (
+                f"📦 LOT: {total_lots:,}  🎒 톤백: {tb_avail:,}/{tb_total:,}  "
+                f"📥 입고: {initial_mt:,.1f} MT  💰 잔량: {current_mt:,.1f} MT  "
+                f"📤 출고: {picked_mt:,.1f} MT  ✅ 가용: {avail_lots:,}  ❌ 소진: {depleted:,}  |  📊 출고율: {pct:.1f}%"
+            )
+            self._inv_summary_label.config(text=line)
         except (ValueError, TypeError, KeyError) as e:
             logger.debug(f"inv_stats 갱신 오류: {e}")
 

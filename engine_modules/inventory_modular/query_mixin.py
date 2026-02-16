@@ -105,7 +105,7 @@ class QueryMixin:
         """v3.9.0: 톤백 + 재고(LOT) 정보 JOIN 조회
         
         톤백리스트 탭용 — 재고리스트 18열 + TONBAG NO + LOCATION = 20열
-        v5.6.3: 톤백 개별 current/initial 보강 — Balance/Inbound 표시용
+        v5.7.1: NET/Balance/Inbound = 톤백 개별(t.weight)만 사용 — LOT 총무게(i.net_weight)는 참고용
         """
         try:
             query = """
