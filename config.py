@@ -373,63 +373,18 @@ VALIDATION = {
 }
 
 # =============================================================================
-# 로깅 설정 (개선 #4 - 로그 로테이션)
+# 로깅 설정 (P2: config_logging에서 구현, 하위 호환 re-export)
 # =============================================================================
-
-LOG_LEVEL = os.environ.get('SQM_LOG_LEVEL', 'INFO')
-LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-LOG_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
-
-# 로그 로테이션 설정
-LOG_MAX_SIZE_MB = 10  # 최대 로그 파일 크기 (MB)
-LOG_BACKUP_COUNT = 5  # 백업 로그 파일 수
-LOG_KEEP_DAYS = 30  # 로그 보관 일수
-
-# 로그 파일 경로
-LOG_FILE = LOG_DIR / "sqm_inventory.log"
-
-# =============================================================================
-# 로깅 초기화 함수
-# =============================================================================
-
-def setup_logging():
-    """
-    로깅 설정 초기화 (로테이션 포함)
-
-    Returns:
-        logger: 설정된 로거 객체
-    """
-    import logging
-    from logging.handlers import RotatingFileHandler
-
-    # 루트 로거 설정
-    logger = logging.getLogger()
-    logger.setLevel(getattr(logging, LOG_LEVEL))
-
-    # 기존 핸들러 제거
-    logger.handlers.clear()
-
-    # 콘솔 핸들러
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
-    logger.addHandler(console_handler)
-
-    # 파일 핸들러 (로테이션)
-    try:
-        file_handler = RotatingFileHandler(
-            LOG_FILE,
-            maxBytes=LOG_MAX_SIZE_MB * 1024 * 1024,  # MB → bytes
-            backupCount=LOG_BACKUP_COUNT,
-            encoding='utf-8'
-        )
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
-        logger.addHandler(file_handler)
-    except (OSError, PermissionError) as e:
-        logger.warning(f"파일 로깅 설정 실패: {e}")
-
-    return logger
+from config_logging import (
+    LOG_LEVEL,
+    LOG_FORMAT,
+    LOG_DATE_FORMAT,
+    LOG_MAX_SIZE_MB,
+    LOG_BACKUP_COUNT,
+    LOG_KEEP_DAYS,
+    LOG_FILE,
+    setup_logging,
+)
 
 # =============================================================================
 # 설정 유효성 검사
@@ -509,170 +464,9 @@ def validate_api_key_with_gui(parent=None):
 
 
 # =============================================================================
-# v3.6.0: 스마트 경로 자동 매핑 (편의성 향상)
+# 파일/경로 유틸 (P2: utils.file_utils에서 구현, 하위 호환 re-export)
 # =============================================================================
-
-def smart_path_recovery(invalid_path: str, file_extension: str = None) -> str:
-    """
-    v3.6.0: 유효하지 않은 경로에서 유사한 파일 자동 검색
-    
-    Args:
-        invalid_path: 유효하지 않은 파일 경로
-        file_extension: 찾을 파일 확장자 (예: '.xlsx', '.pdf')
-    
-    Returns:
-        str: 복구된 경로 또는 빈 문자열
-    """
-    import os
-    from pathlib import Path
-    
-    if not invalid_path:
-        return ""
-    
-    invalid_path = Path(invalid_path)
-    
-    # 1. 파일이 존재하면 그대로 반환
-    if invalid_path.exists():
-        return str(invalid_path)
-    
-    # 2. 디렉토리 추출
-    parent_dir = invalid_path.parent
-    if not parent_dir.exists():
-        # 상위 폴더도 없으면 기본 경로에서 검색
-        parent_dir = BASE_DIR
-    
-    # 3. 확장자 결정
-    if file_extension is None:
-        file_extension = invalid_path.suffix or '.*'
-    
-    # 4. 유사한 파일 검색
-    try:
-        pattern = f"*{file_extension}" if file_extension != '.*' else "*"
-        candidates = list(parent_dir.glob(pattern))
-        
-        if not candidates:
-            return ""
-        
-        # 5. 원본 파일명과 가장 유사한 파일 찾기
-        original_name = invalid_path.stem.lower()
-        
-        best_match = None
-        best_score = 0
-        
-        for candidate in candidates:
-            if candidate.is_file():
-                candidate_name = candidate.stem.lower()
-                # 간단한 유사도 계산 (공통 문자 수)
-                common = sum(1 for c in original_name if c in candidate_name)
-                score = common / max(len(original_name), len(candidate_name), 1)
-                
-                if score > best_score:
-                    best_score = score
-                    best_match = candidate
-        
-        # 유사도 30% 이상이면 반환
-        if best_match and best_score >= 0.3:
-            return str(best_match)
-        
-        # 유사한 파일이 없으면 가장 최근 수정된 파일 반환
-        candidates.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        return str(candidates[0]) if candidates else ""
-        
-    except (ValueError, TypeError, AttributeError) as e:
-        print(f"경로 복구 오류: {e}")
-        return ""
-
-
-def get_recent_files(directory: str = None, extension: str = None, limit: int = 10) -> list:
-    """
-    v3.6.0: 최근 파일 목록 반환
-    
-    Args:
-        directory: 검색할 디렉토리 (None이면 OUTPUT_DIR)
-        extension: 파일 확장자 필터
-        limit: 반환할 최대 파일 수
-    
-    Returns:
-        list: 최근 파일 경로 목록
-    """
-    from pathlib import Path
-    
-    search_dir = Path(directory) if directory else OUTPUT_DIR
-    
-    if not search_dir.exists():
-        return []
-    
-    try:
-        pattern = f"*{extension}" if extension else "*"
-        files = [f for f in search_dir.glob(pattern) if f.is_file()]
-        files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        return [str(f) for f in files[:limit]]
-    except (OSError, IOError, PermissionError):
-        return []
-
-
-# =============================================================================
-# v3.6.0: 안전한 백업 함수 (PermissionError 방지)
-# =============================================================================
-
-def safe_file_backup(source_path: str, backup_dir: str = None) -> tuple:
-    """
-    v3.6.0: PermissionError를 방지하는 안전한 파일 백업
-    
-    Args:
-        source_path: 백업할 파일 경로
-        backup_dir: 백업 디렉토리 (None이면 BACKUP_DIR)
-    
-    Returns:
-        (success, backup_path or error_message)
-    """
-    import shutil
-    import time
-    from pathlib import Path
-    
-    source = Path(source_path)
-    
-    if not source.exists():
-        return False, f"파일 없음: {source_path}"
-    
-    backup_directory = Path(backup_dir) if backup_dir else BACKUP_DIR
-    backup_directory.mkdir(parents=True, exist_ok=True)
-    
-    # 백업 파일명 생성
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    backup_name = f"{source.stem}_{timestamp}{source.suffix}"
-    backup_path = backup_directory / backup_name
-    
-    # 파일 핸들 점검 및 재시도 로직
-    max_retries = 3
-    retry_delay = 0.5  # 초
-    
-    for attempt in range(max_retries):
-        try:
-            # 파일이 사용 중인지 확인 (Windows)
-            try:
-                with open(source, 'rb') as f:
-                    pass  # 읽기 가능하면 OK
-            except PermissionError:
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    continue
-                else:
-                    return False, f"파일 사용 중: {source_path}"
-            
-            # 백업 실행
-            shutil.copy2(source, backup_path)
-            return True, str(backup_path)
-            
-        except PermissionError as e:
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay)
-            else:
-                return False, f"권한 오류: {e}"
-        except (OSError, IOError, PermissionError) as e:
-            return False, f"백업 오류: {e}"
-    
-    return False, "백업 실패 (최대 재시도 초과)"
+from utils.file_utils import smart_path_recovery, get_recent_files, safe_file_backup
 
 
 # =============================================================================

@@ -39,7 +39,7 @@ class PDFHandlersMixin:
         self._log(f"PDF conversion started: {os.path.basename(pdf_path)}")
         
         try:
-            from pdf_converter import PDFConverter
+            from utils.pdf_converter import PDFConverter
             
             converter = PDFConverter()
             result = converter.to_excel(pdf_path)
@@ -84,7 +84,7 @@ class PDFHandlersMixin:
         self._log(f"PDF conversion started: {os.path.basename(pdf_path)}")
         
         try:
-            from pdf_converter import PDFConverter
+            from utils.pdf_converter import PDFConverter
             
             converter = PDFConverter()
             result = converter.to_word(pdf_path)
@@ -140,7 +140,7 @@ class PDFHandlersMixin:
         self._log(f"Batch conversion started: {len(pdf_files)} files")
         
         try:
-            from pdf_converter import PDFConverter
+            from utils.pdf_converter import PDFConverter
             converter = PDFConverter()
             
             success_count = 0

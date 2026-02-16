@@ -15,7 +15,7 @@ from datetime import datetime, date
 from typing import Optional, List, Dict, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from preflight import PreflightResult, PreflightValidator
+    from engine_modules.preflight import PreflightResult, PreflightValidator
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class PreflightMixin:
     def _get_preflight_validator(self) -> Optional['PreflightValidator']:
         """Get preflight validator instance"""
         try:
-            from preflight import PreflightValidator
+            from engine_modules.preflight import PreflightValidator
             return PreflightValidator(self.db)
         except ImportError:
             logger.warning("preflight module not found")
@@ -55,7 +55,7 @@ class PreflightMixin:
         """
         validator = self._get_preflight_validator()
         if not validator:
-            from preflight import PreflightResult
+            from engine_modules.preflight import PreflightResult
             return PreflightResult(operation="INBOUND", total_rows=len(data))
         
         return validator.validate_inbound(data)
@@ -72,7 +72,7 @@ class PreflightMixin:
         """
         validator = self._get_preflight_validator()
         if not validator:
-            from preflight import PreflightResult
+            from engine_modules.preflight import PreflightResult
             return PreflightResult(operation="OUTBOUND", total_rows=len(data))
         
         return validator.validate_outbound(data)
@@ -96,7 +96,7 @@ class PreflightMixin:
         Raises:
             PreflightError: On validation failure (causes transaction rollback)
         """
-        from preflight import PreflightError, PreflightValidator
+        from engine_modules.preflight import PreflightError, PreflightValidator
         import uuid
         
         result = {
@@ -269,7 +269,7 @@ class PreflightMixin:
         Raises:
             PreflightError: On validation failure
         """
-        from preflight import PreflightError, PreflightValidator
+        from engine_modules.preflight import PreflightError, PreflightValidator
         
         result = {
             'success': False,

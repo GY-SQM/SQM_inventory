@@ -308,7 +308,7 @@ class SQMInventoryApp:
     def _setup_ui_helper(self) -> None:
         """v3.0: UI 운영 헬퍼 초기화"""
         try:
-            from ui_ops_helper import UIOperationsHelper
+            from .utils.ui_ops_helper import UIOperationsHelper
             
             # 상태바에서 진행률 바와 레이블 가져오기
             progressbar = getattr(self, 'progress_bar', None)

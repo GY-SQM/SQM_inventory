@@ -735,7 +735,7 @@ if __name__ == "__main__":
         logger.debug("✅ PDF → Word 변환 가능")
     
     logger.debug("\n[사용법]")
-    logger.debug("  from pdf_converter import PDFConverter, pdf_to_excel, pdf_to_word")
+    logger.debug("  from utils.pdf_converter import PDFConverter, pdf_to_excel, pdf_to_word")
     logger.debug("  ")
     logger.debug("  # 방법 1: 간편 함수")
     logger.debug("  excel_path = pdf_to_excel('document.pdf')")
