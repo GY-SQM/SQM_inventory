@@ -685,6 +685,22 @@ def validate_lot_no(lot_no: str) -> Tuple[bool, str]:
     return False, "; ".join(result.errors)
 
 
+def validate_sap_no(sap_no: str) -> Tuple[bool, str]:
+    """
+    SAP NO 간단 검증 (레거시 호환). P1 단일 소스.
+    SAP NO는 선택적(빈 값 허용). 있으면 10자리 숫자 등 형식 검사.
+    """
+    if not sap_no:
+        return True, ""
+    sap_no = str(sap_no).strip()
+    if not sap_no:
+        return True, ""
+    if not re.match(r'^\d{10}$', sap_no):
+        if not sap_no.isalnum():
+            return False, f"SAP NO에 허용되지 않은 문자: {sap_no}"
+    return True, ""
+
+
 def validate_weight(weight: float) -> Tuple[bool, str]:
     """
     중량 간단 검증 (레거시 호환)

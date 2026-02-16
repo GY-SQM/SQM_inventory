@@ -63,48 +63,14 @@ def safe_date(val: Any, default: str = '', output_format: str = '%Y-%m-%d') -> s
 # 용도별 별칭 (DEBUGGING_RISK_OVERVIEW: safe_date 용도별 정리)
 safe_date_str = safe_date  # 문자열 필요 시. 날짜 객체 필요 시 helpers.safe_date_to_date
 
-
-def find_column(df_columns: list, candidates: list, default: Optional[str] = None) -> Optional[str]:
-    """
-    DataFrame 컬럼에서 후보 이름 찾기
-    
-    Args:
-        df_columns: DataFrame의 컬럼 리스트
-        candidates: 찾을 컬럼 이름 후보들
-        default: 못 찾으면 반환할 기본값
-        
-    Returns:
-        찾은 컬럼명 또는 기본값
-    """
-    df_cols_lower = {str(c).lower().strip(): c for c in df_columns}
-    
-    for candidate in candidates:
-        key = str(candidate).lower().strip()
-        if key in df_cols_lower:
-            return df_cols_lower[key]
-    
-    return default
-
-
-def format_number(value: float, decimals: int = 2, use_comma: bool = True) -> str:
-    """숫자 포맷팅"""
-    try:
-        if use_comma:
-            return f"{value:,.{decimals}f}"
-        return f"{value:.{decimals}f}"
-    except (ValueError, TypeError, AttributeError):
-        return str(value)
-
-
-def format_weight_mt(kg_value: float) -> str:
-    """kg를 MT로 변환하여 포맷"""
-    mt = kg_value / 1000
-    return f"{mt:,.2f} MT"
-
-
-def format_weight_kg(kg_value: float) -> str:
-    """kg 포맷"""
-    return f"{kg_value:,.0f} kg"
+# P1: format_number, format_weight_*, find_column 단일 소스
+from .formatters import (  # noqa: F401
+    find_column,
+    format_number,
+    format_weight,
+    format_weight_kg,
+    format_weight_mt,
+)
 
 
 # ─── v3.6.6: DB 쿼리 안전 유틸리티 ─────────────────

@@ -462,26 +462,9 @@ class SQMDatabase(DatabaseMigrationMixin, DatabaseInterface):
 
     @staticmethod
     def validate_sap_no(sap_no: str) -> Tuple[bool, str]:
-        """
-        SAP NO 유효성 검사
-
-        Args:
-            sap_no: 검사할 SAP NO
-
-        Returns:
-            (유효 여부, 오류 메시지)
-        """
-        if not sap_no:
-            return True, ""  # SAP NO는 선택적
-
-        sap_no = str(sap_no).strip()
-
-        # 일반적인 SAP NO 패턴: 2200XXXXXX (10자리)
-        if not re.match(r'^\d{10}$', sap_no):
-            if not sap_no.isalnum():
-                return False, f"SAP NO에 허용되지 않은 문자: {sap_no}"
-
-        return True, ""
+        """SAP NO 유효성 검사. 단일 소스: engine_modules.validators.validate_sap_no"""
+        from engine_modules.validators import validate_sap_no as _validate_sap_no
+        return _validate_sap_no(sap_no)
 
     # =========================================================================
     # 개선 #5: DB 락 감지

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.7.9'
+__version__ = '5.8.0'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.8.0': '🏗️ v5.8.0: P1 완료 — validate_lot_no/validate_sap_no 단일 소스(validators), format_*/find_column 단일 소스(formatters)',
     '5.7.9': '🔧 v5.7.9: 엔트리 run.py 통일, P0 완료(run.bat 삭제·SQM_실행.bat), 리팩토링 마스터 플랜 문서',
     '5.7.8': '🏗️ v5.7.8: 출고 전 필수 — 샘플 1kg 상수화, 상태 상수(PICKED/SOLD), constants·safe_float·config_sql 분할',
     '5.7.7': '🔖 v5.7.7: 릴리스 태그',

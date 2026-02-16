@@ -76,114 +76,21 @@ def safe_date(value: Any, default: Optional[date] = None) -> Optional[date]:
 safe_date_to_date = safe_date  # 날짜 객체 필요 시. 문자열 필요 시 safe_utils.safe_date_str
 
 
-def format_weight(weight_kg: float, unit: str = 'MT') -> str:
-    """
-    Format weight value
-    
-    Args:
-        weight_kg: Weight in kg
-        unit: Output unit ('MT', 'kg', 'auto')
-        
-    Returns:
-        Formatted string
-    """
-    if unit == 'MT':
-        return f"{weight_kg / 1000:.3f} MT"
-    elif unit == 'kg':
-        return f"{weight_kg:,.0f} kg"
-    else:  # auto
-        if weight_kg >= 1000:
-            return f"{weight_kg / 1000:.3f} MT"
-        else:
-            return f"{weight_kg:.1f} kg"
-
-
-def format_number(value: float, decimals: int = 0) -> str:
-    """
-    Format number with thousands separator
-    
-    Args:
-        value: Number to format
-        decimals: Decimal places
-        
-    Returns:
-        Formatted string
-    """
-    if decimals > 0:
-        return f"{value:,.{decimals}f}"
-    else:
-        return f"{value:,.0f}"
-
+# P1: format_* / find_column 단일 소스
+from .formatters import find_column, format_number, format_weight  # noqa: F401
 
 def validate_lot_no(lot_no: str) -> bool:
-    """
-    Validate LOT number format
-    
-    Format: 10 digits (YYMMDDXXXX)
-    
-    Args:
-        lot_no: LOT number to validate
-        
-    Returns:
-        True if valid
-    """
-    if not lot_no:
-        return False
-    
-    lot_no = str(lot_no).strip()
-    
-    # Must be 10 digits
-    if not re.match(r'^\d{10}$', lot_no):
-        return False
-    
-    return True
+    """LOT 번호 검증. 단일 소스: engine_modules.validators.validate_lot_no"""
+    from engine_modules.validators import validate_lot_no as _validate_lot_no
+    ok, _ = _validate_lot_no(lot_no)
+    return ok
 
 
 def validate_sap_no(sap_no: str) -> bool:
-    """
-    Validate SAP number format
-    
-    Format: Starts with 45, 10 digits total
-    
-    Args:
-        sap_no: SAP number to validate
-        
-    Returns:
-        True if valid
-    """
-    if not sap_no:
-        return False
-    
-    sap_no = str(sap_no).strip()
-    
-    # Must be 10 digits starting with 45
-    if not re.match(r'^45\d{8}$', sap_no):
-        return False
-    
-    return True
-
-
-def find_column(df_columns: List[str], candidates: List[str]) -> Optional[str]:
-    """
-    Find matching column name from candidates
-    
-    Args:
-        df_columns: DataFrame column names
-        candidates: Possible column names to match
-        
-    Returns:
-        Matching column name or None
-    """
-    # Normalize DataFrame columns
-    norm_columns = {normalize_column_name(c): c for c in df_columns}
-    
-    # Try each candidate
-    for candidate in candidates:
-        norm_candidate = normalize_column_name(candidate)
-        if norm_candidate in norm_columns:
-            return norm_columns[norm_candidate]
-    
-    return None
+    """SAP NO 검증. 단일 소스: engine_modules.validators.validate_sap_no"""
+    from engine_modules.validators import validate_sap_no as _validate_sap_no
+    ok, _ = _validate_sap_no(sap_no)
+    return ok
 
 
 def get_file_extension(file_path: str) -> str:
