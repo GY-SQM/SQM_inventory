@@ -191,7 +191,7 @@ class LotDetailDialogMixin:
             if is_sample:
                 tag = 'sample'
 
-            tb_no_disp = 'S' if (is_sample or sub_lt == 0) else sub_lt
+            tb_no_disp = 'S0' if (is_sample or sub_lt == 0) else sub_lt
             tb_tree.insert('', END, values=(
                 idx, tb_no_disp, f'{weight:,.1f}', st, tb_type, loc, p_to, p_date, o_date
             ), tags=(tag,))

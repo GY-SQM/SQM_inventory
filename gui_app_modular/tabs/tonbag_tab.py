@@ -384,7 +384,7 @@ class TonbagTabMixin:
         
         listbox = tk.Listbox(dialog, height=8)
         for tb in tonbag_list:
-            disp = 'S' if tb['sub_lt'] == 0 else tb['sub_lt']
+            disp = 'S0' if tb['sub_lt'] == 0 else tb['sub_lt']
             listbox.insert('end', f"{tb['lot_no']} / {disp}")
         listbox.pack(fill='x', padx=20, pady=5)
         
@@ -631,10 +631,10 @@ class TonbagTabMixin:
                 # v5.6.3: mxbg 제거 (톤백리스트에서 불필요)
                 tonbag_no = tb.get('tonbag_no', tb.get('sub_lt', ''))
                 
-                # v5.6.1: TONBAG NO 표시 (샘플은 'S'로 통일 — S0/S00 혼용 제거)
+                # v5.8.5: TONBAG NO 표시 (샘플은 'S0' — 숫자와 혼동 방지)
                 tonbag_no_print = tonbag_no
                 if is_sample:
-                    tonbag_no_print = 'S'
+                    tonbag_no_print = 'S0'
                 
                 location = tb.get('location', '') or ''
                 
@@ -846,7 +846,7 @@ class TonbagTabMixin:
         info_frame.pack(fill='x')
         
         ttk.Label(info_frame, text=f"LOT NO: {lot_no}", font=fonts.body()).pack(anchor='w')
-        ttk.Label(info_frame, text=f"톤백 NO: {sub_lt if sub_lt != 0 else 'S'}", font=fonts.body()).pack(anchor='w')
+        ttk.Label(info_frame, text=f"톤백 NO: {sub_lt if sub_lt != 0 else 'S0'}", font=fonts.body()).pack(anchor='w')
         
         # 출고처 입력
         dest_frame = ttk.Frame(dialog, padding=(Spacing.MD, 0, Spacing.MD, Spacing.SM))
