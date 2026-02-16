@@ -181,14 +181,15 @@ class InventoryTabMixin:
             else:
                 self.tree_inventory.column(col_id, width=0, minwidth=0, stretch=False)
         
-        # v4.2.2: 테이블 스타일 적용 (그리드 라인, 줄무늬)
+        # v4.2.2: 테이블 스타일 적용 (v5.6.9: 다크 테마 시 글씨 가시성)
         try:
             from ..utils.table_styler import apply_table_style
             apply_table_style(
                 self.tree_inventory,
                 grid_lines=True,
                 striped_rows=True,
-                row_height='normal'
+                row_height='normal',
+                is_dark=_is_dark_tv
             )
         except (ImportError, Exception) as e:
             logger.debug(f"테이블 스타일 적용 실패: {e}")
@@ -493,9 +494,14 @@ class InventoryTabMixin:
             _ttk.Label(dlg, text="이력이 없습니다.", foreground='gray').pack(pady=20)
 
     def _apply_inventory_theme_colors(self) -> None:
-        """테마 색상 적용"""
+        """테마 색상 적용 (v5.6.9: Grid 스타일 foreground 갱신 — 다크에서 글씨 보이게)"""
         is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         ThemeColors.configure_tags(self.tree_inventory, is_dark)
+        try:
+            from ..utils.table_styler import TableStyler
+            TableStyler.update_grid_style_for_theme(self.tree_inventory, is_dark)
+        except (ImportError, Exception) as e:
+            logger.debug(f"Grid 스타일 테마 갱신 무시: {e}")
 
     def _on_search(self, *args) -> None:
         self._refresh_inventory()

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class TableStyler:
     """테이블 스타일 관리 클래스"""
     
-    # 색상 테마
+    # 색상 테마 (라이트)
     COLORS = {
         # 그리드 라인
         'grid_line': '#e0e0e0',
@@ -39,6 +39,21 @@ class TableStyler:
         'border': '#9e9e9e',
     }
     
+    # v5.6.9: 다크 테마 — 행 글씨 가시성
+    COLORS_DARK = {
+        'grid_line': '#555555',
+        'grid_line_strong': '#666666',
+        'row_even': '#1e1e1e',
+        'row_odd': '#2a2a2a',
+        'row_even_selected': '#2a3a4a',
+        'row_odd_selected': '#253545',
+        'header_bg': '#333333',
+        'header_fg': '#f0f0f0',
+        'border': '#555555',
+        'foreground': '#f0f0f0',
+        'fieldbackground': '#1e1e1e',
+    }
+    
     # 행 높이
     ROW_HEIGHT = {
         'compact': 24,
@@ -51,53 +66,89 @@ class TableStyler:
         cls,
         treeview: ttk.Treeview,
         show_vertical: bool = True,
-        show_horizontal: bool = True
+        show_horizontal: bool = True,
+        is_dark: bool = False
     ) -> None:
         """
-        Treeview에 그리드 라인 스타일 적용
+        Treeview에 그리드 라인 스타일 적용 (v5.6.9: 다크 테마 시 글씨 밝은색)
         
         Args:
             treeview: 대상 Treeview 위젯
             show_vertical: 세로 그리드 라인 표시
             show_horizontal: 가로 그리드 라인 표시
+            is_dark: 다크 테마 여부 — True면 foreground/fieldbackground 밝은색
         """
         style = ttk.Style()
-        
-        # 스타일 이름 생성 (위젯별 고유)
         style_name = f"Grid.{id(treeview)}.Treeview"
+        colors = cls.COLORS_DARK if is_dark else cls.COLORS
+        fg = colors.get('foreground', '#f0f0f0') if is_dark else '#1a1a1a'
+        fbg = colors.get('fieldbackground', '#1e1e1e') if is_dark else cls.COLORS['row_even']
         
-        # 기본 스타일 복사
         style.configure(
             style_name,
-            background=cls.COLORS['row_even'],
-            foreground='#000000',
-            fieldbackground=cls.COLORS['row_even'],
+            background=colors['row_even'],
+            foreground=fg,
+            fieldbackground=fbg,
             borderwidth=1,
             relief='solid'
         )
         
-        # 줄무늬 적용
         style.map(
             style_name,
             background=[
-                ('selected', cls.COLORS['row_even_selected']),
-                ('!selected', cls.COLORS['row_odd'])
+                ('selected', colors['row_even_selected']),
+                ('!selected', colors['row_odd'])
             ]
         )
         
-        # Treeview에 스타일 적용
         treeview.configure(style=style_name)
         
-        # 그리드 라인 효과를 위한 설정
         if show_vertical or show_horizontal:
-            # 헤더 스타일
             style.configure(
                 f"{style_name}.Heading",
-                background=cls.COLORS['header_bg'],
-                foreground=cls.COLORS['header_fg'],
+                background=colors['header_bg'],
+                foreground=colors['header_fg'],
                 relief='raised',
                 borderwidth=1
             )
+    
+    @classmethod
+    def update_grid_style_for_theme(cls, treeview: ttk.Treeview, is_dark: bool) -> None:
+        """v5.6.9: 테마 변경 시 Grid/RowHeight 스타일 전체 갱신 (배경+글씨 — 다크에서 행 배경도 어둡게)"""
+        try:
+            style_name = treeview.cget('style')
+            if not style_name or not (style_name.startswith('Grid.') or style_name.startswith('RowHeight.')):
+                return
+            style = ttk.Style()
+            colors = cls.COLORS_DARK if is_dark else cls.COLORS
+            fg = colors.get('foreground', '#f0f0f0') if is_dark else '#1a1a1a'
+            fbg = colors.get('fieldbackground', '#1e1e1e') if is_dark else cls.COLORS['row_even']
+            # 배경·전경·필드배경 전부 갱신
+            style.configure(
+                style_name,
+                background=colors['row_even'],
+                foreground=fg,
+                fieldbackground=fbg,
+                borderwidth=1,
+                relief='solid'
+            )
+            # 행 배경 맵도 갱신 (안 하면 흰색/연회색으로 남음)
+            style.map(
+                style_name,
+                background=[
+                    ('selected', colors['row_even_selected']),
+                    ('!selected', colors['row_odd'])
+                ]
+            )
+            style.configure(
+                f"{style_name}.Heading",
+                background=colors['header_bg'],
+                foreground=colors['header_fg'],
+                relief='raised',
+                borderwidth=1
+            )
+        except (tk.TclError, ValueError, TypeError) as e:
+            logger.debug(f"Grid 스타일 테마 갱신 무시: {e}")
     
     @classmethod
     def apply_striped_rows(
@@ -130,23 +181,18 @@ class TableStyler:
         mode: str = 'normal'
     ) -> None:
         """
-        행 높이 설정
-        
-        Args:
-            treeview: 대상 Treeview
-            mode: 'compact', 'normal', 'comfortable'
+        행 높이 설정.
+        이미 Grid.xxx 스타일이면 해당 스타일에 rowheight만 추가(테마 색 유지).
         """
         height = cls.ROW_HEIGHT.get(mode, cls.ROW_HEIGHT['normal'])
-        
         style = ttk.Style()
-        style_name = f"RowHeight.{id(treeview)}.Treeview"
-        
-        style.configure(
-            style_name,
-            rowheight=height
-        )
-        
-        treeview.configure(style=style_name)
+        current = treeview.cget('style') or ''
+        if current.startswith('Grid.'):
+            style.configure(current, rowheight=height)
+        else:
+            style_name = f"RowHeight.{id(treeview)}.Treeview"
+            style.configure(style_name, rowheight=height)
+            treeview.configure(style=style_name)
     
     @classmethod
     def toggle_column(
@@ -278,19 +324,21 @@ def apply_table_style(
     treeview: ttk.Treeview,
     grid_lines: bool = True,
     striped_rows: bool = True,
-    row_height: str = 'normal'
+    row_height: str = 'normal',
+    is_dark: bool = False
 ) -> None:
     """
-    테이블에 스타일 일괄 적용 (간편 함수)
+    테이블에 스타일 일괄 적용 (v5.6.9: is_dark 시 다크 테마 글씨 가시성)
     
     Args:
         treeview: 대상 Treeview
         grid_lines: 그리드 라인 표시
         striped_rows: 줄무늬 표시
         row_height: 행 높이 ('compact', 'normal', 'comfortable')
+        is_dark: 다크 테마 여부
     """
     if grid_lines:
-        TableStyler.apply_grid_lines(treeview)
+        TableStyler.apply_grid_lines(treeview, is_dark=is_dark)
     
     if striped_rows:
         TableStyler.apply_striped_rows(treeview)

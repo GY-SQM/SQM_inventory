@@ -113,7 +113,7 @@ class ThemeMixin:
             CustomMessageBox.showerror(self.root, "Error", f"Theme change failed:\n{e}")
     
     def _update_theme_colors(self) -> None:
-        """테마 변경 시 색상 업데이트"""
+        """테마 변경 시 색상 업데이트 (v5.6.9: Grid 스타일 foreground 갱신 — 다크에서 글씨 보이게)"""
         from ..utils.ui_constants import ThemeColors
         
         is_dark = ThemeColors.is_dark_theme(self.current_theme)
@@ -121,10 +121,20 @@ class ThemeMixin:
         # 재고 트리뷰
         if hasattr(self, 'tree_inventory'):
             ThemeColors.configure_tags(self.tree_inventory, is_dark)
+            try:
+                from ..utils.table_styler import TableStyler
+                TableStyler.update_grid_style_for_theme(self.tree_inventory, is_dark)
+            except (ImportError, Exception):
+                pass
         
         # 톤백 트리뷰
         if hasattr(self, 'tree_sublot'):
             ThemeColors.configure_tags(self.tree_sublot, is_dark)
+            try:
+                from ..utils.table_styler import TableStyler
+                TableStyler.update_grid_style_for_theme(self.tree_sublot, is_dark)
+            except (ImportError, Exception):
+                pass
 
         # v5.4.0: toolbar 색상도 테마 변경 즉시 동기화 (White 테마 검정/글씨 꼬임 방지)
         try:

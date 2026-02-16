@@ -153,14 +153,15 @@ class TonbagTabMixin:
             )
             self.tree_sublot.column(col_id, width=width, anchor=anchor, minwidth=50)
         
-        # v4.2.2: 테이블 스타일 적용 (그리드 라인, 줄무늬)
+        # v4.2.2: 테이블 스타일 적용 (v5.6.9: 다크 테마 시 글씨 가시성)
         try:
             from ..utils.table_styler import apply_table_style
             apply_table_style(
                 self.tree_sublot,
                 grid_lines=True,
                 striped_rows=True,
-                row_height='normal'
+                row_height='normal',
+                is_dark=_is_dark_tb
             )
         except (ImportError, Exception) as e:
             logger.debug(f"테이블 스타일 적용 실패: {e}")
