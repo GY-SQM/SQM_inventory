@@ -79,7 +79,7 @@ class BLMixin:
 
         if not gemini_result or not getattr(gemini_result, 'success', False):
             try:
-                from config import OPENAI_API_KEY, DISABLE_OPENAI_FALLBACK
+                from core.config import OPENAI_API_KEY, DISABLE_OPENAI_FALLBACK
                 if DISABLE_OPENAI_FALLBACK:
                     logger.info("[BL] OpenAI 폴백 비활성(설정) — Gemini만 사용")
                 elif OPENAI_API_KEY and OPENAI_API_KEY.strip():

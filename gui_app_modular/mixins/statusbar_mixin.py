@@ -116,7 +116,7 @@ class StatusBarMixin:
         
         # API 키 보안 상태
         try:
-            from config import API_KEY_SOURCE
+            from core.config import API_KEY_SOURCE
             sec_map = {'ENV': ('🟢', 'ENV'), 'KEYRING': ('🟢', 'KEY'), 
                        'INI': ('🟡', 'INI'), 'NONE': ('🔴', 'N/A')}
             sec_icon, sec_text = sec_map.get(API_KEY_SOURCE, ('🔴', '?'))

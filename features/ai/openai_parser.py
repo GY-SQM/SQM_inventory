@@ -107,7 +107,7 @@ def try_parse_packing_list(pdf_path: str, api_key: Optional[str] = None, model: 
         return None
     if not api_key:
         try:
-            from config import OPENAI_API_KEY
+            from core.config import OPENAI_API_KEY
             api_key = OPENAI_API_KEY
         except (ValueError, TypeError, KeyError, IndexError) as _e:
             logger.debug(f"Suppressed: {_e}")
@@ -116,7 +116,7 @@ def try_parse_packing_list(pdf_path: str, api_key: Optional[str] = None, model: 
         return None
     if not model:
         try:
-            from config import OPENAI_MODEL
+            from core.config import OPENAI_MODEL
             model = OPENAI_MODEL or "gpt-4o"
         except (ValueError, TypeError, KeyError, IndexError):
             model = "gpt-4o"
@@ -214,7 +214,7 @@ def try_parse_invoice(pdf_path: str, api_key: Optional[str] = None, model: Optio
         return None
     if not api_key:
         try:
-            from config import OPENAI_API_KEY
+            from core.config import OPENAI_API_KEY
             api_key = OPENAI_API_KEY
         except (ValueError, TypeError, KeyError, IndexError) as _e:
             logger.debug(f"Suppressed: {_e}")
@@ -223,7 +223,7 @@ def try_parse_invoice(pdf_path: str, api_key: Optional[str] = None, model: Optio
         return None
     if not model:
         try:
-            from config import OPENAI_MODEL
+            from core.config import OPENAI_MODEL
             model = OPENAI_MODEL or "gpt-4o"
         except (ValueError, TypeError, KeyError, IndexError):
             model = "gpt-4o"
@@ -310,7 +310,7 @@ def try_parse_bl(pdf_path: str, api_key: Optional[str] = None, model: Optional[s
         return None
     if not api_key:
         try:
-            from config import OPENAI_API_KEY
+            from core.config import OPENAI_API_KEY
             api_key = OPENAI_API_KEY
         except (ValueError, TypeError, KeyError, IndexError) as _e:
             logger.debug(f"Suppressed: {_e}")
@@ -319,7 +319,7 @@ def try_parse_bl(pdf_path: str, api_key: Optional[str] = None, model: Optional[s
         return None
     if not model:
         try:
-            from config import OPENAI_MODEL
+            from core.config import OPENAI_MODEL
             model = OPENAI_MODEL or "gpt-4o"
         except (ValueError, TypeError, KeyError, IndexError):
             model = "gpt-4o"
@@ -409,7 +409,7 @@ def try_parse_do(pdf_path: str, api_key: Optional[str] = None, model: Optional[s
         return None
     if not api_key:
         try:
-            from config import OPENAI_API_KEY
+            from core.config import OPENAI_API_KEY
             api_key = OPENAI_API_KEY
         except (ValueError, TypeError, KeyError, IndexError) as _e:
             logger.debug(f"Suppressed: {_e}")
@@ -418,7 +418,7 @@ def try_parse_do(pdf_path: str, api_key: Optional[str] = None, model: Optional[s
         return None
     if not model:
         try:
-            from config import OPENAI_MODEL
+            from core.config import OPENAI_MODEL
             model = OPENAI_MODEL or "gpt-4o"
         except (ValueError, TypeError, KeyError, IndexError):
             model = "gpt-4o"

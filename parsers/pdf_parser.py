@@ -252,7 +252,7 @@ class PDFParser:
             if use_gemini_fallback and max_score < 4:
                 try:
                     from gemini_parser import GeminiDocumentParser
-                    from config import GEMINI_API_KEY
+                    from core.config import GEMINI_API_KEY
                     
                     if GEMINI_API_KEY and GEMINI_API_KEY != 'your-api-key-here':
                         gemini = GeminiDocumentParser(GEMINI_API_KEY)

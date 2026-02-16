@@ -29,7 +29,7 @@ class SettingsDialogMixin:
         from ..utils.ui_constants import ThemeColors
         
         try:
-            from config import GEMINI_API_KEY, GEMINI_MODEL, API_KEY_SOURCE, save_api_key_secure, save_gemini_model
+            from core.config import GEMINI_API_KEY, GEMINI_MODEL, API_KEY_SOURCE, save_api_key_secure, save_gemini_model
         except ImportError:
             CustomMessageBox.showerror(self.root, "Error", "Config module not found")
             return
@@ -197,7 +197,7 @@ Open settings.ini now?
 """
         if CustomMessageBox.askyesno(self.root, "Gemini API Required", guide_msg):
             try:
-                from config import SETTINGS_FILE
+                from core.config import SETTINGS_FILE
                 os.startfile(SETTINGS_FILE)
             except (ImportError, ModuleNotFoundError) as e:
                 self._log(f"WARNING Failed to open settings.ini: {e}")
@@ -268,7 +268,7 @@ Open settings.ini now?
         
         def _do_test():
             try:
-                from config import GEMINI_API_KEY, GEMINI_MODEL
+                from core.config import GEMINI_API_KEY, GEMINI_MODEL
                 
                 if not GEMINI_API_KEY or GEMINI_API_KEY.startswith('your-'):
                     self.root.after(0, lambda: CustomMessageBox.showerror(self.root, "API Test",

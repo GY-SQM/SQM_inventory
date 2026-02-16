@@ -105,7 +105,7 @@ class SQMDatabase(DatabaseMigrationMixin, DatabaseInterface):
         # A2: DB 경로 단일화 - config에서 가져오기
         if db_path is None:
             try:
-                from config import DB_PATH
+                from core.config import DB_PATH
                 db_path = str(DB_PATH)
             except ImportError:
                 db_path = os.path.join(os.path.dirname(__file__), 'data', 'sqm_inventory.db')

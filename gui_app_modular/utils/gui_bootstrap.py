@@ -269,7 +269,7 @@ except ImportError:
 
 # Gemini API
 try:
-    from config import GEMINI_API_KEY
+    from core.config import GEMINI_API_KEY
     HAS_GEMINI = bool(GEMINI_API_KEY and GEMINI_API_KEY != 'your-api-key-here')
 except ImportError:
     HAS_GEMINI = False

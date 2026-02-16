@@ -13,7 +13,7 @@ import re
 import logging
 from datetime import date, datetime
 from typing import Optional, List, Any
-from utils.common import normalize_column_name, safe_float, safe_str, safe_int  # noqa: F401 (re-export)
+from core.types import normalize_column_name, safe_float, safe_str, safe_int  # noqa: F401 (re-export)
 
 logger = logging.getLogger(__name__)
 

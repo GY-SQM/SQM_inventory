@@ -73,7 +73,7 @@ def run_self_diagnostic():
 
     print("\n3️⃣ 설정 파일 확인...")
     try:
-        from config import SETTINGS_FILE, DB_PATH, GEMINI_API_KEY, API_KEY_SOURCE
+        from core.config import SETTINGS_FILE, DB_PATH, GEMINI_API_KEY, API_KEY_SOURCE
         if SETTINGS_FILE.exists():
             print("   ✅ settings.ini 존재")
         else:
@@ -92,7 +92,7 @@ def run_self_diagnostic():
 
     print("\n4️⃣ 데이터베이스 확인...")
     try:
-        from config import DB_PATH, DB_DIR
+        from core.config import DB_PATH, DB_DIR
         if DB_DIR.exists():
             print(f"   ✅ DB 디렉토리 존재: {DB_DIR}")
         else:
@@ -112,7 +112,7 @@ def run_self_diagnostic():
 
     logger.debug("\n5️⃣ Gemini API 확인...")
     try:
-        from config import GEMINI_API_KEY, GEMINI_MODEL
+        from core.config import GEMINI_API_KEY, GEMINI_MODEL
         if GEMINI_API_KEY and not GEMINI_API_KEY.startswith('your-'):
             print("   ✅ API 키 설정됨")
             print(f"   ℹ️ 모델: {GEMINI_MODEL}")
@@ -203,7 +203,7 @@ def run_gui():
         except ImportError:
             print("ℹ️ 기본 ttk 테마 사용 (ttkbootstrap 미설치)")
         try:
-            from config import GEMINI_API_KEY
+            from core.config import GEMINI_API_KEY
             if GEMINI_API_KEY and len(GEMINI_API_KEY) > 10:
                 print(f"✅ Gemini API 키 로드됨 ({GEMINI_API_KEY[:10]}...)")
             else:
@@ -251,7 +251,7 @@ def run_self_check():
     from pathlib import Path
     results = {'passed': True, 'checks': [], 'warnings': [], 'errors': []}
     try:
-        from config import DB_PATH, BACKUP_DIR, OUTPUT_DIR
+        from core.config import DB_PATH, BACKUP_DIR, OUTPUT_DIR
     except ImportError:
         results['errors'].append("config.py를 찾을 수 없습니다")
         results['passed'] = False

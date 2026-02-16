@@ -325,7 +325,7 @@ class GeminiDocumentParser:
     def _load_preferred_model(self) -> str | None:
         """config/settings.ini/환경변수 GEMINI_MODEL 반환 (없으면 None)."""
         try:
-            from config import GEMINI_MODEL
+            from core.config import GEMINI_MODEL
             if GEMINI_MODEL and str(GEMINI_MODEL).strip():
                 return str(GEMINI_MODEL).strip()
         except (ValueError, TypeError, KeyError, IndexError) as _e:
@@ -430,7 +430,7 @@ class GeminiDocumentParser:
         
         # 2. config.py
         try:
-            from config import GEMINI_API_KEY
+            from core.config import GEMINI_API_KEY
             if GEMINI_API_KEY:
                 return GEMINI_API_KEY
         except ImportError as _e:
@@ -803,7 +803,7 @@ class GeminiDocumentParser:
             
             # v5.5.2: 디버깅 시 Gemini 원문을 파일로 저장 (ON/OFF: config 또는 SQM_SAVE_RAW_GEMINI_RESPONSE=1)
             try:
-                from config import SAVE_RAW_GEMINI_RESPONSE
+                from core.config import SAVE_RAW_GEMINI_RESPONSE
                 if SAVE_RAW_GEMINI_RESPONSE:
                     log_dir = Path(__file__).resolve().parent.parent.parent / "logs"
                     log_dir.mkdir(parents=True, exist_ok=True)

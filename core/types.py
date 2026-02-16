@@ -2,7 +2,7 @@
 """
 core.types — safe_* 단일 진입점 (P4)
 =====================================
-utils.common + safe_date(safe_utils) re-export.
+utils.common re-export. safe_date(문자열)는 gui_app_modular.utils.safe_utils 에만 있음 (순환 참조 방지).
 """
 from utils.common import (
     safe_int,
@@ -10,12 +10,10 @@ from utils.common import (
     safe_str,
     normalize_column_name,
 )
-from gui_app_modular.utils.safe_utils import safe_date
 
 __all__ = [
     'safe_int',
     'safe_float',
     'safe_str',
-    'safe_date',
     'normalize_column_name',
 ]

@@ -13,8 +13,8 @@ from datetime import datetime
 from typing import Any, Optional
 import logging
 
-# v5.5.5: safe_float/safe_str/safe_int → utils.common (Single Source of Truth)
-from utils.common import safe_float, safe_str, safe_int  # noqa: F401 (re-export)
+# P5-7: 단일 소스 core.types (re-export 유지)
+from core.types import safe_float, safe_str, safe_int  # noqa: F401 (re-export)
 
 logger = logging.getLogger(__name__)
 

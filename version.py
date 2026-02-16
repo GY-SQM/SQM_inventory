@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.8.6'
+__version__ = '5.8.6.1'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.8.6.1': '🔧 v5.8.6.1: P5-5·P5-7 적용 (config→core.config 전환, helpers/safe_utils→core.types), get_settings 추가, core.types 순환참조 제거',
     '5.8.6': '🏗️ v5.8.6: P5-1~4 점진적 core 전환 (config 보강, types/constants/validators → core)',
     '5.8.5': '🎨 v5.8.5: 샘플 톤백 No 표기 S → S0 (숫자와 혼동 방지)',
     '5.8.3': '🏗️ v5.8.3: P4 완료 — core/ 공통 라이브러리 파사드(types, validators, formatters, constants, config, config_logging)',

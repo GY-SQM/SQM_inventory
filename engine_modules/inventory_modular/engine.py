@@ -161,7 +161,7 @@ class SQMInventoryEngineV3(
         """
         # ★★★ v3.6.0: PostgreSQL 지원 ★★★
         try:
-            from config import DB_TYPE
+            from core.config import DB_TYPE
         except ImportError:
             DB_TYPE = 'sqlite'
         
@@ -171,8 +171,8 @@ class SQMInventoryEngineV3(
             # PostgreSQL 모드
             try:
                 from engine_modules.database_postgresql import PostgreSQLDatabase
-                from config import PG_HOST, PG_PORT, PG_DATABASE, PG_USER, PG_PASSWORD
-                from config import PG_MIN_CONNECTIONS, PG_MAX_CONNECTIONS
+                from core.config import PG_HOST, PG_PORT, PG_DATABASE, PG_USER, PG_PASSWORD
+                from core.config import PG_MIN_CONNECTIONS, PG_MAX_CONNECTIONS
                 
                 self.db = PostgreSQLDatabase(
                     host=PG_HOST,

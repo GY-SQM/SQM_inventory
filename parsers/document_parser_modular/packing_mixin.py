@@ -87,7 +87,7 @@ class PackingMixin:
 
         if not gemini_result or not getattr(gemini_result, 'success', False) or len(getattr(gemini_result, 'lots', []) or []) == 0:
             try:
-                from config import OPENAI_API_KEY, DISABLE_OPENAI_FALLBACK
+                from core.config import OPENAI_API_KEY, DISABLE_OPENAI_FALLBACK
                 if DISABLE_OPENAI_FALLBACK:
                     logger.info("[PACKING_LIST] OpenAI 폴백 비활성(설정) — Gemini만 사용")
                 elif not OPENAI_API_KEY or not OPENAI_API_KEY.strip():

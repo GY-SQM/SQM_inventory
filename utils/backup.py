@@ -23,7 +23,7 @@ import logging
 
 # 설정 import
 try:
-    from config import (
+    from core.config import (
         DB_PATH,
         BACKUP_DIR,
         BACKUP_ENABLED,

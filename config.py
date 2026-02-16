@@ -335,6 +335,18 @@ def get_api_key_warning():
                 "환경변수 GEMINI_API_KEY 사용을 권장합니다.")
     return None
 
+
+def get_settings():
+    """설정 딕셔너리 반환 (GUI/파서용). gemini_api_key 등 키 제공."""
+    return {
+        'api_key': _settings.get('api_key', ''),
+        'gemini_api_key': _settings.get('api_key', ''),
+        'model': _settings.get('model', 'gemini-2.5-flash'),
+        'use_gemini': _settings.get('use_gemini', True),
+        'openai_api_key': _settings.get('openai_api_key', ''),
+        'openai_model': _settings.get('openai_model', 'gpt-4o'),
+    }
+
 # =============================================================================
 # UI 설정
 # =============================================================================

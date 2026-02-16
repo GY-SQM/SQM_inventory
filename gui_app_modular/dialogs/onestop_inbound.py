@@ -466,7 +466,7 @@ class OneStopInboundDialog(InboundDialogBase):
             gemini_key = os.environ.get('GEMINI_API_KEY', '')
             if not gemini_key:
                 try:
-                    from config import get_settings
+                    from core.config import get_settings
                     settings = get_settings()
                     gemini_key = settings.get('gemini_api_key', '')
                 except (ImportError, ModuleNotFoundError) as _e:

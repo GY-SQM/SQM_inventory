@@ -84,7 +84,7 @@ def _get_api_key() -> str:
     
     # 2. config.py
     try:
-        from config import GEMINI_API_KEY
+        from core.config import GEMINI_API_KEY
         if GEMINI_API_KEY and not GEMINI_API_KEY.startswith('your-'):
             return GEMINI_API_KEY
     except ImportError as _e:
@@ -100,7 +100,7 @@ def _get_api_key() -> str:
 def get_model_name() -> str:
     """현재 설정된 Gemini 모델명 반환"""
     try:
-        from config import GEMINI_MODEL
+        from core.config import GEMINI_MODEL
         if GEMINI_MODEL:
             return GEMINI_MODEL
     except ImportError as _e:
