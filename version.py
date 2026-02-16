@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.6.8'
+__version__ = '5.6.9'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.6.9': '🎨 v5.6.9: 로케이션 엑셀 양식 확정, 다크 테마 가시성, LOT 상세/하단 요약 스타일 통일, Avail 동적 로직 명시',
     '5.6.8': '🏗️ v5.6.8: 상수파일 분리 + 핵심 테스트 11개 + 데드테이블 마킹 + 타입힌트 보강',
     '5.6.7': '🧹 v5.6.7: DO 후속 연결 + 데드코드 제거(inbound_preview/PG/picking_parser/-1,583줄) + unused import 정리 + 루트 md 정리',
     '5.6.6': '🔧 v5.6.6: 변수 통일 — bag_count→mxbg_pallet, invoice_no→salar_invoice_no, total_weight_kg→net_weight + 입고경로 단일화',

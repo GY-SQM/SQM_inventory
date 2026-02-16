@@ -82,19 +82,19 @@ class LotDetailDialogMixin:
         }
         s_icon = status_icons.get(status, '❓')
 
-        # v5.6.1: 통일 폰트 상수
+        # v5.6.9: LOT 상세 팝업 스타일 통일 (폰트/정렬)
         FONT_TITLE = ('맑은 고딕', 16, 'bold')
         FONT_SUBTITLE = ('맑은 고딕', 12)
         FONT_LABEL = ('맑은 고딕', 10)
-        FONT_VALUE = ('맑은 고딕', 12, 'bold')
-        FONT_BIG_VALUE = ('맑은 고딕', 13, 'bold')
+        FONT_VALUE = ('맑은 고딕', 11, 'bold')
+        FONT_WEIGHT = ('맑은 고딕', 11, 'bold')
 
         tk.Label(header, text=f"📦 {lot_no}", font=FONT_TITLE,
                  bg=header_bg, fg=ThemeColors.get('bg_card')).pack(side=LEFT)
         tk.Label(header, text=f"  |  {product}  |  {s_icon} {status}",
                  font=FONT_SUBTITLE, bg=header_bg, fg=ThemeColors.get('arrow_separator')).pack(side=LEFT, padx=10)
 
-        # ── 정보 카드 행 ──
+        # ── 정보 카드 행 (v5.6.9: 정렬/간격 통일) ──
         info_bar = tk.Frame(popup, bg=card_bg, padx=12, pady=10)
         info_bar.pack(fill=X, padx=10, pady=(5, 0))
 
@@ -106,9 +106,9 @@ class LotDetailDialogMixin:
             ('ARRIVAL', lot_info.get('arrival_date', '-') or '-'),
             ('창고', lot_info.get('warehouse', '-') or '-'),
         ]
-        for label, value in info_items:
+        for c, (label, value) in enumerate(info_items):
             f = tk.Frame(info_bar, bg=card_bg)
-            f.pack(side=LEFT, padx=(0, 25))
+            f.grid(row=0, column=c, padx=(0, 20), sticky='w')
             tk.Label(f, text=label, font=FONT_LABEL, bg=card_bg, fg=ThemeColors.get('text_secondary')).pack(anchor='w')
             tk.Label(f, text=str(value), font=FONT_VALUE, bg=card_bg, fg=fg).pack(anchor='w')
 
@@ -125,9 +125,9 @@ class LotDetailDialogMixin:
         ]
         for label, value, color in weight_items:
             f = tk.Frame(weight_bar, bg=card_bg)
-            f.pack(side=LEFT, padx=(0, 30))
+            f.pack(side=LEFT, padx=(0, 28))
             tk.Label(f, text=label, font=FONT_LABEL, bg=card_bg, fg=ThemeColors.get('text_secondary')).pack(anchor='w')
-            tk.Label(f, text=value, font=FONT_BIG_VALUE, bg=card_bg, fg=color).pack(anchor='w')
+            tk.Label(f, text=value, font=FONT_WEIGHT, bg=card_bg, fg=color).pack(anchor='w')
 
         # ═══════════════════════════════════════════
         # 2. 중단 — Notebook (톤백 + 이력)
@@ -143,12 +143,13 @@ class LotDetailDialogMixin:
                    'picked_to', 'picked_date', 'outbound_date')
         tb_tree = ttk.Treeview(tab_tonbag, columns=tb_cols, show='headings', height=12)
 
+        # v5.6.9: 톤백 테이블 컬럼 너비/정렬 통일
         for cid, txt, w, anchor in [
-            ('no', 'No.', 40, 'center'), ('sub_lt', '톤백#', 60, 'center'),
-            ('weight', '중량(kg)', 100, 'e'), ('status', '상태', 90, 'center'),
-            ('type', '구분', 70, 'center'), ('location', '위치', 80, 'center'),
-            ('picked_to', '출고처', 120, 'w'), ('picked_date', '출고지정일', 100, 'center'),
-            ('outbound_date', '출고완료일', 100, 'center'),
+            ('no', 'No.', 45, 'center'), ('sub_lt', '톤백#', 65, 'center'),
+            ('weight', '중량(kg)', 95, 'e'), ('status', '상태', 85, 'center'),
+            ('type', '구분', 70, 'center'), ('location', '위치', 85, 'center'),
+            ('picked_to', '출고처', 110, 'w'), ('picked_date', '출고지정일', 95, 'center'),
+            ('outbound_date', '출고완료일', 95, 'center'),
         ]:
             tb_tree.heading(cid, text=txt)
             tb_tree.column(cid, width=w, anchor=anchor)
@@ -206,7 +207,7 @@ class LotDetailDialogMixin:
             text=f"✅ 가용: {avail_cnt}개 ({avail_kg:,.0f}kg)  |  "
                  f"📤 출고: {picked_cnt}개 ({picked_kg:,.0f}kg)  |  "
                  f"🧪 샘플: {sample_cnt}개  |  총: {len(tonbags)}개",
-            font=FONT_VALUE, bg=card_bg, fg=fg).pack(padx=10)
+            font=('맑은 고딕', 11), bg=card_bg, fg=fg).pack(padx=10)
 
         # ── TAB 2: 재고 이동 이력 ──
         tab_history = ttk.Frame(nb)

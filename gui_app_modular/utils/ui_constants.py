@@ -502,14 +502,16 @@ class ThemeColors:
     
     @classmethod
     def configure_tags(cls, tree, is_dark: bool = False):
-        """트리뷰 상태 태그 설정 (v3.8.4: 상태별 색상 + 글꼴 강화)"""
+        """트리뷰 상태 태그 설정 (v3.8.4: 상태별 색상 + v5.6.9: 다크 테마 행 텍스트 밝은색)"""
         p = cls.DARK if is_dark else cls.LIGHT
+        fg = '#f0f0f0' if is_dark else '#1a1a1a'
         for status in ['available', 'picked', 'reserved', 'shipped']:
-            tree.tag_configure(status, background=p[status])
+            tree.tag_configure(status, background=p[status], foreground=fg)
         # U9: depleted 태그 (연한 회색 + 취소선 효과)
-        tree.tag_configure('depleted', background='#f0f0f0', foreground='#aaaaaa')
+        tree.tag_configure('depleted', background='#f0f0f0' if not is_dark else '#2a2a2a',
+                          foreground='#aaaaaa' if not is_dark else '#888888')
         # v3.6.2: 줄무늬 태그
-        tree.tag_configure('stripe', background=p['tree_stripe'])
+        tree.tag_configure('stripe', background=p['tree_stripe'], foreground=fg)
 
 
 # ═══════════════════════════════════════════════════════════════

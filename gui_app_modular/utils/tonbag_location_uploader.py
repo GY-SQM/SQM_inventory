@@ -44,11 +44,14 @@ class TonbagLocationUploader:
         └──────────────────┴────────┘
         
         v5.6.1: lot_no + tonbag_no + location 양식도 지원
-        ┌──────────┬───────────┬──────────┐
-        │ lot_no   │ tonbag_no │ location │
-        ├──────────┼───────────┼──────────┤
-        │ 112508.. │ 3         │ A-01-01  │
-        └──────────┴───────────┴──────────┘
+        v5.6.9: 로케이션 엑셀 양식 확정
+        ┌────────┬────────┬────────┬──────────┬───────────┬──────────┐
+        │ 순번   │ 입고일 │ BL No  │ lot_no   │ tonbag_no│ location │
+        ├────────┼────────┼────────┼──────────┼───────────┼──────────┤
+        │ (자동) │ 선택   │ 선택   │ 필수     │ 필수     │ 필수     │
+        │ 1      │ 2025-01│ B/L123 │ 112508.. │ 3         │ A-01-01  │
+        └────────┴────────┴────────┴──────────┴───────────┴──────────┘
+        로케이션 체계: 영문-숫자-숫자 (예: A-01-01)
         """
         try:
             # Excel 읽기
@@ -67,7 +70,7 @@ class TonbagLocationUploader:
             has_loc = any(c in df.columns for c in ('location', '위치'))
             
             if has_lot and has_tb and has_loc:
-                # 양식 2: lot_no + tonbag_no + location
+                # 양식 2: lot_no + tonbag_no + location (입고일, BL No 선택 컬럼 무시)
                 return self._parse_lot_tonbag_format(df)
             elif has_uid and has_loc:
                 # 양식 1: UID + 위치 (기존)
@@ -121,20 +124,24 @@ class TonbagLocationUploader:
         return True, f"✅ {len(data)}개 데이터 파싱 완료 (UID 양식)", data
     
     def _parse_lot_tonbag_format(self, df) -> Tuple[bool, str, List[Dict]]:
-        """양식 2: lot_no + tonbag_no + location (v5.6.1)"""
-        # 컬럼명 정규화
+        """양식 2: lot_no + tonbag_no + location (v5.6.9: 로케이션 영문-숫자-숫자 검증)"""
+        # 컬럼명 정규화 (입고일, BL No 등 선택 컬럼은 매핑만 하면 됨)
         col_map = {}
         for c in df.columns:
-            if c in ('lot_no', 'lot', 'lotno'):
+            c_lower = c.lower().strip()
+            if c_lower in ('lot_no', 'lot', 'lotno'):
                 col_map['lot_no'] = c
-            elif c in ('tonbag_no', 'tonbag', 'tb_no'):
+            elif c_lower in ('tonbag_no', 'tonbag', 'tb_no'):
                 col_map['tonbag_no'] = c
-            elif c in ('location', '위치'):
+            elif c_lower in ('location', '위치'):
                 col_map['location'] = c
         
         lot_col = col_map.get('lot_no')
         tb_col = col_map.get('tonbag_no')
         loc_col = col_map.get('location')
+        
+        if not lot_col or not tb_col or not loc_col:
+            return False, "❌ 필수 컬럼 필요: lot_no, tonbag_no, location", []
         
         df = df.dropna(subset=[lot_col, tb_col, loc_col])
         if len(df) == 0:
@@ -150,6 +157,10 @@ class TonbagLocationUploader:
                 continue
             if not location or location.lower() == 'nan':
                 continue
+            # v5.6.9: 로케이션 형식 검증 (영문-숫자-숫자, 예: A-01-01)
+            valid, msg = validate_location_format(location)
+            if not valid:
+                logger.warning(f"행 {idx + 2}: location '{location}' — {msg}")
             
             # tonbag_no로 UID 조회
             try:

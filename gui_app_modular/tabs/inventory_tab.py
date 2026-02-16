@@ -210,19 +210,20 @@ class InventoryTabMixin:
         self._inv_stats_frame = ttk.Frame(self.tab_inventory, padding=(8, 5))
         self._inv_stats_frame.pack(fill=X, padx=5, pady=(0, 2))
 
-        _sf = ('맑은 고딕', 11)       # 라벨
-        _vf = ('맑은 고딕', 11, 'bold')  # 값
+        # v5.6.9: 하단 요약바 폰트/간격 통일
+        _sf = ('맑은 고딕', 11)
+        _vf = ('맑은 고딕', 11, 'bold')
 
         def _add_stat(parent, icon_text, font_l=_sf, font_v=_vf):
-            ttk.Label(parent, text=icon_text, font=font_l).pack(side=LEFT, padx=(12, 2))
+            ttk.Label(parent, text=icon_text, font=font_l).pack(side=LEFT, padx=(10, 2))
             lbl = ttk.Label(parent, text="-", font=font_v)
-            lbl.pack(side=LEFT, padx=(0, 8))
+            lbl.pack(side=LEFT, padx=(0, 10))
             return lbl
 
         self._inv_stat_lots     = _add_stat(self._inv_stats_frame, "📦 LOT:")
         self._inv_stat_tonbags  = _add_stat(self._inv_stats_frame, "🎒 톤백:")
         self._inv_stat_initial  = _add_stat(self._inv_stats_frame, "📥 입고:")
-        self._inv_stat_current  = _add_stat(self._inv_stats_frame, "💰 잔량:", font_v=('맑은 고딕', 12, 'bold'))
+        self._inv_stat_current  = _add_stat(self._inv_stats_frame, "💰 잔량:")
         self._inv_stat_picked   = _add_stat(self._inv_stats_frame, "📤 출고:")
         self._inv_stat_avail    = _add_stat(self._inv_stats_frame, "✅ 가용:")
         self._inv_stat_depleted = _add_stat(self._inv_stats_frame, "❌ 소진:")
@@ -594,7 +595,7 @@ class InventoryTabMixin:
                         vals.append(str(item.get('customs_status', '') or ''))
                         continue
                     elif col_id == 'avail_bags':
-                        # v5.6.0: 잔여 톤백 수 (AVAILABLE + 샘플 제외)
+                        # v5.6.0/v5.6.9: Avail = 현재 가용 톤백 수 실시간 (출고↓ 반품↑)
                         try:
                             tb_row = self.engine.db.fetchone(
                                 "SELECT COUNT(*) as cnt FROM inventory_tonbag "
