@@ -155,7 +155,7 @@ sqm/
 | P2 | config.py 분할 (로깅, 파일유틸, API키 분리) | ✅ 완료 | config_logging + utils/file_utils |
 | P2 | GUI constants → gui_bootstrap.py 등 역할에 맞는 이름으로 변경 | ✅ 완료 | 의미 명확 |
 | P2 | preflight / pdf_converter / ui_ops_helper / migrate 스크립트 이동 | ✅ 완료 | 루트 정리 |
-| P3 | run.py 슬림화 (진단·백업 모듈 분리) | — | 진입점 100줄 이하 |
+| P3 | run.py 슬림화 (진단·백업 모듈 분리) | ✅ 완료 | run_bootstrap.py 분리, 진입점 ~96줄 |
 | P4 | core/ 도입 여부 결정 및 단계적 이전 | — | 선택 사항 |
 
 ---
