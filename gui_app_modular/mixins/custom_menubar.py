@@ -138,12 +138,12 @@ class CustomMenuBar:
         # 도구
         tools_sub = self._add_submenu(file_menu, "🔧 도구")
         
-        pdf_sub = self._add_submenu(tools_sub, "📄 PDF 변환")
+        pdf_sub = self._add_submenu(tools_sub, "📄 PDF/이미지 변환")
         self._add_command(pdf_sub, "→ Excel", self.app._convert_pdf_to_excel)
         self._add_command(pdf_sub, "→ Word", self.app._convert_pdf_to_word)
         self._add_separator(pdf_sub)
         self._add_command(pdf_sub, "📁 일괄 변환", self.app._batch_convert_pdf_excel)
-        self._add_command(pdf_sub, "🔍 PDF 분석", self.app._analyze_pdf)
+        self._add_command(pdf_sub, "🔍 분석", self.app._analyze_pdf)
         
         self._add_separator(tools_sub)
         self._add_command(tools_sub, "🩺 데이터 정합성 검사", self._show_integrity_check_safe)
@@ -181,13 +181,13 @@ class CustomMenuBar:
         self._add_command(tools_menu, "📋 D/O 후속 연결", self.app._on_do_update)
         self._add_separator(tools_menu)
         
-        # PDF 변환
-        pdf_sub = self._add_submenu(tools_menu, "📄 PDF 변환")
+        # PDF/이미지 변환
+        pdf_sub = self._add_submenu(tools_menu, "📄 PDF/이미지 변환")
         self._add_command(pdf_sub, "→ Excel", self.app._convert_pdf_to_excel)
         self._add_command(pdf_sub, "→ Word", self.app._convert_pdf_to_word)
         self._add_separator(pdf_sub)
         self._add_command(pdf_sub, "📁 일괄 변환", self.app._batch_convert_pdf_excel)
-        self._add_command(pdf_sub, "🔍 PDF 분석", self.app._analyze_pdf)
+        self._add_command(pdf_sub, "🔍 분석", self.app._analyze_pdf)
         
         # v3.8.4: 문서 변환 (OCR)
         self._add_command(tools_menu, "📷 문서 변환 (OCR/PDF)", self._show_doc_convert_safe)
@@ -236,6 +236,8 @@ class CustomMenuBar:
         self._add_separator(tools_menu)
         self._add_command(tools_menu, "📋 로그 정리", self.app._on_cleanup_logs)
         self._add_command(tools_menu, "ℹ️  DB 정보", self.app._show_db_info)
+        self._add_separator(tools_menu)
+        self._add_command(tools_menu, "🗑️ 테스트 DB 초기화 (데이터 삭제)", self.app._show_test_db_reset_popup)
         
         # 고급 기능 (조건부)
         if HAS_FEATURES:
@@ -339,6 +341,35 @@ class CustomMenuBar:
                 log_ui_event('UI_BG_ANOMALY_MENUBAR', {'expected': exp, 'current': cur})
         except (ValueError, TypeError, AttributeError, tk.TclError) as _e:
             logger.debug(f"Suppressed: {_e}")
+
+    def refresh_theme_colors(self) -> None:
+        """v5.7: 테마 변경 시 메뉴바·드롭다운 색상 캐시 갱신 후 위젯에 재적용 (글씨/배경 동기화)"""
+        try:
+            _dark_bar = True
+            _theme = getattr(self.app, 'current_theme', 'flatly')
+            _dark_dd = ThemeColors.is_dark_theme(_theme)
+            self.MENUBAR_BG = ThemeColors.get('statusbar_bg', _dark_bar)
+            self.MENUBAR_FG = ThemeColors.get('statusbar_fg', _dark_bar)
+            self.MENUBAR_HOVER_BG = ThemeColors.get('bg_hover', _dark_bar)
+            self.MENUBAR_ACTIVE_BG = ThemeColors.get('info', _dark_bar)
+            self.DROPDOWN_BG = ThemeColors.get('bg_card', _dark_dd)
+            self.DROPDOWN_FG = ThemeColors.get('text_primary', _dark_dd)
+            self.DROPDOWN_ACTIVE_BG = ThemeColors.get('info', _dark_dd)
+            self.DROPDOWN_ACTIVE_FG = ThemeColors.get('badge_text', _dark_dd)
+            self._restore_menubar_colors()
+            for _menu in (self.menus or {}).values():
+                try:
+                    if _menu and getattr(_menu, 'winfo_exists', lambda: True) and _menu.winfo_exists():
+                        _menu.config(
+                            bg=self.DROPDOWN_BG,
+                            fg=self.DROPDOWN_FG,
+                            activebackground=self.DROPDOWN_ACTIVE_BG,
+                            activeforeground=self.DROPDOWN_ACTIVE_FG,
+                        )
+                except (ValueError, TypeError, AttributeError, self.tk.TclError) as _e:
+                    logger.debug(f"메뉴 색상 갱신 무시: {_e}")
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.debug(f"refresh_theme_colors 무시: {e}")
 
     def _schedule_restore_menubar(self):
         """Restore multiple times to beat Windows/Tk internal refresh timing."""

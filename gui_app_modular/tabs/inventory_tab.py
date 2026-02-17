@@ -111,6 +111,20 @@ class InventoryTabMixin:
             logger.debug(f"컬럼 토글바 생성 실패: {e}")
             self._inv_toggle_bar = None
         
+        # 재고 탭 Excel 내보내기 버튼 (재고리스트 = option 3)
+        try:
+            from ..utils.ui_constants import apply_tooltip
+            inv_btn_frame = ttk.Frame(self.tab_inventory)
+            inv_btn_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+            btn_inv_export = ttk.Button(
+                inv_btn_frame, text="📥 Excel 내보내기",
+                command=lambda: self._on_export_click(option=3)
+            )
+            btn_inv_export.pack(side=LEFT, padx=Spacing.XS)
+            apply_tooltip(btn_inv_export, '재고 리스트를 Excel(루비리 양식) 파일로 내보내기')
+        except Exception as _e:
+            logger.debug(f"재고 Excel 버튼 생성 실패: {_e}")
+        
         # ═══════════════════════════════════════════════════════
         # 트리뷰 (18열)
         # ═══════════════════════════════════════════════════════
@@ -500,6 +514,7 @@ class InventoryTabMixin:
                 'salar_invoice_no': str(row.get('salar_invoice_no', '')),
                 'ship_date': str(row.get('ship_date', ''))[:10] if row.get('ship_date') else '',
                 'arrival_date': str(row.get('arrival_date', ''))[:10] if row.get('arrival_date') else '',
+                'con_return': str(row.get('con_return', ''))[:10] if row.get('con_return') else '',
                 'free_time': str(row.get('free_time', '')),
                 'warehouse': str(row.get('warehouse', '')),
                 'status': str(row.get('status', 'AVAILABLE')),

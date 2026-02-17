@@ -140,7 +140,7 @@ class MenuMixin:
         tools_menu.add_separator()
         
         pdf_menu = tk.Menu(tools_menu, tearoff=0)
-        tools_menu.add_cascade(label="📄 PDF 변환", menu=pdf_menu)
+        tools_menu.add_cascade(label="📄 PDF/이미지 변환", menu=pdf_menu)
         pdf_menu.add_command(label="→ Excel", command=self._convert_pdf_to_excel)
         pdf_menu.add_command(label="→ Word", command=self._convert_pdf_to_word)
         pdf_menu.add_separator()
@@ -182,6 +182,8 @@ class MenuMixin:
         tools_menu.add_separator()
         tools_menu.add_command(label="📋 로그 정리", command=self._on_cleanup_logs)
         tools_menu.add_command(label="ℹ️ DB 정보", command=self._show_db_info)
+        tools_menu.add_separator()
+        tools_menu.add_command(label="🗑️ 테스트 DB 초기화 (데이터 삭제)", command=self._show_test_db_reset_popup)
         
         if HAS_FEATURES:
             tools_menu.add_separator()

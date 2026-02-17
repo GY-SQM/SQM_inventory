@@ -43,6 +43,7 @@ PREVIEW_COLUMNS = [
     ("salar_invoice_no", "INVOICE NO",      120,  "center"),
     ("ship_date",        "SHIP DATE",        90,  "center"),
     ("arrival_date",     "ARRIVAL",          90,  "center"),
+    ("con_return",       "CON RETURN",       95,  "center"),
     ("free_time",        "FREE TIME",        80,  "center"),
     ("warehouse",        "WH",              100,  "center"),
     ("status",           "STATUS",           80,  "center"),
@@ -90,6 +91,10 @@ class OneStopInboundDialog(InboundDialogBase):
         
         # 업로드 결과
         self.upload_success = False
+        # v5.8.9: 컨테이너 번호 접미사(-숫자) 디폴트 숨김, 필요 시 표시
+        self._show_container_suffix = False
+        # 파싱 결과 팝업에서 DB 업로드 선택 시, 완료 후 엑셀 내보내기 여부 질의
+        self._ask_excel_after_upload = False
         
         # UI 참조
         self.dialog = None
@@ -100,8 +105,9 @@ class OneStopInboundDialog(InboundDialogBase):
         self.btn_upload = None
         self.btn_excel = None
     
-    def show(self) -> None:
-        """팝업 표시"""
+    def show(self, initial_files: dict = None) -> None:
+        """팝업 표시. initial_files: { 'DO': 경로 } 등 드래그앤드롭/캡처 이미지 사전 지정."""
+        self._initial_files = initial_files or {}
         self._create_dialog()
     
     def _attach_doc_tooltip(self, widget, text: str):
@@ -131,6 +137,7 @@ class OneStopInboundDialog(InboundDialogBase):
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📥 입고 — SQM v3.9.4")
         self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
+        self.dialog.minsize(720, 520)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
         center_dialog(self.dialog, self.parent)
@@ -197,6 +204,13 @@ class OneStopInboundDialog(InboundDialogBase):
                                    font=('맑은 고딕', 12), anchor='w')
             file_label.pack(side=LEFT, fill=X, expand=True, padx=(0, 2))
             self.file_labels[doc_type] = file_label
+
+        # 드래그앤드롭/캡처 이미지 등 초기 파일 지정
+        for doc_type, path in getattr(self, '_initial_files', {}).items():
+            if doc_type in self.file_labels and path:
+                self.file_paths[doc_type] = path
+                self.file_labels[doc_type].configure(text=os.path.basename(path))
+                self.check_labels[doc_type].configure(text="☑")
         
         # [파싱 시작] 버튼
         self.btn_parse = ttk.Button(
@@ -240,8 +254,12 @@ class OneStopInboundDialog(InboundDialogBase):
         _ps.configure('Inline.Horizontal.TProgressbar', troughcolor=ThemeColors.get('bg_secondary', _pop_dark), thickness=12)
         self._progress_inline_bar = ttk.Progressbar(self._progress_inline_frame, maximum=100, mode='determinate', style='Inline.Horizontal.TProgressbar')
         self._progress_inline_bar.pack(fill=X, pady=(4, 2))
-        self._progress_inline_pct_elapsed = ttk.Label(self._progress_inline_frame, text="", font=('맑은 고딕', 10), foreground=ThemeColors.get('text_secondary', _pop_dark))
-        self._progress_inline_pct_elapsed.pack(anchor='e')
+        _row2 = ttk.Frame(self._progress_inline_frame)
+        _row2.pack(fill=X)
+        self._progress_inline_pct_elapsed = ttk.Label(_row2, text="", font=('맑은 고딕', 10), foreground=ThemeColors.get('text_secondary', _pop_dark))
+        self._progress_inline_pct_elapsed.pack(side=tk.RIGHT)
+        self._progress_inline_busy = ttk.Label(_row2, text="", font=('맑은 고딕', 11), foreground=ThemeColors.get('statusbar_icon_warn', _pop_dark))
+        self._progress_inline_busy.pack(side=tk.LEFT)
         
         # ═══════════════════════════════════════════════════════════
         # 2. 미리보기 테이블 (v3.8.7: 폰트 20% 확대)
@@ -256,10 +274,14 @@ class OneStopInboundDialog(InboundDialogBase):
         heading_font = tkfont.Font(family='맑은 고딕', size=13, weight='bold')
         row_height = preview_font.metrics('linespace') + 8
         
+        _tree_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
+        _tree_fg = ThemeColors.get('text_primary', _tree_dark)
         style = ttk.Style()
         style.configure('Preview.Treeview',
                         font=('맑은 고딕', 14),
-                        rowheight=row_height)
+                        rowheight=row_height,
+                        foreground=_tree_fg,
+                        fieldbackground=ThemeColors.get('bg_card', _tree_dark))
         style.configure('Preview.Treeview.Heading',
                         font=('맑은 고딕', 13, 'bold'))
         
@@ -269,9 +291,8 @@ class OneStopInboundDialog(InboundDialogBase):
             height=18, selectmode='browse',
             style='Preview.Treeview'
         )
-        _tree_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
-        self.tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _tree_dark))
-        self.tree.tag_configure('even', background=ThemeColors.get('bg_card', _tree_dark))
+        self.tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _tree_dark), foreground=_tree_fg)
+        self.tree.tag_configure('even', background=ThemeColors.get('bg_card', _tree_dark), foreground=_tree_fg)
         
         for col_id, header, width, anchor in PREVIEW_COLUMNS:
             self.tree.heading(col_id, text=header)
@@ -284,6 +305,15 @@ class OneStopInboundDialog(InboundDialogBase):
         scrollbar_x.pack(side=BOTTOM, fill=X)
         self.tree.pack(side=LEFT, fill=BOTH, expand=YES)
         scrollbar_y.pack(side=RIGHT, fill=Y)
+        
+        # v5.8.9: 컨테이너 번호 접미사(-숫자) 표시 옵션
+        self._var_show_container_suffix = tk.BooleanVar(value=False)
+        chk_container = ttk.Checkbutton(
+            tree_frame, text="컨테이너 번호 접미사(-숫자) 표시",
+            variable=self._var_show_container_suffix,
+            command=self._on_toggle_container_suffix
+        )
+        chk_container.pack(anchor='w', padx=4, pady=(2, 0))
         
         # ═══════════════════════════════════════════════════════════
         # 4. 하단 한 줄 — 업로드5: 폰트 통일(15), 업로드6: 합계 가운데 배치
@@ -366,7 +396,11 @@ class OneStopInboundDialog(InboundDialogBase):
         file_path = filedialog.askopenfilename(
             parent=self.dialog,
             title=f"{type_names.get(doc_type, doc_type)} 파일 선택",
-            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
+            filetypes=[
+                ("PDF files", "*.pdf"),
+                ("Image (D/O 캡처)", "*.png *.jpg *.jpeg"),
+                ("All files", "*.*")
+            ]
         )
         
         if not file_path:
@@ -433,7 +467,6 @@ class OneStopInboundDialog(InboundDialogBase):
         
         self.btn_parse.config(state='disabled')
         self._show_progress_inline()
-        self._show_progress_popup()
         
         thread = threading.Thread(
             target=self._parse_thread,
@@ -442,7 +475,7 @@ class OneStopInboundDialog(InboundDialogBase):
         thread.start()
     
     def _show_progress_inline(self) -> None:
-        """진행 상태를 미리보기 위 인라인 영역에 표시 (진행/데이터 구분)"""
+        """진행 상태를 미리보기 위 인라인 영역에만 표시 (팝업 없음, 움직임 표시 포함)"""
         ph = getattr(self, '_progress_inline_placeholder', None)
         fr = getattr(self, '_progress_inline_frame', None)
         if ph and ph.winfo_ismapped():
@@ -456,6 +489,10 @@ class OneStopInboundDialog(InboundDialogBase):
             self._progress_inline_msg.config(text="준비 중...")
         if getattr(self, '_progress_inline_pct_elapsed', None):
             self._progress_inline_pct_elapsed.config(text="0%  ·  경과: 0:00")
+        if getattr(self, '_progress_inline_busy', None):
+            self._progress_inline_busy.config(text="진행 중 ●")
+        self._start_progress_elapsed_tick()
+        self._start_progress_busy_animation()
 
     def _hide_progress_inline(self) -> None:
         """진행 완료 후 인라인 영역을 플레이스홀더로 복귀"""
@@ -467,46 +504,8 @@ class OneStopInboundDialog(InboundDialogBase):
             ph.pack(anchor='w')
 
     def _show_progress_popup(self) -> None:
-        """v5.7.5: 파싱/업로드 시 화면 중앙에 큰 진행률 팝업 표시"""
-        if getattr(self, '_progress_popup', None) and self._progress_popup.winfo_exists():
-            return
-        popup = tk.Toplevel(self.dialog)
-        popup.title("작업 진행 중")
-        popup.resizable(False, False)
-        popup.transient(self.dialog)
-        w, h = PROGRESS_POPUP_WIDTH, PROGRESS_POPUP_HEIGHT
-        try:
-            x = self.dialog.winfo_rootx() + (self.dialog.winfo_width() - w) // 2
-            y = self.dialog.winfo_rooty() + (self.dialog.winfo_height() - h) // 2
-        except tk.TclError:
-            x, y = 200, 200
-        popup.geometry(f"{w}x{h}+{max(0, x)}+{max(0, y)}")
-        frame = ttk.Frame(popup, padding=28)
-        frame.pack(fill=tk.BOTH, expand=True)
-        lbl = ttk.Label(frame, text="준비 중...", font=('맑은 고딕', 18, 'bold'))
-        lbl.pack(anchor='w', pady=(0, 10))
-        _pop_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
-        _ps = ttk.Style()
-        _ps.configure('Popup.Horizontal.TProgressbar', troughcolor=ThemeColors.get('bg_secondary', _pop_dark), background=ThemeColors.get('statusbar_icon_warn', _pop_dark), thickness=26)
-        bar = ttk.Progressbar(frame, maximum=100, mode='determinate', style='Popup.Horizontal.TProgressbar')
-        bar.pack(fill=tk.X, pady=(0, 8))
-        pct_lbl = ttk.Label(frame, text="0%", font=('맑은 고딕', 14))
-        pct_lbl.pack(anchor='w')
-        busy_lbl = ttk.Label(frame, text="진행 중 ●", font=('맑은 고딕', 11), foreground=ThemeColors.get('text_secondary', _pop_dark))
-        busy_lbl.pack(anchor='w', pady=(4, 0))
-        elapsed_lbl = ttk.Label(frame, text="경과: 0:00", font=('맑은 고딕', 10), foreground=ThemeColors.get('text_secondary', _pop_dark))
-        elapsed_lbl.pack(anchor='e', pady=(4, 0))
-        self._progress_popup = popup
-        self._progress_popup_label = lbl
-        self._progress_popup_bar = bar
-        self._progress_popup_pct = pct_lbl
-        self._progress_popup_busy = busy_lbl
-        self._progress_popup_elapsed = elapsed_lbl
-        self._progress_start_time = time.time()
-        self._progress_busy_job = None
-        self._progress_elapsed_job = None
-        self._start_progress_busy_animation()
-        self._start_progress_elapsed_tick()
+        """작업진행 전용 창 사용 안 함 — 기존 화면(인라인 진행 상태)만 사용"""
+        pass
 
     def _progress_elapsed_tick(self) -> None:
         """경과 시간 표시 업데이트 (1초 간격) — 팝업·인라인 둘 다"""
@@ -522,11 +521,6 @@ class OneStopInboundDialog(InboundDialogBase):
         else:
             m, s = divmod(secs, 60)
             elapsed_text = f"경과: {m}:{s:02d}"
-        # 팝업 경과
-        popup = getattr(self, '_progress_popup', None)
-        elapsed_lbl = getattr(self, '_progress_popup_elapsed', None)
-        if popup and popup.winfo_exists() and elapsed_lbl and elapsed_lbl.winfo_exists():
-            elapsed_lbl.config(text=elapsed_text)
         # 인라인 경과 (현재 퍼센트 + 경과)
         pct_elapsed = getattr(self, '_progress_inline_pct_elapsed', None)
         if pct_elapsed and pct_elapsed.winfo_ismapped():
@@ -552,15 +546,13 @@ class OneStopInboundDialog(InboundDialogBase):
         self._progress_elapsed_job = None
 
     def _progress_busy_tick(self) -> None:
-        """진행 중 표시를 회전/움직임으로 업데이트 (바 위/아래 안내용)"""
-        busy = getattr(self, '_progress_popup_busy', None)
-        if not busy or not busy.winfo_exists():
-            self._progress_busy_job = None
-            return
+        """진행 중 움직임 표시 — 기존 화면(인라인) 진행 상태 영역에만 표시"""
         phase = getattr(self, '_progress_busy_phase', 0) % 4
         self._progress_busy_phase = phase + 1
         texts = ['진행 중 ●  ', '진행 중 ●● ', '진행 중 ●●●', '진행 중 ●● ']
-        busy.config(text=texts[phase])
+        inline_busy = getattr(self, '_progress_inline_busy', None)
+        if inline_busy and inline_busy.winfo_ismapped():
+            inline_busy.config(text=texts[phase])
         self._progress_busy_job = self.dialog.after(400, self._progress_busy_tick) if self.dialog and self.dialog.winfo_exists() else None
 
     def _start_progress_busy_animation(self) -> None:
@@ -606,19 +598,18 @@ class OneStopInboundDialog(InboundDialogBase):
                     self._progress_popup_label.config(text=message)
                 if getattr(self, '_progress_popup_pct', None):
                     self._progress_popup_pct.config(text=f"{pct}%" if pct >= 0 else "—")
-            # 인라인 (미리보기 위)
+            # 인라인 (미리보기 위) — 기존 화면 프로그레스 바만 사용
             inline_bar = getattr(self, '_progress_inline_bar', None)
             inline_msg = getattr(self, '_progress_inline_msg', None)
-            inline_pct = getattr(self, '_progress_inline_pct_elapsed', None)
+            inline_busy = getattr(self, '_progress_inline_busy', None)
             if inline_bar and inline_bar.winfo_ismapped():
                 inline_bar['value'] = max(0, min(100, pct))
             if inline_msg and inline_msg.winfo_ismapped():
                 inline_msg.config(text=message)
-            # 인라인 퍼센트+경과는 _progress_elapsed_tick에서 갱신
             if pct >= 100 or (pct == 0 and message.strip().startswith("❌")):
                 self._stop_progress_busy_animation()
-                if getattr(self, '_progress_popup_busy', None) and self._progress_popup_busy.winfo_exists():
-                    self._progress_popup_busy.config(text="완료" if pct >= 100 else "오류")
+                if inline_busy and inline_busy.winfo_ismapped():
+                    inline_busy.config(text="완료" if pct >= 100 else "오류")
                 if self.dialog and self.dialog.winfo_exists():
                     self.dialog.after(PROGRESS_POPUP_CLOSE_DELAY_MS, self._hide_progress_popup)
                 self.dialog.after(PROGRESS_POPUP_CLOSE_DELAY_MS + 100, self._hide_progress_inline)
@@ -793,6 +784,21 @@ class OneStopInboundDialog(InboundDialogBase):
             # 표시
             self._update_progress(95, "📋 미리보기 준비...")
             self._display_preview()
+            # 파싱 완료 후 DB 업로드·Excel 버튼이 반드시 보이도록 폴백 (순차 삽입 완료 전에도 활성화)
+            _preview_len = len(self.preview_data)
+            def _ensure_buttons_visible():
+                if not self.dialog or not self.dialog.winfo_exists():
+                    return
+                if _preview_len and getattr(self, 'preview_data', None) and len(self.preview_data) == _preview_len:
+                    if getattr(self, 'btn_excel', None) and self.btn_excel.winfo_exists():
+                        self.btn_excel.config(state='normal')
+                    if getattr(self, 'btn_upload', None) and self.btn_upload.winfo_exists():
+                        if self._has_required_docs():
+                            self.btn_upload.config(state='normal')
+                        else:
+                            self.btn_upload.config(state='disabled')
+            if self.dialog and self.dialog.winfo_exists():
+                self.dialog.after(400, _ensure_buttons_visible)
             
             self._update_progress(100, f"✅ 파싱 완료 — {len(self.preview_data)}개 LOT")
             self._log_safe(f"✅ 파싱 완료: {len(self.preview_data)} LOT, {total}종 서류")
@@ -919,11 +925,15 @@ class OneStopInboundDialog(InboundDialogBase):
                     if ftd and str(ftd) != 'None':
                         con_return_str = str(ftd)[:10]
                         break
+                if not con_return_str:
+                    print(f"[원스톱 미리보기] D/O free_time_info 있으나 반납일 없음 — CON RETURN/FREE TIME 빈칸. 항목 수: {len(ft_infos)}")
                 if con_return_str:
                     con_return_dt = datetime.strptime(con_return_str, '%Y-%m-%d').date()
                     arr_dt = datetime.strptime(str(arr)[:10], '%Y-%m-%d').date()
                     days = (con_return_dt - arr_dt).days
                     row['free_time'] = str(max(0, days))
+                    row['con_return'] = str(con_return_str)[:10]
+                    print(f"[원스톱 미리보기] D/O 반납일 적용: con_return={row['con_return']}, free_time(일수)={row['free_time']}")
             except (ValueError, TypeError) as e:
                 logging.getLogger(__name__).debug(f"free_time 계산 실패: {e}")
         # 업로드4: free_time 일수만 있는 경우 (DO.free_time.storage_free_days)
@@ -1161,6 +1171,37 @@ class OneStopInboundDialog(InboundDialogBase):
         except (RuntimeError, ValueError, TypeError) as e:
             logger.debug(f"미리보기 해제 실패: {e}")
 
+    def _format_container_display(self, val) -> str:
+        """컨테이너 번호: 디폴트로 접미사 -숫자 제거. 표시 옵션 켜면 원문 반환."""
+        if not val or not isinstance(val, str):
+            return val or ''
+        if getattr(self, '_show_container_suffix', False):
+            return val.strip()
+        s = val.strip()
+        if '-' in s:
+            pre, _, suf = s.rpartition('-')
+            if suf.isdigit():
+                return pre
+        return s
+    
+    def _on_toggle_container_suffix(self) -> None:
+        """컨테이너 접미사 표시 체크 시 미리보기 테이블 갱신"""
+        var = getattr(self, '_var_show_container_suffix', None)
+        self._show_container_suffix = bool(var and var.get())
+        if self.preview_data and getattr(self, 'tree', None) and self.tree.winfo_exists():
+            self._refresh_preview_tree_only()
+    
+    def _row_display_values(self, row: dict) -> tuple:
+        """한 행의 표시용 values (container_no는 접미사 옵션 적용)."""
+        out = []
+        for col in PREVIEW_COLUMNS:
+            key = col[0]
+            if key == 'container_no':
+                out.append(self._format_container_display(row.get(key, '')))
+            else:
+                out.append(row.get(key, ''))
+        return tuple(out)
+    
     def _refresh_preview_tree_only(self) -> None:
         """미리보기 테이블만 현재 preview_data로 갱신 (요약/버튼/팝업 없음). 파싱 중 실시간 표시용."""
         if not getattr(self, 'tree', None) or not self.tree.winfo_exists():
@@ -1169,9 +1210,8 @@ class OneStopInboundDialog(InboundDialogBase):
             self.tree.delete(item)
         if not self.preview_data:
             return
-        columns = PREVIEW_COLUMNS
         for idx, row in enumerate(self.preview_data):
-            values = tuple(row.get(col[0], '') for col in columns)
+            values = self._row_display_values(row)
             tag = 'even' if idx % 2 == 0 else 'odd'
             self.tree.insert('', END, values=values, tags=(tag,))
 
@@ -1200,11 +1240,9 @@ class OneStopInboundDialog(InboundDialogBase):
                         self.btn_upload.config(state='disabled')
                     if self.preview_data:
                         self.btn_excel.config(state='normal')
-                    if self.preview_data and self.dialog and self.dialog.winfo_exists():
-                        self.dialog.after(300, self._show_parsing_result_confirmation)
                     return
                 row = data[idx]
-                values = tuple(row.get(col[0], '') for col in columns)
+                values = self._row_display_values(row)
                 tag = 'even' if idx % 2 == 0 else 'odd'
                 self.tree.insert('', END, values=values, tags=(tag,))
                 if self.dialog and self.dialog.winfo_exists():
@@ -1269,82 +1307,6 @@ class OneStopInboundDialog(InboundDialogBase):
             parts.append(f"외 {len(dups) - 10}건")
         return "중복: " + ", ".join(parts)
 
-    def _show_parsing_result_confirmation(self) -> None:
-        """파싱 완료 후 결과를 크게 창으로 띄우고, 맞으면 버튼 팝업으로 이어짐"""
-        if not self.dialog or not self.dialog.winfo_exists() or not self.preview_data:
-            return
-        win = tk.Toplevel(self.dialog)
-        win.title("파싱 결과 확인")
-        win.geometry(DialogSize.get_geometry(self.dialog, 'large'))
-        win.transient(self.dialog)
-        win.grab_set()
-        center_dialog(win, self.dialog)
-        top = ttk.Frame(win, padding=12)
-        top.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(top, text="파싱이 완료되었습니다. 아래 내용이 맞는지 확인하세요.",
-                  font=('맑은 고딕', 14, 'bold')).pack(anchor='w', pady=(0, 8))
-        summary = self.summary_var.get()
-        _win_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
-        if summary:
-            ttk.Label(top, text=summary, font=('맑은 고딕', 12),
-                      foreground=ThemeColors.get('statusbar_progress', _win_dark)).pack(anchor='w', pady=(0, 4))
-        dup_msg = self._check_parsing_duplicates()
-        if dup_msg:
-            ttk.Label(top, text=dup_msg, font=('맑은 고딕', 11),
-                      foreground=ThemeColors.get('statusbar_icon_warn', _win_dark)).pack(anchor='w', pady=(0, 4))
-        else:
-            ttk.Label(top, text="중복 데이터 없음.", font=('맑은 고딕', 11),
-                      foreground=ThemeColors.get('success', _win_dark)).pack(anchor='w', pady=(0, 4))
-        if self.preview_data and any((r.get('arrival_date') or r.get('ship_date')) and not (r.get('free_time') or '').strip() for r in self.preview_data):
-            ttk.Label(top, text="FREE TIME 누락: D/O에서 컨테이너 반납일(con_return_date)이 추출되지 않았을 수 있습니다. 수동 입력 또는 D/O 재파싱을 확인하세요.",
-                      font=('맑은 고딕', 10), foreground=ThemeColors.get('statusbar_icon_warn', _win_dark), wraplength=520).pack(anchor='w', pady=(0, 8))
-        tree_frame = ttk.Frame(top)
-        tree_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
-        cols = tuple(c[0] for c in PREVIEW_COLUMNS)
-        tree = ttk.Treeview(tree_frame, columns=cols, show='headings', height=12)
-        tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _win_dark))
-        tree.tag_configure('even', background=ThemeColors.get('bg_card', _win_dark))
-        for col_id, header, w, anchor in PREVIEW_COLUMNS:
-            tree.heading(col_id, text=header)
-            tree.column(col_id, width=min(w, 120), anchor=anchor or 'center')
-        vsb = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=tree.yview)
-        hsb = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL, command=tree.xview)
-        tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        for i, row in enumerate(self.preview_data[:50]):
-            tag = 'even' if i % 2 == 0 else 'odd'
-            tree.insert('', tk.END, values=tuple(row.get(c[0], '') for c in PREVIEW_COLUMNS), tags=(tag,))
-        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        hsb.pack(side=tk.BOTTOM, fill=tk.X)
-        if len(self.preview_data) > 50:
-            ttk.Label(top, text=f"(상위 50건만 표시, 전체 {len(self.preview_data)}건)",
-                      font=('맑은 고딕', 9)).pack(anchor='w')
-        # 원스톱: 확인 팝업에서 바로 DB 업로드 / Excel / 취소 선택 (업로드 2 단계 제거)
-        _font = getattr(self, '_toolbar_font', '맑은 고딕')
-        _act_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
-        _blue = ThemeColors.get('info', _act_dark)
-        _red = ThemeColors.get('statusbar_icon_err', _act_dark)
-        _act_fg = ThemeColors.get('badge_text', _act_dark)
-        def do_excel():
-            win.destroy()
-            self._export_to_excel()
-        def do_upload():
-            win.destroy()
-            self._on_upload()
-        def do_cancel():
-            win.destroy()
-        btn_f = ttk.Frame(top)
-        btn_f.pack(fill=tk.X, pady=(12, 0))
-        tk.Button(btn_f, text="📥 Excel 내보내기", command=do_excel,
-                  font=(_font, 15, 'bold'), bg=_blue, fg=_act_fg,
-                  padx=15, pady=6, cursor='hand2', bd=0).pack(side=tk.LEFT, padx=(0, 8))
-        tk.Button(btn_f, text="📤 DB 업로드", command=do_upload,
-                  font=(_font, 15, 'bold'), bg=_blue, fg=_act_fg,
-                  padx=15, pady=6, cursor='hand2', bd=0).pack(side=tk.LEFT, padx=(0, 8))
-        tk.Button(btn_f, text="❌ 취소", command=do_cancel,
-                  font=(_font, 15, 'bold'), bg=_red, fg=_act_fg,
-                  padx=15, pady=6, cursor='hand2', bd=0).pack(side=tk.LEFT)
-    
     # ═══════════════════════════════════════════════════════════
     # DB 업로드
     # ═══════════════════════════════════════════════════════════
@@ -1433,7 +1395,7 @@ class OneStopInboundDialog(InboundDialogBase):
         except (RuntimeError, ValueError) as _e:
             logger.debug(f'Suppressed: {_e}')
         
-        self._show_progress_popup()
+        self._show_progress_inline()
         thread = threading.Thread(target=self._upload_thread, daemon=True)
         thread.start()
     
@@ -1655,6 +1617,7 @@ class OneStopInboundDialog(InboundDialogBase):
                     'arrival_date': _arrival,
                     'free_time': _free_time,
                     'free_time_date': _free_time_date,
+                    'con_return': _free_time_date[:10] if _free_time_date else '',  # DB 컬럼명과 동일 키로 전달
                     'warehouse': str(getattr(do, 'warehouse', DEFAULT_WAREHOUSE)) if do else DEFAULT_WAREHOUSE,
                     'vessel': getattr(pl, 'vessel', '') or '',
                 }
@@ -1715,6 +1678,10 @@ class OneStopInboundDialog(InboundDialogBase):
                         if ftd:
                             _con_return = str(ftd)[:10]
                             break
+                    if _con_return:
+                        print(f"[원스톱 업로드] DO에서 con_return(반납일) 사용: {_con_return} — DB CON RETURN 컬럼에 저장")
+                    else:
+                        print(f"[원스톱 업로드] DO에 반납일 없음 — CON RETURN 빈 값으로 저장됨 (free_time_info 항목 수: {len(ft_infos)})")
                     _do_arr = getattr(do, 'arrival_date', None)
                     _do_arrival = (_do_arr.isoformat() if hasattr(_do_arr, 'isoformat') else str(_do_arr or '')) if _do_arr and str(_do_arr) != 'None' else ''
                     do_dict = {
@@ -1826,21 +1793,26 @@ class OneStopInboundDialog(InboundDialogBase):
     def _show_success_and_close(self, count: int):
         def _close():
             if self.dialog and self.dialog.winfo_exists():
-                # v3.8.9: app 참조를 destroy 전에 확보
                 _app = self.app if self.app else None
-                
-                # v5.8.7: D/O 추후 첨부 안내
+                # v5.8.9: 파싱 결과 팝업에서 DB 업로드 선택 시, 완료 후 엑셀 내보내기 여부 질의
+                if getattr(self, '_ask_excel_after_upload', False):
+                    self._ask_excel_after_upload = False
+                    try:
+                        from ..utils.custom_messagebox import CustomMessageBox
+                        if CustomMessageBox.askyesno(self.dialog, "엑셀 내보내기",
+                            "DB 업로드가 완료되었습니다.\n엑셀 내보내기도 하시겠습니까?\n(아니오를 누르면 여기서 종료합니다.)"):
+                            self._export_to_excel()
+                    except (ImportError, ModuleNotFoundError):
+                        pass
                 _deferred = getattr(self, '_do_deferred', False)
                 _msg = f"✅ {count}개 LOT 저장 완료"
                 if _deferred:
                     _msg += "\n\n📋 D/O가 미첨부된 상태입니다.\n나중에 D/O를 받으면 [📋 D/O 후속 연결] 메뉴에서\narrival_date와 Free Time을 업데이트할 수 있습니다."
-                
                 try:
                     from ..utils.custom_messagebox import CustomMessageBox
                     CustomMessageBox.showinfo(self.dialog, "업로드 완료", _msg)
                 except (ImportError, ModuleNotFoundError):
                     CustomMessageBox.info(None, "완료", _msg)
-                
                 self.dialog.destroy()
                 
                 # v3.8.9: 업로드 후 재고리스트 탭 이동 + 자동 새로고침

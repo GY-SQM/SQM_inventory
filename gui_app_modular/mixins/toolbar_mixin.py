@@ -294,7 +294,7 @@ class ToolbarMixin:
             ('📥 PDF 입고 (원스톱)',    lambda: self._safe_call('_on_pdf_inbound')),
             ('📝 Excel 입고',          lambda: self._safe_call('_bulk_import_inventory_simple')),
             None,
-            ('📦 톤백 위치 매핑',      lambda: self._safe_call('_import_location_excel')),
+            ('📦 톤백 위치 매핑',      lambda: self._safe_call('_on_location_mapping_choice')),
             ('📋 입고현황 불러오기',    lambda: self._safe_call('_bulk_import_inventory')),
             ('📥 샘플 Excel 다운로드', lambda: self._safe_call('_download_inbound_template')),
             None,
@@ -309,6 +309,7 @@ class ToolbarMixin:
             ('📤 심플 엑셀 출고',               lambda: self._safe_call('_on_simple_excel_outbound')),
             ('📋 출고 Allocation Table',        lambda: self._safe_call('_on_outbound_click')),
             ('📥 Allocation Table 샘플 다운로드', lambda: self._safe_call('_download_outbound_template')),
+            ('📥 출고 템플릿(톤백 수) 다운로드',  lambda: self._safe_call('_on_outbound_tonbag_choice')),
             ('🎲 가상 Allocation Table 생성',   lambda: self._safe_call('_generate_virtual_allocation')),
             None,
             ('📋 출고 결과',                     lambda: self._safe_call('_import_outbound_excel')),
@@ -384,8 +385,8 @@ class ToolbarMixin:
         pdf_sub.add_command(label="  → Word", command=lambda: self._safe_call('_convert_pdf_to_word'))
         pdf_sub.add_separator()
         pdf_sub.add_command(label="  📁 일괄 변환", command=lambda: self._safe_call('_batch_convert_pdf_excel'))
-        pdf_sub.add_command(label="  🔍 PDF 분석", command=lambda: self._safe_call('_analyze_pdf'))
-        m.add_cascade(label="  📄 PDF 변환", menu=pdf_sub)
+        pdf_sub.add_command(label="  🔍 분석", command=lambda: self._safe_call('_analyze_pdf'))
+        m.add_cascade(label="  📄 PDF/이미지 변환", menu=pdf_sub)
         m.add_separator()
         m.add_command(label="  ❌ 종료", command=self.root.quit)
         return m
@@ -437,6 +438,8 @@ class ToolbarMixin:
         m.add_separator()
         # v5.5.3: PDF 변환 → 📁 파일 메뉴로 이동
         m.add_command(label="  🩺 데이터 정합성 검사", command=lambda: self._safe_call('_run_integrity_check'))
+        m.add_separator()
+        m.add_command(label="  🗑️ 테스트 DB 초기화 (데이터 삭제)", command=lambda: self._safe_call('_show_test_db_reset_popup'))
         return m
 
     def _build_help_menu(self) -> 'tk.Menu':

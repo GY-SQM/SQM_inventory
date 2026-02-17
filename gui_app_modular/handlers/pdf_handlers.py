@@ -24,120 +24,137 @@ class PDFHandlersMixin:
     """
     
     def _convert_pdf_to_excel(self) -> None:
-        """Convert PDF to Excel"""
+        """Convert PDF/Image to Excel"""
         from ..utils.constants import filedialog
         
-        pdf_path = filedialog.askopenfilename(
-            title="Select PDF to Convert",
-            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
+        file_path = filedialog.askopenfilename(
+            title="PDF/이미지 → Excel 변환",
+            filetypes=[
+                ("지원 파일", "*.pdf *.png *.jpg *.jpeg *.bmp *.tif *.tiff"),
+                ("PDF files", "*.pdf"),
+                ("이미지 (캡처)", "*.png *.jpg *.jpeg *.bmp *.tif *.tiff"),
+                ("All files", "*.*"),
+            ]
         )
         
-        if not pdf_path:
+        if not file_path:
             return
         
-        self._set_status("Converting PDF to Excel...")
-        self._log(f"PDF conversion started: {os.path.basename(pdf_path)}")
+        fname = os.path.basename(file_path)
+        self._set_status(f"변환 중: {fname} → Excel...")
+        self._log(f"📄 변환 시작: {fname}")
         
         try:
             from utils.pdf_converter import PDFConverter
             
             converter = PDFConverter()
-            result = converter.to_excel(pdf_path)
+            result = converter.to_excel(file_path)
             
             if result.success:
-                self._log(f"OK Excel conversion complete: {result.output_file}")
+                self._log(f"✅ Excel 변환 완료: {result.output_file}")
                 self._log(f"   Pages: {result.page_count}, Tables: {result.table_count}")
                 self._log(f"   Time: {result.processing_time:.1f}s")
                 
-                if CustomMessageBox.askyesno(self.root, "Conversion Complete",
-                    f"Excel conversion complete!\n\n"
-                    f"File: {os.path.basename(result.output_file)}\n"
-                    f"Pages: {result.page_count}\n"
-                    f"Tables: {result.table_count}\n\n"
-                    f"Open file?"):
+                if CustomMessageBox.askyesno(self.root, "변환 완료",
+                    f"Excel 변환 완료!\n\n"
+                    f"원본: {fname}\n"
+                    f"파일: {os.path.basename(result.output_file)}\n"
+                    f"페이지: {result.page_count}\n"
+                    f"테이블: {result.table_count}\n\n"
+                    f"파일을 열겠습니까?"):
                     os.startfile(result.output_file)
             else:
-                self._log(f"X Conversion failed: {result.error_message}")
-                CustomMessageBox.showerror(self.root, "Conversion Failed", result.error_message)
+                self._log(f"❌ 변환 실패: {result.error_message}")
+                CustomMessageBox.showerror(self.root, "변환 실패", result.error_message)
                 
         except ImportError:
-            CustomMessageBox.showerror(self.root, "Error", "pdf_converter module not found")
+            CustomMessageBox.showerror(self.root, "오류", "pdf_converter 모듈을 찾을 수 없습니다")
         except (OSError, IOError, PermissionError) as e:
-            self._log(f"X Conversion error: {e}")
-            CustomMessageBox.showerror(self.root, "Error", f"Conversion error:\n{e}")
+            self._log(f"❌ 변환 오류: {e}")
+            CustomMessageBox.showerror(self.root, "오류", f"변환 오류:\n{e}")
         
         self._set_status("Ready")
     
     def _convert_pdf_to_word(self) -> None:
-        """Convert PDF to Word"""
+        """Convert PDF/Image to Word"""
         from ..utils.constants import filedialog
         
-        pdf_path = filedialog.askopenfilename(
-            title="Select PDF to Convert",
-            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
+        file_path = filedialog.askopenfilename(
+            title="PDF/이미지 → Word 변환",
+            filetypes=[
+                ("지원 파일", "*.pdf *.png *.jpg *.jpeg *.bmp *.tif *.tiff"),
+                ("PDF files", "*.pdf"),
+                ("이미지 (캡처)", "*.png *.jpg *.jpeg *.bmp *.tif *.tiff"),
+                ("All files", "*.*"),
+            ]
         )
         
-        if not pdf_path:
+        if not file_path:
             return
         
-        self._set_status("Converting PDF to Word...")
-        self._log(f"PDF conversion started: {os.path.basename(pdf_path)}")
+        fname = os.path.basename(file_path)
+        self._set_status(f"변환 중: {fname} → Word...")
+        self._log(f"📄 변환 시작: {fname}")
         
         try:
             from utils.pdf_converter import PDFConverter
             
             converter = PDFConverter()
-            result = converter.to_word(pdf_path)
+            result = converter.to_word(file_path)
             
             if result.success:
-                self._log(f"OK Word conversion complete: {result.output_file}")
+                self._log(f"✅ Word 변환 완료: {result.output_file}")
                 self._log(f"   Pages: {result.page_count}, Tables: {result.table_count}")
                 
-                if CustomMessageBox.askyesno(self.root, "Conversion Complete",
-                    f"Word conversion complete!\n\n"
-                    f"File: {os.path.basename(result.output_file)}\n"
-                    f"Pages: {result.page_count}\n\n"
-                    f"Open file?"):
+                if CustomMessageBox.askyesno(self.root, "변환 완료",
+                    f"Word 변환 완료!\n\n"
+                    f"원본: {fname}\n"
+                    f"파일: {os.path.basename(result.output_file)}\n"
+                    f"페이지: {result.page_count}\n\n"
+                    f"파일을 열겠습니까?"):
                     os.startfile(result.output_file)
             else:
-                self._log(f"X Conversion failed: {result.error_message}")
-                CustomMessageBox.showerror(self.root, "Conversion Failed", result.error_message)
+                self._log(f"❌ 변환 실패: {result.error_message}")
+                CustomMessageBox.showerror(self.root, "변환 실패", result.error_message)
                 
         except ImportError as e:
             if "python-docx" in str(e):
-                CustomMessageBox.showerror(self.root, "Error", 
-                    "python-docx required for Word conversion\n\n"
+                CustomMessageBox.showerror(self.root, "오류", 
+                    "python-docx가 필요합니다\n\n"
                     "pip install python-docx")
             else:
-                CustomMessageBox.showerror(self.root, "Error", f"Module error: {e}")
+                CustomMessageBox.showerror(self.root, "오류", f"모듈 오류: {e}")
         except (OSError, IOError, PermissionError) as e:
-            self._log(f"X Conversion error: {e}")
-            CustomMessageBox.showerror(self.root, "Error", f"Conversion error:\n{e}")
+            self._log(f"❌ 변환 오류: {e}")
+            CustomMessageBox.showerror(self.root, "오류", f"변환 오류:\n{e}")
         
         self._set_status("Ready")
     
     def _batch_convert_pdf_excel(self) -> None:
-        """Batch convert PDFs in folder to Excel"""
+        """Batch convert PDFs/Images in folder to Excel"""
         from ..utils.constants import filedialog
         
-        folder_path = filedialog.askdirectory(title="Select PDF Folder")
+        folder_path = filedialog.askdirectory(title="PDF/이미지 폴더 선택")
         
         if not folder_path:
             return
         
-        # Count PDF files
-        pdf_files = list(Path(folder_path).glob("*.pdf")) + list(Path(folder_path).glob("*.PDF"))
+        folder = Path(folder_path)
+        target_files = []
+        for ext in ('*.pdf', '*.PDF', '*.png', '*.PNG', '*.jpg', '*.JPG', '*.jpeg', '*.JPEG',
+                     '*.bmp', '*.BMP', '*.tif', '*.TIF', '*.tiff', '*.TIFF'):
+            target_files.extend(folder.glob(ext))
         
-        if not pdf_files:
-            CustomMessageBox.showinfo(self.root, "No Files", "No PDF files found in folder")
+        if not target_files:
+            CustomMessageBox.showinfo(self.root, "파일 없음", "폴더에 PDF/이미지 파일이 없습니다")
             return
         
-        if not CustomMessageBox.askyesno(self.root, "Batch Convert",
-            f"Convert {len(pdf_files)} PDF files to Excel?"):
+        if not CustomMessageBox.askyesno(self.root, "일괄 변환",
+            f"{len(target_files)}개 파일을 Excel로 변환하시겠습니까?"):
             return
         
-        self._set_status("Batch converting...")
-        self._log(f"Batch conversion started: {len(pdf_files)} files")
+        self._set_status("일괄 변환 중...")
+        self._log(f"📁 일괄 변환 시작: {len(target_files)}개 파일")
         
         try:
             from utils.pdf_converter import PDFConverter
@@ -146,42 +163,47 @@ class PDFHandlersMixin:
             success_count = 0
             fail_count = 0
             
-            for i, pdf_file in enumerate(pdf_files):
-                self._set_status(f"Converting {i+1}/{len(pdf_files)}: {pdf_file.name}")
+            for i, target_file in enumerate(target_files):
+                self._set_status(f"변환 {i+1}/{len(target_files)}: {target_file.name}")
                 
                 try:
-                    result = converter.to_excel(str(pdf_file))
+                    result = converter.to_excel(str(target_file))
                     if result.success:
                         success_count += 1
-                        self._log(f"  OK {pdf_file.name}")
+                        self._log(f"  ✅ {target_file.name}")
                     else:
                         fail_count += 1
-                        self._log(f"  X {pdf_file.name}: {result.error_message}")
+                        self._log(f"  ❌ {target_file.name}: {result.error_message}")
                 except (ValueError, TypeError, AttributeError) as e:
                     fail_count += 1
-                    self._log(f"  X {pdf_file.name}: {e}")
+                    self._log(f"  ❌ {target_file.name}: {e}")
             
-            self._log(f"Batch complete: {success_count} success, {fail_count} failed")
-            CustomMessageBox.showinfo(self.root, "Batch Complete",
-                f"Batch conversion complete!\n\n"
-                f"Success: {success_count}\n"
-                f"Failed: {fail_count}")
+            self._log(f"일괄 변환 완료: 성공 {success_count}, 실패 {fail_count}")
+            CustomMessageBox.showinfo(self.root, "일괄 변환 완료",
+                f"일괄 변환 완료!\n\n"
+                f"성공: {success_count}\n"
+                f"실패: {fail_count}")
                 
         except ImportError:
-            CustomMessageBox.showerror(self.root, "Error", "pdf_converter module not found")
+            CustomMessageBox.showerror(self.root, "오류", "pdf_converter 모듈을 찾을 수 없습니다")
         except (RuntimeError, ValueError) as e:
-            self._log(f"X Batch error: {e}")
-            CustomMessageBox.showerror(self.root, "Error", f"Batch error:\n{e}")
+            self._log(f"❌ 일괄 변환 오류: {e}")
+            CustomMessageBox.showerror(self.root, "오류", f"일괄 변환 오류:\n{e}")
         
         self._set_status("Ready")
     
     def _analyze_pdf(self) -> None:
-        """Analyze PDF structure"""
+        """Analyze PDF/Image structure"""
         from ..utils.constants import tk, ttk, filedialog, BOTH
         
         pdf_path = filedialog.askopenfilename(
-            title="Select PDF to Analyze",
-            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")]
+            title="PDF/이미지 분석",
+            filetypes=[
+                ("지원 파일", "*.pdf *.png *.jpg *.jpeg *.bmp *.tif *.tiff"),
+                ("PDF files", "*.pdf"),
+                ("이미지 (캡처)", "*.png *.jpg *.jpeg *.bmp *.tif *.tiff"),
+                ("All files", "*.*"),
+            ]
         )
         
         if not pdf_path:

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.8.9'
+__version__ = '5.9.0'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.9.0': '📄 v5.9.0: PDF/이미지 변환 통합 — 캡처 이미지(PNG/JPG/BMP/TIFF) → Excel/Word 변환 지원, 일괄 변환 이미지 포함, D/O 파싱 하이브리드(Arrival Date+Free Time), Gemini thinking model 대응, 입고 엔진·드래그앤드롭·테마·키바인딩 개선',
     '5.8.9': '🎯 v5.8.9: 원스톱 입고 한 화면 처리(업로드2 제거)·파싱 실시간 미리보기·DateEntry gui_bootstrap 통일·Location 엑셀 양식2 UID 컬럼 지원',
     '5.8.8': '🎨 v5.8.8: UI Phase3·Phase4 — 8px 그리드(Spacing)·폰트 3단계(FontScale), 다이얼로그 크기 표준화(DialogSize·center_dialog)',
     '5.8.7': '🎨 v5.8.7: UI 마스터 플랜·Phase1/2 적용 — 기본 컬럼 8개, 트리뷰 36px·제브라, 색상 팔레트(ThemeColors) 통일, 톤백 SAP NO 접미사 제거 표시 (※이전 v8.7.0 푸시는 버전 표기 오류)',

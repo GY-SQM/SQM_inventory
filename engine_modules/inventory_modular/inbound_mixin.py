@@ -305,8 +305,11 @@ class InboundMixin(InventoryBaseMixin):
         lot_data['arrival_date'] = arrival_date.strftime('%Y-%m-%d') if arrival_date else ''
         
         # con_return = 컨테이너 반납일 (D/O의 Free_Time 컬럼 = 반납일). free_time = (con_return - arrival_date) 일수
-        con_return_str = packing.get('free_time_date', '') or (
-            do_data.get('free_time_date', '') if do_data else ''
+        # con_return / free_time_date 혼용 대응: 둘 다 확인
+        con_return_str = (
+            packing.get('con_return', '') or
+            packing.get('free_time_date', '') or
+            (do_data.get('free_time_date', '') if do_data else '')
         )
         con_return_date = self._safe_parse_date(con_return_str) if con_return_str else None
         lot_data['con_return'] = con_return_date.strftime('%Y-%m-%d') if con_return_date else ''

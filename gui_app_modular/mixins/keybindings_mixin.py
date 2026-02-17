@@ -65,8 +65,9 @@ class KeyBindingsMixin:
         # Help
         self.root.bind('<F1>', self._show_help)
         
-        # 테스트 DB 초기화 — Ctrl+Shift+X (다른 프로그램과 겹치지 않도록 Esc → Shift+X)
-        self.root.bind('<Control-Shift-X>', self._show_test_db_reset_popup)
+        # 테스트 DB 초기화 단축키 제거 — Ctrl+Shift+X로 실수 시 DB 파일(.db/.shm/.wal) 삭제 사고 방지.
+        # 초기화는 메뉴(데이터베이스 > 테스트 DB 초기화)에서만 호출 가능.
+        # self.root.bind('<Control-Shift-X>', self._show_test_db_reset_popup)
         
         self._log("Keyboard shortcuts configured")
     
@@ -271,7 +272,7 @@ v2.9.91 - SQM Inventory System
             self._log(f"Copied {len(lines)} rows to clipboard")
 
     def _show_test_db_reset_popup(self, event=None) -> None:
-        """Ctrl+Shift+X로 호출 — 테스트 DB 초기화 전 확인 팝업 (정말 지울지 사용자에게 물어봄)"""
+        """테스트 DB 초기화 전 확인 팝업 (메뉴에서 호출, 단축키는 실수 방지로 제거됨)"""
         from ..utils.constants import tk, ttk
         popup = tk.Toplevel(self.root)
         popup.title("테스트 DB 초기화")

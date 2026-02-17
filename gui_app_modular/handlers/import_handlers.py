@@ -4,15 +4,35 @@ SQM 재고관리 - Excel 입고 처리 핸들러
 =====================================
 
 v2.9.91 - gui_app.py에서 분리
+v5.8.9: 3가지 매핑(수동 입고/빠른 출고/위치) 시 템플릿 열기 vs 파일 업로드 선택
 
 Excel 파일 입고 처리, 컬럼 자동 인식, 데이터 변환
 """
 
 import logging
+import os
+import tempfile
 from ..utils.ui_constants import CustomMessageBox
-from typing import Dict
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _open_file_with_default_app(file_path: str) -> bool:
+    """OS 기본 앱으로 파일 열기 (엑셀 템플릿 등)."""
+    try:
+        if os.name == 'nt':
+            os.startfile(os.path.normpath(file_path))
+            return True
+        import subprocess
+        if hasattr(os, 'uname') and getattr(os.uname(), 'sysname', '') == 'Darwin':
+            subprocess.run(['open', file_path], check=False)
+        else:
+            subprocess.run(['xdg-open', file_path], check=False)
+        return True
+    except Exception as e:
+        logger.debug(f"파일 열기 실패: {e}")
+        return False
 
 
 class ImportHandlersMixin:
@@ -20,19 +40,99 @@ class ImportHandlersMixin:
     Excel 입고 처리 Mixin
     
     SQMInventoryApp 클래스에 mix-in 됩니다.
+    v5.8.9: 3가지 매핑(수동 입고/빠른 출고/위치) 시 [템플릿 열기] vs [파일 업로드] 선택.
     """
+    
+    def _show_template_or_upload_choice(self, title: str, kind: str) -> Optional[str]:
+        """템플릿 열기(프로그램이 생성·열기) vs 파일 업로드 선택. 반환: 'template' | 'upload' | None(취소)."""
+        import tkinter as tk
+        from tkinter import ttk
+        from ..utils.ui_constants import center_dialog, ThemeColors, DialogSize
+        result = [None]
+        win = tk.Toplevel(self.root)
+        win.title(title)
+        win.resizable(False, False)
+        win.transient(self.root)
+        win.grab_set()
+        win.geometry(DialogSize.get_geometry(self.root, 'small'))
+        center_dialog(win, self.root)
+        f = ttk.Frame(win, padding=20)
+        f.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(f, text="다음 중 선택하세요.", font=('맑은 고딕', 12, 'bold')).pack(anchor='w', pady=(0, 12))
+        ttk.Label(f, text="① 프로그램이 엑셀 템플릿을 만들어 열어줍니다.\n   → 열린 시트에 복사·붙여넣기 하거나 직접 입력한 뒤 저장하고,\n   아래 [파일 업로드]에서 해당 파일을 선택하면 됩니다.",
+                  font=('맑은 고딕', 10), wraplength=400).pack(anchor='w', pady=(0, 8))
+        ttk.Label(f, text="② 이미 채운 엑셀 파일을 바로 업로드합니다.",
+                  font=('맑은 고딕', 10), wraplength=400).pack(anchor='w', pady=(0, 16))
+        btn_f = ttk.Frame(f)
+        btn_f.pack(fill=tk.X)
+        def on_template():
+            result[0] = 'template'
+            win.destroy()
+        def on_upload():
+            result[0] = 'upload'
+            win.destroy()
+        ttk.Button(btn_f, text="📄 템플릿 열기", command=on_template, width=22).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_f, text="📤 엑셀 파일 업로드", command=on_upload, width=22).pack(side=tk.LEFT)
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        win.wait_window(win)
+        return result[0]
+    
+    def _create_and_open_template(self, kind: str) -> None:
+        """kind: inbound | outbound_tonbag | location. 템플릿 생성 → 저장 → 기본 앱으로 열기."""
+        from ..utils.constants import filedialog
+        try:
+            import openpyxl
+        except ImportError:
+            CustomMessageBox.showerror(self.root, "오류", "openpyxl이 필요합니다.\npip install openpyxl")
+            return
+        if kind == 'inbound':
+            file_path = filedialog.asksaveasfilename(
+                title="입고 템플릿 저장 후 열기",
+                defaultextension=".xlsx",
+                initialfile="입고_템플릿.xlsx",
+                filetypes=[("Excel files", "*.xlsx")]
+            )
+            if file_path and self._write_inbound_template_to(file_path):
+                if _open_file_with_default_app(file_path):
+                    CustomMessageBox.showinfo(self.root, "템플릿 열림",
+                        "입고 템플릿을 열었습니다.\n데이터를 채운 뒤 저장하고,\n[Excel 입고] → [엑셀 파일 업로드]에서 해당 파일을 선택하세요.")
+        elif kind == 'outbound_tonbag':
+            file_path = filedialog.asksaveasfilename(
+                title="출고 템플릿 저장 후 열기",
+                defaultextension=".xlsx",
+                initialfile="출고_톤백수_템플릿.xlsx",
+                filetypes=[("Excel files", "*.xlsx")]
+            )
+            if file_path and self._write_outbound_tonbag_template_to(file_path):
+                if _open_file_with_default_app(file_path):
+                    CustomMessageBox.showinfo(self.root, "템플릿 열림",
+                        "출고 템플릿을 열었습니다.\n데이터를 채운 뒤 저장하고,\n[Excel 입고] → [엑셀 파일 업로드]에서 해당 파일을 선택하세요.")
+        elif kind == 'location':
+            file_path = filedialog.asksaveasfilename(
+                title="위치 매핑 템플릿 저장 후 열기",
+                defaultextension=".xlsx",
+                initialfile="위치_매핑_템플릿.xlsx",
+                filetypes=[("Excel files", "*.xlsx")]
+            )
+            if file_path and self._write_location_template_to(file_path):
+                if _open_file_with_default_app(file_path):
+                    CustomMessageBox.showinfo(self.root, "템플릿 열림",
+                        "위치 매핑 템플릿을 열었습니다.\n데이터를 채운 뒤 저장하고,\n[톤백 위치 매핑] → [엑셀 파일 업로드]에서 해당 파일을 선택하세요.")
     
     def _bulk_import_inventory_simple(self, file_path: str = None) -> None:
         """
-        간단한 Excel 입고 처리 (파일 선택 다이얼로그 포함)
-        
-        Args:
-            file_path: Excel 파일 경로 (None이면 파일 선택 다이얼로그 표시)
+        간단한 Excel 입고 처리.
+        v5.8.9: file_path가 None이면 [템플릿 열기] vs [파일 업로드] 선택 후 진행.
         """
         from ..utils.constants import filedialog
         
-        # 파일 경로가 없으면 다이얼로그로 선택
         if file_path is None:
+            choice = self._show_template_or_upload_choice("수동 입고", "inbound")
+            if choice is None:
+                return
+            if choice == 'template':
+                self._create_and_open_template('inbound')
+                return
             file_path = filedialog.askopenfilename(
                 title="입고 Excel 파일 선택",
                 filetypes=[
@@ -90,8 +190,8 @@ class ImportHandlersMixin:
             inbound_score = sum(1 for kw in inbound_keywords 
                                if any(kw in c for c in columns_lower))
             
-            # 출고 Excel 특징: outbound, customer, destination
-            outbound_keywords = ['outbound', 'customer', 'destination', 'ship', 'deliver']
+            # 출고 Excel 특징: outbound, customer, destination, tonbag_count(간편 출고 템플릿)
+            outbound_keywords = ['outbound', 'customer', 'destination', 'ship', 'deliver', 'tonbag']
             outbound_score = sum(1 for kw in outbound_keywords 
                                 if any(kw in c for c in columns_lower))
             
@@ -116,11 +216,17 @@ class ImportHandlersMixin:
             logger.error(f"Excel 타입 감지 오류: {e}")
             return 'unknown'
     
+    def _is_manual_inbound_template(self, df) -> bool:
+        """수동 입고 템플릿 여부: 2행이 DB필드명(lot_no, net_weight, mxbg_pallet)인 경우"""
+        cols = [str(c).strip().lower() for c in df.columns]
+        return ('lot_no' in cols or 'lot no' in cols) and ('net_weight' in cols or 'net weight' in cols) and ('mxbg_pallet' in cols or 'mxbg' in cols)
+
     def _import_inbound_excel_auto(self, file_path: str) -> None:
         """
         입고 Excel 자동 처리
         
-        컬럼 자동 인식 + 데이터 변환 + DB 저장
+        - 수동 입고 템플릿(2행=DB필드명)이면 process_inbound 호출 → 톤백+샘플 자동 생성
+        - 그 외 레거시는 add_inventory_from_dict
         """
         from ..utils.constants import pd, HAS_PANDAS, HAS_COLUMN_ALIASES, ColumnMapper
         from ..utils.safe_utils import safe_str, safe_float, safe_date
@@ -130,6 +236,12 @@ class ImportHandlersMixin:
             return
         
         try:
+            # 수동 입고 템플릿: 2행이 헤더(DB필드명)
+            df_header1 = pd.read_excel(file_path, header=1)
+            if not df_header1.empty and self._is_manual_inbound_template(df_header1):
+                self._import_inbound_manual_template(file_path, df_header1)
+                return
+            
             df = pd.read_excel(file_path)
             
             if df.empty:
@@ -266,6 +378,100 @@ class ImportHandlersMixin:
             logger.error(f"입고 Excel 처리 오류: {e}")
             CustomMessageBox.showerror(self.root, "오류", f"입고 처리 오류: {e}")
     
+    def _import_inbound_manual_template(self, file_path: str, df) -> None:
+        """수동 입고 템플릿 → process_inbound 호출 (1 LOT = N톤백+1샘플)."""
+        from ..utils.constants import pd, HAS_PANDAS
+        from ..utils.safe_utils import safe_str, safe_float, safe_date
+        
+        df = df.copy()
+        df.columns = [str(c).strip().lower().replace(' ', '_').rstrip('*').strip('_') for c in df.columns]
+        
+        def _get(row, *keys):
+            for k in keys:
+                for c in df.columns:
+                    if c == k or (c and c.replace('_', '') == k.replace('_', '')):
+                        return row.get(c)
+            return None
+        
+        def _row_to_packing(row) -> dict:
+            net_kg = safe_float(_get(row, 'net_weight', 'netweight'), 0)
+            gross_kg = safe_float(_get(row, 'gross_weight', 'grossweight')) or net_kg
+            mxbg = int(safe_float(_get(row, 'mxbg_pallet', 'mxbg'), 10) or 10)
+            return {
+                'lot_no': safe_str(_get(row, 'lot_no', 'lotno') or '').strip(),
+                'sap_no': safe_str(_get(row, 'sap_no', 'sapno') or ''),
+                'bl_no': safe_str(_get(row, 'bl_no', 'blno') or ''),
+                'container_no': safe_str(_get(row, 'container_no', 'containerno') or ''),
+                'product': safe_str(_get(row, 'product') or '') or 'LITHIUM CARBONATE',
+                'product_code': safe_str(_get(row, 'product_code') or ''),
+                'lot_sqm': safe_str(_get(row, 'lot_sqm') or ''),
+                'mxbg_pallet': mxbg,
+                'net_weight': net_kg,
+                'gross_weight': gross_kg,
+                'salar_invoice_no': safe_str(_get(row, 'salar_invoice_no') or ''),
+                'ship_date': safe_date(_get(row, 'ship_date') or ''),
+                'arrival_date': safe_date(_get(row, 'arrival_date') or ''),
+                'free_time': int(safe_float(_get(row, 'free_time') or 0) or 0),
+                'warehouse': safe_str(_get(row, 'warehouse') or '') or '광양',
+            }
+        
+        rows_valid = []
+        missing_rows = []  # 필수 누락 행 번호 (데이터 입력했는데 LOT/순중량 비어 있는 행)
+        for idx, row in df.iterrows():
+            packing = _row_to_packing(row)
+            excel_row = idx + 4
+            has_any = bool(packing['lot_no'] or _get(row, 'product') or packing.get('mxbg_pallet') or (packing['net_weight'] or 0) > 0)
+            if has_any and (not packing['lot_no'] or (packing['net_weight'] or 0) <= 0):
+                missing_rows.append(excel_row)
+                continue
+            if not packing['lot_no'] or (packing['net_weight'] or 0) <= 0:
+                continue
+            rows_valid.append((excel_row, packing))
+        
+        if missing_rows:
+            CustomMessageBox.showerror(
+                self.root, "필수 항목 누락",
+                f"다음 행에 필수 항목(LOT 번호, 순중량)이 비어 있거나 0입니다:\n\n"
+                f"행 {', '.join(map(str, missing_rows[:15]))}"
+                + (f" 외 {len(missing_rows)-15}건" if len(missing_rows) > 15 else "")
+                + "\n\n엑셀에서 확인한 뒤 다시 업로드하세요."
+            )
+            return
+        if not rows_valid:
+            CustomMessageBox.showwarning(self.root, "경고", "유효한 입고 데이터가 없습니다.\nLOT 번호와 순중량(NET Kg)을 확인하세요.")
+            return
+        
+        preview_lines = []
+        for i, (rnum, p) in enumerate(rows_valid[:5]):
+            preview_lines.append(f"  {i+1}. 행{rnum}: LOT {p['lot_no']} | SAP {p['sap_no']} | {p['net_weight']:.0f}kg | 톤백 {p['mxbg_pallet']}개")
+        if len(rows_valid) > 5:
+            preview_lines.append(f"  ... 외 {len(rows_valid)-5}건")
+        msg = f"수동 입고 템플릿 인식: 총 {len(rows_valid)}건\n\n미리보기:\n" + "\n".join(preview_lines) + "\n\nDB에 반영(process_inbound) 하시겠습니까?"
+        if not CustomMessageBox.askyesno(self.root, "입고 확인", msg):
+            return
+        
+        self._log(f"📥 수동 입고 템플릿: {len(rows_valid)}건 → process_inbound")
+        added_lots = 0
+        added_tonbags = 0
+        errors = []
+        for rnum, packing in rows_valid:
+            result = self.engine.process_inbound(packing)
+            if result.get('success'):
+                added_lots += 1
+                added_tonbags += result.get('created_tonbags', 0)
+            else:
+                errors.append(f"행{rnum} {packing.get('lot_no')}: {result.get('message', '')}; {result.get('errors', [])}")
+        
+        if hasattr(self, '_refresh_inventory'):
+            self._refresh_inventory()
+        if hasattr(self, '_refresh_tonbag'):
+            self._refresh_tonbag()
+        
+        result_msg = f"✅ 입고 완료: {added_lots}개 LOT, {added_tonbags}개 톤백 생성"
+        if errors:
+            result_msg += f"\n\n❌ 실패 {len(errors)}건:\n" + "\n".join(errors[:5])
+        CustomMessageBox.showinfo(self.root, "입고 결과", result_msg)
+    
     def _get_basic_column_mapping(self, columns) -> Dict[str, str]:
         """기본 컬럼 매핑 (Column Alias 없을 때)"""
         col_map = {}
@@ -292,9 +498,9 @@ class ImportHandlersMixin:
         return col_map
     
     def _import_outbound_excel_auto(self, file_path: str) -> None:
-        """출고 Excel 자동 처리"""
+        """출고 Excel 자동 처리. 톤백 수 컬럼 있으면 FIFO N개 합산→weight_kg, 없으면 LOT 전량."""
         from ..utils.constants import pd, HAS_PANDAS
-        from ..utils.safe_utils import safe_str
+        from ..utils.safe_utils import safe_str, safe_float
         
         if not HAS_PANDAS:
             CustomMessageBox.showerror(self.root, "오류", "pandas가 설치되지 않았습니다.")
@@ -302,89 +508,299 @@ class ImportHandlersMixin:
         
         try:
             df = pd.read_excel(file_path)
-            
             if df.empty:
                 CustomMessageBox.showwarning(self.root, "경고", "빈 Excel 파일입니다.")
                 return
+            df.columns = [str(c).strip().lower().replace(' ', '_').rstrip('*').strip('_') for c in df.columns]
+            cols = list(df.columns)
+            col_lot = next((c for c in cols if c in ('lot_no', 'lotno', 'lot')), None) or (cols[0] if cols else None)
+            col_customer = next((c for c in cols if c in ('customer', '고객', 'sold_to', 'destination') or (c and 'customer' in c)), None)
+            col_tonbag = next((c for c in cols if c and ('tonbag' in c or '톤백' in c) and ('count' in c or '수' in c)), None)
             
-            self._log(f"📤 출고 Excel 로드: {len(df)}행")
+            # 필수 항목 사전 검증: 데이터가 있는데 LOT 또는 톤백 수가 비어 있으면 에러
+            missing_outbound_rows = []
+            for idx, row in df.iterrows():
+                excel_row = idx + 2
+                lot = safe_str(row.get(col_lot, '') if col_lot else '').strip()
+                n = int(safe_float(row.get(col_tonbag, 0) or 0)) if col_tonbag and col_tonbag in row.index else 1
+                has_any = bool(lot or (col_customer and row.get(col_customer)) or (col_tonbag and row.get(col_tonbag) is not None))
+                if has_any and (not lot or (col_tonbag and n <= 0)):
+                    missing_outbound_rows.append(excel_row)
+            if missing_outbound_rows:
+                CustomMessageBox.showerror(
+                    self.root, "필수 항목 누락",
+                    f"다음 행에 LOT 번호 또는 출고 톤백 수가 비어 있습니다:\n\n"
+                    f"행 {', '.join(map(str, missing_outbound_rows[:15]))}"
+                    + (f" 외 {len(missing_outbound_rows)-15}건" if len(missing_outbound_rows) > 15 else "")
+                    + "\n\n확인한 뒤 다시 업로드하세요."
+                )
+                return
             
-            # 컬럼 매핑
-            col_map = self._get_basic_column_mapping(df.columns)
-            
-            # 출고 처리
+            self._log(f"📤 출고 Excel 로드: {len(df)}행 (톤백수모드={bool(col_tonbag)})")
             processed = 0
             errors = []
             
             for idx, row in df.iterrows():
                 try:
-                    lot_no = safe_str(row.get(col_map.get('lot_no', 'lot_no')))
+                    lot_no = safe_str(row.get(col_lot, '')).strip()
                     if not lot_no:
                         continue
+                    customer = safe_str(row.get(col_customer, '')).strip() if col_customer else ''
                     
-                    destination = safe_str(row.get('destination', row.get('customer', '')))
-
-                    # v5.7.6: process_outbound(allocation_data) 시그니처 통일 — Excel에 무게 없으면 LOT 전량 출고
-                    lot_row = self.engine.db.fetchone(
-                        "SELECT current_weight FROM inventory WHERE lot_no = ?", (lot_no,)
-                    )
-                    if not lot_row:
-                        errors.append(f"행 {idx+2}: LOT 없음 — {lot_no}")
-                        continue
-                    weight_kg = float(lot_row.get('current_weight') or 0)
-                    if weight_kg <= 0:
-                        errors.append(f"행 {idx+2}: 가용 재고 0 — {lot_no}")
-                        continue
-                    allocation_data = [{
+                    if col_tonbag and col_tonbag in row.index:
+                        n = int(safe_float(row.get(col_tonbag, 0)) or 0)
+                        if n <= 0:
+                            errors.append(f"행 {idx+2}: 톤백 수 0 — {lot_no}")
+                            continue
+                        tonbags = self.engine.db.fetchall(
+                            """SELECT id, weight FROM inventory_tonbag
+                               WHERE lot_no = ? AND status = 'AVAILABLE' AND COALESCE(is_sample, 0) = 0
+                               ORDER BY sub_lt LIMIT ?""",
+                            (lot_no, n)
+                        )
+                        if not tonbags or len(tonbags) < n:
+                            errors.append(f"행 {idx+2}: 가용 톤백 부족 — {lot_no} (요청 {n}개, 가용 {len(tonbags) if tonbags else 0}개)")
+                            continue
+                        weight_kg = sum(float(t.get('weight') or 0) for t in tonbags[:n])
+                    else:
+                        lot_row = self.engine.db.fetchone(
+                            "SELECT current_weight FROM inventory WHERE lot_no = ?", (lot_no,)
+                        )
+                        if not lot_row:
+                            errors.append(f"행 {idx+2}: LOT 없음 — {lot_no}")
+                            continue
+                        weight_kg = float(lot_row.get('current_weight') or 0)
+                        if weight_kg <= 0:
+                            errors.append(f"행 {idx+2}: 가용 재고 0 — {lot_no}")
+                            continue
+                    
+                    result = self.engine.process_outbound([{
                         'lot_no': lot_no,
                         'weight_kg': weight_kg,
-                        'customer': destination,
-                    }]
-                    result = self.engine.process_outbound(allocation_data)
+                        'customer': customer,
+                    }])
                     if result.get('success'):
                         processed += 1
                     else:
                         errors.append(f"행 {idx+2}: {result.get('message')}")
-                    
                 except (ValueError, TypeError, AttributeError) as e:
                     errors.append(f"행 {idx+2}: {str(e)}")
             
-            # 결과 보고
             self._log(f"✅ 출고 완료: {processed}건")
-            
             if errors:
                 error_msg = '\n'.join(errors[:10])
-                CustomMessageBox.showwarning(self.root, "일부 오류", 
+                CustomMessageBox.showwarning(self.root, "일부 오류",
                     f"출고 완료: {processed}건\n\n오류:\n{error_msg}")
             else:
                 CustomMessageBox.showinfo(self.root, "✅ 출고 완료", f"출고 처리 완료: {processed}건")
-            
-            # UI 새로고침
-            self._refresh_inventory()
-            self._refresh_tonbag()
-            
+            if hasattr(self, '_refresh_inventory'):
+                self._refresh_inventory()
+            if hasattr(self, '_refresh_tonbag'):
+                self._refresh_tonbag()
         except (RuntimeError, ValueError) as e:
             logger.error(f"출고 Excel 처리 오류: {e}")
             CustomMessageBox.showerror(self.root, "오류", f"출고 처리 오류: {e}")
 
     # ═══════════════════════════════════════════════════════
+    # v5.8.9: 출고 템플릿(톤백 수) 다운로드
+    # ═══════════════════════════════════════════════════════
+    
+    def _write_outbound_tonbag_template_to(self, file_path: str) -> bool:
+        """출고 템플릿 = 톤백(언로케이션) 리스트와 동일 형식. 필수(lot_no, tonbag_count, customer)만 색상 표시."""
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "출고 데이터"
+            headers = self.TONBAG_TEMPLATE_COLUMNS
+            required_outbound = {'lot_no', 'tonbag_count', 'customer'}
+            header_font = Font(bold=True, color="FFFFFF", size=11)
+            required_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
+            optional_fill = PatternFill(start_color="7F8C8D", end_color="7F8C8D", fill_type="solid")
+            sample_fill = PatternFill(start_color="EBF5FB", end_color="EBF5FB", fill_type="solid")
+            thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+            ncols = len(headers)
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+            ws['A1'] = "출고 템플릿 v5.8.9 — 톤백 리스트와 동일 형식. 진한색 컬럼은 필수(LOT NO, 출고 톤백 수, 고객명). 2행=DB필드명."
+            ws['A1'].font = Font(bold=True, size=11, color="2C3E50")
+            ws.row_dimensions[1].height = 28
+            for col, (db_field, display, width, req_out, _) in enumerate(headers, 1):
+                ws.cell(row=2, column=col, value=db_field)
+                ws.cell(row=2, column=col).font = Font(size=8, color="999999")
+            ws.row_dimensions[2].height = 14
+            for col, (db_field, display, width, req_out, _) in enumerate(headers, 1):
+                cell = ws.cell(row=3, column=col, value=display + (' *' if db_field in required_outbound else ''))
+                cell.font = header_font
+                cell.fill = required_fill if db_field in required_outbound else optional_fill
+                cell.alignment = Alignment(horizontal='center')
+                cell.border = thin_border
+                ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = min(width, 24)
+            for row in range(4, 8):
+                for c in range(1, ncols + 1):
+                    cell = ws.cell(row=row, column=c, value='')
+                    cell.fill = sample_fill
+                    cell.border = thin_border
+            wb.save(file_path)
+            self._log(f"✅ 출고 템플릿 저장: {file_path}")
+            return True
+        except ImportError:
+            CustomMessageBox.showerror(self.root, "오류", "openpyxl이 필요합니다.\npip install openpyxl")
+            return False
+        except Exception as e:
+            logger.error(f"출고 템플릿 생성 오류: {e}")
+            CustomMessageBox.showerror(self.root, "오류", f"템플릿 저장 실패:\n{e}")
+            return False
+    
+    def _download_outbound_tonbag_template(self) -> None:
+        """간편 출고 템플릿(톤백 수) 생성 — lot_no, tonbag_count, customer. 업로드 시 process_outbound."""
+        from ..utils.constants import filedialog
+        file_path = filedialog.asksaveasfilename(
+            title="간편 출고 템플릿 저장",
+            defaultextension=".xlsx",
+            initialfile="출고_톤백수_템플릿.xlsx",
+            filetypes=[("Excel files", "*.xlsx")]
+        )
+        if not file_path:
+            return
+        if self._write_outbound_tonbag_template_to(file_path):
+            CustomMessageBox.showinfo(self.root, "완료",
+                f"간편 출고 템플릿이 저장되었습니다.\n\n파일: {file_path}\n\n"
+                "LOT 번호, 출고 톤백 수, 고객명을 채운 뒤\n메뉴 > Excel 입고에서 해당 파일을 선택하면 출고로 처리됩니다.")
+    
+    def _write_location_template_to(self, file_path: str) -> bool:
+        """위치 매핑 템플릿 = 톤백(언로케이션) 리스트와 동일 형식. 필수(lot_no, tonbag_no, location)만 색상 표시. uid 선택."""
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "위치 데이터"
+            headers = self.TONBAG_TEMPLATE_COLUMNS
+            required_location = {'lot_no', 'tonbag_no', 'location'}
+            header_font = Font(bold=True, color="FFFFFF", size=11)
+            required_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
+            optional_fill = PatternFill(start_color="7F8C8D", end_color="7F8C8D", fill_type="solid")
+            sample_fill = PatternFill(start_color="EBF5FB", end_color="EBF5FB", fill_type="solid")
+            thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+            ncols = len(headers)
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+            ws['A1'] = "위치 매핑 템플릿 v5.8.9 — 톤백 리스트와 동일 형식. 진한색 컬럼은 필수(LOT NO, TONBAG NO, LOCATION). UID 선택. 2행=DB필드명."
+            ws['A1'].font = Font(bold=True, size=11, color="2C3E50")
+            ws.row_dimensions[1].height = 28
+            for col, (db_field, display, width, _, req_loc) in enumerate(headers, 1):
+                ws.cell(row=2, column=col, value=db_field)
+                ws.cell(row=2, column=col).font = Font(size=8, color="999999")
+            ws.row_dimensions[2].height = 14
+            for col, (db_field, display, width, _, req_loc) in enumerate(headers, 1):
+                cell = ws.cell(row=3, column=col, value=display + (' *' if db_field in required_location else ''))
+                cell.font = header_font
+                cell.fill = required_fill if db_field in required_location else optional_fill
+                cell.alignment = Alignment(horizontal='center')
+                cell.border = thin_border
+                ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = min(width, 24)
+            for row in range(4, 8):
+                for c in range(1, ncols + 1):
+                    cell = ws.cell(row=row, column=c, value='')
+                    cell.fill = sample_fill
+                    cell.border = thin_border
+            wb.save(file_path)
+            self._log(f"✅ 위치 템플릿 저장: {file_path}")
+            return True
+        except ImportError:
+            CustomMessageBox.showerror(self.root, "오류", "openpyxl이 필요합니다.\npip install openpyxl")
+            return False
+        except Exception as e:
+            logger.error(f"위치 템플릿 생성 오류: {e}")
+            CustomMessageBox.showerror(self.root, "오류", f"템플릿 저장 실패:\n{e}")
+            return False
+    
+    # ═══════════════════════════════════════════════════════
+    # v5.8.9: 3가지 매핑 — 템플릿 열기 vs 파일 업로드 선택
+    # ═══════════════════════════════════════════════════════
+    
+    def _on_outbound_tonbag_choice(self) -> None:
+        """빠른 출고(톤백 수): [템플릿 열기] vs [파일 업로드] 선택 후 진행."""
+        from ..utils.constants import filedialog
+        choice = self._show_template_or_upload_choice("빠른 출고 (톤백 수)", "outbound_tonbag")
+        if choice is None:
+            return
+        if choice == 'template':
+            self._create_and_open_template('outbound_tonbag')
+            return
+        file_path = filedialog.askopenfilename(
+            title="출고 Excel 파일 선택",
+            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+        )
+        if file_path:
+            self._import_outbound_excel_auto(file_path)
+    
+    def _on_location_mapping_choice(self) -> None:
+        """톤백 위치 매핑: [템플릿 열기] vs [파일 업로드] 선택 후 진행."""
+        choice = self._show_template_or_upload_choice("톤백 위치 매핑", "location")
+        if choice is None:
+            return
+        if choice == 'template':
+            self._create_and_open_template('location')
+            return
+        if hasattr(self, '_import_location_excel'):
+            self._import_location_excel()
+    
+    # ═══════════════════════════════════════════════════════
     # v3.8.4: 입고 샘플 Excel 템플릿 다운로드
     # ═══════════════════════════════════════════════════════
     
-    def _download_inbound_template(self) -> None:
-        """입고용 샘플 Excel 템플릿 생성 및 다운로드"""
-        from ..utils.constants import filedialog
-        
-        file_path = filedialog.asksaveasfilename(
-            title="샘플 Excel 템플릿 저장",
-            defaultextension=".xlsx",
-            initialfile="입고_샘플_템플릿.xlsx",
-            filetypes=[("Excel files", "*.xlsx")]
-        )
-        
-        if not file_path:
-            return
-        
+    # 재고 리스트와 동일한 컬럼 정의 (입고/반품 템플릿 공통). 필수 여부는 케이스별로 다름.
+    INVENTORY_TEMPLATE_COLUMNS = [
+        ('lot_no', 'LOT NO', 120, True),   # 입고 필수
+        ('sap_no', 'SAP NO', 120, False),
+        ('bl_no', 'BL NO', 140, False),
+        ('product', 'PRODUCT', 160, True),  # 입고 필수
+        ('status', 'STATUS', 90, False),
+        ('current_weight', 'Balance(Kg)', 100, False),
+        ('net_weight', 'NET(Kg)', 100, True),  # 입고 필수
+        ('container_no', 'CONTAINER', 130, False),
+        ('mxbg_pallet', 'MXBG', 70, True),  # 입고 필수
+        ('avail_bags', 'Avail', 60, False),
+        ('salar_invoice_no', 'INVOICE NO', 100, False),
+        ('ship_date', 'SHIP DATE', 95, False),
+        ('arrival_date', 'ARRIVAL', 95, False),
+        ('con_return', 'CON RETURN', 95, False),
+        ('free_time', 'FREE TIME', 80, False),
+        ('warehouse', 'WH', 80, False),
+        ('customs', 'CUSTOMS', 90, False),
+        ('initial_weight', 'Inbound(Kg)', 100, False),
+        ('outbound_weight', 'Outbound(Kg)', 100, False),
+    ]
+    # 톤백(언로케이션) 리스트와 동일한 컬럼 정의 (출고/로케이션 템플릿 공통). 필수 여부는 케이스별로 다름.
+    TONBAG_TEMPLATE_COLUMNS = [
+        ('lot_no', 'LOT NO', 120, True, True),
+        ('tonbag_no', 'TONBAG NO', 90, False, True),
+        ('sap_no', 'SAP NO', 120, False, False),
+        ('bl_no', 'BL NO', 140, False, False),
+        ('product', 'PRODUCT', 160, False, False),
+        ('tonbag_status', 'STATUS', 90, False, False),
+        ('current_weight', 'Balance(Kg)', 100, False, False),
+        ('tonbag_uid', 'UID', 150, False, False),
+        ('container_no', 'CONTAINER', 130, False, False),
+        ('location', 'LOCATION', 90, False, True),
+        ('net_weight', 'NET(Kg)', 100, False, False),
+        ('salar_invoice_no', 'INVOICE NO', 100, False, False),
+        ('ship_date', 'SHIP DATE', 95, False, False),
+        ('arrival_date', 'ARRIVAL', 95, False, False),
+        ('con_return', 'CON RETURN', 95, False, False),
+        ('free_time', 'FREE TIME', 80, False, False),
+        ('warehouse', 'WH', 80, False, False),
+        ('customs', 'CUSTOMS', 90, False, False),
+        ('initial_weight', 'Inbound(Kg)', 100, False, False),
+        ('outbound_weight', 'Outbound(Kg)', 100, False, False),
+        ('tonbag_count', '출고 톤백 수', 14, True, False),
+        ('customer', '고객명', 20, True, False),
+    ]
+    # (db_field, display, width, required_outbound, required_location)
+    
+    def _write_inbound_template_to(self, file_path: str) -> bool:
+        """입고 템플릿 = 재고 리스트와 동일 형식. 필수(lot_no, product, mxbg_pallet, net_weight)만 색상 표시."""
         try:
             import openpyxl
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -392,30 +808,9 @@ class ImportHandlersMixin:
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "입고 데이터"
+            headers = self.INVENTORY_TEMPLATE_COLUMNS
+            required_inbound = {'lot_no', 'product', 'mxbg_pallet', 'net_weight'}
             
-            # 헤더 정의 (v3.8.8: 18열 통일, 필수/선택 구분)
-            headers = [
-                ('lot_no',            'LOT NO *',         '필수', 18),
-                ('sap_no',            'SAP NO',           '선택', 15),
-                ('bl_no',             'BL NO',            '선택', 18),
-                ('container_no',      'CONTAINER',        '선택', 16),
-                ('product',           'PRODUCT *',        '필수', 15),
-                ('product_code',      'CODE',             '선택', 10),
-                ('lot_sqm',           'LOT SQM',          '선택', 12),
-                ('mxbg_pallet',       'MXBG *',           '필수', 8),
-                ('net_weight',        'NET(Kg) *',        '필수', 12),
-                ('gross_weight',      'GROSS(Kg)',        '선택', 12),
-                ('salar_invoice_no',  'INVOICE NO',       '선택', 18),
-                ('ship_date',         'SHIP DATE',        '선택', 13),
-                ('arrival_date',      'ARRIVAL',          '선택', 13),
-                ('free_time',         'FREE TIME',        '선택', 10),
-                ('warehouse',         'WH',               '선택', 8),
-                ('stock_date',        'STOCK DATE',       '선택', 13),
-                ('location',          'LOCATION',         '선택', 10),
-                ('remark',            'REMARK',           '선택', 20),
-            ]
-            
-            # 스타일
             header_font = Font(bold=True, color="FFFFFF", size=11)
             required_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
             optional_fill = PatternFill(start_color="7F8C8D", end_color="7F8C8D", fill_type="solid")
@@ -425,82 +820,40 @@ class ImportHandlersMixin:
                 top=Side(style='thin'), bottom=Side(style='thin')
             )
             
-            # 1행: 설명
-            ws.merge_cells('A1:R1')
-            ws['A1'] = "📥 SQM v3.8.8 입고 데이터 템플릿 — * 표시는 필수 항목입니다 (18열)"
-            ws['A1'].font = Font(bold=True, size=12, color="2C3E50")
-            ws.row_dimensions[1].height = 30
+            ncols = len(headers)
+            ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+            ws['A1'] = "입고 템플릿 v5.8.9 — 재고 리스트와 동일 형식. 진한색 컬럼은 필수 입력. 2행=DB필드명. 채운 뒤 Excel 입고로 업로드하세요."
+            ws['A1'].font = Font(bold=True, size=11, color="2C3E50")
+            ws.row_dimensions[1].height = 28
             
-            # 2행: DB 필드명 (숨겨진 매핑 키)
-            for col, (db_field, _, _, _) in enumerate(headers, 1):
-                cell = ws.cell(row=2, column=col, value=db_field)
-                cell.font = Font(size=8, color="999999")
-            ws.row_dimensions[2].height = 15
+            for col, (db_field, display, width, _) in enumerate(headers, 1):
+                ws.cell(row=2, column=col, value=db_field)
+                ws.cell(row=2, column=col).font = Font(size=8, color="999999")
+            ws.row_dimensions[2].height = 14
             
-            # 3행: 표시 헤더
-            for col, (_, display, req, width) in enumerate(headers, 1):
-                cell = ws.cell(row=3, column=col, value=display)
+            for col, (db_field, display, width, _) in enumerate(headers, 1):
+                cell = ws.cell(row=3, column=col, value=display + (' *' if db_field in required_inbound else ''))
                 cell.font = header_font
-                cell.fill = required_fill if req == '필수' else optional_fill
+                cell.fill = required_fill if db_field in required_inbound else optional_fill
                 cell.alignment = Alignment(horizontal='center')
                 cell.border = thin_border
                 col_letter = openpyxl.utils.get_column_letter(col)
-                ws.column_dimensions[col_letter].width = width
+                ws.column_dimensions[col_letter].width = min(width, 20)
             
-            # 4~5행: 샘플 데이터 (18열)
-            samples = [
-                ['SQM20250001', '4500012345', 'MAEU2500001', 'FFAU5000001-1',
-                 'MIC9000', 'LC-B', 'SQM-001', 10, 20000, 20500,
-                 'FA-2025-001', '2025-09-06', '2025-10-17', 25, '광양',
-                 '2025-10-20', 'A-01', '1차 입고'],
-                ['SQM20250002', '4500012346', 'MAEU2500002', 'TCLU3000001-1',
-                 'NICKEL', 'NI-A', 'SQM-002', 8, 15000, 15300,
-                 'FA-2025-002', '2025-09-06', '2025-10-17', 25, '광양',
-                 '2025-10-22', 'B-02', ''],
-            ]
-            
-            for row_idx, sample in enumerate(samples, 4):
-                for col, val in enumerate(sample, 1):
-                    cell = ws.cell(row=row_idx, column=col, value=val)
+            for row in range(4, 8):
+                for c in range(1, ncols + 1):
+                    cell = ws.cell(row=row, column=c, value='')
                     cell.fill = sample_fill
                     cell.border = thin_border
             
-            # 안내 시트 (v3.8.8: 18열 가이드)
             ws2 = wb.create_sheet("안내")
-            guides = [
-                ("필드", "설명", "형식", "예시"),
-                ("lot_no", "LOT 번호 (필수, 고유값)", "텍스트", "SQM20250001"),
-                ("sap_no", "SAP 주문번호", "텍스트", "4500012345"),
-                ("bl_no", "선하증권 번호", "텍스트", "MAEU2500001"),
-                ("container_no", "컨테이너 번호", "텍스트", "FFAU5000001-1"),
-                ("product", "제품명 (필수)", "텍스트", "MIC9000"),
-                ("product_code", "제품 코드", "텍스트", "LC-B"),
-                ("lot_sqm", "LOT SQM 번호", "텍스트", "SQM-001"),
-                ("mxbg_pallet", "맥시백(톤백) 수 (필수)", "정수", "10"),
-                ("net_weight", "순중량 kg (필수)", "숫자", "20000"),
-                ("gross_weight", "총중량 kg", "숫자", "20500"),
-                ("salar_invoice_no", "인보이스 번호", "텍스트", "FA-2025-001"),
-                ("ship_date", "선적일", "날짜", "2025-09-06"),
-                ("arrival_date", "입항일", "날짜", "2025-10-17"),
-                ("free_time", "프리타임 (일)", "정수", "25"),
-                ("warehouse", "창고", "텍스트", "광양"),
-                ("stock_date", "입고일", "날짜", "2025-10-20"),
-                ("location", "적치 위치", "텍스트", "A-01"),
-                ("remark", "비고", "텍스트", ""),
-            ]
-            for row_idx, (a, b, c, d) in enumerate(guides, 1):
-                ws2.cell(row=row_idx, column=1, value=a)
-                ws2.cell(row=row_idx, column=2, value=b)
-                ws2.cell(row=row_idx, column=3, value=c)
-                ws2.cell(row=row_idx, column=4, value=d)
-                if row_idx == 1:
-                    for col in range(1, 5):
-                        ws2.cell(row=1, column=col).font = Font(bold=True)
-            
-            ws2.column_dimensions['A'].width = 18
-            ws2.column_dimensions['B'].width = 30
-            ws2.column_dimensions['C'].width = 10
-            ws2.column_dimensions['D'].width = 20
+            ws2.cell(row=1, column=1, value="필수 항목(진한색) 없으면 업로드 시 오류가 납니다.")
+            ws2.cell(row=1, column=1).font = Font(bold=True)
+            for i, (field, display, _, req) in enumerate(headers, 2):
+                ws2.cell(row=i, column=1, value=field)
+                ws2.cell(row=i, column=2, value=display + (" (필수)" if req else ""))
+            ws2.column_dimensions['A'].width = 20
+            ws2.column_dimensions['B'].width = 24
             
             try:
                 from gui_app_modular.utils.report_footer import add_gy_logistics_footer
@@ -508,19 +861,31 @@ class ImportHandlersMixin:
             except (ImportError, ModuleNotFoundError) as _e:
                 logger.debug(f'Suppressed: {_e}')
             wb.save(file_path)
-            
-            self._log(f"✅ 샘플 템플릿 저장: {file_path}")
-            CustomMessageBox.showinfo(self.root, "완료",
-                f"샘플 Excel 템플릿이 저장되었습니다.\n\n"
-                f"파일: {file_path}\n\n"
-                "* 표시 항목은 필수입니다.\n"
-                "2행의 DB 필드명은 자동 매핑에 사용됩니다.")
-                
+            self._log(f"✅ 입고 템플릿 저장: {file_path}")
+            return True
         except ImportError:
             CustomMessageBox.showerror(self.root, "오류", "openpyxl 패키지가 필요합니다.\npip install openpyxl")
-        except (ImportError, ModuleNotFoundError) as e:
-            logger.error(f"템플릿 생성 오류: {e}")
+            return False
+        except (ImportError, ModuleNotFoundError, OSError) as e:
+            logger.error(f"입고 템플릿 생성 오류: {e}")
             CustomMessageBox.showerror(self.root, "오류", f"템플릿 생성 실패:\n{e}")
+            return False
+    
+    def _download_inbound_template(self) -> None:
+        """입고용 샘플 Excel 템플릿 생성 및 다운로드 (저장 위치 선택 후 저장)"""
+        from ..utils.constants import filedialog
+        file_path = filedialog.asksaveasfilename(
+            title="샘플 Excel 템플릿 저장",
+            defaultextension=".xlsx",
+            initialfile="입고_샘플_템플릿.xlsx",
+            filetypes=[("Excel files", "*.xlsx")]
+        )
+        if not file_path:
+            return
+        if self._write_inbound_template_to(file_path):
+            CustomMessageBox.showinfo(self.root, "완료",
+                f"입고 템플릿이 저장되었습니다.\n\n파일: {file_path}\n\n"
+                "재고 리스트와 동일 형식. 진한색 컬럼은 필수 입력입니다.\n2행은 DB 필드명(자동 매핑용)입니다.")
 
     # ═══════════════════════════════════════════════════════
     # v3.8.4 A4: Excel 자동 아카이브

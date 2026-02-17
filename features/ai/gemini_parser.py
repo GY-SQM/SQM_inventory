@@ -460,21 +460,22 @@ class GeminiDocumentParser:
             if doc:
                 doc.close()
     
-    def _call_gemini(self, prompt: str, image_bytes: bytes = None) -> str:
+    def _call_gemini(self, prompt: str, image_bytes: bytes = None, mime_type: str = "image/png") -> str:
         """Gemini API 호출
         
         v3.8.4: gemini-2.5-flash thinking model 대응
         - response.text가 빈 경우 candidates[0].content.parts에서 직접 추출
+        - image_bytes: PNG/JPEG 등 캡처 이미지 지원 (mime_type 지정 가능)
         """
         try:
             contents = []
             
             if image_bytes:
-                # 이미지 + 텍스트
+                # 이미지 + 텍스트 (캡처 이미지: image/png, image/jpeg 등)
                 contents.append(
                     types.Part.from_bytes(
                         data=image_bytes,
-                        mime_type="image/png"
+                        mime_type=mime_type
                     )
                 )
             
@@ -1116,23 +1117,9 @@ JSON만 출력하세요."""
     # D/O 파싱
     # =========================================================================
     
-    def parse_do(self, pdf_path: str) -> DOResult:
-        """
-        D/O (Delivery Order) PDF를 Gemini로 파싱
-        v2.9.24: 입항일 추출 강화 - 다양한 키 지원
-        """
-        result = DOResult()
-        
-        try:
-            logger.info(f"[GeminiParser] D/O 파싱 시작: {pdf_path}")
-            
-            images = self._pdf_to_images(pdf_path)
-            if not images:
-                result.error_message = "PDF 이미지 변환 실패"
-                return result
-            
-            # ★★★ v5.8.6.B: 프롬프트 전면 개선 — Ship Date/Arrival Date/Free Time ★★★
-            prompt = """이 D/O(화물인도지시서/발급확인서) 문서를 분석하여 아래 JSON 형식으로 추출해주세요.
+    def _get_do_prompt(self) -> str:
+        """D/O 파싱용 공통 프롬프트 (PDF/캡처 이미지 공유)."""
+        return """이 D/O(화물인도지시서/발급확인서) 문서를 분석하여 아래 JSON 형식으로 추출해주세요.
 오직 JSON만 출력하세요. 설명·마크다운·코드블럭(```) 금지.
 
 ★★★ arrival_date (입항일) — 최우선 추출 필드 ★★★
@@ -1173,8 +1160,9 @@ arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
 1. D/O No는 문서 상단 (예: 241044299)
 2. B/L No는 "MAEU" 접두사가 붙을 수 있음 — 숫자만 추출: 258468669
 3. 컨테이너 목록에서 Container No, Seal No 추출
-4. Free Time 컬럼 값은 실제로 컨테이너 반납일(con_return_date) — 반드시 YYYY-MM-DD로 추출 (누락 시 FREE TIME 일수 계산 불가)
+4. Free Time / 프리타임 컬럼 값 = 컨테이너 반납일(con_return_date). 반드시 YYYY-MM-DD로 추출 (날짜가 아니면 빈 문자열. 누락 시 재고 화면 FREE TIME/CON RETURN 공백)
 5. 반납지는 "반납지" 필드 (예: KRKNYTM). containers[] 안의 각 컨테이너에 con_return_date를 꼭 넣으세요.
+6. 문서에 "프리타임" 또는 "Free Time"으로 된 컬럼이 있으면 그 셀의 날짜(YYYY-MM-DD)를 con_return_date에 넣으세요.
 
 ```json
 {
@@ -1199,68 +1187,94 @@ arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
 
 ★ arrival_date: 빈 문자열("") 금지, null 금지. 찾으면 YYYY-MM-DD, 못 찾으면 "NOT_FOUND"
 ★ all_dates_found: 문서에서 보이는 모든 날짜를 빠짐없이 나열해주세요.
+★ containers[].con_return_date: 각 컨테이너 행의 "Free Time" 또는 "프리타임" 컬럼 값(반납일 YYYY-MM-DD). 문서에 반납일이 하나만 있으면 모든 컨테이너에 같은 날짜를 넣으세요. 누락 시 재고 화면 CON RETURN·FREE TIME이 비게 됩니다.
 모든 컨테이너를 빠짐없이 추출해주세요. JSON만 응답해주세요."""
 
+    def _apply_do_json_to_result(self, result: DOResult, data: Dict) -> None:
+        """JSON 추출 결과를 DOResult에 매핑 (PDF/이미지 공통)."""
+        if not data:
+            return
+        result.do_no = str(data.get('do_no', ''))
+        result.bl_no = str(data.get('bl_no', ''))
+        result.bl_no_full = str(data.get('bl_no_full', ''))
+        result.vessel = data.get('vessel', '')
+        result.voyage = data.get('voyage', '')
+        result.port_of_loading = data.get('port_of_loading', '')
+        result.port_of_discharge = data.get('port_of_discharge', '')
+        result.shipper = data.get('shipper', '')
+        result.consignee = data.get('consignee', '')
+        result.total_weight_kg = float(data.get('total_weight_kg', 0))
+        arrival = (data.get('arrival_date') or data.get('eta_date') or data.get('eta') or
+                  data.get('vessel_arrival') or data.get('eta_busan') or '')
+        _arrival_str = str(arrival).strip() if arrival else ''
+        result.arrival_date = ''
+        if _arrival_str and _arrival_str not in ('NOT_FOUND', 'None', ''):
+            try:
+                from utils.date_utils import normalize_date
+                _d = normalize_date(_arrival_str)
+                if _d:
+                    result.arrival_date = _d.isoformat()
+            except Exception:
+                pass
+            if not result.arrival_date and re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', _arrival_str[:10]):
+                result.arrival_date = _arrival_str[:10]
+        result.all_dates_found = data.get('all_dates_found', [])
+        result.issue_date = data.get('issue_date', '')
+        result.release_date = data.get('release_date', data.get('issue_date', ''))
+        _conts = data.get('containers', [])
+        for cont in _conts:
+            con_return_val = (cont.get('con_return_date', '') or cont.get('free_time_date', '') or
+                            cont.get('free_time', '') or cont.get('con_return', '') or
+                            cont.get('return_date', '') or cont.get('Free_Time', '') or '')
+            if con_return_val and isinstance(con_return_val, str):
+                con_return_val = str(con_return_val).strip()[:10]
+                if not re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', con_return_val):
+                    con_return_val = ''
+            cno = cont.get('container_no', '') or ''
+            result.containers.append(ContainerDetail(
+                container_no=cno,
+                seal_no=cont.get('seal_no', ''),
+                size_type=cont.get('size_type', ''),
+                free_time=con_return_val,
+                return_place=cont.get('return_place', '') or cont.get('return_location', '')
+            ))
+        result.container_numbers = [c.container_no for c in result.containers]
+        result.success = bool(result.bl_no or result.do_no)
+
+    def parse_do(self, pdf_path: str) -> DOResult:
+        """D/O (Delivery Order) PDF를 Gemini로 파싱."""
+        result = DOResult()
+        try:
+            logger.info(f"[GeminiParser] D/O 파싱 시작: {pdf_path}")
+            images = self._pdf_to_images(pdf_path)
+            if not images:
+                result.error_message = "PDF 이미지 변환 실패"
+                return result
+            prompt = self._get_do_prompt()
             response_text = self._call_gemini(prompt, images[0])
             result.raw_response = response_text
-            
             data = self._extract_json(response_text)
-            
-            if data:
-                result.do_no = str(data.get('do_no', ''))
-                result.bl_no = str(data.get('bl_no', ''))
-                result.bl_no_full = str(data.get('bl_no_full', ''))
-                result.vessel = data.get('vessel', '')
-                result.voyage = data.get('voyage', '')
-                result.port_of_loading = data.get('port_of_loading', '')
-                result.port_of_discharge = data.get('port_of_discharge', '')
-                result.shipper = data.get('shipper', '')
-                result.consignee = data.get('consignee', '')
-                result.total_weight_kg = float(data.get('total_weight_kg', 0))
-                
-                # ★★★ v5.8.6.B: arrival_date 다중 키 지원 + all_dates_found ★★★
-                # ★★★ v5.8.8: 날짜가 아닌 값(예: '광양' 등 항구명)이 들어오면 빈값 — ARRIVAL 컬럼 혼동 방지
-                arrival = (data.get('arrival_date') or 
-                          data.get('eta_date') or 
-                          data.get('eta') or 
-                          data.get('vessel_arrival') or
-                          data.get('eta_busan') or '')
-                _arrival_str = str(arrival).strip() if arrival else ''
-                result.arrival_date = ''
-                if _arrival_str and _arrival_str not in ('NOT_FOUND', 'None', ''):
-                    try:
-                        from utils.date_utils import normalize_date
-                        _d = normalize_date(_arrival_str)
-                        if _d:
-                            result.arrival_date = _d.isoformat()
-                    except Exception:
-                        pass
-                    if not result.arrival_date and re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', _arrival_str[:10]):
-                        result.arrival_date = _arrival_str[:10]
-                result.all_dates_found = data.get('all_dates_found', [])
-                
-                result.issue_date = data.get('issue_date', '')
-                result.release_date = data.get('release_date', data.get('issue_date', ''))
-                
-                # 컨테이너 상세 정보
-                for cont in data.get('containers', []):
-                    result.containers.append(ContainerDetail(
-                        container_no=cont.get('container_no', ''),
-                        seal_no=cont.get('seal_no', ''),
-                        size_type=cont.get('size_type', ''),
-                        free_time=cont.get('con_return_date', '') or cont.get('free_time', ''),
-                        return_place=cont.get('return_place', '')
-                    ))
-                
-                result.container_numbers = [c.container_no for c in result.containers]
-                result.success = bool(result.bl_no or result.do_no)
-            
+            self._apply_do_json_to_result(result, data)
             logger.info(f"[GeminiParser] D/O 완료: BL={result.bl_no}")
-            
         except (ValueError, TypeError, AttributeError) as e:
             result.error_message = str(e)
             logger.error(f"[GeminiParser] D/O 오류: {e}")
-        
+        return result
+
+    def parse_do_from_image(self, image_bytes: bytes, mime_type: str = "image/png") -> DOResult:
+        """D/O 캡처 이미지를 Gemini API로 파싱 (파일 없이 직접 이미지 바이트)."""
+        result = DOResult()
+        try:
+            logger.info("[GeminiParser] D/O 이미지 파싱 시작 (캡처/업로드 이미지)")
+            prompt = self._get_do_prompt()
+            response_text = self._call_gemini(prompt, image_bytes, mime_type=mime_type)
+            result.raw_response = response_text
+            data = self._extract_json(response_text)
+            self._apply_do_json_to_result(result, data)
+            logger.info(f"[GeminiParser] D/O 이미지 파싱 완료: BL={result.bl_no}")
+        except (ValueError, TypeError, AttributeError) as e:
+            result.error_message = str(e)
+            logger.error(f"[GeminiParser] D/O 이미지 오류: {e}")
         return result
     
     # =========================================================================

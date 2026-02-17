@@ -22,10 +22,11 @@ class InboundProcessorMixin:
     # 유일한 PDF 입고 진입점
     # ══════════════════════════════════════════════════════════
 
-    def _on_pdf_inbound(self) -> None:
+    def _on_pdf_inbound(self, initial_files: dict = None) -> None:
         """v5.6.5: PDF 입고 — OneStopInboundDialog
 
-        FA + PL + BL 필수 (Gate-1), DO 선택
+        FA + PL + BL 필수 (Gate-1), DO 선택.
+        initial_files: {'DO': 경로} 등 드래그앤드롭/캡처 이미지 사전 지정.
         """
         self._log("")
         self._log(f"{'=' * 50}")
@@ -40,7 +41,7 @@ class InboundProcessorMixin:
                 log_fn=self._log,
                 app=self
             )
-            dialog.show()
+            dialog.show(initial_files=initial_files or {})
         except (ImportError, ModuleNotFoundError) as e:
             self._log(f"❌ 원스톱 입고 오류: {e}")
             logger.error(f"원스톱 입고 오류: {e}", exc_info=True)

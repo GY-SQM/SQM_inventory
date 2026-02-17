@@ -1,30 +1,32 @@
 # -*- coding: utf-8 -*-
 """
-SQM 재고관리 시스템 - PDF 변환기 (v2.5.4)
+SQM 재고관리 시스템 - PDF/이미지 변환기 (v2.6.0)
 
-★ 모든 형태의 PDF를 Excel/Word로 변환 ★
+★ PDF 및 캡처 이미지를 Excel/Word로 변환 ★
 
-지원 PDF 유형:
+지원 입력 유형:
 1. 텍스트 기반 PDF - 직접 텍스트 추출
 2. 이미지/스캔 PDF - OCR로 텍스트 추출
 3. 표가 있는 PDF - 테이블 구조 유지하여 Excel 변환
+4. 캡처 이미지 (PNG/JPG/JPEG/BMP/TIFF) - OCR → Excel/Word 변환
 
 사용법:
     from pdf_converter import PDFConverter
     
     converter = PDFConverter()
     
-    # Excel로 변환
+    # PDF → Excel
     excel_path = converter.to_excel("document.pdf")
     
-    # Word로 변환  
-    word_path = converter.to_word("document.pdf")
+    # 캡처 이미지 → Excel
+    excel_path = converter.to_excel("capture.png")
     
-    # 둘 다 변환
-    results = converter.convert_all("document.pdf")
+    # Word로 변환 (PDF/이미지 모두 가능)
+    word_path = converter.to_word("document.pdf")
+    word_path = converter.to_word("screenshot.jpg")
 
 Author: Ruby
-Version: 2.5.4
+Version: 2.6.0
 """
 
 import re
@@ -107,15 +109,19 @@ class ConversionResult:
 # PDF 변환기
 # =============================================================================
 
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff', '.webp'}
+
+
 class PDFConverter:
     """
-    PDF → Excel/Word 변환기
+    PDF/이미지 → Excel/Word 변환기
     
     기능:
     1. 텍스트 추출 (일반 PDF)
     2. OCR 추출 (스캔/이미지 PDF)
     3. 테이블 감지 및 구조화
-    4. Excel/Word 파일 생성
+    4. 캡처 이미지 OCR → Excel/Word 변환
+    5. Excel/Word 파일 생성
     """
     
     def __init__(self, output_dir: str = None, ocr_lang: str = "eng+kor"):
@@ -141,6 +147,11 @@ class PDFConverter:
             raise ImportError("PyMuPDF가 필요합니다: pip install pymupdf")
         if not HAS_OPENPYXL:
             raise ImportError("openpyxl이 필요합니다: pip install openpyxl")
+    
+    @staticmethod
+    def _is_image_file(file_path: str) -> bool:
+        """이미지 파일 여부 판별"""
+        return Path(file_path).suffix.lower() in IMAGE_EXTENSIONS
     
     # =========================================================================
     # PDF 분석
@@ -223,13 +234,48 @@ class PDFConverter:
     # 텍스트 추출
     # =========================================================================
     
-    def extract_content(self, pdf_path: str) -> List[PageContent]:
+    def extract_content(self, file_path: str) -> List[PageContent]:
         """
-        PDF에서 모든 컨텐츠 추출 (v2.9.41: 안전한 파일 핸들링)
+        PDF 또는 이미지에서 모든 컨텐츠 추출.
+        v2.6.0: 캡처 이미지(PNG/JPG 등) 지원 추가
+        
+        Args:
+            file_path: PDF 또는 이미지 파일 경로
         
         Returns:
             List[PageContent]: 페이지별 컨텐츠
         """
+        if self._is_image_file(file_path):
+            return self._extract_content_from_image(file_path)
+        return self._extract_content_from_pdf(file_path)
+    
+    def _extract_content_from_image(self, image_path: str) -> List[PageContent]:
+        """캡처 이미지에서 OCR로 컨텐츠 추출 (v2.6.0)"""
+        content = PageContent(page_num=1, text="", is_scanned=True)
+        
+        if not HAS_OCR:
+            logger.warning("pytesseract 미설치 — 이미지 OCR 불가")
+            content.text = "[OCR 불가] pytesseract가 설치되지 않았습니다."
+            return [content]
+        
+        try:
+            img = Image.open(image_path)
+            text = pytesseract.image_to_string(img, lang=self.ocr_lang)
+            content.text = text
+            
+            table = self._extract_table_from_text(text)
+            if table:
+                content.tables.append(table)
+            
+            logger.info(f"이미지 OCR 완료: {Path(image_path).name} ({len(text)} chars)")
+        except (OSError, IOError) as e:
+            logger.error(f"이미지 OCR 실패: {e}")
+            content.text = f"[OCR 실패] {e}"
+        
+        return [content]
+    
+    def _extract_content_from_pdf(self, pdf_path: str) -> List[PageContent]:
+        """PDF에서 모든 컨텐츠 추출 (v2.9.41: 안전한 파일 핸들링)"""
         doc = None
         try:
             doc = fitz.open(str(pdf_path))
@@ -331,16 +377,16 @@ class PDFConverter:
     
     def to_excel(
         self, 
-        pdf_path: str, 
+        file_path: str, 
         output_path: str = None,
         include_text: bool = True,
         table_only: bool = False
     ) -> ConversionResult:
         """
-        PDF → Excel 변환
+        PDF 또는 캡처 이미지 → Excel 변환
         
         Args:
-            pdf_path: PDF 파일 경로
+            file_path: PDF 또는 이미지 파일 경로
             output_path: 출력 파일 경로 (기본: 자동 생성)
             include_text: 텍스트도 포함할지 여부
             table_only: 테이블만 추출할지 여부
@@ -349,14 +395,14 @@ class PDFConverter:
             ConversionResult: 변환 결과
         """
         start_time = datetime.now()
-        pdf_path = Path(pdf_path)
+        file_path = Path(file_path)
         
         if output_path is None:
-            output_path = self.output_dir / f"{pdf_path.stem}.xlsx"
+            output_path = self.output_dir / f"{file_path.stem}.xlsx"
         
         try:
-            # 컨텐츠 추출
-            pages = self.extract_content(str(pdf_path))
+            # 컨텐츠 추출 (PDF 또는 이미지)
+            pages = self.extract_content(str(file_path))
             
             # Excel 생성
             wb = Workbook()
@@ -398,7 +444,7 @@ class PDFConverter:
             
             return ConversionResult(
                 success=True,
-                source_file=str(pdf_path),
+                source_file=str(file_path),
                 output_file=str(output_path),
                 output_type="excel",
                 page_count=len(pages),
@@ -410,7 +456,7 @@ class PDFConverter:
             logger.error(f"Excel 변환 실패: {e}")
             return ConversionResult(
                 success=False,
-                source_file=str(pdf_path),
+                source_file=str(file_path),
                 output_file=str(output_path),
                 output_type="excel",
                 page_count=0,
@@ -478,15 +524,15 @@ class PDFConverter:
     
     def to_word(
         self, 
-        pdf_path: str, 
+        file_path: str, 
         output_path: str = None,
         preserve_layout: bool = True
     ) -> ConversionResult:
         """
-        PDF → Word 변환
+        PDF 또는 캡처 이미지 → Word 변환
         
         Args:
-            pdf_path: PDF 파일 경로
+            file_path: PDF 또는 이미지 파일 경로
             output_path: 출력 파일 경로 (기본: 자동 생성)
             preserve_layout: 레이아웃 유지 시도 여부
         
@@ -496,7 +542,7 @@ class PDFConverter:
         if not HAS_DOCX:
             return ConversionResult(
                 success=False,
-                source_file=str(pdf_path),
+                source_file=str(file_path),
                 output_file="",
                 output_type="word",
                 page_count=0,
@@ -505,20 +551,22 @@ class PDFConverter:
             )
         
         start_time = datetime.now()
-        pdf_path = Path(pdf_path)
+        file_path = Path(file_path)
         
         if output_path is None:
-            output_path = self.output_dir / f"{pdf_path.stem}.docx"
+            output_path = self.output_dir / f"{file_path.stem}.docx"
         
         try:
-            # 컨텐츠 추출
-            pages = self.extract_content(str(pdf_path))
+            # 컨텐츠 추출 (PDF 또는 이미지)
+            pages = self.extract_content(str(file_path))
             
             # Word 문서 생성
             doc = Document()
             
             # 제목
-            title = doc.add_heading(f"PDF 변환: {pdf_path.name}", level=0)
+            is_image = self._is_image_file(str(file_path))
+            title_prefix = "이미지 변환" if is_image else "PDF 변환"
+            doc.add_heading(f"{title_prefix}: {file_path.name}", level=0)
             doc.add_paragraph(f"변환 일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             doc.add_paragraph("")
             
@@ -559,7 +607,7 @@ class PDFConverter:
             
             return ConversionResult(
                 success=True,
-                source_file=str(pdf_path),
+                source_file=str(file_path),
                 output_file=str(output_path),
                 output_type="word",
                 page_count=len(pages),
@@ -571,7 +619,7 @@ class PDFConverter:
             logger.error(f"Word 변환 실패: {e}")
             return ConversionResult(
                 success=False,
-                source_file=str(pdf_path),
+                source_file=str(file_path),
                 output_file=str(output_path),
                 output_type="word",
                 page_count=0,

@@ -198,8 +198,10 @@ class AdvancedDialogsMixin:
         top_bar.pack(fill=X, padx=10, pady=8)
         
         def _download_return_template():
-            """반품 전용 샘플 Excel 템플릿 생성"""
+            """반품 템플릿 = 재고 리스트와 동일 형식 + return_qty_kg, return_reason. 필수(lot_no, return_qty_kg, return_reason)만 색상."""
             from ..utils.constants import filedialog
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             file_path = filedialog.asksaveasfilename(
                 title="반품 양식 저장", defaultextension=".xlsx",
                 initialfile="반품_양식_템플릿.xlsx",
@@ -207,51 +209,52 @@ class AdvancedDialogsMixin:
             if not file_path:
                 return
             try:
-                import openpyxl
-                from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+                inv_cols = getattr(self, 'INVENTORY_TEMPLATE_COLUMNS', None)
+                if inv_cols is None:
+                    inv_cols = [
+                        ('lot_no', 'LOT NO', 120, True), ('sap_no', 'SAP NO', 120, False),
+                        ('bl_no', 'BL NO', 140, False), ('product', 'PRODUCT', 160, False),
+                        ('net_weight', 'NET(Kg)', 100, False), ('container_no', 'CONTAINER', 130, False),
+                        ('mxbg_pallet', 'MXBG', 70, False),
+                    ]
+                return_extra = [
+                    ('return_qty_kg', 'RETURN QTY (KG)', 16, True),
+                    ('return_reason', 'RETURN REASON', 20, True),
+                ]
+                headers = list(inv_cols) + return_extra
+                required_return = {'lot_no', 'return_qty_kg', 'return_reason'}
                 wb = openpyxl.Workbook()
                 ws = wb.active
                 ws.title = "반품 데이터"
-                headers = [
-                    ('lot_no',        'LOT NO *',        '필수', 18),
-                    ('bl_no',         'BL NO',           '선택', 18),
-                    ('tonbag_no',     'TONBAG NO',       '선택', 12),
-                    ('return_qty_kg', 'RETURN QTY (KG) *','필수', 16),
-                    ('return_reason', 'RETURN REASON *',  '필수', 20),
-                    ('remark',        'REMARK',           '선택', 25),
-                ]
                 hfont = Font(bold=True, color="FFFFFF", size=11)
                 req_fill = PatternFill(start_color="C0392B", end_color="C0392B", fill_type="solid")
                 opt_fill = PatternFill(start_color="7F8C8D", end_color="7F8C8D", fill_type="solid")
                 smp_fill = PatternFill(start_color="FDEDEC", end_color="FDEDEC", fill_type="solid")
-                thin = Border(left=Side(style='thin'), right=Side(style='thin'),
-                              top=Side(style='thin'), bottom=Side(style='thin'))
-                ws.merge_cells('A1:F1')
-                ws['A1'] = "🔄 SQM v4.0.4 반품 양식 — * 필수 항목 (BL NO 입력 시 DB 자동 조회)"
-                ws['A1'].font = Font(bold=True, size=12, color="C0392B")
+                thin = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+                ncols = len(headers)
+                ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
+                ws['A1'] = "🔄 반품 템플릿 v5.8.9 — 재고 리스트와 동일 형식. 진한색 컬럼은 필수(LOT NO, 반품수량, 사유). 2행=DB필드명."
+                ws['A1'].font = Font(bold=True, size=11, color="C0392B")
                 ws.row_dimensions[1].height = 28
-                for col, (db_f, _, _, _) in enumerate(headers, 1):
+                for col, h in enumerate(headers, 1):
+                    db_f = h[0]
                     ws.cell(row=2, column=col, value=db_f).font = Font(size=8, color="999999")
                 ws.row_dimensions[2].height = 14
-                for col, (_, disp, req, w) in enumerate(headers, 1):
-                    c = ws.cell(row=3, column=col, value=disp)
+                for col, h in enumerate(headers, 1):
+                    db_f, disp, w, _ = h[0], h[1], h[2], (h[3] if len(h) > 3 else False)
+                    c = ws.cell(row=3, column=col, value=disp + (' *' if db_f in required_return else ''))
                     c.font = hfont
-                    c.fill = req_fill if req == '필수' else opt_fill
+                    c.fill = req_fill if db_f in required_return else opt_fill
                     c.alignment = Alignment(horizontal='center')
                     c.border = thin
-                    ws.column_dimensions[chr(64+col)].width = w
-                samples = [
-                    ['1120000001', 'BLTEST001', '1', '', '품질 불량', '표면 결함'],
-                    ['1120000001', 'BLTEST001', '2', '', '수량 오류', ''],
-                    ['1120000002', '', '', '', '고객 취소', '발주 취소'],
-                ]
-                for r, row in enumerate(samples, 4):
-                    for c, val in enumerate(row, 1):
-                        cell = ws.cell(row=r, column=c, value=val)
+                    ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = min(w, 24)
+                for r in range(4, 8):
+                    for c in range(1, ncols + 1):
+                        cell = ws.cell(row=r, column=c, value='')
                         cell.fill = smp_fill
                         cell.border = thin
                 wb.save(file_path)
-                CustomMessageBox.showinfo(dialog, "완료", f"반품 양식 저장 완료\n\n{file_path}")
+                CustomMessageBox.showinfo(dialog, "완료", f"반품 양식 저장 완료\n\n{file_path}\n\n재고 리스트와 동일 형식 + 반품수량·사유. 필수만 채우면 됩니다.")
                 self._log(f"📥 반품 양식 다운로드: {file_path}")
             except (FileNotFoundError, OSError, PermissionError) as e:
                 CustomMessageBox.showerror(dialog, "오류", f"파일 저장 실패: {e}")

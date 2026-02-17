@@ -88,7 +88,7 @@ class ThemeMixin:
             logger.error(f"Save theme preference error: {e}")
     
     def _change_theme(self, theme_name: str) -> None:
-        """Change application theme"""
+        """Change application theme — 근본 해결: 전역 스타일·메뉴바·트리 일괄 갱신"""
         from ..utils.constants import HAS_TTKBOOTSTRAP
         
         if not HAS_TTKBOOTSTRAP:
@@ -96,16 +96,42 @@ class ThemeMixin:
             return
         
         try:
-            pass
-            
             if hasattr(self.root, 'style'):
                 self.root.style.theme_use(theme_name)
             
             self.current_theme = theme_name
             self._save_theme_preference(theme_name)
             
-            # 테마 색상 업데이트 (트리뷰 등)
+            # 1) 전역 가독성 스타일 재적용 (Treeview/Notebook 등 글씨·배경 동기화)
+            try:
+                from ..utils.ui_constants import ReadableStyle
+                ReadableStyle.apply(self.root, theme_name)
+            except (ImportError, Exception) as e:
+                logger.debug(f"ReadableStyle 재적용 무시: {e}")
+            
+            # 2) 트리뷰 태그·그리드 스타일 + 메뉴바 색상 갱신
             self._update_theme_colors()
+            
+            # 3) 메뉴바가 테마 색상 캐시를 쓰면 재적용 (글씨/배경 동기화)
+            try:
+                if hasattr(self, 'custom_menubar') and getattr(self.custom_menubar, 'refresh_theme_colors', None):
+                    self.custom_menubar.refresh_theme_colors()
+            except (ValueError, TypeError, AttributeError) as _e:
+                logger.debug(f"메뉴바 테마 갱신 무시: {_e}")
+            
+            # 4) 재고·톤백 트리 리프레시로 화면에 새 색상 반영
+            try:
+                if hasattr(self, '_refresh_inventory'):
+                    self._refresh_inventory()
+                if hasattr(self, '_refresh_tonbag'):
+                    self._refresh_tonbag()
+            except (ValueError, TypeError, AttributeError) as _e:
+                logger.debug(f"탭 리프레시 무시: {_e}")
+            
+            try:
+                self.root.update_idletasks()
+            except Exception as _e:
+                logger.debug(f"update_idletasks 무시: {_e}")
             
             self._log(f"Theme changed: {theme_name}")
             

@@ -33,43 +33,69 @@ class DOMixin:
     ★ v5.8.6.B: Arrival Date 하이브리드 + Free Time 계산 복원
     """
     
-    def parse_do(self, pdf_path: str, use_gemini: bool = True) -> Optional[DOData]:
+    def parse_do(self, pdf_path: Optional[str] = None, image_bytes: Optional[bytes] = None,
+                 image_path: Optional[str] = None, use_gemini: bool = True) -> Optional[DOData]:
         """
-        D/O PDF 파싱 (API-Only + Arrival Date 폴백 + Free Time 계산)
-        ★ v5.8.6.B: arrival_date 정규식 폴백 + Free Time 계산 추가
+        D/O 파싱: PDF 파일 또는 캡처 이미지(바이트/경로)를 Gemini API로 파싱.
+        pdf_path, image_bytes, image_path 중 하나만 지정. 이미지 시 PDF 전용 폴백(정규식/OCR)은 생략.
         """
-        # API-Only Gate
         self._require_gemini_api_key()
 
-        logger.info(f"[DO] Gemini API(강제)로 파싱: {pdf_path}")
+        # 단일 경로로 이미지 파일이 전달된 경우 (기존 호출 호환)
+        if pdf_path and not image_path and not image_bytes:
+            low = pdf_path.lower()
+            if low.endswith(('.png', '.jpg', '.jpeg')):
+                image_path = pdf_path
+                pdf_path = None
+
+        # 캡처 이미지 경로 → 바이트 로드
+        if image_path and not image_bytes:
+            try:
+                with open(image_path, "rb") as f:
+                    image_bytes = f.read()
+            except OSError as e:
+                logger.warning(f"[DO] 이미지 파일 읽기 실패: {image_path} — {e}")
+                raise RuntimeError(f"[DO] 이미지 파일을 열 수 없습니다: {image_path}") from e
+
+        use_image = image_bytes is not None
+        source_label = image_path or (pdf_path or "이미지(바이트)")
+
+        if use_image:
+            mime_type = "image/jpeg" if (image_path or "").lower().endswith((".jpg", ".jpeg")) else "image/png"
+            logger.info(f"[DO] Gemini API로 캡처 이미지 파싱: {source_label}")
+        else:
+            if not pdf_path:
+                raise ValueError("[DO] pdf_path, image_bytes, image_path 중 하나는 필수입니다.")
+            logger.info(f"[DO] Gemini API(강제)로 파싱: {pdf_path}")
+
         from features.ai.gemini_parser import GeminiDocumentParser
         from ..document_models import DOData, ContainerInfo, FreeTimeInfo
 
         gemini_parser = GeminiDocumentParser(self.gemini_api_key)
         gemini_result = None
         try:
-            gemini_result = self._gemini_with_retry(
-                gemini_parser.parse_do, pdf_path,
-                retries=3, wait_seconds=1.0,
-            )
+            if use_image:
+                gemini_result = self._gemini_with_retry(
+                    lambda: gemini_parser.parse_do_from_image(image_bytes, mime_type),
+                    retries=3, wait_seconds=1.0,
+                )
+            else:
+                gemini_result = self._gemini_with_retry(
+                    gemini_parser.parse_do, pdf_path,
+                    retries=3, wait_seconds=1.0,
+                )
         except (ValueError, TypeError, KeyError, IndexError) as gemini_err:
             logger.warning(f"[DO] Gemini 실패, OpenAI 폴백 시도: {gemini_err}")
 
-        if not gemini_result or not getattr(gemini_result, 'success', False):
+        if not use_image and (not gemini_result or not getattr(gemini_result, 'success', False)):
             try:
                 from core.config import OPENAI_API_KEY, DISABLE_OPENAI_FALLBACK
-                if DISABLE_OPENAI_FALLBACK:
-                    logger.info("[DO] OpenAI 폴백 비활성(설정) — Gemini만 사용")
-                elif OPENAI_API_KEY and OPENAI_API_KEY.strip():
+                if not DISABLE_OPENAI_FALLBACK and OPENAI_API_KEY and OPENAI_API_KEY.strip():
                     from features.ai.openai_parser import try_parse_do
                     openai_result = try_parse_do(pdf_path)
                     if openai_result and getattr(openai_result, 'success', False):
                         gemini_result = openai_result
                         logger.info("[DO] OpenAI 폴백으로 파싱 성공")
-                    elif openai_result is None:
-                        logger.info("[DO] OpenAI 폴백 실패 또는 openai 패키지 미설치")
-                else:
-                    logger.info("[DO] OpenAI 폴백 생략: OPENAI_API_KEY 미설정")
             except (ValueError, TypeError, KeyError, IndexError) as fallback_err:
                 logger.warning(f"[DO] OpenAI 폴백 시도 중 오류: {fallback_err}")
 
@@ -78,7 +104,7 @@ class DOMixin:
             raise RuntimeError(f"[DO] Gemini 파싱 실패(API-Only). {msg}".strip())
 
         result = DOData()
-        result.source_file = pdf_path
+        result.source_file = pdf_path or image_path or ""
         result.parsed_at = datetime.now()
 
         # 핵심 필드 매핑
@@ -108,8 +134,8 @@ class DOMixin:
                 if val:
                     gemini_dict[key] = val
 
-            # PDF 텍스트 추출 (정규식 폴백용)
-            pdf_text = extract_pdf_text(pdf_path)
+            # PDF 텍스트 추출 (정규식 폴백용 — 캡처 이미지일 땐 생략)
+            pdf_text = extract_pdf_text(pdf_path) if pdf_path else ""
 
             # 하이브리드 추출
             arrival_date, source, estimated = extract_arrival_date(gemini_dict, pdf_text)
@@ -154,17 +180,41 @@ class DOMixin:
         result.containers = []
         result.free_time_info = []
 
-        for c in getattr(gemini_result, 'containers', []) or []:
-            container_no = getattr(c, 'container_no', '') or ''
+        # [디버그] D/O con_return(반납일) 파싱 시작 — 사용자 확인용
+        _containers_raw = getattr(gemini_result, 'containers', []) or []
+        print(f"\n[DO con_return 파싱] 시작 — 소스: {source_label}")
+        print(f"[DO con_return 파싱] Gemini 컨테이너 수: {len(_containers_raw)}")
+
+        for c in _containers_raw:
+            if hasattr(c, 'container_no'):
+                container_no = getattr(c, 'container_no', '') or ''
+            else:
+                container_no = (c.get('container_no', '') if isinstance(c, dict) else '') or ''
             if container_no:
                 result.containers.append(ContainerInfo(container_no=container_no))
 
-            # v5.8.6.B: con_return_date 호환 + 기존 free_time 호환
-            free_time_date = (getattr(c, 'con_return_date', '') or
-                            getattr(c, 'free_time_date', '') or
-                            getattr(c, 'free_time', '') or '')
-            return_location = (getattr(c, 'return_location', '') or
-                             getattr(c, 'return_place', '') or '')
+            # v5.8.6.B: con_return_date 호환 + D/O 프리타임 컬럼(반납일) 다중 키 수용
+            if isinstance(c, dict):
+                free_time_date = (c.get('con_return_date') or c.get('free_time_date') or
+                                c.get('free_time') or c.get('con_return') or c.get('return_date') or '')
+            else:
+                free_time_date = (getattr(c, 'con_return_date', '') or
+                                getattr(c, 'free_time_date', '') or
+                                getattr(c, 'free_time', '') or '')
+            if free_time_date:
+                free_time_date = str(free_time_date).strip()[:10]
+                if not re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', free_time_date):
+                    free_time_date = ''
+            if free_time_date:
+                print(f"[DO con_return 추출됨] container_no={container_no or '(없음)'}, con_return(반납일)={free_time_date}")
+            else:
+                _hint = list(c.keys())[:10] if isinstance(c, dict) else "객체(con_return_date/free_time_date/free_time 속성 확인)"
+                print(f"[DO con_return 미추출] container_no={container_no or '(없음)'} — 반납일 없음 또는 YYYY-MM-DD 아님. 참고: {_hint}")
+            return_location = (
+                (getattr(c, 'return_location', '') if hasattr(c, 'return_location') else '')
+                or (getattr(c, 'return_place', '') if hasattr(c, 'return_place') else '')
+                or (c.get('return_place') or c.get('return_location', '') if isinstance(c, dict) else '')
+            )
             storage_free_days = getattr(c, 'storage_free_days', 0) or 0
 
             if container_no or free_time_date or return_location:
@@ -175,9 +225,93 @@ class DOMixin:
                     storage_free_days=int(storage_free_days or 0),
                 ))
 
-        # Free Time(컨테이너 반납일) 미추출 시 로그 — D/O 문서에 반납일 컬럼이 있으면 con_return_date로 추출 필요
+        # [디버그] Gemini 결과 요약 — con_return 추출 여부
+        _with_date = [(getattr(ft, 'container_no', ''), getattr(ft, 'free_time_date', '')) for ft in result.free_time_info if (getattr(ft, 'free_time_date', '') or '').strip()]
+        if _with_date:
+            print(f"[DO con_return 파싱] Gemini에서 반납일 추출된 항목 수: {len(_with_date)} — {_with_date}")
+        else:
+            print(f"[DO con_return 파싱] Gemini에서 반납일 0건 — 이유: API 응답 containers[]에 con_return_date/free_time_date/free_time(날짜형) 없음. OCR 폴백 시도 예정.")
+
+        # 반납일 공통값 보급: 한 컨테이너라도 반납일이 있으면 빈 free_time_info에 동일값 적용 (D/O에서 하나만 적힌 경우)
+        first_date = ''
+        for ft in result.free_time_info:
+            d = (getattr(ft, 'free_time_date', '') or '').strip()
+            if d and re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', d[:10]):
+                first_date = d[:10]
+                break
+        if first_date:
+            for ft in result.free_time_info:
+                if not (getattr(ft, 'free_time_date', '') or '').strip():
+                    ft.free_time_date = first_date
+                    logger.info(f"[DO] 반납일 공통 적용: {first_date}")
+
+        # ★ OCR 폴백: Gemini로 반납일이 하나도 없을 때만 "절대 안 죽는" OCR로 Free Time 표 추출 후 병합
+        _need_ocr = (
+            result.containers
+            and (
+                not result.free_time_info
+                or all(not (getattr(ft, 'free_time_date', '') or '').strip() for ft in result.free_time_info)
+            )
+        )
+        _ocr_source = pdf_path or image_path
+        if _need_ocr and _ocr_source:
+            print(f"[DO con_return 파싱] OCR 폴백 실행 — Free Time 표 직접 추출 시도: {_ocr_source}")
+            try:
+                from parsers.do_free_time_ocr import parse_do_free_time, normalize_container
+                ocr_result = parse_do_free_time(_ocr_source)
+                free_time_map = ocr_result.get("free_time_map") or {}
+                if free_time_map:
+                    print(f"[DO con_return 파싱] OCR 폴백 추출됨: {free_time_map}")
+                    # 기존 free_time_info에 반납일 채우기
+                    for ft in result.free_time_info:
+                        cno = (getattr(ft, 'container_no', '') or '').strip()
+                        if not cno:
+                            continue
+                        norm = normalize_container(cno)
+                        if norm in free_time_map and not (getattr(ft, 'free_time_date', '') or '').strip():
+                            ft.free_time_date = free_time_map[norm]
+                            logger.info(f"[DO] OCR 폴백 반납일 적용: {cno} -> {free_time_map[norm]}")
+                    # 컨테이너는 있는데 free_time_info에 없는 경우 추가
+                    for c in result.containers:
+                        cno = (getattr(c, 'container_no', '') or '').strip()
+                        if not cno:
+                            continue
+                        norm = normalize_container(cno)
+                        if norm not in free_time_map:
+                            continue
+                        if any(
+                            (getattr(ft, 'container_no', '') or '').strip()
+                            and normalize_container((getattr(ft, 'container_no', '') or '')) == norm
+                            for ft in result.free_time_info
+                        ):
+                            continue
+                        result.free_time_info.append(FreeTimeInfo(
+                            container_no=cno,
+                            free_time_date=free_time_map[norm],
+                            return_location="",
+                            storage_free_days=0,
+                        ))
+                        logger.info(f"[DO] OCR 폴백 FreeTimeInfo 추가: {cno} -> {free_time_map[norm]}")
+                for err in ocr_result.get("errors") or []:
+                    logger.debug("[DO] OCR 폴백: %s", err)
+                if not free_time_map:
+                    print(f"[DO con_return 파싱] OCR 폴백 후에도 반납일 0건 — 이유: {ocr_result.get('errors', [])}")
+            except Exception as ocr_err:
+                logger.debug("[DO] OCR 폴백 실패(무시): %s", ocr_err)
+                print(f"[DO con_return 파싱] OCR 폴백 실패 — 이유: {ocr_err}")
+        elif _need_ocr and not _ocr_source:
+            print(f"[DO con_return 파싱] OCR 폴백 미실행 — PDF/이미지 경로 없음 (캡처 바이트만 전달된 경우)")
+
+        # [디버그] 최종 con_return 요약
+        _final = [(getattr(ft, 'container_no', ''), getattr(ft, 'free_time_date', '')) for ft in result.free_time_info if (getattr(ft, 'free_time_date', '') or '').strip()]
+        if _final:
+            print(f"[DO con_return 파싱] 최종 반납일 적용됨 (재고 CON RETURN에 사용): {_final}\n")
+        else:
+            print(f"[DO con_return 파싱] 최종 반납일 없음 — 재고 화면 CON RETURN·FREE TIME 비게 됨. D/O 문서의 'Free Time' 또는 '프리타임' 컬럼(날짜) 확인.\n")
+
+        # Free Time(컨테이너 반납일) 미추출 시 로그 — D/O 문서에 "프리타임"/Free Time 컬럼(반납일) 확인
         if result.containers and (not result.free_time_info or all(not (getattr(ft, 'free_time_date', '') or '').strip() for ft in result.free_time_info)):
-            logger.warning("[DO] 컨테이너 반납일(con_return_date/Free Time) 미추출 — FREE TIME 일수 계산 불가. D/O 문서의 반납일 컬럼 확인.")
+            logger.warning("[DO] 컨테이너 반납일(con_return_date/Free Time/프리타임) 미추출 — 재고 리스트 CON RETURN·FREE TIME 공백. D/O 문서의 반납일 컬럼 확인.")
 
         return result
 

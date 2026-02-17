@@ -134,24 +134,27 @@ class DragDropMixin:
         excel_files = []
         other_files = []
         
+        image_extensions = ('.png', '.jpg', '.jpeg')
         for file_path in files:
             ext = os.path.splitext(file_path)[1].lower()
-            
             if ext == '.pdf':
                 pdf_files.append(file_path)
             elif ext in ('.xlsx', '.xls', '.csv'):
                 excel_files.append(file_path)
+            elif ext in image_extensions:
+                other_files.append(file_path)  # 이미지는 별도 처리(단일 시 DO로 열기)
             else:
                 other_files.append(file_path)
-        
+
         # Handle based on file types
         if len(files) == 1:
-            # Single file - process directly
             file_path = files[0]
             ext = os.path.splitext(file_path)[1].lower()
-            
             if ext == '.pdf':
                 self._process_pdf_inbound(file_path)
+            elif ext in image_extensions:
+                # 캡처 이미지 → 원스톱 입고에서 D/O로 사전 지정
+                self._process_pdf_inbound(file_path, initial_files={'DO': file_path})
             elif ext in ('.xlsx', '.xls'):
                 self._show_excel_import_options(file_path)
             elif ext == '.csv':
@@ -178,12 +181,12 @@ class DragDropMixin:
             if pdf_files and CustomMessageBox.askyesno(self.root, "Process Files", msg):
                 self._process_batch_pdf_inbound(pdf_files)
     
-    def _process_pdf_inbound(self, file_path: str) -> None:
-        """Process single PDF for inbound — v5.6.5: OneStop으로 통합"""
+    def _process_pdf_inbound(self, file_path: str = None, initial_files: dict = None) -> None:
+        """Process single PDF/이미지 for inbound — v5.6.5: OneStop 통합. 이미지 시 D/O로 사전 지정."""
         if hasattr(self, '_on_pdf_inbound'):
-            self._on_pdf_inbound()
+            self._on_pdf_inbound(initial_files=initial_files or {})
         else:
-            self._log(f"PDF processing not available: {file_path}")
+            self._log(f"PDF/이미지 처리 불가: {file_path}")
     
     def _process_batch_pdf_inbound(self, files: List[str]) -> None:
         """v5.6.5: 다중 PDF → 원스톱 다이얼로그 1회 호출"""
