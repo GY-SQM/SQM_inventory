@@ -154,9 +154,10 @@ invoice = packing.get('salar_invoice_no', '')
   - import_handlers: process_outbound(allocation_data) 형태로 수정. LOT 전량 출고 시 current_weight 조회 후 allocation_data 구성.
 - [ ] **출고와 함께 (v5.7.0)**  
   - 고객명(sold_to/picked_to/customer) 표준화.
-- [ ] **함수/모듈 (적절한 시점)**  
-  - safe_int common 단일 소스; safe_date 용도별 구분 또는 함수명 분리.  
-  - 버전 fallback·상수 단일 소스; 메시지박스 CustomMessageBox 통일.
+- [x] **함수/모듈 (적절한 시점) — 완료**  
+  - safe_int common 단일 소스; safe_date 용도별 구분(safe_date_to_date / safe_date_str).  
+  - 버전 fallback·상수 단일 소스(version.py, engine re-export); 메시지박스 CustomMessageBox 통일.  
+  - onestop_inbound: core.types.safe_float 사용(로컬 _safe_float 없음). GUI 상수: core.constants re-export만 사용.
 - [ ] **데드코드**  
   - picking_list_*, tonbag_mapping_history, inbound_preview.py, 미사용 컬럼에 대해 제거/복구/ deprecated 결정.
 
@@ -172,17 +173,17 @@ invoice = packing.get('salar_invoice_no', '')
 |------|------------|
 | **톤백 수 / Invoice / 무게 전달** | `packing.get('bag_count')`, `packing.get('invoice_no')`, `packing.get('total_weight_kg')` **전역 0건** — v5.6.6 반영 유지. |
 | **출고 API** | import_handlers는 `process_outbound(allocation_data)` 호출, current_weight 조회 후 allocation_data 구성 — v5.7.6 반영 유지. |
+| **safe_int** | utils/common(core.types) 단일 소스, helpers는 re-export 또는 common 사용으로 통일. |
+| **safe_date** | 용도별 구분(safe_date_to_date / safe_date_str) 적용 완료. |
+| **safe_float** | onestop_inbound는 `core.types.safe_float` 사용. 로컬 _safe_float 없음. |
+| **버전/앱명** | version.py 단일 소스, fallback 통일 완료. |
+| **상수 DEFAULT_WAREHOUSE 등** | gui_bootstrap은 core.constants에서만 re-export(로컬 fallback 제거). 단일 소스 유지. |
+| **메시지 박스** | CustomMessageBox 통일 적용. (내부에서 messagebox 호출하는 것은 설계상 정상.) |
 
-### 8.2 여전히 중복·혼용인 항목 (출고 후 또는 적절한 시점에 정리)
+### 8.2 참고만 할 항목 (의도적 구분·별도 정리)
 
 | 구분 | 내용 | 위치/비고 |
 |------|------|------------|
-| **함수** | **safe_int** | `utils/common.py`(단일 소스) + `gui_app_modular/utils/helpers.py`(별도 구현). helpers는 int(float(value))만 사용. |
-| | **safe_date** | `helpers.py` → `Optional[date]` / `safe_utils.py` → `str` (포맷 지정). 시그니처·반환 타입 상이. |
-| | **_safe_float (로컬)** | `onestop_inbound.py`에 `_safe_float()` 로컬 함수 — utils.common.safe_float와 역할 중복. |
-| **버전/앱명** | **__version__ / APP_NAME** | `version.py`(5.7.7)가 원천. fallback: run(3.9.4), gui_app_modular/utils/constants(3.9.2), parsers/__init__(3.8.7). |
-| **상수** | **DEFAULT_WAREHOUSE** | `engine_modules.constants` + `gui_app_modular.utils.constants`(327라인) 중복 정의. 엔진/onestop은 engine에서 import. |
-| **메시지 박스** | **CustomMessageBox vs messagebox** | 대부분 CustomMessageBox 사용. **직접 messagebox 호출**: onestop_inbound(1), auto_backup(3), mac_guard(2), gemini_chat_gui(1), ui_ops_helper(1). CustomMessageBox 내부에서 messagebox 호출하는 것은 설계상 정상. |
 | **용어(참고)** | **lot_no / lot_number / lotno** | DB·엔진은 lot_no. `lot_numbers`는 Invoice 등에서 "LOT 번호 리스트" 의미로 사용(의도적). 컬럼 매핑/엑셀에서 lotno 별칭 사용. |
 
 ### 8.3 출고 로직 시 권장

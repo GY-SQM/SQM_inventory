@@ -6,6 +6,9 @@ SQM Inventory - Helper Functions
 v2.9.91 - Common utility functions
 
 Date parsing, format conversion, file operations
+
+날짜 처리: date 객체 필요 → safe_date_to_date (이 모듈)
+          문자열 필요 → safe_utils.safe_date_str
 """
 
 import os
@@ -20,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 def safe_date(value: Any, default: Optional[date] = None) -> Optional[date]:
     """
-    Safe date conversion → date 객체 반환. 문자열(포맷)이 필요하면 safe_utils.safe_date 또는 safe_date_str 사용.
+    Safe date conversion → date 객체 반환.
+    문자열이 필요하면: from gui_app_modular.utils.safe_utils import safe_date_str
 
     Supports formats:
     - datetime object

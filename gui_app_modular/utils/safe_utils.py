@@ -6,6 +6,9 @@ SQM 재고관리 - GUI 공통 유틸리티
 v2.9.91 - gui_app.py에서 분리된 공통 함수들
 
 기존 gui_app.py의 24개 중복 safe_* 함수를 통합
+
+날짜 처리: 문자열 필요 → safe_date_str (이 모듈, 별칭 safe_date)
+          date 객체 필요 → helpers.safe_date_to_date
 """
 
 import sqlite3
@@ -19,8 +22,8 @@ from core.types import safe_float, safe_str, safe_int  # noqa: F401 (re-export)
 logger = logging.getLogger(__name__)
 
 
-def safe_date(val: Any, default: str = '', output_format: str = '%Y-%m-%d') -> str:
-    """안전한 날짜 변환 → 문자열 반환 (포맷 지정). 날짜 객체가 필요하면 helpers.safe_date_to_date 사용."""
+def safe_date_str(val: Any, default: str = '', output_format: str = '%Y-%m-%d') -> str:
+    """안전한 날짜 변환 → 문자열 반환 (포맷 지정). date 객체가 필요하면 helpers.safe_date_to_date 사용."""
     if val is None:
         return default
     
@@ -60,8 +63,8 @@ def safe_date(val: Any, default: str = '', output_format: str = '%Y-%m-%d') -> s
     return default
 
 
-# 용도별 별칭 (DEBUGGING_RISK_OVERVIEW: safe_date 용도별 정리)
-safe_date_str = safe_date  # 문자열 필요 시. 날짜 객체 필요 시 helpers.safe_date_to_date
+# 하위 호환: safe_date = safe_date_str (문자열 반환). date 객체는 helpers.safe_date_to_date
+safe_date = safe_date_str
 
 # P1: format_number, format_weight_*, find_column 단일 소스
 from .formatters import (  # noqa: F401

@@ -284,32 +284,28 @@ class InboundMixin(InventoryBaseMixin):
             if sd:
                 lot_data['ship_date'] = sd.strftime('%Y-%m-%d')
         
-        # 입항일 처리
+        # 입항일: 파싱된 값만 사용. 모를 때는 반드시 비움 — date.today() 사용 금지
         arrival_date = None
         if do_data and do_data.get('arrival_date'):
             arrival_date = self._safe_parse_date(do_data.get('arrival_date'))
         if not arrival_date and packing.get('arrival_date'):
             arrival_date = self._safe_parse_date(packing.get('arrival_date'))
+        lot_data['arrival_date'] = arrival_date.strftime('%Y-%m-%d') if arrival_date else ''
         
-        lot_data['arrival_date'] = (
-            arrival_date.strftime('%Y-%m-%d') if arrival_date 
-            else date.today().strftime('%Y-%m-%d')
-        )
-        
-        # v3.8.7: Free Time 계산 (free_time_date - arrival_date)
-        # 우선순위: packing_dict에서 UI가 이미 계산한 값 → 엔진 자체 계산 (폴백)
+        # 컨테이너 반납일(con_return) → FREE TIME 일수 = con_return - arrival_date
+        # con_return: D/O의 Free_Time 컬럼 값(실제 의미는 반납일)
         free_time = 0
-        ft_date_str = packing.get('free_time_date', '') or (
+        con_return_str = packing.get('free_time_date', '') or (
             do_data.get('free_time_date', '') if do_data else ''
         )
-        if ft_date_str and arrival_date:
-            ft_date = self._safe_parse_date(ft_date_str)
+        if con_return_str and arrival_date:
+            ft_date = self._safe_parse_date(con_return_str)
             if ft_date:
                 free_time = (ft_date - arrival_date).days
                 if free_time < 0:
                     free_time = 0
         
-        # packing에서 직접 free_time 값이 있으면 우선 사용
+        # packing에서 이미 계산된 free_time(일수)이 있으면 우선 사용
         if packing.get('free_time'):
             try:
                 free_time = int(float(packing['free_time']))

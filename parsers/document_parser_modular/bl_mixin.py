@@ -2,22 +2,11 @@
 """
 SQM 재고관리 시스템 - B/L (Bill of Lading) 파서 Mixin
 ======================================================
-
 v3.6.0: document_parser_v2.py에서 분리
-
-모듈 개요:
-    B/L(선하증권) PDF를 파싱합니다.
-    
-추출 항목:
-    - B/L No: 258468669
-    - Booking No: 258468669
-    - SAP NO: 2200033057
-    - 선적 정보: Shipper, Consignee, Vessel, Port
-    - 컨테이너 정보: Container No, Seal No, Size, Weight
-    - 운임 정보: Freight
+v5.8.6.B: Ship Date 하이브리드 추출 (Gemini 우선 + 정규식 폴백)
 
 작성자: Ruby (남기동)
-버전: v3.6.0
+버전: v5.8.6.B
 """
 
 import re
@@ -32,31 +21,12 @@ logger = logging.getLogger(__name__)
 
 
 class BLMixin:
-    """
-    B/L (Bill of Lading) 파서 Mixin
-    
-    선하증권 PDF에서 B/L 번호, 컨테이너 정보, 선적 정보를 추출합니다.
-    
-    Example:
-        >>> class MyParser(BLMixin, DocumentParserBase):
-        ...     pass
-        >>> parser = MyParser()
-        >>> bl = parser.parse_bl('bl.pdf')
-    """
+    """B/L (Bill of Lading) 파서 Mixin — v5.8.6.B Ship Date 폴백 추가"""
     
     def parse_bl(self, pdf_path: str) -> Optional[BLData]:
         """
-        B/L PDF 파싱 (API-Only)
-
-        정책(v5.5.1): **모든 파싱은 Gemini API를 강제**합니다.
-        - API Key 미설정: 하드-스톱(예외)
-        - 파싱 실패: 정규식/로컬 폴백 없음(예외)
-
-        Args:
-            pdf_path: B/L PDF 파일 경로
-
-        Returns:
-            BLData: 파싱 결과
+        B/L PDF 파싱 (API-Only + Ship Date 폴백)
+        ★ v5.8.6.B: Ship Date만 정규식 폴백 추가
         """
         # API-Only Gate
         self._require_gemini_api_key()
@@ -69,10 +39,8 @@ class BLMixin:
         gemini_result = None
         try:
             gemini_result = self._gemini_with_retry(
-                gemini_parser.parse_bl,
-                pdf_path,
-                retries=3,
-                wait_seconds=1.0,
+                gemini_parser.parse_bl, pdf_path,
+                retries=3, wait_seconds=1.0,
             )
         except (ValueError, TypeError, KeyError, IndexError) as gemini_err:
             logger.warning(f"[BL] Gemini 실패, OpenAI 폴백 시도: {gemini_err}")
@@ -89,7 +57,7 @@ class BLMixin:
                         gemini_result = openai_result
                         logger.info("[BL] OpenAI 폴백으로 파싱 성공")
                     elif openai_result is None:
-                        logger.info("[BL] OpenAI 폴백 실패 또는 openai 패키지 미설치(pip install openai)")
+                        logger.info("[BL] OpenAI 폴백 실패 또는 openai 패키지 미설치")
                 else:
                     logger.info("[BL] OpenAI 폴백 생략: OPENAI_API_KEY 미설정")
             except (ValueError, TypeError, KeyError, IndexError) as fallback_err:
@@ -109,12 +77,46 @@ class BLMixin:
         result.consignee = getattr(gemini_result, 'consignee', '') or ''
         result.vessel = getattr(gemini_result, 'vessel', '') or ''
 
+        # ═══════════════════════════════════════════════════════
+        # ★★★ v5.8.6.B: Ship Date 하이브리드 추출 ★★★
+        # Gemini 우선 → 실패 시 정규식 폴백
+        # ═══════════════════════════════════════════════════════
+        try:
+            from utils.date_utils import extract_ship_date, extract_pdf_text
+
+            gemini_dict = {}
+            for key in ('shipped_on_board_date', 'shipped_date', 'ship_date'):
+                val = getattr(gemini_result, key, '')
+                if val:
+                    gemini_dict[key] = val
+
+            pdf_text = extract_pdf_text(pdf_path)
+            ship_date, source, estimated = extract_ship_date(gemini_dict, pdf_text)
+
+            result.shipped_on_board_date = ship_date
+            result.ship_date = ship_date
+        except Exception as e:
+            logger.warning(f"[BL] Ship Date 하이브리드 추출 오류 (기존 방식 사용): {e}")
+            # 기존 방식 폴백
+            ship_str = (getattr(gemini_result, 'shipped_on_board_date', '') or
+                       getattr(gemini_result, 'shipped_date', '') or
+                       getattr(gemini_result, 'ship_date', '') or '')
+            if ship_str and ship_str != 'NOT_FOUND':
+                try:
+                    parts = str(ship_str).strip()[:10].split('-')
+                    if len(parts) == 3:
+                        from datetime import date
+                        result.shipped_on_board_date = date(
+                            int(parts[0]), int(parts[1]), int(parts[2]))
+                        result.ship_date = result.shipped_on_board_date
+                except (ValueError, TypeError, IndexError):
+                    pass
+
         # 컨테이너 목록
         containers = getattr(gemini_result, 'containers', []) or []
         result.containers = []
         for c in containers:
             try:
-                # gross_weight_kg(Gemini) 또는 weight_kg(OpenAI 폴백) 지원
                 w = float(getattr(c, 'gross_weight_kg', None) or getattr(c, 'weight_kg', 0) or 0)
                 result.containers.append(ContainerInfo(
                     container_no=getattr(c, 'container_no', '') or '',

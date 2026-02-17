@@ -58,13 +58,11 @@ class CRUDMixin:
             ship_date = kwargs.get('ship_date', '')
             free_time = kwargs.get('free_time', 0)
             
-            # Date handling
+            # Date handling — arrival_date 미상 시 비움(date.today() 사용 금지)
             if arrival_date is None:
-                arrival_date = date.today()
+                arrival_date = ''
             if stock_date is None:
                 stock_date = date.today()
-            
-            # Convert dates to strings
             if hasattr(arrival_date, 'isoformat'):
                 arrival_date = arrival_date.isoformat()
             if hasattr(stock_date, 'isoformat'):

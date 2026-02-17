@@ -321,12 +321,8 @@ MAX_RECENT_FILES = 10
 CACHE_EXPIRE_SECONDS = 300
 
 # ═══════════════════════════════════════════════════════════════
-# SQM 비즈니스 기본값 (v5.7.8: engine_modules.constants 단일 소스)
+# SQM 비즈니스 기본값 — core.constants 단일 소스 (re-export만, 로컬 정의 없음)
 # ═══════════════════════════════════════════════════════════════
-try:
-    from core.constants import DEFAULT_WAREHOUSE, DEFAULT_TONBAG_COUNT
-except ImportError:
-    DEFAULT_WAREHOUSE = '광양'
-    DEFAULT_TONBAG_COUNT = 10
+from core.constants import DEFAULT_WAREHOUSE, DEFAULT_TONBAG_COUNT
 DEFAULT_PRODUCT = 'LITHIUM CARBONATE'
 WEIGHT_TOLERANCE_KG = 0.5  # 무게 허용 오차 (kg)

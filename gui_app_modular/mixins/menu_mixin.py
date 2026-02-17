@@ -191,6 +191,7 @@ class MenuMixin:
             adv_menu.add_command(label="🔬 출고 검증", command=self._dry_run_outbound)
             adv_menu.add_separator()
             adv_menu.add_command(label="🩺 전체 진단", command=self._run_self_test)
+            adv_menu.add_command(label="🧪 단위 테스트", command=self._open_test_runner)
         
         # =====================================================
         # 보기 메뉴

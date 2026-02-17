@@ -555,6 +555,8 @@ class TonbagTabMixin:
                 bl_no = str(tb.get('bl_no', ''))
                 product = str(tb.get('product', ''))
                 container = str(tb.get('container_no', ''))
+                if hasattr(self, '_format_container_no'):
+                    container = self._format_container_no(container)
                 is_sample = tb.get('is_sample', 0)
                 
                 # v3.9.5: 샘플 필터 (체크박스 OFF면 샘플 숨김)

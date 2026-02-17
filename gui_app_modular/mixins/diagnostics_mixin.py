@@ -172,8 +172,18 @@ class DiagnosticsMixin:
             CustomMessageBox.showerror(self.root, "오류", f"저장 오류:\n{e}")
     
     # ═══════════════════════════════════════════════════════════════
-    # 자가 진단
+    # 자가 진단 / 테스트 러너
     # ═══════════════════════════════════════════════════════════════
+    
+    def _open_test_runner(self) -> None:
+        """단위 테스트 러너 다이얼로그 열기 (pytest tests/ 실행)."""
+        try:
+            from ..dialogs.test_runner_dialog import TestRunnerDialog
+            d = TestRunnerDialog(self.root)
+            d.show()
+        except Exception as e:
+            logger.exception("테스트 러너 열기 실패")
+            CustomMessageBox.showerror(self.root, "오류", f"테스트 러너 열기 실패:\n{e}")
     
     def _run_self_test(self) -> None:
         """전체 시스템 자가 진단"""

@@ -233,6 +233,7 @@ class CustomMenuBar:
             self._add_command(adv_sub, "🔬 출고 검증", self.app._dry_run_outbound)
             self._add_separator(adv_sub)
             self._add_command(adv_sub, "🩺 전체 진단", self.app._run_self_test)
+            self._add_command(adv_sub, "🧪 단위 테스트", self.app._open_test_runner)
         
     def _create_features_menu(self) -> None:
         """3. 🚀 v2.7 기능 메뉴"""

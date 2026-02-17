@@ -242,6 +242,8 @@ class BLResult:
     total_containers: int = 0
     total_weight_kg: float = 0.0
     shipped_date: str = ""
+    ship_date: str = ""  # BL 선적일 (shipped_date와 동일, 호출부 ship_date 사용)
+    shipped_on_board_date: str = ""  # v5.8.6.B: BLData 필드명과 통일
     eta: str = ""
     raw_response: str = ""
     error_message: str = ""
@@ -264,6 +266,7 @@ class DOResult:
     container_numbers: List[str] = field(default_factory=list)  # 단순 목록
     total_weight_kg: float = 0.0
     arrival_date: str = ""
+    all_dates_found: List[str] = field(default_factory=list)  # v5.8.6.B: 문서 내 모든 날짜
     issue_date: str = ""
     release_date: str = ""
     raw_response: str = ""
@@ -764,6 +767,7 @@ class GeminiDocumentParser:
             prompt = """오직 JSON만 출력하세요. 설명·마크다운·코드블럭(```) 표시 금지. 반드시 lots 배열을 포함하고, 각 lot에는 lot_no, mxbg, net_weight_kg가 필수입니다.
 
 이 Packing List 문서를 분석하여 아래 JSON 형식으로 정확히 추출해주세요.
+표에 LIST 1, 2, ... 20처럼 여러 행이 있으면 반드시 그 행 수만큼 모두 추출하세요. (예: 20행이면 lots 배열에 20개 항목)
 
 숫자 형식 주의 (★중요★):
 - 유럽식 표기 (5.131,250 = 5131.250)를 숫자로 변환
@@ -829,7 +833,7 @@ class GeminiDocumentParser:
                 result.error_message = "JSON 추출 실패"
                 return result
             
-            # 결과 매핑
+            # 결과 매핑 (1페이지)
             result.folio = str(data.get('folio', ''))
             result.product = data.get('product', '')
             result.packing = data.get('packing', '')
@@ -841,15 +845,19 @@ class GeminiDocumentParser:
             result.total_net_weight_kg = parse_euro_weight(data.get('total_net_weight_kg', 0))
             result.total_gross_weight_kg = parse_euro_weight(data.get('total_gross_weight_kg', 0))
             
-            # LOT 목록
-            for lot_data in data.get('lots', []):
+            seen_lot_nos = set()
+            def append_lot(lot_data: dict, from_continuation_page: bool = False) -> None:
+                lot_no = str(lot_data.get('lot_no', '')).strip()
+                if from_continuation_page and lot_no and lot_no in seen_lot_nos:
+                    return
+                if lot_no:
+                    seen_lot_nos.add(lot_no)
                 lot = LOTItem(
                     list_no=int(lot_data.get('list_no', 0)),
                     container_no=str(lot_data.get('container_no', '')),
-                    lot_no=str(lot_data.get('lot_no', '')),
+                    lot_no=lot_no or str(lot_data.get('lot_no', '')),
                     lot_sqm=str(lot_data.get('lot_sqm', '')),
                     mxbg=int(lot_data.get('mxbg', 10)),
-                    # ★★★ v2.9.52: 유럽식 숫자 변환 적용 ★★★
                     net_weight_kg=parse_euro_weight(lot_data.get('net_weight_kg', 0)),
                     gross_weight_kg=parse_euro_weight(lot_data.get('gross_weight_kg', 0)),
                     del_no=str(lot_data.get('del_no', '')),
@@ -857,10 +865,49 @@ class GeminiDocumentParser:
                 )
                 result.lots.append(lot)
             
+            # 1페이지: 중복 제거 없이 전부 추가 (1페이지에 20개 있으면 20개 모두 반영)
+            for lot_data in data.get('lots', []):
+                append_lot(lot_data, from_continuation_page=False)
+            
+            # 다중 페이지: 2페이지부터 추가 LOT 추출 (20개 롯트 등이 2페이지에 나뉠 경우 누락 방지)
+            prompt_continuation = """오직 JSON만 출력하세요. 설명·마크다운·코드블럭(```) 금지.
+이 Packing List의 이어지는 페이지입니다. 이 페이지에 있는 LOT 행만 아래 형식으로 추출하세요.
+유럽식 숫자 (5.131,250 = 5131.250)를 숫자로 변환하고, net_weight_kg·gross_weight_kg는 소수점 포함 kg로 넣으세요.
+{"lots": [ {"list_no": 1, "container_no": "", "lot_no": "", "lot_sqm": "", "mxbg": 10, "net_weight_kg": 5001.5, "gross_weight_kg": 5131.25, "del_no": "", "al_no": ""} ]}
+JSON만 출력하세요."""
+            
+            for page_idx in range(1, len(images)):
+                try:
+                    page_text = self._call_gemini(prompt_continuation, images[page_idx])
+                    page_data = self._extract_json(page_text)
+                    if not page_data:
+                        continue
+                    page_lots = page_data.get("lots") if isinstance(page_data.get("lots"), list) else []
+                    logger.info(f"[GeminiParser] PL 추가 페이지 {page_idx + 1}: {len(page_lots)} LOT")
+                    for lot_data in page_lots:
+                        if not isinstance(lot_data, dict):
+                            continue
+                        # list_no 재부여 (이어지는 번호), 2페이지 이후는 lot_no 중복 시 스킵
+                        lot_data = dict(lot_data)
+                        lot_data["list_no"] = len(result.lots) + 1
+                        append_lot(lot_data, from_continuation_page=True)
+                except (ValueError, TypeError, KeyError) as _e:
+                    logger.warning(f"[GeminiParser] PL 페이지 {page_idx + 1} 추출 실패: {_e}")
+            
+            # list_no 순서대로 재정렬 및 총중량 재계산
+            if result.lots:
+                for idx, lot in enumerate(result.lots, 1):
+                    lot.list_no = idx
+                result.total_net_weight_kg = sum(lot.net_weight_kg for lot in result.lots)
+                result.total_gross_weight_kg = sum(lot.gross_weight_kg for lot in result.lots)
+            
             result.success = len(result.lots) > 0
             
             # v2.5.8: 제품명 로깅
             logger.info(f"[GeminiParser] Packing List 완료: {len(result.lots)} LOT, {result.total_net_weight_kg:,.0f}kg, 제품: {result.product or '(없음)'}")
+            # 1페이지뿐인데 20개 미만이면 누락 가능성 경고 (원본이 20행인 경우)
+            if len(images) == 1 and len(result.lots) < 20 and len(result.lots) >= 19:
+                logger.warning(f"[GeminiParser] PL 1페이지인데 {len(result.lots)}개만 추출됨 — 원본에 20행이 있다면 응답 잘림 또는 모델 누락일 수 있음. 로그/raw 응답 확인 권장.")
             
         except (ValueError, TypeError, KeyError) as e:
             result.error_message = str(e)
@@ -992,9 +1039,17 @@ class GeminiDocumentParser:
     ],
     "total_containers": 5,
     "total_weight_kg": 102625,
-    "shipped_date": "2025-09-06"
+    "shipped_on_board_date": "★필수★ 선적일 YYYY-MM-DD 또는 NOT_FOUND"
 }
 ```
+
+★★★ shipped_on_board_date (선적일) 추출 규칙 ★★★
+- 찾는 위치: "SHIPPED ON BOARD", "ON BOARD DATE", "LADEN ON BOARD", "DATE OF SHIPMENT" 라벨 근처
+- 보통 문서 하단 또는 서명 근처에 있습니다
+- 형식: 반드시 YYYY-MM-DD로 변환 (예: 2025-09-15)
+- "15 SEP 2025" 형식이면 → "2025-09-15"로 변환
+- "15/09/2025" 형식이면 → "2025-09-15"로 변환
+- 찾지 못하면 "NOT_FOUND"라고 적어주세요. 빈 문자열("") 금지!
 
 모든 컨테이너를 빠짐없이 추출해주세요. JSON만 응답해주세요."""
 
@@ -1025,7 +1080,9 @@ class GeminiDocumentParser:
                         result.consignee = data.get('consignee', '')
                         result.total_containers = int(data.get('total_containers', 0))
                         result.total_weight_kg = float(data.get('total_weight_kg', 0))
-                        result.shipped_date = data.get('shipped_date', '')
+                        result.shipped_date = data.get('shipped_on_board_date', '') or data.get('shipped_date', '') or data.get('ship_date', '')
+                        result.ship_date = result.shipped_date  # 호출부 getattr(bl, 'ship_date') 호환
+                        result.shipped_on_board_date = result.shipped_date  # BLData 필드 호환
                     
                     # SAP NO 찾기 (어느 페이지에서든)
                     page_sap = str(data.get('sap_no', ''))
@@ -1074,20 +1131,50 @@ class GeminiDocumentParser:
                 result.error_message = "PDF 이미지 변환 실패"
                 return result
             
-            # ★★★ v2.9.24: 프롬프트 강화 - 한글 라벨 명시 ★★★
+            # ★★★ v5.8.6.B: 프롬프트 전면 개선 — Ship Date/Arrival Date/Free Time ★★★
             prompt = """이 D/O(화물인도지시서/발급확인서) 문서를 분석하여 아래 JSON 형식으로 추출해주세요.
+오직 JSON만 출력하세요. 설명·마크다운·코드블럭(```) 금지.
 
-**중요 추출 규칙:**
+★★★ arrival_date (입항일) — 최우선 추출 필드 ★★★
+
+이 문서에서 가장 중요한 데이터는 arrival_date(선박 입항일)입니다.
+반드시 찾아야 합니다.
+
+[찾는 방법 — 아래 순서대로 확인하세요]
+
+STEP 1: 문서 하단 "(For Local Use)" 또는 "참고사항" 섹션에서
+        "선박 입항일" 또는 "1. 선박 입항일" 아래 줄에
+        YYYY-MM-DD 형식 날짜가 있습니다. 이것이 arrival_date입니다.
+        예시:
+        (For Local Use)
+        1. 선박 입항일
+        2025-10-17        ← 이것이 arrival_date!
+
+STEP 2: STEP 1에서 못 찾으면 다음 라벨 근처를 검색:
+        "Arrival Date", "입항일", "입항예정일",
+        "ETA", "ETA BUSAN", "ETA(BUSAN)", "ATA", "Vessel Arrival"
+
+STEP 3: 모두 실패하면 "NOT_FOUND"로 적으세요.
+
+★★★ 주의: 다음 날짜와 arrival_date를 혼동하지 마세요! ★★★
+- Free Time 컬럼의 날짜 → 이것은 컨테이너 "반납기한"입니다 (arrival_date 아님!)
+- "발행일" → 이것은 D/O 발급일입니다 (arrival_date 아님!)
+- "출력일시" → 이것은 인쇄일입니다 (arrival_date 아님!)
+arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
+
+[날짜 형식 — 반드시 YYYY-MM-DD로 변환]
+- "2025-10-17" → 그대로
+- "2025.10.17" → "2025-10-17"
+- "17/10/2025" → "2025-10-17"
+- "Oct 17, 2025" → "2025-10-17"
+- "2025년 10월 17일" → "2025-10-17"
+
+[기타 추출 규칙]
 1. D/O No는 문서 상단 (예: 241044299)
-2. B/L No는 "MAEU" 접두사가 붙을 수 있음 (예: MAEU258468669)
-   - 숫자만 추출: 258468669
+2. B/L No는 "MAEU" 접두사가 붙을 수 있음 — 숫자만 추출: 258468669
 3. 컨테이너 목록에서 Container No, Seal No 추출
-4. Free Time은 컨테이너별로 다를 수 있음 (YYYY-MM-DD)
-5. ★★★ 선박 입항일(arrival_date)은 다음 표기를 모두 확인:
-   - "선박 입항일" (한글, 문서 하단 "(For Local Use)" 섹션)
-   - "Arrival Date", "Vessel Arrival", "ETA", "ETA BUSAN", "ETA(BUSAN)"
-   - 형식: YYYY-MM-DD (예: 2025-10-17)
-6. 반납지는 "반납지" 필드 (예: KRKNYTM)
+4. Free Time 컬럼 값은 실제로 컨테이너 반납일(con_return_date) — 반드시 YYYY-MM-DD로 추출 (누락 시 FREE TIME 일수 계산 불가)
+5. 반납지는 "반납지" 필드 (예: KRKNYTM). containers[] 안의 각 컨테이너에 con_return_date를 꼭 넣으세요.
 
 ```json
 {
@@ -1101,15 +1188,17 @@ class GeminiDocumentParser:
     "shipper": "송하인 (예: SQM SALAR SPA.)",
     "consignee": "수하인 (예: SOQUIMICH LLC)",
     "containers": [
-        {"container_no": "FFAU4840178", "seal_no": "CL0501799", "size_type": "45G1", "free_time": "2025-11-11", "return_place": "KRKNYTM"}
+        {"container_no": "FFAU4840178", "seal_no": "CL0501799", "size_type": "45G1", "con_return_date": "2025-11-11", "return_place": "KRKNYTM"}
     ],
     "total_weight_kg": 102625,
-    "arrival_date": "선박 입항일 (필수! 예: 2025-10-17)",
-    "issue_date": "D/O 발행일 (예: 2025-10-20)"
+    "arrival_date": "★필수★ 입항일 YYYY-MM-DD 또는 NOT_FOUND",
+    "issue_date": "D/O 발행일 YYYY-MM-DD",
+    "all_dates_found": ["문서에서 발견한 모든 날짜를 YYYY-MM-DD 형식으로 나열"]
 }
 ```
 
-★★★ arrival_date(선박 입항일)를 반드시 찾아주세요. 문서 하단 "(For Local Use)" 섹션에 있을 수 있습니다.
+★ arrival_date: 빈 문자열("") 금지, null 금지. 찾으면 YYYY-MM-DD, 못 찾으면 "NOT_FOUND"
+★ all_dates_found: 문서에서 보이는 모든 날짜를 빠짐없이 나열해주세요.
 모든 컨테이너를 빠짐없이 추출해주세요. JSON만 응답해주세요."""
 
             response_text = self._call_gemini(prompt, images[0])
@@ -1129,13 +1218,14 @@ class GeminiDocumentParser:
                 result.consignee = data.get('consignee', '')
                 result.total_weight_kg = float(data.get('total_weight_kg', 0))
                 
-                # ★★★ v2.9.24: arrival_date 다중 키 지원 ★★★
+                # ★★★ v5.8.6.B: arrival_date 다중 키 지원 + all_dates_found ★★★
                 arrival = (data.get('arrival_date') or 
                           data.get('eta_date') or 
                           data.get('eta') or 
                           data.get('vessel_arrival') or
                           data.get('eta_busan') or '')
                 result.arrival_date = arrival
+                result.all_dates_found = data.get('all_dates_found', [])
                 
                 result.issue_date = data.get('issue_date', '')
                 result.release_date = data.get('release_date', data.get('issue_date', ''))
@@ -1146,7 +1236,7 @@ class GeminiDocumentParser:
                         container_no=cont.get('container_no', ''),
                         seal_no=cont.get('seal_no', ''),
                         size_type=cont.get('size_type', ''),
-                        free_time=cont.get('free_time', ''),
+                        free_time=cont.get('con_return_date', '') or cont.get('free_time', ''),
                         return_place=cont.get('return_place', '')
                     ))
                 

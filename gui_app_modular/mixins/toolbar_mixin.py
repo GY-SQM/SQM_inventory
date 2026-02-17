@@ -440,7 +440,7 @@ class ToolbarMixin:
         m.add_command(label="━━ 🔧 도구 ━━", state='disabled', font=(f, 14, 'bold'))
         # 컨테이너 서픽스 옵션
         m.add_checkbutton(
-            label="  📦 컨테이너 구분 (-1, -2 표시)",
+            label="  📦 컨테이너 구분 (-1, -2 표시) — 재고/톤백 CONTAINER 열 접미사 표시",
             variable=self._container_suffix_var,
             command=self._on_container_suffix_toggle
         )
@@ -467,18 +467,18 @@ class ToolbarMixin:
         f = self._toolbar_font
         m = self._create_menu()
         
-        # v5.0.2: 버전 자동 표시
+        # v5.0.2: 버전 자동 표시 — 툴팁 대신 라벨에 설명 포함 (Tk 메뉴는 툴팁 미지원)
         try:
             from version import __version__
             version_label = f"  📝 버전 정보 (v{__version__})"
         except ImportError:
             version_label = "  📝 버전 정보"
         
-        m.add_command(label="  📖 사용법", command=lambda: self._safe_call('_show_help'))
-        m.add_command(label="  ⌨️ 단축키 안내", command=lambda: self._safe_call('_show_shortcuts'))
+        m.add_command(label="  📖 사용법 — 사용 설명서 열기", command=lambda: self._safe_call('_show_help'))
+        m.add_command(label="  ⌨️ 단축키 안내 — 키보드 단축키 목록", command=lambda: self._safe_call('_show_shortcuts'))
         m.add_separator()
-        m.add_command(label="  ℹ️ 시스템 정보", command=lambda: self._safe_call('_show_system_info'))
-        m.add_command(label=version_label, command=lambda: self._safe_call('_show_about'))
+        m.add_command(label="  ℹ️ 시스템 정보 — Python·DB·경로 등", command=lambda: self._safe_call('_show_system_info'))
+        m.add_command(label=version_label + " — 앱 버전·라이선스", command=lambda: self._safe_call('_show_about'))
         return m
 
     # ═══════════════════════════════════════════════════════
@@ -737,13 +737,27 @@ class ToolbarMixin:
     # ═══════════════════════════════════════════════════════
 
     def _on_container_suffix_toggle(self) -> None:
-        """컨테이너 -1, -2 서픽스 표시 토글"""
+        """컨테이너 -1, -2 서픽스 표시 토글 — 재고/톤백 테이블의 CONTAINER 열 표시를 갱신합니다."""
         show = self._container_suffix_var.get()
         self._log(f"📦 컨테이너 구분: {'ON' if show else 'OFF'}")
         if hasattr(self, '_refresh_inventory'):
             self._refresh_inventory()
         if hasattr(self, '_refresh_tonbag'):
             self._refresh_tonbag()
+
+    def _format_container_no(self, container_no: str) -> str:
+        """컨테이너 번호 표시: _container_suffix_var가 꺼져 있으면 끝의 -1, -2 접미사를 제거합니다."""
+        if not container_no:
+            return ''
+        if not getattr(self, '_container_suffix_var', None):
+            return str(container_no)
+        if not self._container_suffix_var.get():
+            s = str(container_no).strip()
+            if '-' in s:
+                parts = s.rsplit('-', 1)
+                if len(parts) == 2 and parts[1].isdigit():
+                    return parts[0].strip()
+        return str(container_no)
 
     def _on_auto_refresh_toggle(self) -> None:
         """v3.8.4: 대시보드 자동 갱신 30초 토글"""

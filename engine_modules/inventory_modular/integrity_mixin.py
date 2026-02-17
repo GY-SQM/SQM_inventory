@@ -78,10 +78,11 @@ class IntegrityMixin:
                 result['valid'] = False
 
             # 검증 2-3: 톤백 합계 대조 (v5.7.2: 가용/출고 합산에 샘플 포함 — 대원칙 5001=500×10+1)
+            # 가용 합계: status IN ('AVAILABLE','SAMPLE') — 샘플이 SAMPLE로 저장돼도 1kg 포함, 중복 없음
             tb_summary = self.db.fetchone("""
                 SELECT 
-                    COALESCE(SUM(CASE WHEN status='AVAILABLE' THEN weight ELSE 0 END), 0) as avail_w,
-                    COALESCE(SUM(CASE WHEN status IN ('PICKED','CONFIRMED','SHIPPED') THEN weight ELSE 0 END), 0) as picked_w,
+                    COALESCE(SUM(CASE WHEN status IN ('AVAILABLE','SAMPLE') THEN weight ELSE 0 END), 0) as avail_w,
+                    COALESCE(SUM(CASE WHEN status IN ('PICKED','CONFIRMED','SHIPPED','SOLD') THEN weight ELSE 0 END), 0) as picked_w,
                     SUM(CASE WHEN COALESCE(is_sample,0)=0 THEN 1 ELSE 0 END) as total_count,
                     SUM(CASE WHEN status='AVAILABLE' THEN 1 ELSE 0 END) as avail_count,
                     SUM(CASE WHEN status IN ('PICKED','CONFIRMED','SHIPPED') THEN 1 ELSE 0 END) as picked_count,

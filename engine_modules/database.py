@@ -90,7 +90,7 @@ class SQMDatabase(DatabaseMigrationMixin, DatabaseInterface):
 
     # LOT 번호 유효성 검사 패턴 (10자리 숫자)
     # v2.9.0: 112로 시작한다고 단정하지 않음
-    LOT_NO_PATTERN = re.compile(r'^\d{10}$')
+    # LOT 검증은 engine_modules.validators.validate_lot_no 단일 소스 사용
 
     # 백업 설정
     MAX_BACKUPS = 5  # 최대 백업 파일 수
@@ -396,42 +396,11 @@ class SQMDatabase(DatabaseMigrationMixin, DatabaseInterface):
     @classmethod
     def validate_lot_no(cls, lot_no: str, strict: bool = True) -> Tuple[bool, str]:
         """
-        LOT 번호 유효성 검사 (v2.9.0)
-
-        Args:
-            lot_no: 검사할 LOT 번호
-            strict: 엄격 검사 여부 (10자리 숫자 강제)
-
-        Returns:
-            (유효 여부, 오류 메시지)
-            
-        Note:
-            v2.9.0: 112로 시작한다고 단정하지 않음 - 10자리 숫자만 확인
+        LOT 번호 유효성 검사. 단일 소스: engine_modules.validators.validate_lot_no
+        strict 인자는 하위 호환용(무시). 검증 기준은 validators와 동일.
         """
-        if not lot_no:
-            return False, "LOT 번호가 비어있습니다"
-
-        lot_no = str(lot_no).strip()
-
-        if not lot_no:
-            return False, "LOT 번호가 비어있습니다"
-
-        # v2.9.0: 10자리 숫자만 확인
-        if strict:
-            if cls.LOT_NO_PATTERN.match(lot_no):
-                return True, ""
-            else:
-                return False, f"LOT 번호 형식 오류 (10자리 숫자 필요): {lot_no}"
-        else:
-            if cls.LOT_NO_PATTERN.match(lot_no):
-                return True, ""
-            else:
-                # 유연 모드: 알파벳 포함 허용
-                if not lot_no.replace('-', '').replace('_', '').isalnum():
-                    return False, f"LOT 번호에 허용되지 않은 문자가 포함됨: {lot_no}"
-                if len(lot_no) < 5 or len(lot_no) > 20:
-                    return False, f"LOT 번호 길이 오류 (5-20자): {lot_no}"
-                return True, ""
+        from engine_modules.validators import validate_lot_no as _validate_lot_no
+        return _validate_lot_no(lot_no)
 
     @staticmethod
     def validate_weight(weight: float) -> Tuple[bool, str]:

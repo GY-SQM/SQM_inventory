@@ -65,6 +65,9 @@ class KeyBindingsMixin:
         # Help
         self.root.bind('<F1>', self._show_help)
         
+        # 테스트 DB 초기화 — 보안상 Ctrl+Esc 동시에 눌렀을 때만 팝업 표시
+        self.root.bind('<Control-Escape>', self._show_test_db_reset_popup)
+        
         self._log("Keyboard shortcuts configured")
     
     def _on_open_file(self, event=None) -> None:
@@ -266,3 +269,87 @@ v2.9.91 - SQM Inventory System
             self.root.clipboard_clear()
             self.root.clipboard_append(text)
             self._log(f"Copied {len(lines)} rows to clipboard")
+
+    def _show_test_db_reset_popup(self, event=None) -> None:
+        """Ctrl+Esc로만 호출 — 테스트 DB 초기화 팝업 (보안용 숨김)"""
+        from ..utils.constants import tk, ttk
+        popup = tk.Toplevel(self.root)
+        popup.title("테스트 DB 초기화")
+        popup.resizable(False, False)
+        popup.transient(self.root)
+        popup.grab_set()
+        try:
+            x = self.root.winfo_rootx() + max(0, (self.root.winfo_width() - 420) // 2)
+            y = self.root.winfo_rooty() + max(0, (self.root.winfo_height() - 180) // 2)
+            popup.geometry(f"420x180+{max(0, x)}+{max(0, y)}")
+        except tk.TclError:
+            popup.geometry("420x180")
+        frame = ttk.Frame(popup, padding=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(frame, text="테스트용 데이터베이스를 초기화합니다.\n모든 재고·톤백·출고 데이터가 삭제됩니다.",
+                  font=('맑은 고딕', 11), wraplength=360).pack(anchor='w', pady=(0, 12))
+        ttk.Label(frame, text="계속하시겠습니까?",
+                  font=('맑은 고딕', 10), foreground='#e67e22').pack(anchor='w', pady=(0, 16))
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(fill=tk.X)
+        def do_reset():
+            popup.destroy()
+            self._reset_test_db()
+        ttk.Button(btn_frame, text="테스트 DB 초기화", command=do_reset, width=18).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="취소", command=popup.destroy, width=10).pack(side=tk.LEFT)
+        popup.bind('<Escape>', lambda e: popup.destroy())
+        popup.protocol("WM_DELETE_WINDOW", popup.destroy)
+
+    def _reset_test_db(self) -> None:
+        """테스트 DB 초기화 — SQLite만 지원. 연결 종료 후 파일 삭제·재생성."""
+        import os
+        import shutil
+        from datetime import datetime
+        if not getattr(self, 'engine', None):
+            self._log("⚠️ 엔진이 없습니다.")
+            return
+        db_path = getattr(self.engine, 'db_path', None)
+        if not db_path or db_path == ':memory:':
+            self._log("⚠️ 메모리 DB 또는 경로 없음 — 초기화 불가")
+            return
+        if getattr(self.engine, 'db_type', 'sqlite') != 'sqlite':
+            self._log("⚠️ 테스트 DB 초기화는 SQLite에서만 지원합니다.")
+            return
+        path = os.path.abspath(db_path)
+        if not os.path.isfile(path):
+            self._log("⚠️ DB 파일이 없습니다.")
+            return
+        try:
+            if hasattr(self.engine, 'db') and hasattr(self.engine.db, 'close'):
+                self.engine.db.close()
+        except Exception as e:
+            logger.debug(f"DB close: {e}")
+        backup_dir = os.path.join(os.path.dirname(path), 'backups')
+        os.makedirs(backup_dir, exist_ok=True)
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_path = os.path.join(backup_dir, f"sqm_before_reset_{stamp}.db")
+        try:
+            shutil.copy2(path, backup_path)
+            self._log(f"백업: {backup_path}")
+        except OSError as e:
+            logger.warning(f"백업 실패: {e}")
+        try:
+            os.remove(path)
+        except OSError as e:
+            self._log(f"❌ DB 파일 삭제 실패: {e}")
+            CustomMessageBox.showerror(self.root, "테스트 DB 초기화", f"파일이 사용 중이거나 권한이 없습니다.\n{e}")
+            return
+        try:
+            self._init_engine()
+            self._log("✅ 테스트 DB 초기화 완료.")
+            self._refresh_inventory()
+            self._refresh_tonbag()
+            if hasattr(self, '_refresh_dashboard') and callable(self._refresh_dashboard):
+                try:
+                    self._refresh_dashboard()
+                except Exception as _e:
+                    logger.debug(f"Dashboard refresh: {_e}")
+            CustomMessageBox.showinfo(self.root, "테스트 DB 초기화", "데이터베이스가 초기화되었습니다.\n재고·톤백 화면이 갱신됩니다.")
+        except Exception as e:
+            logger.error(f"테스트 DB 초기화 오류: {e}", exc_info=True)
+            CustomMessageBox.showerror(self.root, "테스트 DB 초기화", f"엔진 재생성 실패:\n{e}")

@@ -2,22 +2,11 @@
 """
 SQM 재고관리 시스템 - D/O (Delivery Order) 파서 Mixin
 ======================================================
-
 v3.6.0: document_parser_v2.py에서 분리
-
-모듈 개요:
-    D/O(화물인도지시서) PDF를 파싱합니다.
-    D/O는 대부분 이미지 PDF이므로 Gemini Vision API를 사용합니다.
-    
-추출 항목:
-    - D/O No
-    - B/L No
-    - Arrival Date (입항일 - 재고 입고일로 사용)
-    - Container & Seal
-    - Free Time
+v5.8.6.B: Arrival Date 하이브리드 추출 + Free Time 계산 복원
 
 작성자: Ruby (남기동)
-버전: v3.6.0
+버전: v5.8.6.B
 """
 
 import re
@@ -41,32 +30,13 @@ except ImportError:
 class DOMixin:
     """
     D/O (Delivery Order) 파서 Mixin
-    
-    화물인도지시서 PDF에서 입항일, Free Time 등을 추출합니다.
-    이미지 PDF인 경우 Gemini Vision API를 사용합니다.
-    
-    Example:
-        >>> class MyParser(DOMixin, DocumentParserBase):
-        ...     pass
-        >>> parser = MyParser(gemini_api_key='your_key')
-        >>> do = parser.parse_do('do.pdf')
+    ★ v5.8.6.B: Arrival Date 하이브리드 + Free Time 계산 복원
     """
     
     def parse_do(self, pdf_path: str, use_gemini: bool = True) -> Optional[DOData]:
-
         """
-        D/O PDF 파싱 (API-Only)
-
-        정책(v5.5.1): **모든 파싱은 Gemini API를 강제**합니다.
-        - API Key 미설정: 하드-스톱(예외)
-        - 파싱 실패: 정규식/로컬 폴백 없음(예외)
-
-        Args:
-            pdf_path: D/O PDF 파일 경로
-            use_gemini: (호환용) 무시됨. API-Only 강제.
-
-        Returns:
-            DOData: 파싱 결과
+        D/O PDF 파싱 (API-Only + Arrival Date 폴백 + Free Time 계산)
+        ★ v5.8.6.B: arrival_date 정규식 폴백 + Free Time 계산 추가
         """
         # API-Only Gate
         self._require_gemini_api_key()
@@ -79,10 +49,8 @@ class DOMixin:
         gemini_result = None
         try:
             gemini_result = self._gemini_with_retry(
-                gemini_parser.parse_do,
-                pdf_path,
-                retries=3,
-                wait_seconds=1.0,
+                gemini_parser.parse_do, pdf_path,
+                retries=3, wait_seconds=1.0,
             )
         except (ValueError, TypeError, KeyError, IndexError) as gemini_err:
             logger.warning(f"[DO] Gemini 실패, OpenAI 폴백 시도: {gemini_err}")
@@ -99,7 +67,7 @@ class DOMixin:
                         gemini_result = openai_result
                         logger.info("[DO] OpenAI 폴백으로 파싱 성공")
                     elif openai_result is None:
-                        logger.info("[DO] OpenAI 폴백 실패 또는 openai 패키지 미설치(pip install openai)")
+                        logger.info("[DO] OpenAI 폴백 실패 또는 openai 패키지 미설치")
                 else:
                     logger.info("[DO] OpenAI 폴백 생략: OPENAI_API_KEY 미설정")
             except (ValueError, TypeError, KeyError, IndexError) as fallback_err:
@@ -113,12 +81,74 @@ class DOMixin:
         result.source_file = pdf_path
         result.parsed_at = datetime.now()
 
-        # 핵심 필드 매핑 (Gemini: discharge_port/delivery_order_no, OpenAI 폴백: port_of_discharge/do_no)
+        # 핵심 필드 매핑
         result.bl_no = getattr(gemini_result, 'bl_no', '') or ''
         result.vessel = getattr(gemini_result, 'vessel', '') or ''
         result.voyage = getattr(gemini_result, 'voyage', '') or ''
-        result.port_of_discharge = getattr(gemini_result, 'discharge_port', '') or getattr(gemini_result, 'port_of_discharge', '') or ''
-        result.do_no = getattr(gemini_result, 'delivery_order_no', '') or getattr(gemini_result, 'do_no', '') or ''
+        result.port_of_discharge = (getattr(gemini_result, 'discharge_port', '') or
+                                    getattr(gemini_result, 'port_of_discharge', '') or '')
+        result.do_no = (getattr(gemini_result, 'delivery_order_no', '') or
+                       getattr(gemini_result, 'do_no', '') or '')
+
+        # ═══════════════════════════════════════════════════════
+        # ★★★ v5.8.6.B: Arrival Date 하이브리드 추출 ★★★
+        # Gemini 우선 → 정규식 → all_dates_found 추정
+        # ═══════════════════════════════════════════════════════
+        try:
+            from utils.date_utils import (
+                extract_arrival_date, extract_pdf_text,
+                calculate_free_time_status
+            )
+
+            # Gemini 결과를 dict로 변환
+            gemini_dict = {}
+            for key in ('arrival_date', 'eta_date', 'eta', 'vessel_arrival',
+                       'eta_busan', 'issue_date', 'all_dates_found'):
+                val = getattr(gemini_result, key, None)
+                if val:
+                    gemini_dict[key] = val
+
+            # PDF 텍스트 추출 (정규식 폴백용)
+            pdf_text = extract_pdf_text(pdf_path)
+
+            # 하이브리드 추출
+            arrival_date, source, estimated = extract_arrival_date(gemini_dict, pdf_text)
+            result.arrival_date = arrival_date
+
+            # ★★★ Free Time 계산 (arrival_date가 있을 때만) ★★★
+            if arrival_date:
+                ft_status = calculate_free_time_status(arrival_date)
+                logger.info(f"[DO] Free Time: {ft_status['message']}")
+                # DOData에 free_time_status 속성이 없으면 무시 (호환성)
+                try:
+                    result.free_time_status = ft_status
+                except AttributeError:
+                    pass
+
+        except ImportError:
+            logger.debug("[DO] date_utils 미설치 — 기존 매핑 사용")
+            # 기존 방식 폴백
+            arr_str = getattr(gemini_result, 'arrival_date', '') or ''
+            if arr_str and str(arr_str).strip() and str(arr_str) != 'None':
+                try:
+                    parts = str(arr_str).strip()[:10].split('-')
+                    if len(parts) == 3:
+                        result.arrival_date = date(
+                            int(parts[0]), int(parts[1]), int(parts[2]))
+                except (ValueError, TypeError, IndexError):
+                    pass
+        except Exception as e:
+            logger.warning(f"[DO] Arrival Date 하이브리드 추출 오류: {e}")
+            # 기존 방식 폴백
+            arr_str = getattr(gemini_result, 'arrival_date', '') or ''
+            if arr_str and str(arr_str).strip() and str(arr_str) not in ('None', 'NOT_FOUND'):
+                try:
+                    parts = str(arr_str).strip()[:10].split('-')
+                    if len(parts) == 3:
+                        result.arrival_date = date(
+                            int(parts[0]), int(parts[1]), int(parts[2]))
+                except (ValueError, TypeError, IndexError):
+                    pass
 
         # 컨테이너/Free Time
         result.containers = []
@@ -129,9 +159,12 @@ class DOMixin:
             if container_no:
                 result.containers.append(ContainerInfo(container_no=container_no))
 
-            # Gemini: free_time_date/return_location, OpenAI 폴백: free_time/return_place
-            free_time_date = getattr(c, 'free_time_date', '') or getattr(c, 'free_time', '') or ''
-            return_location = getattr(c, 'return_location', '') or getattr(c, 'return_place', '') or ''
+            # v5.8.6.B: con_return_date 호환 + 기존 free_time 호환
+            free_time_date = (getattr(c, 'con_return_date', '') or
+                            getattr(c, 'free_time_date', '') or
+                            getattr(c, 'free_time', '') or '')
+            return_location = (getattr(c, 'return_location', '') or
+                             getattr(c, 'return_place', '') or '')
             storage_free_days = getattr(c, 'storage_free_days', 0) or 0
 
             if container_no or free_time_date or return_location:
@@ -142,26 +175,26 @@ class DOMixin:
                     storage_free_days=int(storage_free_days or 0),
                 ))
 
+        # Free Time(컨테이너 반납일) 미추출 시 로그 — D/O 문서에 반납일 컬럼이 있으면 con_return_date로 추출 필요
+        if result.containers and (not result.free_time_info or all(not (getattr(ft, 'free_time_date', '') or '').strip() for ft in result.free_time_info)):
+            logger.warning("[DO] 컨테이너 반납일(con_return_date/Free Time) 미추출 — FREE TIME 일수 계산 불가. D/O 문서의 반납일 컬럼 확인.")
+
         return result
 
     def _parse_do_gemini(self, pdf_path: str, result: DOData) -> DOData:
-        """Gemini Vision API를 사용한 D/O 파싱"""
+        """Gemini Vision API를 사용한 D/O 파싱 (레거시 — parse_do에서 직접 호출하지 않음)"""
         if not HAS_NEW_GENAI or not self.gemini_api_key:
             logger.warning("[DO] Gemini API 사용 불가")
             return result
         
         try:
-            # PDF를 이미지로 변환
             images = self._pdf_to_images(pdf_path, max_pages=3)
-            
             if not images:
                 logger.warning("[DO] 이미지 변환 실패")
                 return result
             
-            # Gemini 클라이언트 생성
             client = genai.Client(api_key=self.gemini_api_key)
             
-            # 프롬프트
             prompt = """
 이 D/O(Delivery Order/화물인도지시서) 이미지에서 다음 정보를 추출해주세요:
 
@@ -185,9 +218,8 @@ JSON 형식으로 응답해주세요:
     "vessel": "..."
 }
 """
-            # 이미지와 프롬프트 전송
             contents = [prompt]
-            for img_bytes in images[:2]:  # 최대 2페이지
+            for img_bytes in images[:2]:
                 contents.append(types.Part.from_bytes(data=img_bytes, mime_type="image/png"))
             
             response = client.models.generate_content(
@@ -195,11 +227,9 @@ JSON 형식으로 응답해주세요:
                 contents=contents
             )
             
-            # 응답 파싱
             response_text = response.text
             logger.debug(f"[DO] Gemini 응답: {response_text[:500]}")
             
-            # JSON 추출
             import json
             json_match = re.search(r'\{[\s\S]*\}', response_text)
             if json_match:
@@ -214,12 +244,17 @@ JSON 형식으로 응답해주세요:
                 if data.get('vessel'):
                     result.vessel = data['vessel']
                 
+                # ★ v5.8.6.B: normalize_date 사용
                 if data.get('arrival_date'):
                     try:
-                        parts = data['arrival_date'].split('-')
-                        result.arrival_date = date(int(parts[0]), int(parts[1]), int(parts[2]))
-                    except (ValueError, TypeError, KeyError) as _e:
-                        logger.debug(f'Suppressed: {_e}')
+                        from utils.date_utils import normalize_date
+                        result.arrival_date = normalize_date(data['arrival_date'])
+                    except ImportError:
+                        try:
+                            parts = data['arrival_date'].split('-')
+                            result.arrival_date = date(int(parts[0]), int(parts[1]), int(parts[2]))
+                        except (ValueError, TypeError, KeyError):
+                            pass
                 
                 if data.get('containers'):
                     for c in data['containers']:

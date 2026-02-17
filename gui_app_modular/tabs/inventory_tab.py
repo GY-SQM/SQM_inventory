@@ -476,6 +476,51 @@ class InventoryTabMixin:
     def _on_status_filter(self, event) -> None:
         self._refresh_inventory()
 
+    def _convert_preview_to_inventory_items(self, preview_data: list) -> list:
+        """원스톱 파싱 미리보기 데이터를 재고 탭 형식으로 변환 (실시간 표시용)"""
+        result = []
+        for row in preview_data:
+            try:
+                nw = row.get('net_weight', '') or '0'
+                if isinstance(nw, str):
+                    nw = nw.replace(',', '').strip()
+                net = float(nw) if nw else 0.0
+            except (ValueError, TypeError):
+                net = 0.0
+            mxbg = row.get('mxbg_pallet', '10') or '10'
+            if isinstance(mxbg, str) and mxbg.isdigit():
+                mxbg = int(mxbg)
+            else:
+                try:
+                    mxbg = int(float(mxbg))
+                except (ValueError, TypeError):
+                    mxbg = 10
+            result.append({
+                'lot_no': str(row.get('lot_no', '')),
+                'sap_no': str(row.get('sap_no', '')),
+                'bl_no': str(row.get('bl_no', '')),
+                'container_no': str(row.get('container_no', '')),
+                'product': str(row.get('product', '')),
+                'mxbg_pallet': mxbg,
+                'avail_bags': mxbg,
+                'net_weight': net,
+                'salar_invoice_no': str(row.get('salar_invoice_no', '')),
+                'ship_date': str(row.get('ship_date', ''))[:10] if row.get('ship_date') else '',
+                'arrival_date': str(row.get('arrival_date', ''))[:10] if row.get('arrival_date') else '',
+                'free_time': str(row.get('free_time', '')),
+                'warehouse': str(row.get('warehouse', '')),
+                'status': str(row.get('status', 'AVAILABLE')),
+                'customs': '',
+                'initial_weight': net,
+                'current_weight': net,
+            })
+        return result
+
+    def _set_parsing_preview_data(self, data) -> None:
+        """파싱 미리보기 데이터 설정/해제. None이면 DB 기준으로 복원."""
+        self._parsing_preview_data = data
+        self._refresh_inventory()
+
     def _refresh_inventory(self) -> None:
         """재고 목록 새로고침 (18열 + 콤보 검색 + Date 기간)"""
         if not hasattr(self, 'tree_inventory'):
@@ -526,7 +571,14 @@ class InventoryTabMixin:
             date_to = self._date_to_var.get().strip().replace('-', '')
 
         try:
-            inventory = self.engine.get_all_inventory()
+            # 파싱 팝업에서 실시간 푸시된 미리보기 데이터가 있으면 재고 리스트에 표시
+            preview = getattr(self, '_parsing_preview_data', None)
+            if preview is not None and isinstance(preview, list) and len(preview) > 0:
+                inventory = self._convert_preview_to_inventory_items(preview)
+                if hasattr(self, '_log'):
+                    self._log(f"📋 파싱 미리보기: 재고 리스트에 {len(inventory)}건 표시 (저장 전)")
+            else:
+                inventory = self.engine.get_all_inventory()
 
             for item in inventory:
                 lot_no = str(item.get('lot_no', ''))
@@ -601,6 +653,9 @@ class InventoryTabMixin:
                     v = item.get(col_id, '')
                     if v is None:
                         v = ''
+                    # 컨테이너 구분(-1, -2) 옵션: 꺼져 있으면 접미사 제거
+                    if col_id == 'container_no' and hasattr(self, '_format_container_no'):
+                        v = self._format_container_no(str(v))
                     # 숫자 포맷팅
                     if col_id in ('net_weight', 'current_weight', 'initial_weight'):
                         try:

@@ -29,9 +29,9 @@ class InventoryBaseMixin:
             return None
         
         date_str = str(date_value).strip()
-        if not date_str:
+        if not date_str or date_str in ('None', 'none', 'null', 'NULL'):
             return None
-        
+
         formats = formats or [
             '%Y-%m-%d', '%Y/%m/%d', '%d-%m-%Y', '%d/%m/%Y',
             '%Y.%m.%d', '%m/%d/%Y', '%d.%m.%Y', '%Y%m%d',
@@ -39,11 +39,11 @@ class InventoryBaseMixin:
         
         for fmt in formats:
             try:
-                return datetime.strptime(date_str, fmt).date()
+                return datetime.strptime(date_str[:10], fmt).date()
             except ValueError:
                 continue
-        
-        logger.warning(f"날짜 파싱 실패: {date_str}")
+
+        logger.warning(f"날짜 파싱 실패: {date_str!r}")
         return None
     
     @staticmethod

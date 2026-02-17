@@ -152,6 +152,7 @@ sqm/
 | P0 | run.bat 삭제, 문서에서 SQM_실행.bat/run.py 로 수정 | ✅ 완료 | 혼란 제거 |
 | P1 | validate_lot_no / validate_sap_no 단일 소스(validators) + 사용처 전환 | ✅ 완료 | 버그 예방 |
 | P1 | format_number / format_weight / find_column 단일 소스 정리 | ✅ 완료 | 중복 제거 |
+| P1 | safe_int / safe_date / 버전·앱명 / 메시지박스 / 상수(DEFAULT_WAREHOUSE 등) 단일 소스 | ✅ 완료 | DEBUGGING_RISK_OVERVIEW §7·§8 반영, gui_bootstrap re-export만 사용 |
 | P2 | config.py 분할 (로깅, 파일유틸, API키 분리) | ✅ 완료 | config_logging + utils/file_utils |
 | P2 | GUI constants → gui_bootstrap.py 등 역할에 맞는 이름으로 변경 | ✅ 완료 | 의미 명확 |
 | P2 | preflight / pdf_converter / ui_ops_helper / migrate 스크립트 이동 | ✅ 완료 | 루트 정리 |
