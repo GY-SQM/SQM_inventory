@@ -25,18 +25,18 @@ class ColumnToggleBar:
         toggle_bar.pack(fill='x')
     """
 
-    def __init__(self, parent, tree, toggle_columns: List[Tuple[str, str]],
+    def __init__(self, parent, tree, toggle_columns: List[Tuple],
                  is_dark: bool = False):
         """
         Args:
             parent: 부모 위젯
             tree: Treeview 위젯
-            toggle_columns: [(col_id, label), ...]
+            toggle_columns: [(col_id, label)] 또는 [(col_id, label, default_visible), ...]
             is_dark: 하위 호환 (사용하지 않음)
         """
         self.tree = tree
         self.toggle_vars = {}
-        self.toggle_columns = toggle_columns
+        self.toggle_columns = [(c[0], c[1]) for c in toggle_columns]
 
         # ttk.Frame — 테마 자동 대응
         self.frame = ttk.Frame(parent, padding=(5, 4))
@@ -50,8 +50,10 @@ class ColumnToggleBar:
         _lbl_col.pack(side='left', padx=(0, 10))
         self._apply_tooltip_safe(_lbl_col, "체크 해제 시 해당 컬럼이 목록에서 숨겨집니다. 체크하면 다시 표시됩니다.")
 
-        for col_id, label in toggle_columns:
-            var = tk.BooleanVar(value=True)
+        for item in toggle_columns:
+            col_id, label = item[0], item[1]
+            default_visible = item[2] if len(item) >= 3 else True
+            var = tk.BooleanVar(value=default_visible)
             chk = ttk.Checkbutton(
                 left_frame,
                 text=label,

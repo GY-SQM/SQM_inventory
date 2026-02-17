@@ -43,14 +43,14 @@ class SettingsDialogMixin:
         dialog.grab_set()
         
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
-        _bg = '#1e1e1e' if _is_dark else ThemeColors.get('bg_card')
-        _fg = '#e0e0e0' if _is_dark else ThemeColors.get('text_primary')
+        _bg = ThemeColors.get('bg_card', _is_dark)
+        _fg = ThemeColors.get('text_primary', _is_dark)
         dialog.configure(bg=_bg)
         
-        # 헤더
-        header = tk.Frame(dialog, bg=ThemeColors.get('info'), pady=8)
+        # 헤더 (v8.7.0 Phase2: ThemeColors)
+        header = tk.Frame(dialog, bg=ThemeColors.get('info', _is_dark), pady=8)
         header.pack(fill=X)
-        tk.Label(header, text="🔐 Gemini API 키 설정", bg=ThemeColors.get('info'), fg='white',
+        tk.Label(header, text="🔐 Gemini API 키 설정", bg=ThemeColors.get('info', _is_dark), fg=ThemeColors.get('badge_text', _is_dark),
                  font=('맑은 고딕', 13, 'bold')).pack()
         
         body = tk.Frame(dialog, bg=_bg, padx=20, pady=15)
@@ -69,7 +69,7 @@ class SettingsDialogMixin:
         apply_tooltip(_l1, "현재 로드된 API 키의 마스킹된 표시입니다. 새 키를 입력한 뒤 저장하면 교체됩니다.")
         tk.Label(info_frame, text=f"  {masked}", bg=_bg, fg=ThemeColors.get('statusbar_progress'), font=('맑은 고딕', 10, 'bold')).pack(anchor=W)
         tk.Label(info_frame, text=f"  저장 위치: {source_text}", bg=_bg, fg=_fg, font=('맑은 고딕', 9)).pack(anchor=W)
-        tk.Label(info_frame, text=f"  모델: {GEMINI_MODEL}", bg=_bg, fg='gray', font=('맑은 고딕', 9)).pack(anchor=W)
+        tk.Label(info_frame, text=f"  모델: {GEMINI_MODEL}", bg=_bg, fg=ThemeColors.get('text_muted', _is_dark), font=('맑은 고딕', 9)).pack(anchor=W)
         
         ttk.Separator(body).pack(fill=X, pady=10)
         
@@ -123,13 +123,13 @@ class SettingsDialogMixin:
             model_str = model_var.get().strip()
             if key:
                 if not key.startswith('AIza'):
-                    result_label.config(text="⚠️ Google API 키 형식이 아닙니다 (AIza...)", fg='#e67e22')
+                    result_label.config(text="⚠️ Google API 키 형식이 아닙니다 (AIza...)", fg=ThemeColors.get('statusbar_icon_warn', _is_dark))
                     return
                 method = save_api_key_secure(key)
                 if method == 'KEYRING':
                     result_label.config(text="✅ API 키·모델 저장됨 (다음 실행부터 모델 적용)", fg=ThemeColors.get('badge_db'))
                 elif method == 'INI':
-                    result_label.config(text="✅ API 키·모델 저장됨 (다음 실행부터 모델 적용)", fg='#e67e22')
+                    result_label.config(text="✅ API 키·모델 저장됨 (다음 실행부터 모델 적용)", fg=ThemeColors.get('badge_db', _is_dark))
                 else:
                     result_label.config(text="❌ API 키 저장 실패", fg=ThemeColors.get('statusbar_icon_err'))
             if model_str:

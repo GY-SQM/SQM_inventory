@@ -18,29 +18,29 @@ import logging
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════
-# 18열 정의: (컬럼ID, 표시명, 기본폭, 정렬, 기본표시여부)
+# 19열 정의: (컬럼ID, 표시명, 기본폭, 정렬, 기본표시여부)
+# v8.7.0 Phase1: 기본 표시 8개만 (첫인상 개선), 나머지는 토글로 표시
 # ═══════════════════════════════════════════════════════════════
 INVENTORY_COLUMNS = [
-    # v4.0.0: 18열 확정 → v5.6.0: 19열 (잔여 톤백 추가)
     ('row_num',            'No.',            50, 'center', True),   #  1. 순번
-    ('lot_no',             'LOT NO',        120, 'center', True),   #  2
+    ('lot_no',             'LOT NO',        120, 'center', True), #  2
     ('sap_no',             'SAP NO',        120, 'center', True),   #  3
-    ('bl_no',              'BL NO',         140, 'center', True),   #  4
-    ('container_no',       'CONTAINER',     130, 'center', True),   #  5
-    ('product',            'PRODUCT',       160, 'center', True),   #  6
-    ('mxbg_pallet',        'MXBG',           70, 'center', True),   #  7
-    ('avail_bags',         'Avail',          60, 'center', True),   #  8. v5.6.0 잔여 톤백
-    ('net_weight',         'NET(Kg)',        100, 'e',      True),   #  9
-    ('salar_invoice_no',   'INVOICE NO',    100, 'center', True),   # 10
-    ('ship_date',          'SHIP DATE',      95, 'center', True),   # 11
-    ('arrival_date',       'ARRIVAL',        95, 'center', True),   # 12
-    ('free_time',          'FREE TIME',      80, 'center', True),   # 13
-    ('warehouse',          'WH',             80, 'center', True),   # 14
-    ('status',             'STATUS',         90, 'center', True),   # 15
-    ('customs',            'CUSTOMS',        90, 'center', True),   # 16
-    ('current_weight',     'Balance(Kg)',    100, 'e',      True),   # 17
-    ('initial_weight',     'Inbound(Kg)',    100, 'e',      True),   # 18
-    ('outbound_weight',    'Outbound(Kg)',   100, 'e',      True),   # 19
+    ('bl_no',              'BL NO',         140, 'center', True),    #  4
+    ('product',            'PRODUCT',       160, 'center', True),   #  5
+    ('status',             'STATUS',         90, 'center', True),   #  6
+    ('current_weight',     'Balance(Kg)',    100, 'e',      True),   #  7
+    ('net_weight',         'NET(Kg)',        100, 'e',      True),   #  8
+    ('container_no',       'CONTAINER',     130, 'center', False),   #  9
+    ('mxbg_pallet',        'MXBG',           70, 'center', False),  # 10
+    ('avail_bags',         'Avail',          60, 'center', False),  # 11
+    ('salar_invoice_no',   'INVOICE NO',    100, 'center', False),  # 12
+    ('ship_date',          'SHIP DATE',      95, 'center', False),   # 13
+    ('arrival_date',       'ARRIVAL',        95, 'center', False),  # 14
+    ('free_time',          'FREE TIME',      80, 'center', False),  # 15
+    ('warehouse',          'WH',             80, 'center', False),   # 16
+    ('customs',            'CUSTOMS',        90, 'center', False),   # 17
+    ('initial_weight',     'Inbound(Kg)',    100, 'e',      False), # 18
+    ('outbound_weight',    'Outbound(Kg)',   100, 'e',      False), # 19
 ]
 
 
@@ -95,20 +95,10 @@ class InventoryTabMixin:
         )
         self._inv_filter_bar.pack(fill=X, padx=5, pady=(0, 2))
 
-        # v5.0.2: 컬럼 토글 바 (v5.7.5: 표시 모드 제거)
+        # v5.0.2: 컬럼 토글 바 (v8.7.0: 전체 19열 + 기본표시여부 반영)
         try:
             from ..utils.column_toggle import ColumnToggleBar
-            
-            # 토글 가능한 컬럼 목록
-            toggleable_cols = [
-                ('sap_no', 'SAP NO'),
-                ('bl_no', 'BL NO'),
-                ('container_no', 'CONTAINER'),
-                ('ship_date', 'SHIP DATE'),          # ✅ v5.0.6 수정
-                ('free_time', 'FREE TIME'),          # ✅ v5.0.6 수정
-                ('customs', 'CUSTOMS'),
-            ]
-            
+            toggleable_cols = [(c[0], c[1], c[4]) for c in INVENTORY_COLUMNS]
             self._inv_toggle_bar = ColumnToggleBar(
                 self.tab_inventory,
                 None,  # Treeview는 나중에 연결
@@ -138,12 +128,11 @@ class InventoryTabMixin:
         _row_h = _inv_font.metrics('linespace') + 6
         
         _is_dark_tv = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
-        if _is_dark_tv:
-            _tv_bg, _tv_fg, _tv_field = '#1e1e1e', '#e0e0e0', '#1e1e1e'
-            _tv_head_bg, _tv_head_fg = '#333333', ThemeColors.get('bg_card')
-        else:
-            _tv_bg, _tv_fg, _tv_field = ThemeColors.get('bg_card'), '#1a1a1a', ThemeColors.get('bg_card')
-            _tv_head_bg, _tv_head_fg = ThemeColors.get('text_primary'), ThemeColors.get('bg_card')
+        _tv_bg = ThemeColors.get('bg_card', _is_dark_tv)
+        _tv_fg = ThemeColors.get('text_primary', _is_dark_tv)
+        _tv_field = _tv_bg
+        _tv_head_bg = ThemeColors.get('bg_secondary', _is_dark_tv)
+        _tv_head_fg = ThemeColors.get('text_primary', _is_dark_tv)
         
         _style.configure('Inv.Treeview', 
                          font=_inv_font,
@@ -213,10 +202,11 @@ class InventoryTabMixin:
         # v4.0.6: 필터바에 treeview 연결
         self._inv_filter_bar.tree = self.tree_inventory
         
-        # v5.0.2: 컬럼 토글바에 treeview 연결
+        # v5.0.2: 컬럼 토글바에 treeview 연결 (v8.7.0: 초기 displaycolumns 적용)
         if hasattr(self, '_inv_toggle_bar') and self._inv_toggle_bar:
             self._inv_toggle_bar.tree = self.tree_inventory
-        
+            self._apply_column_visibility()
+
         # v4.0.6: 하단 NET(KG) / Balance 합계 바
         # v5.6.1: FooterTotalBar 제거 — stats_frame 1줄로 통합
         # self._inv_footer = FooterTotalBar(self.tab_inventory, is_dark=_is_dark_filter)
@@ -693,24 +683,19 @@ class InventoryTabMixin:
             # ═══ v5.6.1: 상태별 행 배경+전경색 (다크테마 가시성 수정) ═══
             _dk = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
             _p = ThemeColors.get_palette(_dk)
-            _stripe_bg = _p.get('tree_stripe', ThemeColors.get('tree_stripe') if not _dk else '#2a2a2a')
-            _text_color = '#1a1a1a' if not _dk else '#f0f0f0'  # 다크→밝은색, 라이트→검정
+            _stripe_bg = ThemeColors.get('tree_stripe', _dk)
+            _text_color = ThemeColors.get('text_primary', _dk)
 
             self.tree_inventory.tag_configure('available',
-                background=_p.get('available', ThemeColors.get('available')) if not _dk else '#1b3a2a',
-                foreground=_text_color)
+                background=ThemeColors.get('available', _dk), foreground=_text_color)
             self.tree_inventory.tag_configure('picked',
-                background=_p.get('picked', ThemeColors.get('picked')) if not _dk else '#3a1a1a',
-                foreground=_text_color)
+                background=ThemeColors.get('picked', _dk), foreground=_text_color)
             self.tree_inventory.tag_configure('reserved',
-                background=_p.get('reserved', ThemeColors.get('reserved')) if not _dk else '#3a3a1a',
-                foreground=_text_color)
+                background=ThemeColors.get('reserved', _dk), foreground=_text_color)
             self.tree_inventory.tag_configure('shipped',
-                background=_p.get('shipped', ThemeColors.get('shipped')) if not _dk else '#1a2a3a',
-                foreground=_text_color)
+                background=ThemeColors.get('shipped', _dk), foreground=_text_color)
             self.tree_inventory.tag_configure('depleted',
-                background='#f5f5f5' if not _dk else '#2a2a2a',
-                foreground='#999999' if not _dk else '#666666')
+                background=ThemeColors.get('bg_secondary', _dk), foreground=ThemeColors.get('text_muted', _dk))
             self.tree_inventory.tag_configure('stripe',
                 background=_stripe_bg, foreground=_text_color)
 
@@ -968,25 +953,29 @@ class InventoryTabMixin:
                 tree.heading(c_id, text=c_label)
     
     def _show_empty_state_hint(self) -> None:
-        """v3.9.9: 재고 데이터 없을 때 안내 표시"""
+        """v3.9.9: 재고 데이터 없을 때 안내 표시 (v8.7.0 Phase2: ThemeColors)"""
         from ..utils.constants import tk
         
         if hasattr(self, '_empty_hint') and self._empty_hint:
             return
         
         try:
-            self._empty_hint = tk.Frame(self._inv_tree_frame, bg='#f5f6fa')
+            _ed = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+            _bg = ThemeColors.get('bg_secondary', _ed)
+            _fg = ThemeColors.get('text_secondary', _ed)
+            _fg_muted = ThemeColors.get('text_muted', _ed)
+            self._empty_hint = tk.Frame(self._inv_tree_frame, bg=_bg)
             self._empty_hint.place(relx=0.5, rely=0.4, anchor='center')
             
-            tk.Label(self._empty_hint, text="📦", bg='#f5f6fa',
+            tk.Label(self._empty_hint, text="📦", bg=_bg,
                      font=('', 36)).pack(pady=(0, 5))
-            tk.Label(self._empty_hint, text="재고 데이터가 없습니다", bg='#f5f6fa',
-                     fg=ThemeColors.get('text_secondary'), font=('맑은 고딕', 14, 'bold')).pack()
+            tk.Label(self._empty_hint, text="재고 데이터가 없습니다", bg=_bg,
+                     fg=_fg, font=('맑은 고딕', 14, 'bold')).pack()
             tk.Label(self._empty_hint, 
                      text="Ctrl+O: 파일 열기 | Ctrl+N: 입고 | 파일 드래그앤드롭",
-                     bg='#f5f6fa', fg='#95a5a6', font=('맑은 고딕', 10)).pack(pady=5)
+                     bg=_bg, fg=_fg_muted, font=('맑은 고딕', 10)).pack(pady=5)
             
-            btn_frame = tk.Frame(self._empty_hint, bg='#f5f6fa')
+            btn_frame = tk.Frame(self._empty_hint, bg=_bg)
             btn_frame.pack(pady=10)
             
             from ..utils.constants import ttk

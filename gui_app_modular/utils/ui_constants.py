@@ -532,8 +532,8 @@ class ReadableStyle:
         ReadableStyle.apply(root, theme_name='flatly')
     """
     
-    # Treeview 행 높이 — v3.8.7: 30% 확대
-    ROW_HEIGHT = 38
+    # Treeview 행 높이 (v8.7.0 Phase1: 36px로 가독성 개선)
+    ROW_HEIGHT = 36
     
     # 기본 폰트 — v3.8.7: 30% 확대
     FONT_FAMILY = '맑은 고딕'

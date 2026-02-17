@@ -35,29 +35,27 @@ class ToolbarMixin:
     # v5.5.3 patch_01: UI_COLORS 삭제 → style.colors 사용
 
     def _load_toolbar_colors(self) -> None:
-        """v5.5.3 patch_01: style.colors 기반 단순화 — 모든 테마 자동 대응"""
+        """v5.5.3 patch_01 + v8.7.0 Phase2: ThemeColors 단일 소스 — 툴바는 항상 다크 스타일"""
         try:
             import ttkbootstrap as ttk_bs
             sc = ttk_bs.Style().colors
-            # 툴바 배경: 다크 고정 (테마 무관하게 상단바는 항상 다크)
-            self._tb_bg = '#2c2c2c'
-            self._tb_sep = '#444444'
-            # 텍스트: 비활성=회색, 활성=흰색
-            self._tb_fg_normal = '#999999'
-            self._tb_fg_active = '#ffffff'
-            self._tb_fg_hover = '#cccccc'
-            # 호버 배경: 살짝 밝게
-            self._tb_hover_bg = '#3a3a3a'
-            # 밑줄 색상: 테마의 info 색상 자동 사용
-            self._tb_underline_color = str(sc.info)
+            _dark = True
+            self._tb_bg = ThemeColors.get('statusbar_bg', _dark)
+            self._tb_sep = ThemeColors.get('border', _dark)
+            self._tb_fg_normal = ThemeColors.get('text_secondary', _dark)
+            self._tb_fg_active = ThemeColors.get('statusbar_fg', _dark)
+            self._tb_fg_hover = ThemeColors.get('text_primary', _dark)
+            self._tb_hover_bg = ThemeColors.get('bg_hover', _dark)
+            self._tb_underline_color = str(sc.info) if getattr(sc, 'info', None) else ThemeColors.get('info', _dark)
         except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
-            self._tb_bg = '#2c2c2c'
-            self._tb_sep = '#444444'
-            self._tb_fg_normal = '#999999'
-            self._tb_fg_active = '#ffffff'
-            self._tb_fg_hover = '#cccccc'
-            self._tb_hover_bg = '#3a3a3a'
-            self._tb_underline_color = '#3498db'
+            _dark = True
+            self._tb_bg = ThemeColors.get('statusbar_bg', _dark)
+            self._tb_sep = ThemeColors.get('border', _dark)
+            self._tb_fg_normal = ThemeColors.get('text_secondary', _dark)
+            self._tb_fg_active = ThemeColors.get('statusbar_fg', _dark)
+            self._tb_fg_hover = ThemeColors.get('text_primary', _dark)
+            self._tb_hover_bg = ThemeColors.get('bg_hover', _dark)
+            self._tb_underline_color = ThemeColors.get('info', _dark)
 
     def _setup_toolbar(self) -> None:
         self._toolbar_font = _pick_font(self.root)
@@ -83,7 +81,7 @@ class ToolbarMixin:
             ver_frame.pack(side='right', padx=15)
             tk.Label(ver_frame, text=f"📦 {APP_NAME}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_progress'),
                      font=('맑은 고딕', 13, 'bold')).pack(side='left')
-            tk.Label(ver_frame, text=f"  v{__version__}", bg=self._tb_bg, fg='#e67e22',
+            tk.Label(ver_frame, text=f"  v{__version__}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_icon_warn', True),
                      font=('맑은 고딕', 14, 'bold')).pack(side='left')
         except (ImportError, ModuleNotFoundError) as _e:
             logger.debug(f'Suppressed: {_e}')
@@ -263,7 +261,7 @@ class ToolbarMixin:
             self._search_btn.bind('<Button-1>', lambda e: self._show_search_popup())
 
             def _search_enter(e):
-                self._search_btn.config(bg=self._tb_underline_color, fg='white')
+                self._search_btn.config(bg=self._tb_underline_color, fg=ThemeColors.get('statusbar_fg', True))
             def _search_leave(e):
                 self._search_btn.config(bg=self._tb_bg, fg=self._tb_underline_color)
             self._search_btn.bind('<Enter>', _search_enter)
@@ -672,7 +670,8 @@ class ToolbarMixin:
         tk.Label(df, text=' ~ ', font=(f, _fs)).pack(side='left')
         tk.Entry(df, textvariable=svars['date_to'], width=12, font=(f, _fs)
                  ).pack(side='left')
-        tk.Label(df, text='  (YYYY-MM-DD)', font=(f, 10), fg='gray'
+        _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        tk.Label(df, text='  (YYYY-MM-DD)', font=(f, 10), fg=ThemeColors.get('text_muted', _is_dark)
                  ).pack(side='left', padx=5)
 
         # 상태
@@ -722,10 +721,12 @@ class ToolbarMixin:
         _btn_w = 12
         bf = tk.Frame(main)
         bf.grid(row=5, column=0, columnspan=2, pady=(20, 0))
-        tk.Button(bf, text='🔍 검색', font=_btn_font, bg=ThemeColors.get('statusbar_progress'), fg='white',
+        _popup_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        _btn_fg = ThemeColors.get('badge_text', _popup_dark)
+        tk.Button(bf, text='🔍 검색', font=_btn_font, bg=ThemeColors.get('statusbar_progress'), fg=_btn_fg,
                  bd=0, width=_btn_w, pady=8, cursor='hand2',
                  command=do_search).pack(side='left', padx=8)
-        tk.Button(bf, text='🔄 초기화', font=_btn_font, bg='#95a5a6', fg='white',
+        tk.Button(bf, text='🔄 초기화', font=_btn_font, bg=ThemeColors.get('btn_neutral', _popup_dark), fg=_btn_fg,
                  bd=0, width=_btn_w, pady=8, cursor='hand2',
                  command=do_reset).pack(side='left', padx=8)
 
@@ -1126,8 +1127,9 @@ class ToolbarMixin:
             tip_win = tk.Toplevel(widget)
             tip_win.wm_overrideredirect(True)
             tip_win.wm_geometry(f"+{x}+{y}")
+            _tip_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
             tk.Label(tip_win, text=text, justify='left',
-                     background="#ffffdd", foreground="#333",
+                     background=ThemeColors.get('bg_card', _tip_dark), foreground=ThemeColors.get('text_primary', _tip_dark),
                      relief='solid', borderwidth=1,
                      font=(self._toolbar_font, 13), padx=10, pady=6,
                      wraplength=350).pack()

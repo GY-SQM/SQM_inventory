@@ -24,10 +24,35 @@ class TonbagTabMixin:
     """
     
     def _setup_tonbag_tab(self) -> None:
-        """톤백 탭 설정 (v5.0.2: 필터바 추가)"""
+        """톤백 탭 설정 (v5.0.2: 필터바 추가, v8.7.0: 기본 표시 8개)"""
         from ..utils.constants import ttk, tk, VERTICAL, HORIZONTAL, BOTH, YES, LEFT, RIGHT, X, Y
         from ..utils.ui_constants import Spacing, ThemeColors, FontScale, apply_tooltip
-        
+
+        # v8.7.0: 컬럼 정의를 먼저 두어 토글바/트리에서 공통 사용
+        self._tonbag_columns = [
+            ('row_num',            'No.',            50, 'center', True),
+            ('lot_no',             'LOT NO',        120, 'center', True),
+            ('tonbag_no_print',    'TONBAG NO',      90, 'center', True),
+            ('sap_no',             'SAP NO',        120, 'center', True),
+            ('bl_no',              'BL NO',         140, 'center', True),
+            ('product',            'PRODUCT',       160, 'center', True),
+            ('tonbag_status',      'STATUS',         90, 'center', True),
+            ('current_weight',     'Balance(Kg)',   100, 'e',      True),
+            ('tonbag_uid',         'UID',           150, 'center', False),
+            ('container_no',       'CONTAINER',     130, 'center', False),
+            ('location',           'LOCATION',       90, 'center', False),
+            ('net_weight',         'NET(Kg)',        100, 'e',      False),
+            ('salar_invoice_no',   'INVOICE NO',    100, 'center', False),
+            ('ship_date',          'SHIP DATE',      95, 'center', False),
+            ('arrival_date',       'ARRIVAL',        95, 'center', False),
+            ('free_time',          'FREE TIME',      80, 'center', False),
+            ('warehouse',          'WH',             80, 'center', False),
+            ('customs',            'CUSTOMS',        90, 'center', False),
+            ('initial_weight',     'Inbound(Kg)',   100, 'e',      False),
+            ('outbound_weight',    'Outbound(Kg)',  100, 'e',      False),
+        ]
+        self._tonbag_col_visible = {c[0]: c[4] for c in self._tonbag_columns}
+
         # ═══════════════════════════════════════════════════════════════
         # v5.0.8: 헤더 필터 바 (재고 리스트와 완전 동일)
         # ═══════════════════════════════════════════════════════════════
@@ -61,23 +86,13 @@ class TonbagTabMixin:
         except (ImportError, AttributeError) as e:
             logger.debug(f"HeaderFilterBar 로딩 실패: {e}")
         
-        # v5.0.2: 컬럼 토글 바 (v5.7.5: 표시 모드 제거)
+        # v5.0.2: 컬럼 토글 바 (v8.7.0: 20열 + 기본표시 8개만)
         try:
             from ..utils.column_toggle import ColumnToggleBar
-            
-            # 재고 리스트와 동일한 6개 표시 컬럼 (v5.5.2)
-            tonbag_toggle_cols = [
-                ('sap_no', 'SAP NO'),
-                ('bl_no', 'BL NO'),
-                ('container_no', 'CONTAINER'),
-                ('ship_date', 'SHIP DATE'),
-                ('free_time', 'FREE TIME'),
-                ('customs', 'CUSTOMS'),
-            ]
-            
+            tonbag_toggle_cols = [(c[0], c[1], c[4]) for c in self._tonbag_columns]
             self._tonbag_toggle_bar = ColumnToggleBar(
                 self.tab_tonbag,
-                None,  # Treeview는 나중에 연결
+                None,
                 tonbag_toggle_cols,
                 is_dark=_is_dark_filter
             )
@@ -102,12 +117,11 @@ class TonbagTabMixin:
         _tb_row_h = _tb_font.metrics('linespace') + 6
         
         _is_dark_tb = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
-        if _is_dark_tb:
-            _tb_bg, _tb_fg, _tb_field = '#1e1e1e', '#e0e0e0', '#1e1e1e'
-            _tb_hd_bg, _tb_hd_fg = '#333333', ThemeColors.get('bg_card')
-        else:
-            _tb_bg, _tb_fg, _tb_field = ThemeColors.get('bg_card'), '#1a1a1a', ThemeColors.get('bg_card')
-            _tb_hd_bg, _tb_hd_fg = ThemeColors.get('text_primary'), ThemeColors.get('bg_card')
+        _tb_bg = ThemeColors.get('bg_card', _is_dark_tb)
+        _tb_fg = ThemeColors.get('text_primary', _is_dark_tb)
+        _tb_field = _tb_bg
+        _tb_hd_bg = ThemeColors.get('bg_secondary', _is_dark_tb)
+        _tb_hd_fg = ThemeColors.get('text_primary', _is_dark_tb)
         
         _style.configure('Tb.Treeview',
                          font=_tb_font, rowheight=_tb_row_h,
@@ -120,44 +134,23 @@ class TonbagTabMixin:
                    background=[('selected', ThemeColors.get('tree_select_fg'))],
                    foreground=[('selected', ThemeColors.get('bg_card'))])
         
-        # v3.9.0: 톤백리스트 20열 = 재고리스트 18열 + TONBAG NO + LOCATION
-        # MXBG(#7) 뒤에 TONBAG NO(#8), LOCATION(#9) 삽입
-        # v5.6.3: MXBG 제거 (LOT 단위 정보 → 톤백리스트 불필요), 21→20열
-        self._tonbag_columns = [
-            ('row_num',            'No.',            50, 'center'),   #  1. 순번
-            ('lot_no',             'LOT NO',        120, 'center'),   #  2
-            ('tonbag_no_print',    'TONBAG NO',      90, 'center'),   #  3
-            ('tonbag_uid',         'UID',           150, 'center'),   #  4
-            ('sap_no',             'SAP NO',        120, 'center'),   #  5
-            ('bl_no',              'BL NO',         140, 'center'),   #  6
-            ('container_no',       'CONTAINER',     130, 'center'),   #  7
-            ('product',            'PRODUCT',       160, 'center'),   #  8
-            ('location',           'LOCATION',       90, 'center'),   #  9
-            ('net_weight',         'NET(Kg)',        100, 'e'),        # 10
-            ('salar_invoice_no',   'INVOICE NO',    100, 'center'),   # 11
-            ('ship_date',          'SHIP DATE',      95, 'center'),   # 12
-            ('arrival_date',       'ARRIVAL',        95, 'center'),   # 13
-            ('free_time',          'FREE TIME',      80, 'center'),   # 14
-            ('warehouse',          'WH',             80, 'center'),   # 15
-            ('tonbag_status',      'STATUS',         90, 'center'),   # 16
-            ('customs',            'CUSTOMS',        90, 'center'),   # 17
-            ('current_weight',     'Balance(Kg)',   100, 'e'),         # 18
-            ('initial_weight',     'Inbound(Kg)',   100, 'e'),         # 19
-            ('outbound_weight',    'Outbound(Kg)',  100, 'e'),         # 20
-        ]
-        
         col_ids = [c[0] for c in self._tonbag_columns]
         self.tree_sublot = ttk.Treeview(
             tree_frame, columns=col_ids, show="headings", height=20,
             selectmode='extended', style='Tb.Treeview'
         )
         
-        for col_id, label, width, anchor in self._tonbag_columns:
+        for col_id, label, width, anchor, visible in self._tonbag_columns:
             self.tree_sublot.heading(
                 col_id, text=label,
                 command=lambda c=col_id: self._sort_treeview(self.tree_sublot, c)
             )
-            self.tree_sublot.column(col_id, width=width, anchor=anchor, minwidth=50)
+            if visible:
+                self.tree_sublot.column(col_id, width=width, anchor=anchor, minwidth=50)
+            else:
+                self.tree_sublot.column(col_id, width=0, minwidth=0)
+        visible_cols = [c[0] for c in self._tonbag_columns if c[4]]
+        self.tree_sublot.configure(displaycolumns=visible_cols)
         
         # v4.2.2: 테이블 스타일 적용 (v5.6.9: 다크 테마 시 글씨 가시성)
         try:
@@ -188,10 +181,10 @@ class TonbagTabMixin:
         if hasattr(self, '_tonbag_filter_bar'):
             self._tonbag_filter_bar.tree = self.tree_sublot
         
-        # v5.0.2: 컬럼 토글바에 treeview 연결
+        # v5.0.2: 컬럼 토글바에 treeview 연결 (v8.7.0: 초기 displaycolumns는 위에서 이미 적용)
         if hasattr(self, '_tonbag_toggle_bar') and self._tonbag_toggle_bar:
             self._tonbag_toggle_bar.tree = self.tree_sublot
-        
+
         # ═══════════════════════════════════════════════════════════════
         # v5.5.2: 액션/통계 바 (재고 리스트와 동일 — 트리 아래, 재고 통계 바와 같은 스타일)
         # ═══════════════════════════════════════════════════════════════
@@ -547,11 +540,14 @@ class TonbagTabMixin:
             total_count = 0
             available_count = 0
             picked_count = 0
-            _text_color = '#1a1a1a'
+            _dk_tonbag = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+            _text_color = ThemeColors.get('text_primary', _dk_tonbag)
 
             for tb in tonbags:
                 lot_no = str(tb.get('lot_no', ''))
-                sap_no = str(tb.get('sap_no', ''))
+                sap_no_raw = str(tb.get('sap_no', ''))
+                # 톤백 리스트 SAP NO: '-' 및 접미사 제거하여 표시 (예: 1125072729-S0 → 1125072729)
+                sap_no = sap_no_raw.split('-')[0].strip() if '-' in sap_no_raw else sap_no_raw
                 bl_no = str(tb.get('bl_no', ''))
                 product = str(tb.get('product', ''))
                 container = str(tb.get('container_no', ''))
@@ -708,21 +704,21 @@ class TonbagTabMixin:
                 
                 self.tree_sublot.insert('', 'end', values=vals, tags=tuple(tags))
             
-            # 태그 색상 적용 (v5.6.1: 다크테마 가시성 수정)
+            # 태그 색상 적용 (v8.7.0 Phase2: ThemeColors 단일 소스)
             _dk = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
-            _text_color = '#1a1a1a' if not _dk else '#f0f0f0'
+            _text_color = ThemeColors.get('text_primary', _dk)
             self.tree_sublot.tag_configure('available',
-                background=ThemeColors.get('available') if not _dk else '#1b3a2a', foreground=_text_color)
+                background=ThemeColors.get('available', _dk), foreground=_text_color)
             self.tree_sublot.tag_configure('picked',
-                background=ThemeColors.get('picked') if not _dk else '#3a1a1a', foreground=_text_color)
+                background=ThemeColors.get('picked', _dk), foreground=_text_color)
             self.tree_sublot.tag_configure('reserved',
-                background=ThemeColors.get('reserved') if not _dk else '#3a3a1a', foreground=_text_color)
+                background=ThemeColors.get('reserved', _dk), foreground=_text_color)
             self.tree_sublot.tag_configure('shipped',
-                background=ThemeColors.get('shipped') if not _dk else '#1a2a3a', foreground=_text_color)
+                background=ThemeColors.get('shipped', _dk), foreground=_text_color)
             self.tree_sublot.tag_configure('depleted',
-                background='#f5f5f5' if not _dk else '#2a2a2a', foreground='#999999' if not _dk else '#666666')
+                background=ThemeColors.get('bg_secondary', _dk), foreground=ThemeColors.get('text_muted', _dk))
             self.tree_sublot.tag_configure('stripe',
-                background=ThemeColors.get('tree_stripe') if not _dk else '#2a2a2a', foreground=_text_color)
+                background=ThemeColors.get('tree_stripe', _dk), foreground=_text_color)
             
             # v5.7.5: 하단 요약 라벨 제거로 업데이트 생략
 

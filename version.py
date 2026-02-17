@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '8.7.0'
+__version__ = '5.8.7'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
-    '8.7.0': '🎨 v8.7.0: UI 디자인 마스터 플랜 문서화 — ThemeColors/Spacing/FontScale/UICalculator 인프라 연결 로드맵, 다크테마·8px그리드·컬럼기본표시·다이얼로그 표준화 체크리스트',
+    '5.8.7': '🎨 v5.8.7: UI 마스터 플랜·Phase1/2 적용 — 기본 컬럼 8개, 트리뷰 36px·제브라, 색상 팔레트(ThemeColors) 통일, 톤백 SAP NO 접미사 제거 표시 (※이전 v8.7.0 푸시는 버전 표기 오류)',
     '5.8.6.2': '🧪 v5.8.6.2: P5-8~14 단위테스트 (core types/validators/formatters/constants/config, run_bootstrap, config_logging, file_utils), 전체 수집 순환참조 방지·engine_modules None 방어',
     '5.8.6.1': '🔧 v5.8.6.1: P5-5·P5-7 적용 (config→core.config 전환, helpers/safe_utils→core.types), get_settings 추가, core.types 순환참조 제거',
     '5.8.6': '🏗️ v5.8.6: P5-1~4 점진적 core 전환 (config 보강, types/constants/validators → core)',

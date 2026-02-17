@@ -57,11 +57,11 @@ class TableStyler:
         'fieldbackground': '#1e1e1e',
     }
     
-    # 행 높이
+    # 행 높이 (v8.7.0 Phase1: normal 36px로 가독성 개선)
     ROW_HEIGHT = {
         'compact': 24,
-        'normal': 28,
-        'comfortable': 32,
+        'normal': 36,
+        'comfortable': 40,
     }
     
     @classmethod

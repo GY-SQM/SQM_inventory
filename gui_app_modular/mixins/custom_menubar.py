@@ -31,15 +31,15 @@ class CustomMenuBar:
     MENU_PADY = 7
     DROPDOWN_FONT = ('맑은 고딕', 11)
     
-    # v4.0.8: 메뉴바 색상 — 진한 인디고 배경 + 밝은 흰색 텍스트
-    MENUBAR_BG = '#0d1b2a'
-    MENUBAR_FG = '#f0f4ff'
-    MENUBAR_HOVER_BG = '#1b3a5c'
-    MENUBAR_ACTIVE_BG = '#2a5f8f'
-    DROPDOWN_BG = ThemeColors.get('bg_card')
-    DROPDOWN_FG = '#1a1a1a'
-    DROPDOWN_ACTIVE_BG = ThemeColors.get('info')
-    DROPDOWN_ACTIVE_FG = ThemeColors.get('bg_card')
+    # v4.0.8 / v8.7.0 Phase2: 메뉴바 색상 — ThemeColors 단일 소스 (메뉴바는 다크 스타일)
+    MENUBAR_BG = None  # __init__에서 ThemeColors로 설정
+    MENUBAR_FG = None
+    MENUBAR_HOVER_BG = None
+    MENUBAR_ACTIVE_BG = None
+    DROPDOWN_BG = None
+    DROPDOWN_FG = None
+    DROPDOWN_ACTIVE_BG = None
+    DROPDOWN_ACTIVE_FG = None
     
     def __init__(self, parent, app):
         """
@@ -53,8 +53,20 @@ class CustomMenuBar:
         self.app = app
         self.tk = tk
         self.ttk = ttk
+
+        # v8.7.0 Phase2: ThemeColors 단일 소스 (메뉴바 다크, 드롭다운은 테마 따름)
+        _dark_bar = True
+        _dark_dd = ThemeColors.is_dark_theme(getattr(app, 'current_theme', 'flatly'))
+        self.MENUBAR_BG = ThemeColors.get('statusbar_bg', _dark_bar)
+        self.MENUBAR_FG = ThemeColors.get('statusbar_fg', _dark_bar)
+        self.MENUBAR_HOVER_BG = ThemeColors.get('bg_hover', _dark_bar)
+        self.MENUBAR_ACTIVE_BG = ThemeColors.get('info', _dark_bar)
+        self.DROPDOWN_BG = ThemeColors.get('bg_card', _dark_dd)
+        self.DROPDOWN_FG = ThemeColors.get('text_primary', _dark_dd)
+        self.DROPDOWN_ACTIVE_BG = ThemeColors.get('info', _dark_dd)
+        self.DROPDOWN_ACTIVE_FG = ThemeColors.get('badge_text', _dark_dd)
         
-        # v4.0.8: 메뉴바 프레임 — 진한 인디고 배경, 충분한 높이
+        # v4.0.8: 메뉴바 프레임 — 진한 배경, 충분한 높이
         self.menubar_frame = tk.Frame(parent, bg=self.MENUBAR_BG, pady=3, padx=6)
         self.menubar_frame.pack(fill=X, side='top')
         
@@ -481,20 +493,23 @@ class CustomMenuBar:
         content = tk.Frame(guide, padx=20, pady=10)
         content.pack(fill='both', expand=True)
         
+        _gd = ThemeColors.is_dark_theme(getattr(self.app, 'current_theme', 'flatly'))
+        _sec = ThemeColors.get('text_secondary', _gd)
+        _pri = ThemeColors.get('text_primary', _gd)
         statuses = [
-            ('✅ AVAILABLE', '가용', ThemeColors.get('badge_db'), ThemeColors.get('available'),
+            ('✅ AVAILABLE', '가용', ThemeColors.get('badge_db', _gd), ThemeColors.get('available', _gd),
              '출고 가능한 정상 재고. 입고 완료 후 기본 상태.'),
-            ('📤 PICKED', '출고 지정', '#e67e22', ThemeColors.get('picked'),
+            ('📤 PICKED', '출고 지정', ThemeColors.get('statusbar_icon_warn', _gd), ThemeColors.get('picked', _gd),
              '출고 배정(Allocation) 완료. 아직 선적 전.'),
-            ('✔️ CONFIRMED', '출고 확정', '#8e44ad', '#f3e5f5',
+            ('✔️ CONFIRMED', '출고 확정', ThemeColors.get('info', _gd), ThemeColors.get('tree_select_bg', _gd),
              '출고 확정됨. PICKED → CONFIRMED 전환 후 선적 대기.'),
-            ('🚢 SHIPPED', '선적 완료', ThemeColors.get('info'), ThemeColors.get('shipped'),
+            ('🚢 SHIPPED', '선적 완료', ThemeColors.get('info', _gd), ThemeColors.get('shipped', _gd),
              '실제 출하(선적) 완료. 창고에서 나간 상태.'),
-            ('❌ DEPLETED', '소진', '#95a5a6', '#f5f5f5',
+            ('❌ DEPLETED', '소진', ThemeColors.get('text_muted', _gd), ThemeColors.get('bg_secondary', _gd),
              '해당 LOT/톤백의 재고가 모두 소진됨. 0 kg.'),
-            ('🔒 RESERVED', '예약', ThemeColors.get('statusbar_icon_warn'), ThemeColors.get('reserved'),
+            ('🔒 RESERVED', '예약', ThemeColors.get('statusbar_icon_warn', _gd), ThemeColors.get('reserved', _gd),
              '특정 고객/주문에 예약된 재고. 다른 출고에 사용 불가.'),
-            ('🧪 SAMPLE', '샘플', '#1abc9c', '#e0f7fa',
+            ('🧪 SAMPLE', '샘플', ThemeColors.get('success', _gd), ThemeColors.get('available', _gd),
              '샘플 톤백(1kg). 정규 재고와 별도 관리. is_sample=1'),
         ]
         
@@ -502,15 +517,12 @@ class CustomMenuBar:
             row = tk.Frame(content, bg=bg_color, padx=10, pady=6, relief='groove', bd=1)
             row.pack(fill='x', pady=3)
             
-            # 아이콘 + 영문 상태
             tk.Label(row, text=icon_label, font=('맑은 고딕', 13, 'bold'),
                      bg=bg_color, fg=fg_color, width=18, anchor='w').pack(side='left')
-            # 한글명
             tk.Label(row, text=f"({ko_name})", font=('맑은 고딕', 11),
-                     bg=bg_color, fg='#555555', width=8).pack(side='left')
-            # 설명
+                     bg=bg_color, fg=_sec, width=8).pack(side='left')
             tk.Label(row, text=desc, font=('맑은 고딕', 10),
-                     bg=bg_color, fg='#333333', anchor='w', wraplength=300).pack(side='left', padx=(10, 0))
+                     bg=bg_color, fg=_pri, anchor='w', wraplength=300).pack(side='left', padx=(10, 0))
         
         # 닫기 버튼
         tk.Button(guide, text="닫기", command=guide.destroy,
