@@ -33,6 +33,27 @@ class DatabaseMigrationMixin:
         self._migrate_v420_tonbag_uid()
         self._migrate_v423_tonbag_location()
         self._migrate_v520_tonbag_no_text()
+        self._migrate_v588_con_return()
+
+    def _migrate_v588_con_return(self) -> None:
+        """
+        v5.8.8: inventory.con_return, inventory_tonbag.con_return 추가
+        D/O의 Free_Time 컬럼 = 컨테이너 반납일(날짜). free_time = (con_return - arrival_date) 일수.
+        """
+        try:
+            for table, col in [('inventory', 'con_return'), ('inventory_tonbag', 'con_return')]:
+                try:
+                    self.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT")
+                    logger.info(f"[v5.8.8] {table}.{col} 컬럼 추가 완료")
+                except (sqlite3.OperationalError, OSError) as e:
+                    if 'duplicate' in str(e).lower() or 'already exists' in str(e).lower():
+                        logger.debug(f"[v5.8.8] {table}.{col} 이미 존재: {e}")
+                    else:
+                        raise
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v5.8.8] con_return 마이그레이션 실패: {e}")
+            self.rollback()
 
     def _migrate_v420_tonbag_uid(self) -> None:
         """

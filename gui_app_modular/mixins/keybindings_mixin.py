@@ -65,8 +65,8 @@ class KeyBindingsMixin:
         # Help
         self.root.bind('<F1>', self._show_help)
         
-        # 테스트 DB 초기화 — 보안상 Ctrl+Esc 동시에 눌렀을 때만 팝업 표시
-        self.root.bind('<Control-Escape>', self._show_test_db_reset_popup)
+        # 테스트 DB 초기화 — Ctrl+Shift+X (다른 프로그램과 겹치지 않도록 Esc → Shift+X)
+        self.root.bind('<Control-Shift-X>', self._show_test_db_reset_popup)
         
         self._log("Keyboard shortcuts configured")
     
@@ -271,7 +271,7 @@ v2.9.91 - SQM Inventory System
             self._log(f"Copied {len(lines)} rows to clipboard")
 
     def _show_test_db_reset_popup(self, event=None) -> None:
-        """Ctrl+Esc로만 호출 — 테스트 DB 초기화 팝업 (보안용 숨김)"""
+        """Ctrl+Shift+X로 호출 — 테스트 DB 초기화 전 확인 팝업 (정말 지울지 사용자에게 물어봄)"""
         from ..utils.constants import tk, ttk
         popup = tk.Toplevel(self.root)
         popup.title("테스트 DB 초기화")
@@ -284,14 +284,14 @@ v2.9.91 - SQM Inventory System
         frame.pack(fill=tk.BOTH, expand=True)
         ttk.Label(frame, text="테스트용 데이터베이스를 초기화합니다.\n모든 재고·톤백·출고 데이터가 삭제됩니다.",
                   font=('맑은 고딕', 11), wraplength=360).pack(anchor='w', pady=(0, 12))
-        ttk.Label(frame, text="계속하시겠습니까?",
+        ttk.Label(frame, text="정말 데이터베이스를 지우시겠습니까?",
                   font=('맑은 고딕', 10), foreground='#e67e22').pack(anchor='w', pady=(0, 16))
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(fill=tk.X)
         def do_reset():
             popup.destroy()
             self._reset_test_db()
-        ttk.Button(btn_frame, text="테스트 DB 초기화", command=do_reset, width=18).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="예, 초기화", command=do_reset, width=18).pack(side=tk.LEFT, padx=(0, 8))
         ttk.Button(btn_frame, text="취소", command=popup.destroy, width=10).pack(side=tk.LEFT)
         popup.bind('<Escape>', lambda e: popup.destroy())
         popup.protocol("WM_DELETE_WINDOW", popup.destroy)

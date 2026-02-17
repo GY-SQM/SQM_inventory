@@ -174,6 +174,14 @@ class InboundMixin(InventoryBaseMixin):
                     tonbags,
                     inventory_id=inventory_id
                 )
+                # v5.8.8: 톤백에도 con_return(컨테이너 반납일) 동일 적용
+                if lot_data.get('con_return'):
+                    try:
+                        self.db.execute(
+                            "UPDATE inventory_tonbag SET con_return = ? WHERE lot_no = ?",
+                            (lot_data['con_return'], lot_no))
+                    except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
+                        logger.debug(f"톤백 con_return 업데이트 스킵(컬럼 없을 수 있음): {_e}")
                 
                 # v3.8.4: 톤백 합계 = LOT 중량 검증
                 if tonbag_count > 0:
@@ -223,7 +231,11 @@ class InboundMixin(InventoryBaseMixin):
     
     def _prepare_lot_data(self, packing, bl_data=None, 
                           do_data=None) -> Dict:
-        """LOT 데이터 준비 (v3.8.8: dict/PackingData/dataclass 모두 지원)"""
+        """LOT 데이터 준비 (v3.8.8: dict/PackingData/dataclass 모두 지원).
+        
+        변수 구분 (혼동 방지): arrival_date=입항일(날짜 YYYY-MM-DD), warehouse=창고(예: 광양),
+        free_time_date=con_return=컨테이너 반납일, free_time=일수(반납일-입항일).
+        """
         # v3.8.8: 모든 타입 → dict 변환 + 디버깅
         orig_type = type(packing).__name__
         if not isinstance(packing, dict):
@@ -279,12 +291,12 @@ class InboundMixin(InventoryBaseMixin):
             lot_data['salar_invoice_no'] = packing['salar_invoice_no']
         # v5.6.6: invoice_no fallback 제거 (salar_invoice_no 단일)
         
+        # ship_date: 파싱 가능할 때만 설정. B/L·Invoice에서 채워져야 함.
         if packing.get('ship_date'):
             sd = self._safe_parse_date(packing['ship_date'])
-            if sd:
-                lot_data['ship_date'] = sd.strftime('%Y-%m-%d')
+            lot_data['ship_date'] = sd.strftime('%Y-%m-%d') if sd else ''
         
-        # 입항일: 파싱된 값만 사용. 모를 때는 반드시 비움 — date.today() 사용 금지
+        # 입항일(arrival_date): 파싱된 값만 사용. 모를 때는 반드시 비움 — warehouse('광양')와 혼동 금지
         arrival_date = None
         if do_data and do_data.get('arrival_date'):
             arrival_date = self._safe_parse_date(do_data.get('arrival_date'))
@@ -292,18 +304,20 @@ class InboundMixin(InventoryBaseMixin):
             arrival_date = self._safe_parse_date(packing.get('arrival_date'))
         lot_data['arrival_date'] = arrival_date.strftime('%Y-%m-%d') if arrival_date else ''
         
-        # 컨테이너 반납일(con_return) → FREE TIME 일수 = con_return - arrival_date
-        # con_return: D/O의 Free_Time 컬럼 값(실제 의미는 반납일)
-        free_time = 0
+        # con_return = 컨테이너 반납일 (D/O의 Free_Time 컬럼 = 반납일). free_time = (con_return - arrival_date) 일수
         con_return_str = packing.get('free_time_date', '') or (
             do_data.get('free_time_date', '') if do_data else ''
         )
-        if con_return_str and arrival_date:
-            ft_date = self._safe_parse_date(con_return_str)
-            if ft_date:
-                free_time = (ft_date - arrival_date).days
-                if free_time < 0:
-                    free_time = 0
+        con_return_date = self._safe_parse_date(con_return_str) if con_return_str else None
+        lot_data['con_return'] = con_return_date.strftime('%Y-%m-%d') if con_return_date else ''
+        
+        free_time = 0
+        if not con_return_str and (do_data or packing.get('free_time_date') is not None):
+            logger.debug(f"[_prepare_lot_data] FREE TIME 0: con_return_date 미제공 lot_no={packing.get('lot_no')!r}")
+        if con_return_date and arrival_date:
+            free_time = (con_return_date - arrival_date).days
+            if free_time < 0:
+                free_time = 0
         
         # packing에서 이미 계산된 free_time(일수)이 있으면 우선 사용
         if packing.get('free_time'):

@@ -89,19 +89,20 @@ class CRUDMixin:
             with self.db.transaction("IMMEDIATE"):
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 
-                # Insert inventory (v3.8.7: 18열 전체)
+                # Insert inventory (v3.8.7: 18열 전체, v5.8.8: con_return 추가)
+                con_return = kwargs.get('con_return', '')
                 self.db.execute("""
                     INSERT INTO inventory (
                         lot_no, sap_no, bl_no, container_no, product, product_code,
                         lot_sqm, mxbg_pallet, net_weight, gross_weight,
                         current_weight, initial_weight, picked_weight,
-                        salar_invoice_no, ship_date, arrival_date, free_time,
+                        salar_invoice_no, ship_date, arrival_date, con_return, free_time,
                         warehouse, stock_date, status, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 'AVAILABLE', ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 'AVAILABLE', ?)
                 """, (lot_no, sap_no, bl_no, container_no, product, product_code,
                       lot_sqm, mxbg_pallet, net_weight, gross_weight,
                       net_weight, net_weight,
-                      salar_invoice_no, ship_date, arrival_date, free_time,
+                      salar_invoice_no, ship_date, arrival_date, con_return, free_time,
                       warehouse, stock_date, now))
                 
                 # P3: DB 독립적 ID 조회 (SQLite: lastrowid, PG: RETURNING)
@@ -166,7 +167,7 @@ class CRUDMixin:
         allowed = {
             'lot_no', 'sap_no', 'bl_no', 'container_no', 'product', 'product_code',
             'mxbg_pallet', 'net_weight', 'gross_weight', 'warehouse', 'arrival_date', 'stock_date',
-            'lot_sqm', 'salar_invoice_no', 'ship_date', 'free_time', 'initial_weight', 'current_weight',
+            'lot_sqm', 'salar_invoice_no', 'ship_date', 'con_return', 'free_time', 'initial_weight', 'current_weight',
         }
         kwargs = {k: v for k, v in data.items() if k in allowed}
         result = self.add_inventory(**kwargs)

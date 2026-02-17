@@ -1219,12 +1219,24 @@ arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
                 result.total_weight_kg = float(data.get('total_weight_kg', 0))
                 
                 # ★★★ v5.8.6.B: arrival_date 다중 키 지원 + all_dates_found ★★★
+                # ★★★ v5.8.8: 날짜가 아닌 값(예: '광양' 등 항구명)이 들어오면 빈값 — ARRIVAL 컬럼 혼동 방지
                 arrival = (data.get('arrival_date') or 
                           data.get('eta_date') or 
                           data.get('eta') or 
                           data.get('vessel_arrival') or
                           data.get('eta_busan') or '')
-                result.arrival_date = arrival
+                _arrival_str = str(arrival).strip() if arrival else ''
+                result.arrival_date = ''
+                if _arrival_str and _arrival_str not in ('NOT_FOUND', 'None', ''):
+                    try:
+                        from utils.date_utils import normalize_date
+                        _d = normalize_date(_arrival_str)
+                        if _d:
+                            result.arrival_date = _d.isoformat()
+                    except Exception:
+                        pass
+                    if not result.arrival_date and re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', _arrival_str[:10]):
+                        result.arrival_date = _arrival_str[:10]
                 result.all_dates_found = data.get('all_dates_found', [])
                 
                 result.issue_date = data.get('issue_date', '')

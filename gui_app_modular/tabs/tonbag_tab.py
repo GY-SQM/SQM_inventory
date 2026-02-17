@@ -28,7 +28,7 @@ class TonbagTabMixin:
         from ..utils.constants import ttk, tk, VERTICAL, HORIZONTAL, BOTH, YES, LEFT, RIGHT, X, Y
         from ..utils.ui_constants import Spacing, ThemeColors, FontScale, apply_tooltip
 
-        # v8.7.0: 컬럼 정의를 먼저 두어 토글바/트리에서 공통 사용
+        # 컬럼 정의 — 기본 전부 표시, 필요 시 "표시 컬럼" 체크로 숨김
         self._tonbag_columns = [
             ('row_num',            'No.',            50, 'center', True),
             ('lot_no',             'LOT NO',        120, 'center', True),
@@ -38,18 +38,19 @@ class TonbagTabMixin:
             ('product',            'PRODUCT',       160, 'center', True),
             ('tonbag_status',      'STATUS',         90, 'center', True),
             ('current_weight',     'Balance(Kg)',   100, 'e',      True),
-            ('tonbag_uid',         'UID',           150, 'center', False),
-            ('container_no',       'CONTAINER',     130, 'center', False),
-            ('location',           'LOCATION',       90, 'center', False),
-            ('net_weight',         'NET(Kg)',        100, 'e',      False),
-            ('salar_invoice_no',   'INVOICE NO',    100, 'center', False),
-            ('ship_date',          'SHIP DATE',      95, 'center', False),
-            ('arrival_date',       'ARRIVAL',        95, 'center', False),
-            ('free_time',          'FREE TIME',      80, 'center', False),
-            ('warehouse',          'WH',             80, 'center', False),
-            ('customs',            'CUSTOMS',        90, 'center', False),
-            ('initial_weight',     'Inbound(Kg)',   100, 'e',      False),
-            ('outbound_weight',    'Outbound(Kg)',  100, 'e',      False),
+            ('tonbag_uid',         'UID',           150, 'center', True),
+            ('container_no',       'CONTAINER',     130, 'center', True),
+            ('location',           'LOCATION',       90, 'center', True),
+            ('net_weight',         'NET(Kg)',        100, 'e',      True),
+            ('salar_invoice_no',   'INVOICE NO',    100, 'center', True),
+            ('ship_date',          'SHIP DATE',      95, 'center', True),
+            ('arrival_date',       'ARRIVAL',        95, 'center', True),
+            ('con_return',         'CON RETURN',     95, 'center', True),
+            ('free_time',          'FREE TIME',      80, 'center', True),
+            ('warehouse',          'WH',             80, 'center', True),
+            ('customs',            'CUSTOMS',        90, 'center', True),
+            ('initial_weight',     'Inbound(Kg)',   100, 'e',      True),
+            ('outbound_weight',    'Outbound(Kg)',  100, 'e',      True),
         ]
         self._tonbag_col_visible = {c[0]: c[4] for c in self._tonbag_columns}
 
@@ -488,6 +489,7 @@ class TonbagTabMixin:
                                 tb.setdefault('salar_invoice_no', i.get('salar_invoice_no'))
                                 tb.setdefault('ship_date', i.get('ship_date'))
                                 tb.setdefault('arrival_date', i.get('arrival_date'))
+                                tb.setdefault('con_return', i.get('con_return'))
                                 tb.setdefault('free_time', i.get('free_time'))
                                 tb.setdefault('warehouse', i.get('warehouse'))
                                 tb.setdefault('customs', i.get('customs'))
@@ -680,28 +682,29 @@ class TonbagTabMixin:
                         _uid = f"{lot_no}-S0"
                     else:
                         _uid = f"{lot_no}-{_sub}"
-                # v5.6.3: MXBG 제거, 20열
+                # v5.8.8: _tonbag_columns 순서와 정확히 일치 (con_return 포함, 열 밀림 방지)
                 vals = (
-                    str(row_num),                                   #  1. No.
-                    lot_no,                                         #  2. LOT NO
-                    tonbag_no_print,                                #  3. TONBAG NO
-                    _uid,                                           #  4. UID
-                    sap_no,                                         #  5. SAP NO
-                    bl_no,                                          #  6. BL NO
-                    container,                                      #  7. CONTAINER
-                    product,                                        #  8. PRODUCT
-                    location,                                       #  9. LOCATION
-                    _fmt(tonbag_w),                                 # 10. NET(Kg) — 톤백 개별
-                    tb.get('salar_invoice_no', '') or '',           # 11. INVOICE NO
-                    tb.get('ship_date', '') or '',                  # 12. SHIP DATE
-                    tb.get('arrival_date', '') or '',               # 13. ARRIVAL
-                    tb.get('free_time', '') or '',                  # 14. FREE TIME
-                    tb.get('warehouse', '') or '',                  # 15. WH
-                    ('Sold' if status in ('PICKED', 'SOLD') else status),  # 16. STATUS (v5.7.5: Picked→Sold 표기)
-                    tb.get('customs', tb.get('customs_status', '')) or '',  # 17. CUSTOMS
-                    _fmt(tb_balance),                               # 18. Balance(Kg)
-                    _fmt(tonbag_inbound),                           # 19. Inbound(Kg)
-                    _fmt(tb_outbound) if tb_outbound > 0 else '0', # 20. Outbound(Kg)
+                    str(row_num),                                    #  1. row_num (No.)
+                    lot_no,                                          #  2. lot_no
+                    str(tonbag_no_print),                            #  3. tonbag_no_print (TONBAG NO)
+                    sap_no,                                          #  4. sap_no
+                    bl_no,                                           #  5. bl_no
+                    product,                                         #  6. product
+                    ('Sold' if status in ('PICKED', 'SOLD') else status),  #  7. tonbag_status
+                    _fmt(tb_balance),                                #  8. current_weight (Balance(Kg))
+                    _uid,                                            #  9. tonbag_uid
+                    container,                                       # 10. container_no
+                    location,                                        # 11. location
+                    _fmt(tonbag_w),                                  # 12. net_weight (NET(Kg))
+                    tb.get('salar_invoice_no', '') or '',            # 13. salar_invoice_no
+                    tb.get('ship_date', '') or '',                   # 14. ship_date
+                    tb.get('arrival_date', '') or '',                # 15. arrival_date
+                    tb.get('con_return', '') or '',                  # 16. con_return (CON RETURN)
+                    tb.get('free_time', '') or '',                  # 17. free_time
+                    tb.get('warehouse', '') or '',                   # 18. warehouse
+                    tb.get('customs', tb.get('customs_status', '')) or '',  # 19. customs
+                    _fmt(tonbag_inbound),                            # 20. initial_weight (Inbound(Kg))
+                    _fmt(tb_outbound) if tb_outbound > 0 else '0',   # 21. outbound_weight
                 )
                 
                 self.tree_sublot.insert('', 'end', values=vals, tags=tuple(tags))

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════
 # 19열 정의: (컬럼ID, 표시명, 기본폭, 정렬, 기본표시여부)
-# v8.7.0 Phase1: 기본 표시 8개만 (첫인상 개선), 나머지는 토글로 표시
+# 기본 전부 표시 — 필요 시 "표시 컬럼" 체크로 숨김
 # ═══════════════════════════════════════════════════════════════
 INVENTORY_COLUMNS = [
     ('row_num',            'No.',            50, 'center', True),   #  1. 순번
@@ -30,17 +30,18 @@ INVENTORY_COLUMNS = [
     ('status',             'STATUS',         90, 'center', True),   #  6
     ('current_weight',     'Balance(Kg)',    100, 'e',      True),   #  7
     ('net_weight',         'NET(Kg)',        100, 'e',      True),   #  8
-    ('container_no',       'CONTAINER',     130, 'center', False),   #  9
-    ('mxbg_pallet',        'MXBG',           70, 'center', False),  # 10
-    ('avail_bags',         'Avail',          60, 'center', False),  # 11
-    ('salar_invoice_no',   'INVOICE NO',    100, 'center', False),  # 12
-    ('ship_date',          'SHIP DATE',      95, 'center', False),   # 13
-    ('arrival_date',       'ARRIVAL',        95, 'center', False),  # 14
-    ('free_time',          'FREE TIME',      80, 'center', False),  # 15
-    ('warehouse',          'WH',             80, 'center', False),   # 16
-    ('customs',            'CUSTOMS',        90, 'center', False),   # 17
-    ('initial_weight',     'Inbound(Kg)',    100, 'e',      False), # 18
-    ('outbound_weight',    'Outbound(Kg)',   100, 'e',      False), # 19
+    ('container_no',       'CONTAINER',     130, 'center', True),
+    ('mxbg_pallet',        'MXBG',           70, 'center', True),
+    ('avail_bags',         'Avail',          60, 'center', True),
+    ('salar_invoice_no',   'INVOICE NO',    100, 'center', True),
+    ('ship_date',          'SHIP DATE',      95, 'center', True),
+    ('arrival_date',       'ARRIVAL',        95, 'center', True),
+    ('con_return',         'CON RETURN',     95, 'center', True),
+    ('free_time',          'FREE TIME',      80, 'center', True),
+    ('warehouse',          'WH',             80, 'center', True),
+    ('customs',            'CUSTOMS',        90, 'center', True),
+    ('initial_weight',     'Inbound(Kg)',    100, 'e',      True),
+    ('outbound_weight',    'Outbound(Kg)',   100, 'e',      True),
 ]
 
 

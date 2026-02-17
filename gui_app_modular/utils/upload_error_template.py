@@ -69,10 +69,10 @@ class UploadErrorTemplate:
         
         'missing_required': {
             'title': '필수 컬럼 누락',
-            'description': '필수 입력 항목이 비어있습니다.',
+            'description': '아래 "실패 행"에서 어떤 행의 어떤 항목이 비어 있는지 확인한 뒤, 해당 셀을 채워 주세요.',
             'solution': [
                 '필수 컬럼: LOT NO, PRODUCT, NET(Kg), MXBG',
-                '모든 필수 컬럼에 값을 입력하세요.',
+                '실패 행에 표시된 항목만 채우면 됩니다.',
                 '빈 셀이 없는지 확인하세요.'
             ],
             'example': 'LOT NO: 1125072340\nPRODUCT: LITHIUM CARBONATE\nNET(Kg): 25000\nMXBG: 10'
@@ -165,14 +165,18 @@ class UploadErrorTemplate:
             'example': ''
         })
         
-        # 실패 행 상세 정보 생성
+        # 실패 행 상세 정보 생성 — 어느 행의 어떤 데이터가 빠졌는지 명확히 표시
         failed_details = []
         for item in failed_rows[:10]:  # 최대 10개만 표시
             row_num = item.get('row', item.get('row_num', '?'))
             value = item.get('value', '')
             column = item.get('column', '')
+            missing_columns = item.get('missing_columns', [])  # ['LOT NO', 'PRODUCT'] 등
             
-            if column:
+            if missing_columns:
+                cols_str = ', '.join(missing_columns)
+                failed_details.append(f"  • 행 {row_num}: [{cols_str}] 비어 있음")
+            elif column:
                 failed_details.append(f"  • 행 {row_num}, {column}: {value}")
             else:
                 failed_details.append(f"  • 행 {row_num}: {value}")

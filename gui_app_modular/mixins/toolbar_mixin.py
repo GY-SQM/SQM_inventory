@@ -30,12 +30,10 @@ def _pick_font(root) -> str:
 
 
 class ToolbarMixin:
-    """v3.8.4: 통합 메뉴바 (ThemeColors 통일)"""
-
-    # v5.5.3 patch_01: UI_COLORS 삭제 → style.colors 사용
+    """v3.8.4: 통합 메뉴바 (ThemeColors 단일 소스, Phase5: 메뉴 헬퍼·미니멀)"""
 
     def _load_toolbar_colors(self) -> None:
-        """v5.5.3 patch_01 + v8.7.0 Phase2: ThemeColors 단일 소스 — 툴바는 항상 다크 스타일"""
+        """ThemeColors 단일 소스 — 툴바는 항상 다크 스타일 (Phase2/5)"""
         try:
             import ttkbootstrap as ttk_bs
             sc = ttk_bs.Style().colors
@@ -148,19 +146,24 @@ class ToolbarMixin:
 
     def _add_menu_item(self, menu, label: str, command, icon_pad: bool = True) -> None:
         """여백 포함 메뉴 항목 추가 (위아래 간격 확보)"""
-        # label 앞뒤에 공백 추가하여 간격 확보
         padded = f"  {label}  " if not label.startswith('  ') else f"{label}  "
         menu.add_command(label=padded, command=command)
+
+    def _add_menu_items(self, menu: 'tk.Menu', items: list) -> None:
+        """Phase5: (label, command) 또는 None(구분선) 리스트로 메뉴 일괄 구성"""
+        for item in items:
+            if item is None:
+                menu.add_separator()
+            else:
+                label, cmd = item[0], item[1]
+                menu.add_command(label=f"  {label}" if not str(label).startswith('  ') else label, command=cmd)
 
     # ═══════════════════════════════════════════════════════
     # 7개 메뉴 버튼 (균등 배치)
     # ═══════════════════════════════════════════════════════
 
     def _build_all_menus(self) -> None:
-        """v5.5.3 patch_02: 6개 드롭다운 메뉴 + 검색 Outline 버튼 분리"""
-        f = self._toolbar_font
-
-        # ── 7개 드롭다운 메뉴 (동일 스타일) + 상세 툴팁 ──
+        """7개 드롭다운 메뉴 (밑줄 스타일) + 툴팁"""
         menus = [
             ('📁 파일 ▼',      self._build_file_menu,
              '파일 메뉴: 데이터베이스 열기/저장/백업, 설정 파일, 최근 파일, 종료 등 파일 관련 기능'),
@@ -286,9 +289,8 @@ class ToolbarMixin:
         return style_name
 
     def _build_inbound_menu(self) -> 'tk.Menu':
-        f = self._toolbar_font
         m = self._create_menu()
-        items = [
+        self._add_menu_items(m, [
             ('📥 PDF 입고 (원스톱)',    lambda: self._safe_call('_on_pdf_inbound')),
             ('📝 Excel 입고',          lambda: self._safe_call('_bulk_import_inventory_simple')),
             None,
@@ -297,18 +299,12 @@ class ToolbarMixin:
             ('📥 샘플 Excel 다운로드', lambda: self._safe_call('_download_inbound_template')),
             None,
             ('🔄 반품 (재입고)',       lambda: self._safe_call('_show_return_dialog')),
-        ]
-        for item in items:
-            if item is None:
-                m.add_separator()
-            else:
-                m.add_command(label=f"  {item[0]}", command=item[1])
+        ])
         return m
 
     def _build_outbound_menu(self) -> 'tk.Menu':
-        f = self._toolbar_font
         m = self._create_menu()
-        items = [
+        self._add_menu_items(m, [
             ('📤 빠른 출고',                    lambda: self._safe_call('_on_simple_outbound')),
             ('📤 심플 엑셀 출고',               lambda: self._safe_call('_on_simple_excel_outbound')),
             ('📋 출고 Allocation Table',        lambda: self._safe_call('_on_outbound_click')),
@@ -316,55 +312,33 @@ class ToolbarMixin:
             ('🎲 가상 Allocation Table 생성',   lambda: self._safe_call('_generate_virtual_allocation')),
             None,
             ('📋 출고 결과',                     lambda: self._safe_call('_import_outbound_excel')),
-            # v4.0.3: 반품은 입고 메뉴로 이동
-        ]
-        for item in items:
-            if item is None:
-                m.add_separator()
-            else:
-                m.add_command(label=f"  {item[0]}", command=item[1])
+        ])
         return m
 
     def _build_report_menu(self) -> 'tk.Menu':
-        f = self._toolbar_font
         m = self._create_menu()
-        # v5.0.2: 메뉴 간소화 - 핵심 2개만
-        items = [
+        self._add_menu_items(m, [
             ('📊 재고리스트 Excel',  lambda: self._on_export_click(option=3)),
             ('🎒 톤백리스트 Excel',  lambda: self._on_export_click(option=4)),
             None,
             ('📋 입출고 이력 조회', lambda: self._safe_call('_show_outbound_history')),
             ('📊 재고 추이 차트', lambda: self._safe_call('_show_snapshot_chart')),
             ('📄 거래명세서 생성', lambda: self._safe_call('_generate_outbound_invoice')),
-        ]
-        for item in items:
-            if item is None:
-                m.add_separator()
-            else:
-                m.add_command(label=f"  {item[0]}", command=item[1])
+        ])
         return m
 
     def _build_customer_report_menu(self) -> 'tk.Menu':
-        """v5.5.3: 고객 보고서 메뉴 (양식은 추후 업로드 예정)"""
-        f = self._toolbar_font
+        """v5.5.3: 고객 보고서 메뉴"""
         m = self._create_menu()
-        m.add_command(
-            label="  📝 고객 보고서 생성",
-            command=lambda: self._safe_call('_generate_customer_report')
-        )
-        m.add_command(
-            label="  📂 보고서 양식 관리",
-            command=lambda: self._safe_call('_manage_report_templates')
-        )
-        m.add_separator()
-        m.add_command(
-            label="  📋 보고서 이력 조회",
-            command=lambda: self._safe_call('_show_report_history')
-        )
+        self._add_menu_items(m, [
+            ('📝 고객 보고서 생성', lambda: self._safe_call('_generate_customer_report')),
+            ('📂 보고서 양식 관리', lambda: self._safe_call('_manage_report_templates')),
+            None,
+            ('📋 보고서 이력 조회', lambda: self._safe_call('_show_report_history')),
+        ])
         return m
 
     def _build_file_menu(self) -> 'tk.Menu':
-        f = self._toolbar_font
         m = self._create_menu()
         exp = self._create_menu(m)
         exp.add_command(label="  📋 통관요청 양식", command=lambda: self._on_export_click(option=1))
@@ -417,7 +391,6 @@ class ToolbarMixin:
         return m
 
     def _build_settings_menu(self) -> 'tk.Menu':
-        f = self._toolbar_font
         m = self._create_menu()
         # 화면
         m.add_command(label="━━ 🖥️ 화면 ━━", state='disabled', font=self._tb_font_scale.heading())
@@ -467,21 +440,19 @@ class ToolbarMixin:
         return m
 
     def _build_help_menu(self) -> 'tk.Menu':
-        f = self._toolbar_font
         m = self._create_menu()
-        
-        # v5.0.2: 버전 자동 표시 — 툴팁 대신 라벨에 설명 포함 (Tk 메뉴는 툴팁 미지원)
         try:
             from version import __version__
-            version_label = f"  📝 버전 정보 (v{__version__})"
+            version_label = f"📝 버전 정보 (v{__version__})"
         except ImportError:
-            version_label = "  📝 버전 정보"
-        
-        m.add_command(label="  📖 사용법 — 사용 설명서 열기", command=lambda: self._safe_call('_show_help'))
-        m.add_command(label="  ⌨️ 단축키 안내 — 키보드 단축키 목록", command=lambda: self._safe_call('_show_shortcuts'))
-        m.add_separator()
-        m.add_command(label="  ℹ️ 시스템 정보 — Python·DB·경로 등", command=lambda: self._safe_call('_show_system_info'))
-        m.add_command(label=version_label + " — 앱 버전·라이선스", command=lambda: self._safe_call('_show_about'))
+            version_label = "📝 버전 정보"
+        self._add_menu_items(m, [
+            ('📖 사용법 — 사용 설명서 열기', lambda: self._safe_call('_show_help')),
+            ('⌨️ 단축키 안내 — 키보드 단축키 목록', lambda: self._safe_call('_show_shortcuts')),
+            None,
+            ('ℹ️ 시스템 정보 — Python·DB·경로 등', lambda: self._safe_call('_show_system_info')),
+            (version_label + " — 앱 버전·라이선스", lambda: self._safe_call('_show_about')),
+        ])
         return m
 
     # ═══════════════════════════════════════════════════════

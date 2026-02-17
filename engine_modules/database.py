@@ -770,6 +770,7 @@ class SQMDatabase(DatabaseMigrationMixin, DatabaseInterface):
                 salar_invoice_no TEXT,
                 ship_date DATE,
                 arrival_date DATE,
+                con_return DATE,
                 free_time INTEGER DEFAULT 0,
                 warehouse TEXT DEFAULT 'GY',
 
@@ -884,6 +885,9 @@ class SQMDatabase(DatabaseMigrationMixin, DatabaseInterface):
 
                 -- ✅ 입고일 (v2.5.4 추가)
                 inbound_date DATE,
+
+                -- v5.8.8: 컨테이너 반납일 (D/O Free_Time 컬럼 = 반납일, free_time = con_return - arrival 일수)
+                con_return TEXT,
 
                 -- ✅ 화물 위치 (v2.5.4 추가)
                 location TEXT,
@@ -1131,6 +1135,9 @@ class SQMDatabase(DatabaseMigrationMixin, DatabaseInterface):
         
         # ★★★ v3.9.6: 검색 성능 인덱스 추가 ★★★
         self._migrate_v396_search_indexes()
+        
+        # ★★★ v5.8.8: con_return(컨테이너 반납일) 컬럼 추가 ★★★
+        self._migrate_v588_con_return()
     
     
     def _verify_schema(self) -> Dict[str, Any]:

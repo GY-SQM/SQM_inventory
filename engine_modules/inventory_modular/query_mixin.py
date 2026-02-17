@@ -48,7 +48,7 @@ class QueryMixin:
                        sold_to, warehouse, status, location, vessel,
                        initial_weight, current_weight, picked_weight,
                        net_weight, gross_weight, mxbg_pallet,
-                       salar_invoice_no, ship_date, arrival_date, free_time,
+                       salar_invoice_no, ship_date, arrival_date, con_return, free_time,
                        customs,
                        stock_date, inbound_date, created_at, updated_at
                 FROM inventory WHERE 1=1
@@ -118,7 +118,7 @@ class QueryMixin:
                     t.is_sample,
                     i.net_weight, i.salar_invoice_no,
                     i.ship_date, i.arrival_date,
-                    i.free_time, i.warehouse,
+                    i.con_return, i.free_time, i.warehouse,
                     t.status AS tonbag_status,
                     i.customs,
                     i.current_weight, i.initial_weight,
