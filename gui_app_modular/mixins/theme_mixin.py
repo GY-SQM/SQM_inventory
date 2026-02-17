@@ -164,10 +164,10 @@ class ThemeMixin:
         dialog = tk.Toplevel(self.root)
         dialog.title("Select Theme")
         
-        width, height = DialogSize.calculate(self.root, 'medium')
-        dialog.geometry(f"{width}x{height}")
+        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
         dialog.transient(self.root)
         dialog.grab_set()
+        center_dialog(dialog, self.root)
         
         # === UI 통일성: 간격 표준화 ===
         # Current theme

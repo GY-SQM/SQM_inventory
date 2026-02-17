@@ -11,7 +11,7 @@ Right-click context menus for treeviews
 import sqlite3
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog
 logger = logging.getLogger(__name__)
 
 
@@ -118,9 +118,10 @@ class ContextMenuMixin:
         # Create edit dialog
         dialog = tk.Toplevel(self.root)
         dialog.title(f"Edit LOT: {lot_no}")
-        dialog.geometry("450x400")
+        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
         dialog.transient(self.root)
         dialog.grab_set()
+        center_dialog(dialog, self.root)
         
         # Form frame
         form_frame = ttk.Frame(dialog, padding=10)
@@ -340,12 +341,13 @@ class ContextMenuMixin:
         # Status options
         statuses = ['AVAILABLE', 'PICKED', 'SOLD', 'SAMPLE', 'BLOCKED']
         
-        # Simple dialog
+        # Simple dialog (Phase4: DialogSize)
         dialog = tk.Toplevel(self.root)
         dialog.title("Change Status")
-        dialog.geometry("300x150")
+        dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         dialog.transient(self.root)
         dialog.grab_set()
+        center_dialog(dialog, self.root)
         
         ttk.Label(dialog, text=f"LOT: {lot_no}, Tonbag: {sub_lt}").pack(pady=10)
         ttk.Label(dialog, text=f"Current: {current_status}").pack()
@@ -442,27 +444,29 @@ class ContextMenuMixin:
         
         dialog = tk.Toplevel(self.root)
         dialog.title(f"📅 LOT 히스토리 — {lot_no}")
-        dialog.geometry("750x580")
+        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
         dialog.transient(self.root)
         dialog.grab_set()
+        center_dialog(dialog, self.root)
         
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
-        _bg = '#1e1e1e' if _is_dark else ThemeColors.get('bg_card')
-        _fg = '#e0e0e0' if _is_dark else ThemeColors.get('text_primary')
-        _accent = ThemeColors.get('statusbar_progress')
-        _green = ThemeColors.get('badge_db')
-        _orange = '#e67e22'
-        _red = ThemeColors.get('statusbar_icon_err')
+        _bg = ThemeColors.get('bg_card', _is_dark)
+        _fg = ThemeColors.get('text_primary', _is_dark)
+        _accent = ThemeColors.get('statusbar_progress', _is_dark)
+        _green = ThemeColors.get('badge_db', _is_dark)
+        _orange = ThemeColors.get('statusbar_icon_warn', _is_dark)
+        _red = ThemeColors.get('statusbar_icon_err', _is_dark)
         
         dialog.configure(bg=_bg)
         
         # 헤더
         header = tk.Frame(dialog, bg=_accent, pady=10)
         header.pack(fill=X)
+        _header_fg = ThemeColors.get('badge_text', _is_dark)
         tk.Label(header, text="📅 LOT 히스토리 타임라인",
-                 bg=_accent, fg='white', font=('맑은 고딕', 14, 'bold')).pack()
+                 bg=_accent, fg=_header_fg, font=('맑은 고딕', 14, 'bold')).pack()
         tk.Label(header, text=f"LOT: {lot_no} | SAP: {lot.get('sap_no', '')} | {lot.get('product', '')}",
-                 bg=_accent, fg='white', font=('맑은 고딕', 10)).pack()
+                 bg=_accent, fg=_header_fg, font=('맑은 고딕', 10)).pack()
         
         # 타임라인
         canvas_frame = tk.Frame(dialog, bg=_bg)
@@ -535,7 +539,7 @@ class ContextMenuMixin:
             content.pack(side=LEFT, fill=X, expand=YES)
             tk.Label(content, text=f"{icon} {title}", bg=_bg, fg=_fg,
                      font=('맑은 고딕', 11, 'bold'), anchor=W).pack(anchor=W)
-            tk.Label(content, text=detail, bg=_bg, fg='gray',
+            tk.Label(content, text=detail, bg=_bg, fg=ThemeColors.get('text_muted', _is_dark),
                      font=('맑은 고딕', 9), anchor=W).pack(anchor=W)
             
             if idx < len(events) - 1:
@@ -561,7 +565,7 @@ class ContextMenuMixin:
         bar.create_rectangle(0, 0, fill_w, 20, fill=bar_c, outline='')
         
         tk.Label(pf, text=f"입고: {init_w:,.0f}kg | 출고: {init_w-curr_w:,.0f}kg | 잔량: {curr_w:,.0f}kg",
-                 bg=_bg, fg='gray', font=('맑은 고딕', 9)).pack(anchor=W)
+                 bg=_bg, fg=ThemeColors.get('text_muted', _is_dark), font=('맑은 고딕', 9)).pack(anchor=W)
         
         ttk.Button(dialog, text="닫기", command=dialog.destroy).pack(pady=10)
         

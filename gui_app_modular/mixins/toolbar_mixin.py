@@ -12,7 +12,7 @@ import sqlite3
 import logging
 import tkinter as tk
 from tkinter import ttk
-from ..utils.ui_constants import ThemeColors
+from ..utils.ui_constants import ThemeColors, Spacing, FontScale, FontStyle, get_font_scale, DialogSize, center_dialog
 from utils.ui_debug import log_ui_event, safe_widget_bg  # v5.3.6
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,7 @@ class ToolbarMixin:
 
     def _setup_toolbar(self) -> None:
         self._toolbar_font = _pick_font(self.root)
+        self._tb_font_scale = get_font_scale() or FontScale()
         logger.info(f"[v3.8.4] 폰트: {self._toolbar_font}")
 
         # ThemeColors에서 동적 로드
@@ -70,23 +71,24 @@ class ToolbarMixin:
         self._toolbar_container = tk.Frame(self.root)
         self._toolbar_container.pack(fill='x')
 
-        # Row1: 메뉴 버튼
-        self._row1 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=5)
+        # Row1: 메뉴 버튼 (Phase3: Spacing 8px 그리드)
+        self._row1 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=Spacing.XS)
         self._row1.pack(fill='x')
         
-        # v4.0.0: 오른쪽 버전 배지 (큰 글자)
+        # v4.0.0: 오른쪽 버전 배지 (Phase3: FontScale body/heading)
         try:
             from version import __version__, APP_NAME
             ver_frame = tk.Frame(self._row1, bg=self._tb_bg)
-            ver_frame.pack(side='right', padx=15)
+            ver_frame.pack(side='right', padx=Spacing.MD)
+            _vf = self._tb_font_scale
             tk.Label(ver_frame, text=f"📦 {APP_NAME}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_progress'),
-                     font=('맑은 고딕', 13, 'bold')).pack(side='left')
+                     font=_vf.body(bold=True)).pack(side='left')
             tk.Label(ver_frame, text=f"  v{__version__}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_icon_warn', True),
-                     font=('맑은 고딕', 14, 'bold')).pack(side='left')
+                     font=_vf.heading()).pack(side='left')
         except (ImportError, ModuleNotFoundError) as _e:
             logger.debug(f'Suppressed: {_e}')
         # Row2: 탭 버튼 (v3.8.9: 항상 표시)
-        self._row2 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=3)
+        self._row2 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=Spacing.XS)
         self._row2.pack(fill='x')
         self._row2_visible = True
 
@@ -101,11 +103,11 @@ class ToolbarMixin:
 
         # 구분선
         self._sep_line = tk.Frame(self._row2, bg=self._tb_sep, height=1)
-        self._sep_line.pack(fill='x', padx=10, pady=(0, 3))
+        self._sep_line.pack(fill='x', padx=Spacing.SM, pady=(0, Spacing.XS))
 
         # === 탭 전환 (Row2에 고정, 왼쪽 정렬) ===
         self._sec_tabs = tk.Frame(self._row2, bg=self._tb_bg)
-        self._sec_tabs.pack(side='left', padx=6)
+        self._sec_tabs.pack(side='left', padx=Spacing.SM)
         self._build_tab_buttons()
 
         # v3.8.9: overflow 체크 비활성화 (탭은 항상 row2에 고정)
@@ -128,7 +130,8 @@ class ToolbarMixin:
         menu_dis = ThemeColors.get('text_muted', is_dark)
         f = self._toolbar_font
         p = parent or self.root
-        m = tk.Menu(p, tearoff=0, font=(f, 17),
+        _menu_font = self._tb_font_scale.get_font(FontStyle.SUBTITLE)
+        m = tk.Menu(p, tearoff=0, font=(f, _menu_font[1]),
                     activeborderwidth=3,
                     borderwidth=3,
                     relief='flat',
@@ -179,13 +182,14 @@ class ToolbarMixin:
             text = item[0]
             builder = item[1]
             tooltip = item[2] if len(item) > 2 else ""
-            # v5.7.5: 상단 메뉴가 가장 크게 — 14pt bold (탭보다 큼)
+            # v5.7.5: 상단 메뉴가 가장 크게 (Phase3: FontScale.heading + Spacing)
+            _btn_font = self._tb_font_scale.heading()
             btn = tk.Label(self._menu_frame, text=text,
-                          font=(f, 14, 'bold'),
+                          font=_btn_font,
                           bg=self._tb_bg, fg=self._tb_fg_normal,
                           anchor='center', justify='center',
-                          padx=9, pady=6, cursor='hand2')
-            btn.pack(side='left', padx=2)
+                          padx=Spacing.SM, pady=Spacing.SM, cursor='hand2')
+            btn.pack(side='left', padx=Spacing.XS)
 
             # 밑줄 인디케이터 (숨긴 상태로 생성)
             underline = tk.Frame(btn, height=2, bg=self._tb_underline_color)
@@ -238,7 +242,7 @@ class ToolbarMixin:
                 text='🔍 검색',
                 bootstyle='outline-info',
                 command=self._show_search_popup,
-                padding=(12, 4),
+                padding=(Spacing.MD, Spacing.XS),
             )
             # 폰트 크기 적용
             try:
@@ -251,10 +255,10 @@ class ToolbarMixin:
             # ttkbootstrap 없으면 tk.Label + relief='solid' 폴백
             self._search_btn = tk.Label(
                 self._menu_frame, text='🔍 검색',
-                font=(f, 13, 'bold'),
+                font=self._tb_font_scale.body(bold=True),
                 bg=self._tb_bg, fg=self._tb_underline_color,
                 anchor='center', justify='center',
-                padx=12, pady=4, cursor='hand2',
+                padx=Spacing.MD, pady=Spacing.XS, cursor='hand2',
                 relief='solid', borderwidth=1,
                 highlightbackground=self._tb_underline_color,
             )
@@ -267,7 +271,7 @@ class ToolbarMixin:
             self._search_btn.bind('<Enter>', _search_enter)
             self._search_btn.bind('<Leave>', _search_leave)
 
-        self._search_btn.pack(side='right', padx=(10, 8))
+        self._search_btn.pack(side='right', padx=(Spacing.SM, Spacing.SM))
 
     def _create_search_btn_style(self, font_family: str) -> str:
         """검색 버튼 전용 스타일 (폰트 크기 조정)"""
@@ -275,7 +279,8 @@ class ToolbarMixin:
         style = ttk_bs.Style()
         style_name = 'Search.TButton'
         try:
-            style.configure(style_name, font=(font_family, 13, 'bold'))
+            _sz = self._tb_font_scale.get_size(FontStyle.BODY)
+            style.configure(style_name, font=(font_family, _sz, 'bold'))
         except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
             logger.debug(f"Suppressed: {_e}")
         return style_name
@@ -415,15 +420,15 @@ class ToolbarMixin:
         f = self._toolbar_font
         m = self._create_menu()
         # 화면
-        m.add_command(label="━━ 🖥️ 화면 ━━", state='disabled', font=(f, 14, 'bold'))
+        m.add_command(label="━━ 🖥️ 화면 ━━", state='disabled', font=self._tb_font_scale.heading())
         m.add_command(label="  🔄 새로고침 (F5)", command=self._refresh_all_data)
         # 테마
         theme = self._create_menu(m)
-        theme.add_command(label="━━ ☀️ Light ━━", state='disabled', font=(f, 14, 'bold'))
+        theme.add_command(label="━━ ☀️ Light ━━", state='disabled', font=self._tb_font_scale.heading())
         for t in ['flatly', 'cosmo', 'litera', 'minty', 'journal', 'yeti', 'morph']:
             theme.add_command(label=f"  ☀️ {t.capitalize()}", command=lambda th=t: self._change_theme(th))
         theme.add_separator()
-        theme.add_command(label="━━ 🌙 Dark ━━", state='disabled', font=(f, 14, 'bold'))
+        theme.add_command(label="━━ 🌙 Dark ━━", state='disabled', font=self._tb_font_scale.heading())
         for t in ['darkly', 'cyborg', 'superhero', 'solar', 'vapor']:
             theme.add_command(label=f"  🌙 {t.capitalize()}", command=lambda th=t: self._change_theme(th))
         m.add_cascade(label="  🎨 테마 선택", menu=theme)
@@ -435,7 +440,7 @@ class ToolbarMixin:
         m.add_cascade(label="  🔤 글꼴 크기", menu=fsize)
         m.add_separator()
         # 도구
-        m.add_command(label="━━ 🔧 도구 ━━", state='disabled', font=(f, 14, 'bold'))
+        m.add_command(label="━━ 🔧 도구 ━━", state='disabled', font=self._tb_font_scale.heading())
         # 컨테이너 서픽스 옵션
         m.add_checkbutton(
             label="  📦 컨테이너 구분 (-1, -2 표시) — 재고/톤백 CONTAINER 열 접미사 표시",
@@ -497,17 +502,16 @@ class ToolbarMixin:
              '시스템·작업 로그를 확인합니다. 오류 추적이나 동작 확인에 사용하세요.'),
         ]
         self._tab_buttons = {}
-        # v5.7.5: 탭(재고리스트/톤백리스트 등)은 상단 메뉴보다 작게 — 11pt
-        _tab_font_size = 11
+        # v5.7.5: 탭은 상단 메뉴보다 작게 (Phase3: FontScale.small + Spacing)
+        _tab_font = self._tb_font_scale.small()
         for key, text, tip in tab_defs:
-            # 래퍼 프레임 (버튼 + 밑줄을 묶음)
             wrapper = tk.Frame(self._sec_tabs, bg=self._tb_bg)
-            wrapper.pack(side='left', padx=3)
+            wrapper.pack(side='left', padx=Spacing.XS)
 
-            btn = tk.Label(wrapper, text=text, font=(f, _tab_font_size),
+            btn = tk.Label(wrapper, text=text, font=_tab_font,
                           bg=self._tb_bg, fg=self._tb_fg_normal,
                           anchor='center', justify='center',
-                          padx=9, pady=5, cursor='hand2')
+                          padx=Spacing.SM, pady=Spacing.XS, cursor='hand2')
             btn.pack()
 
             # 밑줄 (비활성 시 숨김)
@@ -534,13 +538,13 @@ class ToolbarMixin:
             need_w = self._menu_frame.winfo_reqwidth() + self._sec_tabs.winfo_reqwidth() + 60
             if need_w > win_w and not self._row2_visible:
                 self._sec_tabs.pack_forget()
-                self._sec_tabs.pack(in_=self._row2, fill='x', expand=True, padx=6)
+                self._sec_tabs.pack(in_=self._row2, fill='x', expand=True, padx=Spacing.SM)
                 self._row2.pack(fill='x')
                 self._row2_visible = True
             elif need_w <= win_w and self._row2_visible:
                 self._sec_tabs.pack_forget()
                 self._row2.pack_forget()
-                self._sec_tabs.pack(in_=self._row1, fill='x', expand=True, padx=6, pady=(3, 0))
+                self._sec_tabs.pack(in_=self._row1, fill='x', expand=True, padx=Spacing.SM, pady=(Spacing.XS, 0))
                 self._row2_visible = False
         except (RuntimeError, ValueError) as _e:
             logger.debug(f"{type(_e).__name__}: {_e}")
@@ -564,17 +568,18 @@ class ToolbarMixin:
                 logger.debug(f"toolbar_mixin: {_e}")
 
     def _highlight_active_tab(self) -> None:
-        """v5.5.3 patch_01: 밑줄+텍스트로 활성 탭 강조"""
-        _sz = 18
+        """v5.5.3 patch_01: 밑줄+텍스트로 활성 탭 강조 (Phase3: FontScale.subtitle + Spacing)"""
+        _sub_font = self._tb_font_scale.subtitle(bold=True)
+        _sub_font_normal = self._tb_font_scale.subtitle(bold=False)
         for key, btn in self._tab_buttons.items():
             if key == self._active_tab_key:
                 btn.config(bg=self._tb_bg, fg=self._tb_fg_active,
-                          relief='flat', font=(self._toolbar_font, _sz, 'bold'))
+                          relief='flat', font=_sub_font)
                 btn._underline.config(bg=self._tb_underline_color)
-                btn._underline.pack(fill='x', padx=4, pady=(2, 0))
+                btn._underline.pack(fill='x', padx=Spacing.XS, pady=(Spacing.XS, 0))
             else:
                 btn.config(bg=self._tb_bg, fg=self._tb_fg_normal,
-                          relief='flat', font=(self._toolbar_font, _sz))
+                          relief='flat', font=_sub_font_normal)
                 btn._underline.pack_forget()
 
     def _tab_hover_enter(self, btn, key: str) -> None:
@@ -596,17 +601,13 @@ class ToolbarMixin:
         f = self._toolbar_font
         popup = tk.Toplevel(self.root)
         popup.title("🔍 검색")
-        popup.geometry("520x420")
+        popup.geometry(DialogSize.get_geometry(self.root, 'medium'))
         popup.resizable(True, True)
         popup.transient(self.root)
         popup.grab_set()
+        center_dialog(popup, self.root)
 
-        popup.update_idletasks()
-        x = self.root.winfo_rootx() + (self.root.winfo_width() // 2) - 260
-        y = self.root.winfo_rooty() + 80
-        popup.geometry(f"+{x}+{y}")
-
-        main = tk.Frame(popup, padx=25, pady=20)
+        main = tk.Frame(popup, padx=Spacing.LG, pady=Spacing.MD)
         main.pack(fill='both', expand=True)
 
         # v3.8.9: 검색 필터용 안정적 StringVar (팝업 닫혀도 유지)
@@ -621,18 +622,19 @@ class ToolbarMixin:
             }
         
         svars = self._search_filter_vars
-        _fs = 14
+        _lab_font = self._tb_font_scale.heading()
+        _body_font = self._tb_font_scale.body()
 
-        # 콤보박스: SAP NO, BL NO, LOT NO
+        # 콤보박스: SAP NO, BL NO, LOT NO (Phase3: Spacing + FontScale)
         combos = {}
         for row_idx, (field, label) in enumerate([
             ('sap_no', 'SAP NO'), ('bl_no', 'BL NO'), ('lot_no', 'LOT NO')
         ]):
-            tk.Label(main, text=label, font=(f, _fs, 'bold'), anchor='w'
-                     ).grid(row=row_idx, column=0, sticky='w', pady=6)
+            tk.Label(main, text=label, font=_lab_font, anchor='w'
+                     ).grid(row=row_idx, column=0, sticky='w', pady=Spacing.SM)
             cb = ttk.Combobox(main, textvariable=svars[field],
-                              state='readonly', width=28, font=(f, _fs))
-            cb.grid(row=row_idx, column=1, sticky='ew', padx=(10, 0), pady=6)
+                              state='readonly', width=28, font=_body_font)
+            cb.grid(row=row_idx, column=1, sticky='ew', padx=(Spacing.SM, 0), pady=Spacing.SM)
             combos[field] = cb
             
             # v3.8.9: DB에서 값 로드
@@ -661,26 +663,27 @@ class ToolbarMixin:
                 cb['values'] = ['전체']
 
         # Date (Arrival Date 기준)
-        tk.Label(main, text='Arrival Date', font=(f, _fs, 'bold'), anchor='w'
-                 ).grid(row=3, column=0, sticky='w', pady=6)
+        tk.Label(main, text='Arrival Date', font=_lab_font, anchor='w'
+                 ).grid(row=3, column=0, sticky='w', pady=Spacing.SM)
         df = tk.Frame(main)
-        df.grid(row=3, column=1, sticky='ew', padx=(10, 0), pady=6)
-        tk.Entry(df, textvariable=svars['date_from'], width=12, font=(f, _fs)
+        df.grid(row=3, column=1, sticky='ew', padx=(Spacing.SM, 0), pady=Spacing.SM)
+        tk.Entry(df, textvariable=svars['date_from'], width=12, font=_body_font
                  ).pack(side='left')
-        tk.Label(df, text=' ~ ', font=(f, _fs)).pack(side='left')
-        tk.Entry(df, textvariable=svars['date_to'], width=12, font=(f, _fs)
+        tk.Label(df, text=' ~ ', font=_body_font).pack(side='left')
+        tk.Entry(df, textvariable=svars['date_to'], width=12, font=_body_font
                  ).pack(side='left')
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
-        tk.Label(df, text='  (YYYY-MM-DD)', font=(f, 10), fg=ThemeColors.get('text_muted', _is_dark)
-                 ).pack(side='left', padx=5)
+        _small_font = self._tb_font_scale.small()
+        tk.Label(df, text='  (YYYY-MM-DD)', font=_small_font, fg=ThemeColors.get('text_muted', _is_dark)
+                 ).pack(side='left', padx=Spacing.XS)
 
         # 상태
-        tk.Label(main, text='상태', font=(f, _fs, 'bold'), anchor='w'
-                 ).grid(row=4, column=0, sticky='w', pady=6)
+        tk.Label(main, text='상태', font=_lab_font, anchor='w'
+                 ).grid(row=4, column=0, sticky='w', pady=Spacing.SM)
         ttk.Combobox(main, textvariable=svars['status'],
                      values=['전체', 'AVAILABLE', 'PICKED', 'SHIPPED', 'DEPLETED'],
-                     state='readonly', width=28, font=(f, _fs)
-                     ).grid(row=4, column=1, sticky='ew', padx=(10, 0), pady=6)
+                     state='readonly', width=28, font=_body_font
+                     ).grid(row=4, column=1, sticky='ew', padx=(Spacing.SM, 0), pady=Spacing.SM)
 
         main.columnconfigure(1, weight=1)
 
@@ -716,19 +719,19 @@ class ToolbarMixin:
                 else:
                     svars[key].set('전체')
 
-        # v3.8.9: 버튼 크기 통일
-        _btn_font = (f, 13, 'bold')
+        # v3.8.9: 버튼 크기 통일 (Phase3: Spacing + FontScale)
+        _btn_font = self._tb_font_scale.body(bold=True)
         _btn_w = 12
         bf = tk.Frame(main)
-        bf.grid(row=5, column=0, columnspan=2, pady=(20, 0))
+        bf.grid(row=5, column=0, columnspan=2, pady=(Spacing.LG, 0))
         _popup_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         _btn_fg = ThemeColors.get('badge_text', _popup_dark)
         tk.Button(bf, text='🔍 검색', font=_btn_font, bg=ThemeColors.get('statusbar_progress'), fg=_btn_fg,
-                 bd=0, width=_btn_w, pady=8, cursor='hand2',
-                 command=do_search).pack(side='left', padx=8)
+                 bd=0, width=_btn_w, pady=Spacing.SM, cursor='hand2',
+                 command=do_search).pack(side='left', padx=Spacing.SM)
         tk.Button(bf, text='🔄 초기화', font=_btn_font, bg=ThemeColors.get('btn_neutral', _popup_dark), fg=_btn_fg,
-                 bd=0, width=_btn_w, pady=8, cursor='hand2',
-                 command=do_reset).pack(side='left', padx=8)
+                 bd=0, width=_btn_w, pady=Spacing.SM, cursor='hand2',
+                 command=do_reset).pack(side='left', padx=Spacing.SM)
 
         popup.bind('<Escape>', lambda e: popup.destroy())
         popup.bind('<Return>', lambda e: do_search())
@@ -1131,7 +1134,7 @@ class ToolbarMixin:
             tk.Label(tip_win, text=text, justify='left',
                      background=ThemeColors.get('bg_card', _tip_dark), foreground=ThemeColors.get('text_primary', _tip_dark),
                      relief='solid', borderwidth=1,
-                     font=(self._toolbar_font, 13), padx=10, pady=6,
+                     font=self._tb_font_scale.body(), padx=Spacing.SM, pady=Spacing.SM,
                      wraplength=350).pack()
         def schedule(e):
             nonlocal after_id

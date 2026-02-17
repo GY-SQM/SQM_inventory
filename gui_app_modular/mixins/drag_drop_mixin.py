@@ -45,18 +45,19 @@ class DragDropMixin:
         try:
             from ..utils.constants import tk
             self._drop_overlay = tk.Frame(self.root, bg=ThemeColors.get('statusbar_progress'))
+            _dd_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
             self._drop_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
-            self._drop_overlay.configure(bg=ThemeColors.get('statusbar_progress'))
+            self._drop_overlay.configure(bg=ThemeColors.get('statusbar_progress', _dd_dark))
             
-            inner = tk.Frame(self._drop_overlay, bg=ThemeColors.get('info'), bd=3, relief='solid')
+            inner = tk.Frame(self._drop_overlay, bg=ThemeColors.get('info', _dd_dark), bd=3, relief='solid')
             inner.place(relx=0.1, rely=0.2, relwidth=0.8, relheight=0.6)
             
-            tk.Label(inner, text="📁", bg=ThemeColors.get('info'), fg='white',
+            tk.Label(inner, text="📁", bg=ThemeColors.get('info', _dd_dark), fg=ThemeColors.get('badge_text', _dd_dark),
                      font=('', 48)).pack(pady=(30, 10))
-            tk.Label(inner, text="파일을 여기에 놓으세요", bg=ThemeColors.get('info'), fg='white',
+            tk.Label(inner, text="파일을 여기에 놓으세요", bg=ThemeColors.get('info', _dd_dark), fg=ThemeColors.get('badge_text', _dd_dark),
                      font=('맑은 고딕', 18, 'bold')).pack()
             tk.Label(inner, text="PDF → 입고 서류 파싱 | Excel → 입고/출고 선택",
-                     bg=ThemeColors.get('info'), fg=ThemeColors.get('arrow_separator'), font=('맑은 고딕', 11)).pack(pady=5)
+                     bg=ThemeColors.get('info', _dd_dark), fg=ThemeColors.get('arrow_separator', _dd_dark), font=('맑은 고딕', 11)).pack(pady=5)
             
             self._drop_overlay.lift()
         except (RuntimeError, ValueError) as e:
@@ -193,23 +194,24 @@ class DragDropMixin:
     def _show_excel_import_options(self, file_path: str) -> None:
         """v3.9.9: Excel 파일 처리 옵션 (한글화)"""
         from ..utils.constants import tk, ttk, X
-        from ..utils.ui_constants import ThemeColors
-        
+        from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog
+
         dialog = tk.Toplevel(self.root)
         dialog.title("📥 Excel 파일 처리")
-        dialog.geometry("400x280")
+        dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         dialog.transient(self.root)
         dialog.grab_set()
+        center_dialog(dialog, self.root)
         
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
-        _bg = '#1e1e1e' if _is_dark else ThemeColors.get('bg_card')
-        _fg = '#e0e0e0' if _is_dark else ThemeColors.get('text_primary')
+        _bg = ThemeColors.get('bg_card', _is_dark)
+        _fg = ThemeColors.get('text_primary', _is_dark)
         dialog.configure(bg=_bg)
         
         # 헤더
         header = tk.Frame(dialog, bg=ThemeColors.get('info'), pady=8)
         header.pack(fill=X)
-        tk.Label(header, text="📥 Excel 파일 처리 방법 선택", bg=ThemeColors.get('info'), fg='white',
+        tk.Label(header, text="📥 Excel 파일 처리 방법 선택", bg=ThemeColors.get('info', _is_dark), fg=ThemeColors.get('badge_text', _is_dark),
                  font=('맑은 고딕', 12, 'bold')).pack()
         
         body = tk.Frame(dialog, bg=_bg, padx=20, pady=10)
@@ -247,11 +249,13 @@ class DragDropMixin:
         """Show options for batch Excel import"""
         from ..utils.constants import tk, ttk
         
+        from ..utils.ui_constants import DialogSize, center_dialog
         dialog = tk.Toplevel(self.root)
         dialog.title("Batch Excel Import")
-        dialog.geometry("350x220")
+        dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         dialog.transient(self.root)
         dialog.grab_set()
+        center_dialog(dialog, self.root)
         
         ttk.Label(dialog, text=f"{len(files)} Excel files selected",
                   font=('', 13, 'bold')).pack(pady=10)

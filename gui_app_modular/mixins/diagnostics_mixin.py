@@ -102,10 +102,12 @@ class DiagnosticsMixin:
         """작업 로그 표시"""
         from ..utils.constants import tk, ttk, BOTH, VERTICAL, END
         
+        from ..utils.ui_constants import DialogSize, center_dialog
         dialog = tk.Toplevel(self.root)
         dialog.title("📋 작업 로그")
-        dialog.geometry("700x500")
+        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
         dialog.transient(self.root)
+        center_dialog(dialog, self.root)
         
         # 텍스트 영역
         frame = ttk.Frame(dialog)

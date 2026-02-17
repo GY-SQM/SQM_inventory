@@ -17,7 +17,7 @@ from datetime import datetime, date as _date_type
 # 비즈니스 기본값
 from core.constants import DEFAULT_WAREHOUSE
 
-from ..utils.ui_constants import ThemeColors
+from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog
 from core.types import safe_float
 
 # v5.8.7: DatePicker 달력 UI (없으면 텍스트 입력 폴백)
@@ -115,8 +115,9 @@ class OneStopInboundDialog(InboundDialogBase):
             tip = tk.Toplevel(widget)
             tip.wm_overrideredirect(True)
             tip.wm_geometry(f"+{e.x_root+15}+{e.y_root+10}")
+            _od = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
             lbl = tk.Label(tip, text=text, justify='left',
-                          background='#ffffcc', foreground='#333333',
+                          background=ThemeColors.get('bg_card', _od), foreground=ThemeColors.get('text_primary', _od),
                           relief='solid', borderwidth=1,
                           font=('맑은 고딕', 11), padx=8, pady=6)
             lbl.pack()
@@ -132,9 +133,10 @@ class OneStopInboundDialog(InboundDialogBase):
         """원스톱 입고 팝업 생성"""
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📥 입고 — SQM v3.9.4")
-        self.dialog.geometry("1200x700")
+        self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
+        center_dialog(self.dialog, self.parent)
         self.dialog.resizable(True, True)
         self.dialog.protocol("WM_DELETE_WINDOW", self._on_cancel)
         
@@ -179,9 +181,10 @@ class OneStopInboundDialog(InboundDialogBase):
             self._attach_doc_tooltip(lbl, _tooltips.get(doc_type, ''))
             
             # 📂 폴더선택 버튼
+            _os_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
             btn_sel = tk.Button(cell, text="📂",
                                 command=lambda dt=doc_type: self._select_file(dt),
-                                font=('', 13), bg='#555555', fg='white',
+                                font=('', 13), bg=ThemeColors.get('btn_neutral', _os_dark), fg=ThemeColors.get('badge_text', _os_dark),
                                 padx=4, pady=1, cursor='hand2', bd=0)
             btn_sel.pack(side=LEFT, padx=(0, 2))
             _req = '(필수)' if required else '(선택)'
@@ -193,7 +196,7 @@ class OneStopInboundDialog(InboundDialogBase):
             self.check_labels[doc_type] = check_label
             
             # 파일명 (숨김 — 체크되면 표시)
-            file_label = ttk.Label(cell, text="", foreground='#aaaaaa',
+            file_label = ttk.Label(cell, text="", foreground=ThemeColors.get('text_muted', _os_dark),
                                    font=('맑은 고딕', 12), anchor='w')
             file_label.pack(side=LEFT, fill=X, expand=True, padx=(0, 2))
             self.file_labels[doc_type] = file_label
@@ -248,8 +251,9 @@ class OneStopInboundDialog(InboundDialogBase):
             height=18, selectmode='browse',
             style='Preview.Treeview'
         )
-        self.tree.tag_configure('odd', background='#f0f4f8')
-        self.tree.tag_configure('even', background='#ffffff')
+        _tree_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
+        self.tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _tree_dark))
+        self.tree.tag_configure('even', background=ThemeColors.get('bg_card', _tree_dark))
         
         for col_id, header, width, anchor in PREVIEW_COLUMNS:
             self.tree.heading(col_id, text=header)
@@ -272,41 +276,38 @@ class OneStopInboundDialog(InboundDialogBase):
         
         _font = getattr(self, '_toolbar_font', '맑은 고딕') if hasattr(self, '_toolbar_font') else '맑은 고딕'
         _btn_font_size = 15
-        _blue = ThemeColors.get('info')
-        _red = ThemeColors.get('statusbar_icon_err')
+        _btn_fg = ThemeColors.get('badge_text', _tree_dark)
+        _blue = ThemeColors.get('info', _tree_dark)
+        _red = ThemeColors.get('statusbar_icon_err', _tree_dark)
         
-        # 왼쪽: Excel 내보내기 (파란색, 폰트 15)
         self.btn_excel = tk.Button(
             btn_frame, text="📥 Excel 내보내기",
             command=self._export_to_excel, state='disabled',
-            font=(_font, _btn_font_size, 'bold'), bg=_blue, fg='white',
+            font=(_font, _btn_font_size, 'bold'), bg=_blue, fg=_btn_fg,
             padx=15, pady=6, cursor='hand2', bd=0
         )
         self.btn_excel.pack(side=LEFT, padx=(0, 5))
         
-        # DB 업로드 (파란색, 같은 폰트)
         self.btn_upload = tk.Button(
             btn_frame, text="📤 DB 업로드",
             command=self._on_upload, state='disabled',
-            font=(_font, _btn_font_size, 'bold'), bg=_blue, fg='white',
+            font=(_font, _btn_font_size, 'bold'), bg=_blue, fg=_btn_fg,
             padx=20, pady=8, cursor='hand2', bd=0
         )
         self.btn_upload.pack(side=LEFT, padx=(5, 0))
         self._attach_doc_tooltip(self.btn_upload,
             "미리보기 데이터를 DB에 저장합니다\n\n• 저장 후 재고리스트에 자동 반영\n• 중복 LOT는 자동 스킵\n• 저장 완료 후 재고리스트 화면 표시")
         
-        # 가운데: 합계 (업로드6: 버튼과 같은 선상 가운데)
         self.summary_var = tk.StringVar(value="")
         _summary_lbl = ttk.Label(btn_frame, textvariable=self.summary_var,
                                 font=('맑은 고딕', 13, 'bold'),
-                                foreground='#4fc3f7')
+                                foreground=ThemeColors.get('statusbar_progress', _tree_dark))
         _summary_lbl.pack(side=LEFT, fill=X, expand=True, padx=10)
         
-        # 오른쪽: 취소 (빨간색, 같은 폰트 15)
         tk.Button(
             btn_frame, text="❌ 취소",
             command=self._on_cancel,
-            font=(_font, _btn_font_size, 'bold'), bg=_red, fg='white',
+            font=(_font, _btn_font_size, 'bold'), bg=_red, fg=_btn_fg,
             padx=20, pady=8, cursor='hand2', bd=0
         ).pack(side=RIGHT, padx=(5, 0))
     
@@ -319,10 +320,11 @@ class OneStopInboundDialog(InboundDialogBase):
         n = len(self.file_paths)
         if not getattr(self, 'parse_hint', None):
             return
+        _hint_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
         if 'PACKING_LIST' not in self.file_paths:
             self.parse_hint.config(
                 text="💡 최소 Packing List를 선택하세요",
-                foreground='#aaa'
+                foreground=ThemeColors.get('text_muted', _hint_dark)
             )
             if self.btn_parse:
                 self.btn_parse.config(state='disabled')
@@ -331,7 +333,7 @@ class OneStopInboundDialog(InboundDialogBase):
                 self.btn_parse.config(state='normal')
             self.parse_hint.config(
                 text=f"총 4개 중 {n}개 업로드되었습니다.",
-                foreground='white'
+                foreground=ThemeColors.get('text_primary', _hint_dark)
             )
     
     def _select_file(self, doc_type: str):
@@ -356,7 +358,7 @@ class OneStopInboundDialog(InboundDialogBase):
         fname = os.path.basename(file_path)
         
         # UI 업데이트
-        self.file_labels[doc_type].config(text=fname, foreground='black')
+        self.file_labels[doc_type].config(text=fname, foreground=ThemeColors.get('text_primary', ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))))
         self.check_labels[doc_type].config(text="✅")
         
         self._log(f"📂 {doc_type}: {fname}")
@@ -439,13 +441,14 @@ class OneStopInboundDialog(InboundDialogBase):
         frame.pack(fill=tk.BOTH, expand=True)
         lbl = ttk.Label(frame, text="준비 중...", font=('맑은 고딕', 18, 'bold'))
         lbl.pack(anchor='w', pady=(0, 10))
+        _pop_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
         _ps = ttk.Style()
-        _ps.configure('Popup.Horizontal.TProgressbar', troughcolor='#333333', background='#f1c40f', thickness=26)
+        _ps.configure('Popup.Horizontal.TProgressbar', troughcolor=ThemeColors.get('bg_secondary', _pop_dark), background=ThemeColors.get('statusbar_icon_warn', _pop_dark), thickness=26)
         bar = ttk.Progressbar(frame, maximum=100, mode='determinate', style='Popup.Horizontal.TProgressbar')
         bar.pack(fill=tk.X, pady=(0, 8))
         pct_lbl = ttk.Label(frame, text="0%", font=('맑은 고딕', 14))
         pct_lbl.pack(anchor='w')
-        busy_lbl = ttk.Label(frame, text="진행 중 ●", font=('맑은 고딕', 11), foreground='#7f8c8d')
+        busy_lbl = ttk.Label(frame, text="진행 중 ●", font=('맑은 고딕', 11), foreground=ThemeColors.get('text_secondary', _pop_dark))
         busy_lbl.pack(anchor='w', pady=(4, 0))
         self._progress_popup = popup
         self._progress_popup_label = lbl
@@ -857,17 +860,11 @@ class OneStopInboundDialog(InboundDialogBase):
                     win.title("📋 D/O 파싱 실패 — 날짜 정보 입력")
                     msg_text = "D/O에서 날짜를 읽지 못했습니다.\n직접 입력하거나 나중에 D/O를 다시 첨부할 수 있습니다."
                 
-                win.geometry("520x460")
+                win.geometry(DialogSize.get_geometry(self.dialog, 'medium'))
                 win.resizable(False, False)
                 win.transient(self.dialog)
                 win.grab_set()
-                
-                try:
-                    x = self.dialog.winfo_rootx() + max(0, (self.dialog.winfo_width() - 520) // 2)
-                    y = self.dialog.winfo_rooty() + max(0, (self.dialog.winfo_height() - 460) // 2)
-                    win.geometry(f"520x460+{x}+{y}")
-                except tk.TclError:
-                    pass
+                center_dialog(win, self.dialog)
                 
                 frame = ttk.Frame(win, padding=20)
                 frame.pack(fill=tk.BOTH, expand=True)
@@ -880,6 +877,7 @@ class OneStopInboundDialog(InboundDialogBase):
                 # ── 헬퍼: DateEntry 또는 텍스트 입력 생성 ──
                 def _make_date_field(parent, label, hint, prefill='', required=False):
                     """DatePicker가 있으면 달력, 없으면 텍스트 입력"""
+                    _cal_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
                     lf = ttk.LabelFrame(parent,
                         text=f"{'★ ' if required else ''}{label}{' — 필수' if required else ''}",
                         padding=8)
@@ -888,16 +886,15 @@ class OneStopInboundDialog(InboundDialogBase):
                     var = tk.StringVar(value=prefill)
                     
                     if HAS_DATEPICKER:
-                        # 달력 위젯
                         de = DateEntry(lf, textvariable=var,
                                       font=('맑은 고딕', 11), width=16,
                                       date_pattern='yyyy-mm-dd',
-                                      background='#2c6fbb', foreground='white',
-                                      headersbackground='#2c6fbb',
-                                      headersforeground='white',
-                                      selectbackground='#4fc3f7',
-                                      normalbackground='white',
-                                      weekendbackground='#f0f0f0',
+                                      background=ThemeColors.get('info', _cal_dark), foreground=ThemeColors.get('badge_text', _cal_dark),
+                                      headersbackground=ThemeColors.get('info', _cal_dark),
+                                      headersforeground=ThemeColors.get('badge_text', _cal_dark),
+                                      selectbackground=ThemeColors.get('statusbar_progress', _cal_dark),
+                                      normalbackground=ThemeColors.get('bg_card', _cal_dark),
+                                      weekendbackground=ThemeColors.get('bg_secondary', _cal_dark),
                                       locale='ko_KR')
                         de.pack(side=tk.LEFT, padx=(0, 8))
                         
@@ -917,7 +914,7 @@ class OneStopInboundDialog(InboundDialogBase):
                         entry.pack(side=tk.LEFT, padx=(0, 8))
                     
                     ttk.Label(lf, text=hint,
-                             font=('맑은 고딕', 9), foreground='gray').pack(side=tk.LEFT)
+                             font=('맑은 고딕', 9), foreground=ThemeColors.get('text_muted', _cal_dark)).pack(side=tk.LEFT)
                     
                     return var
                 
@@ -938,8 +935,9 @@ class OneStopInboundDialog(InboundDialogBase):
                 
                 # 에러 표시
                 err_var = tk.StringVar()
+                _err_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
                 ttk.Label(frame, textvariable=err_var,
-                         font=('맑은 고딕', 10), foreground='red').pack(anchor='w', pady=(4, 0))
+                         font=('맑은 고딕', 10), foreground=ThemeColors.get('danger', _err_dark)).pack(anchor='w', pady=(4, 0))
                 
                 # ── 날짜 검증 함수 ──
                 def _validate_date(s):
@@ -1152,41 +1150,35 @@ class OneStopInboundDialog(InboundDialogBase):
             return
         win = tk.Toplevel(self.dialog)
         win.title("파싱 결과 확인")
-        win.geometry("900x520")
+        win.geometry(DialogSize.get_geometry(self.dialog, 'large'))
         win.transient(self.dialog)
         win.grab_set()
-        try:
-            x = self.dialog.winfo_rootx() + max(0, (self.dialog.winfo_width() - 900) // 2)
-            y = self.dialog.winfo_rooty() + max(0, (self.dialog.winfo_height() - 520) // 2)
-            win.geometry(f"900x520+{x}+{y}")
-        except tk.TclError as e:
-            logger.debug(f"Suppressed: {e}")
+        center_dialog(win, self.dialog)
         top = ttk.Frame(win, padding=12)
         top.pack(fill=tk.BOTH, expand=True)
         ttk.Label(top, text="파싱이 완료되었습니다. 아래 내용이 맞는지 확인하세요.",
                   font=('맑은 고딕', 14, 'bold')).pack(anchor='w', pady=(0, 8))
         summary = self.summary_var.get()
+        _win_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
         if summary:
             ttk.Label(top, text=summary, font=('맑은 고딕', 12),
-                      foreground='#4fc3f7').pack(anchor='w', pady=(0, 4))
-        # 입고 중복 데이터 검사: lot_no 기준
+                      foreground=ThemeColors.get('statusbar_progress', _win_dark)).pack(anchor='w', pady=(0, 4))
         dup_msg = self._check_parsing_duplicates()
         if dup_msg:
             ttk.Label(top, text=dup_msg, font=('맑은 고딕', 11),
-                      foreground='#e67e22').pack(anchor='w', pady=(0, 4))
+                      foreground=ThemeColors.get('statusbar_icon_warn', _win_dark)).pack(anchor='w', pady=(0, 4))
         else:
             ttk.Label(top, text="중복 데이터 없음.", font=('맑은 고딕', 11),
-                      foreground='#27ae60').pack(anchor='w', pady=(0, 4))
-        # FREE TIME 누락 시 안내 (arrival/ship_date는 있는데 free_time 없음 → D/O 반납일 미추출 가능)
+                      foreground=ThemeColors.get('success', _win_dark)).pack(anchor='w', pady=(0, 4))
         if self.preview_data and any((r.get('arrival_date') or r.get('ship_date')) and not (r.get('free_time') or '').strip() for r in self.preview_data):
             ttk.Label(top, text="FREE TIME 누락: D/O에서 컨테이너 반납일(con_return_date)이 추출되지 않았을 수 있습니다. 수동 입력 또는 D/O 재파싱을 확인하세요.",
-                      font=('맑은 고딕', 10), foreground='#e67e22', wraplength=520).pack(anchor='w', pady=(0, 8))
+                      font=('맑은 고딕', 10), foreground=ThemeColors.get('statusbar_icon_warn', _win_dark), wraplength=520).pack(anchor='w', pady=(0, 8))
         tree_frame = ttk.Frame(top)
         tree_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
         cols = tuple(c[0] for c in PREVIEW_COLUMNS)
         tree = ttk.Treeview(tree_frame, columns=cols, show='headings', height=12)
-        tree.tag_configure('odd', background='#f0f4f8')
-        tree.tag_configure('even', background='#ffffff')
+        tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _win_dark))
+        tree.tag_configure('even', background=ThemeColors.get('bg_card', _win_dark))
         for col_id, header, w, anchor in PREVIEW_COLUMNS:
             tree.heading(col_id, text=header)
             tree.column(col_id, width=min(w, 120), anchor=anchor or 'center')
@@ -1220,17 +1212,15 @@ class OneStopInboundDialog(InboundDialogBase):
         pop.title("다음 작업 선택")
         pop.resizable(False, False)
         pop.transient(self.dialog)
-        try:
-            x = self.dialog.winfo_rootx() + (self.dialog.winfo_width() - 420) // 2
-            y = self.dialog.winfo_rooty() + (self.dialog.winfo_height() - 80) // 2
-            pop.geometry(f"420x80+{max(0, x)}+{max(0, y)}")
-        except tk.TclError:
-            pop.geometry("420x80")
+        pop.geometry("420x80")
+        center_dialog(pop, self.dialog)
         f = ttk.Frame(pop, padding=12)
         f.pack(fill=tk.BOTH, expand=True)
         _font = getattr(self, '_toolbar_font', '맑은 고딕')
-        _blue = ThemeColors.get('info')
-        _red = ThemeColors.get('statusbar_icon_err')
+        _act_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
+        _blue = ThemeColors.get('info', _act_dark)
+        _red = ThemeColors.get('statusbar_icon_err', _act_dark)
+        _act_fg = ThemeColors.get('badge_text', _act_dark)
         def do_excel():
             pop.destroy()
             self._export_to_excel()
@@ -1240,13 +1230,13 @@ class OneStopInboundDialog(InboundDialogBase):
         def do_cancel():
             pop.destroy()
         tk.Button(f, text="📥 Excel 내보내기", command=do_excel,
-                  font=(_font, 15, 'bold'), bg=_blue, fg='white',
+                  font=(_font, 15, 'bold'), bg=_blue, fg=_act_fg,
                   padx=15, pady=6, cursor='hand2', bd=0).pack(side=tk.LEFT, padx=(0, 8))
         tk.Button(f, text="📤 DB 업로드", command=do_upload,
-                  font=(_font, 15, 'bold'), bg=_blue, fg='white',
+                  font=(_font, 15, 'bold'), bg=_blue, fg=_act_fg,
                   padx=15, pady=6, cursor='hand2', bd=0).pack(side=tk.LEFT, padx=(0, 8))
         tk.Button(f, text="❌ 취소", command=do_cancel,
-                  font=(_font, 15, 'bold'), bg=_red, fg='white',
+                  font=(_font, 15, 'bold'), bg=_red, fg=_act_fg,
                   padx=15, pady=6, cursor='hand2', bd=0).pack(side=tk.LEFT)
     
     # ═══════════════════════════════════════════════════════════

@@ -14,6 +14,8 @@ from tkinter import ttk
 from typing import List, Dict, Callable
 from datetime import datetime
 
+from ..utils.ui_constants import DialogSize, center_dialog
+
 
 def _is_sample_item(item: Dict) -> bool:
     """
@@ -55,12 +57,13 @@ class AllocationPreviewDialog:
         self.on_confirm = on_confirm
         self.on_cancel = on_cancel
         
-        # 다이얼로그 생성
+        # 다이얼로그 생성 (Phase4: DialogSize)
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("📋 출고 Allocation 미리보기")
-        self.dialog.geometry("950x720")
+        self.dialog.geometry(DialogSize.get_geometry(parent, 'large'))
         self.dialog.transient(parent)
         self.dialog.grab_set()
+        center_dialog(self.dialog, parent)
         
         # 통계 계산
         self.stats = self._calculate_stats()

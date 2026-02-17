@@ -11,8 +11,11 @@ logger = logging.getLogger(__name__)
 try:
     import tkinter as tk
     from tkinter import ttk
+    from ..utils.ui_constants import DialogSize, center_dialog
 except ImportError as _e:
     logger.debug(f"column_mapper_dialog: {_e}")
+    DialogSize = None
+    center_dialog = None
 
 
 # SQM 필수/선택 필드 정의
@@ -43,11 +46,16 @@ class ColumnMapperDialog:
         
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("📋 컬럼 매핑 - Excel → SQM")
-        self.dialog.geometry("750x550")
+        if DialogSize and center_dialog:
+            self.dialog.geometry(DialogSize.get_geometry(parent, 'medium'))
+        else:
+            self.dialog.geometry("750x550")
         self.dialog.resizable(True, True)
         self.dialog.minsize(500, 400)
         self.dialog.transient(parent)
         self.dialog.grab_set()
+        if center_dialog:
+            center_dialog(self.dialog, parent)
         
         self._build_ui()
         self._auto_map()

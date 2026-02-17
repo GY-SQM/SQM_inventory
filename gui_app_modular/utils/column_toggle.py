@@ -11,6 +11,8 @@ import tkinter as tk
 from tkinter import ttk
 from typing import List, Tuple
 
+from .ui_constants import Spacing, FontScale, FontStyle
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,16 +40,17 @@ class ColumnToggleBar:
         self.toggle_vars = {}
         self.toggle_columns = [(c[0], c[1]) for c in toggle_columns]
 
-        # ttk.Frame — 테마 자동 대응
-        self.frame = ttk.Frame(parent, padding=(5, 4))
+        # ttk.Frame — 테마 자동 대응 (Phase3: 8px 그리드)
+        _fonts = FontScale()
+        self.frame = ttk.Frame(parent, padding=(Spacing.XS, Spacing.XS))
 
         # 왼쪽: "표시 컬럼:" + 체크박스
         left_frame = ttk.Frame(self.frame)
         left_frame.pack(side='left', fill='x', expand=True)
 
         _lbl_col = ttk.Label(left_frame, text="표시 컬럼:",
-                             font=('맑은 고딕', 9, 'bold'))
-        _lbl_col.pack(side='left', padx=(0, 10))
+                             font=_fonts.get_font(FontStyle.SMALL, 'bold'))
+        _lbl_col.pack(side='left', padx=(0, Spacing.SM))
         self._apply_tooltip_safe(_lbl_col, "체크 해제 시 해당 컬럼이 목록에서 숨겨집니다. 체크하면 다시 표시됩니다.")
 
         for item in toggle_columns:
@@ -60,7 +63,7 @@ class ColumnToggleBar:
                 variable=var,
                 command=lambda c=col_id, v=var: self._toggle_column(c, v)
             )
-            chk.pack(side='left', padx=5)
+            chk.pack(side='left', padx=Spacing.XS)
             self.toggle_vars[col_id] = var
             self._apply_tooltip_safe(chk, f"'{label}' 컬럼 표시/숨김. 해제 시 목록에서 이 컬럼이 사라집니다.")
 

@@ -5,6 +5,7 @@ import os
 import json
 import logging
 from ..utils.custom_messagebox import CustomMessageBox
+from ..utils.ui_constants import DialogSize, center_dialog
 from datetime import datetime
 from pathlib import Path
 
@@ -229,10 +230,11 @@ class AutoBackupSettingsDialog:
         
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("⏰ 자동 백업 설정")
-        self.dialog.geometry("480x500")
+        self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
         self.dialog.resizable(False, False)
+        center_dialog(self.dialog, self.parent)
         
         main = ttk.Frame(self.dialog, padding=20)
         main.pack(fill='both', expand=True)

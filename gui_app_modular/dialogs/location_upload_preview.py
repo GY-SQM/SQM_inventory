@@ -13,6 +13,8 @@ from tkinter import ttk
 from typing import Dict, List, Callable, Optional
 import logging
 
+from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,105 +40,73 @@ class LocationUploadPreviewDialog:
         self.on_confirm = on_confirm
         self.on_cancel = on_cancel
         
-        # 다이얼로그 생성
+        # 다이얼로그 생성 (Phase4: DialogSize)
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("📍 톤백 위치 업로드 미리보기")
-        self.dialog.geometry("900x600")
+        self.dialog.geometry(DialogSize.get_geometry(parent, 'large'))
         self.dialog.transient(parent)
         self.dialog.grab_set()
+        center_dialog(self.dialog, parent)
         
         self._create_ui()
-        
-        # 화면 중앙 배치
-        self.dialog.update_idletasks()
-        x = (self.dialog.winfo_screenwidth() // 2) - (900 // 2)
-        y = (self.dialog.winfo_screenheight() // 2) - (600 // 2)
-        self.dialog.geometry(f"+{x}+{y}")
     
     def _create_ui(self):
-        """UI 생성"""
-        # ========================================
+        """UI 생성 (v5.8.7 Phase2: ThemeColors)"""
+        _lum_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
+        _bg_sec = ThemeColors.get('bg_secondary', _lum_dark)
+        _fg_pri = ThemeColors.get('text_primary', _lum_dark)
+        _danger = ThemeColors.get('danger', _lum_dark)
+        _btn_fg = ThemeColors.get('badge_text', _lum_dark)
+        _success = ThemeColors.get('success', _lum_dark)
+        _neutral = ThemeColors.get('btn_neutral', _lum_dark)
+        _bg_card = ThemeColors.get('bg_card', _lum_dark)
+
         # 상단: 요약 정보
-        # ========================================
-        summary_frame = tk.Frame(self.dialog, bg='#f0f0f0', pady=10)
+        summary_frame = tk.Frame(self.dialog, bg=_bg_sec, pady=10)
         summary_frame.pack(fill=tk.X, padx=10, pady=(10, 5))
         
         total = self.result['total']
         success = self.result['success_count']
         fail = self.result['fail_count']
         
-        # 통계
         stats_text = f"📊 총 {total}개 | ✅ 성공 {success}개 | ❌ 실패 {fail}개"
-        tk.Label(
-            summary_frame,
-            text=stats_text,
-            font=('맑은 고딕', 12, 'bold'),
-            bg='#f0f0f0',
-            fg='#2c3e50'
-        ).pack()
-        
-        # 경고 메시지
+        tk.Label(summary_frame, text=stats_text, font=('맑은 고딕', 12, 'bold'),
+                 bg=_bg_sec, fg=_fg_pri).pack()
         if fail > 0:
-            tk.Label(
-                summary_frame,
-                text=f"⚠️ {fail}개 톤백의 UID를 찾을 수 없습니다",
-                font=('맑은 고딕', 10),
-                bg='#f0f0f0',
-                fg='#e74c3c'
-            ).pack()
+            tk.Label(summary_frame, text=f"⚠️ {fail}개 톤백의 UID를 찾을 수 없습니다",
+                     font=('맑은 고딕', 10), bg=_bg_sec, fg=_danger).pack()
         
-        # ========================================
-        # 중앙: 탭 (매칭 성공 / 실패)
-        # ========================================
         tab_frame = ttk.Notebook(self.dialog)
         tab_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
-        # 탭 1: 매칭 성공
         matched_tab = tk.Frame(tab_frame)
         tab_frame.add(matched_tab, text=f"✅ 매칭 성공 ({success})")
-        self._create_matched_table(matched_tab)
+        self._create_matched_table(matched_tab, _lum_dark)
         
-        # 탭 2: 매칭 실패
         if fail > 0:
             failed_tab = tk.Frame(tab_frame)
             tab_frame.add(failed_tab, text=f"❌ 매칭 실패 ({fail})")
-            self._create_failed_table(failed_tab)
+            self._create_failed_table(failed_tab, _lum_dark)
         
-        # ========================================
-        # 하단: 버튼
-        # ========================================
-        button_frame = tk.Frame(self.dialog, bg='white', pady=10)
+        button_frame = tk.Frame(self.dialog, bg=_bg_card, pady=10)
         button_frame.pack(fill=tk.X, side=tk.BOTTOM)
         
-        # 확인 버튼
         if success > 0:
             confirm_btn = tk.Button(
-                button_frame,
-                text=f"✅ 업로드 ({success}개)",
-                font=('맑은 고딕', 11, 'bold'),
-                bg='#27ae60',
-                fg='white',
-                padx=20,
-                pady=10,
-                command=self._on_confirm_click
+                button_frame, text=f"✅ 업로드 ({success}개)",
+                font=('맑은 고딕', 11, 'bold'), bg=_success, fg=_btn_fg,
+                padx=20, pady=10, command=self._on_confirm_click
             )
             confirm_btn.pack(side=tk.RIGHT, padx=10)
         
-        # 취소 버튼
         cancel_btn = tk.Button(
-            button_frame,
-            text="❌ 취소",
-            font=('맑은 고딕', 11),
-            bg='#95a5a6',
-            fg='white',
-            padx=20,
-            pady=10,
-            command=self._on_cancel_click
+            button_frame, text="❌ 취소", font=('맑은 고딕', 11),
+            bg=_neutral, fg=_btn_fg, padx=20, pady=10, command=self._on_cancel_click
         )
         cancel_btn.pack(side=tk.RIGHT, padx=5)
     
-    def _create_matched_table(self, parent):
-        """매칭 성공 테이블"""
+    def _create_matched_table(self, parent, is_dark=False):
+        """매칭 성공 테이블 (v5.8.7 Phase2: ThemeColors)"""
         # 컬럼 정의
         columns = [
             ('row_num', 'Excel 행', 60),
@@ -199,14 +169,13 @@ class LocationUploadPreviewDialog:
             
             tree.insert('', 'end', values=values, tags=(tag,))
         
-        # 태그 색상
-        tree.tag_configure('new', background='#e8f8f5')
-        tree.tag_configure('changed', background='#fef5e7')
-        tree.tag_configure('same', background='#f8f9fa')
+        tree.tag_configure('new', background=ThemeColors.get('available', is_dark))
+        tree.tag_configure('changed', background=ThemeColors.get('reserved', is_dark))
+        tree.tag_configure('same', background=ThemeColors.get('bg_secondary', is_dark))
         
         self.matched_tree = tree
     
-    def _create_failed_table(self, parent):
+    def _create_failed_table(self, parent, is_dark=False):
         """매칭 실패 테이블"""
         # 컬럼 정의
         columns = [
@@ -249,8 +218,7 @@ class LocationUploadPreviewDialog:
             )
             tree.insert('', 'end', values=values, tags=('error',))
         
-        # 태그 색상
-        tree.tag_configure('error', background='#fadbd8', foreground='#e74c3c')
+        tree.tag_configure('error', background=ThemeColors.get('picked', is_dark), foreground=ThemeColors.get('danger', is_dark))
         
         self.failed_tree = tree
     

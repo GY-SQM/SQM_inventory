@@ -11,7 +11,7 @@ Status bar with mode indicator, module status, progress bar
 import sqlite3
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog
 logger = logging.getLogger(__name__)
 
 
@@ -298,8 +298,9 @@ class StatusBarMixin:
         
         dialog = tk.Toplevel(self.root)
         dialog.title("Module Status")
-        dialog.geometry("400x300")
+        dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         dialog.transient(self.root)
+        center_dialog(dialog, self.root)
         
         # Summary
         ttk.Label(dialog, 

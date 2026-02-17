@@ -13,6 +13,8 @@ from tkinter import ttk
 from typing import Optional, Dict, List
 import logging
 
+from gui_app_modular.utils.ui_constants import ThemeColors
+
 logger = logging.getLogger(__name__)
 
 
@@ -255,14 +257,18 @@ class TableStyler:
         Returns:
             툴바 프레임
         """
-        toolbar = tk.Frame(parent, bg='#f0f0f0', pady=5)
+        _ts_dark = ThemeColors.is_dark_theme(getattr(parent, 'current_theme', 'flatly'))
+        _ts_bg = ThemeColors.get('bg_secondary', _ts_dark)
+        _ts_fg = ThemeColors.get('text_primary', _ts_dark)
+        toolbar = tk.Frame(parent, bg=_ts_bg, pady=5)
         
         # 왼쪽: 컬럼 토글
         if toggleable_columns:
             tk.Label(
                 toolbar,
                 text="표시 컬럼:",
-                bg='#f0f0f0',
+                bg=_ts_bg,
+                fg=_ts_fg,
                 font=('맑은 고딕', 9)
             ).pack(side=tk.LEFT, padx=(10, 5))
             
@@ -279,7 +285,8 @@ class TableStyler:
                     text=col_name,
                     variable=var,
                     command=make_toggle(col_id, var),
-                    bg='#f0f0f0',
+                    bg=_ts_bg,
+                    fg=_ts_fg,
                     font=('맑은 고딕', 9)
                 )
                 cb.pack(side=tk.LEFT, padx=2)

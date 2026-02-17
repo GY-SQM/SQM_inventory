@@ -12,7 +12,7 @@ SQM v3.9.1 — 재고 현황 탭 (18열 + 체크박스 열선택)
 """
 
 import sqlite3
-from ..utils.ui_constants import ThemeColors
+from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog
 import logging
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ class InventoryTabMixin:
             date_from_var=self._date_from_var,
             date_to_var=self._date_to_var,
         )
-        self._inv_filter_bar.pack(fill=X, padx=5, pady=(0, 2))
+        self._inv_filter_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
 
         # v5.0.2: 컬럼 토글 바 (v8.7.0: 전체 19열 + 기본표시여부 반영)
         try:
@@ -105,7 +105,7 @@ class InventoryTabMixin:
                 toggleable_cols,
                 is_dark=_is_dark_filter
             )
-            self._inv_toggle_bar.pack(fill=X, padx=5, pady=(0, 2))
+            self._inv_toggle_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
         except (ImportError, Exception) as e:
             logger.debug(f"컬럼 토글바 생성 실패: {e}")
             self._inv_toggle_bar = None
@@ -114,7 +114,7 @@ class InventoryTabMixin:
         # 트리뷰 (18열)
         # ═══════════════════════════════════════════════════════
         tree_frame = ttk.Frame(self.tab_inventory)
-        tree_frame.pack(fill=BOTH, expand=YES, padx=5, pady=5)
+        tree_frame.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
         self._inv_tree_frame = tree_frame
 
         # 모든 18열로 생성
@@ -357,8 +357,9 @@ class InventoryTabMixin:
         
         dlg = tk.Toplevel(self.root)
         dlg.title(f"🎒 톤백 상세 — {lot_no}")
-        dlg.geometry("700x400")
+        dlg.geometry(DialogSize.get_geometry(self.root, 'medium'))
         dlg.transient(self.root)
+        center_dialog(dlg, self.root)
         
         cols = ('sub_lt', 'weight', 'status', 'location', 'picked_to', 'outbound_date')
         tree = _ttk.Treeview(dlg, columns=cols, show='headings', height=15)
@@ -387,13 +388,13 @@ class InventoryTabMixin:
         
         scroll = _ttk.Scrollbar(dlg, orient='vertical', command=tree.yview)
         tree.configure(yscrollcommand=scroll.set)
-        tree.pack(side='left', fill='both', expand=True, padx=5, pady=5)
-        scroll.pack(side='right', fill='y', pady=5)
+        tree.pack(side='left', fill='both', expand=True, padx=Spacing.XS, pady=Spacing.XS)
+        scroll.pack(side='right', fill='y', pady=Spacing.XS)
         
         total = sum((tb['weight'] or 0) for tb in tonbags)
         avail = sum((tb['weight'] or 0) for tb in tonbags if tb['status'] == 'AVAILABLE')
         _ttk.Label(dlg, text=f"합계: {len(tonbags)}개 / {total:,.0f}kg (가용: {avail:,.0f}kg)",
-                  font=('', 13, 'bold')).pack(side='bottom', pady=5)
+                  font=('', 13, 'bold')).pack(side='bottom', pady=Spacing.XS)
     
     def _quick_outbound_from_context(self, lot_no: str) -> None:
         if hasattr(self, '_on_simple_outbound'):
@@ -416,8 +417,9 @@ class InventoryTabMixin:
         
         dlg = tk.Toplevel(self.root)
         dlg.title(f"📊 LOT 이력 — {lot_no}")
-        dlg.geometry("600x350")
+        dlg.geometry(DialogSize.get_geometry(self.root, 'medium'))
         dlg.transient(self.root)
+        center_dialog(dlg, self.root)
         
         cols = ('type', 'qty', 'customer', 'date', 'created')
         tree = _ttk.Treeview(dlg, columns=cols, show='headings', height=12)
@@ -445,10 +447,10 @@ class InventoryTabMixin:
         
         _stripe_bg = ThemeColors.get('tree_stripe', getattr(self, '_is_dark', False))
         tree.tag_configure('stripe', background=_stripe_bg)
-        tree.pack(fill='both', expand=True, padx=5, pady=5)
+        tree.pack(fill='both', expand=True, padx=Spacing.XS, pady=Spacing.XS)
         
         if not movements:
-            _ttk.Label(dlg, text="이력이 없습니다.", foreground='gray').pack(pady=20)
+            _ttk.Label(dlg, text="이력이 없습니다.", foreground='gray').pack(pady=Spacing.LG)
 
     def _apply_inventory_theme_colors(self) -> None:
         """테마 색상 적용 (v5.6.9: Grid 스타일 foreground 갱신 — 다크에서 글씨 보이게)"""
@@ -968,25 +970,25 @@ class InventoryTabMixin:
             self._empty_hint.place(relx=0.5, rely=0.4, anchor='center')
             
             tk.Label(self._empty_hint, text="📦", bg=_bg,
-                     font=('', 36)).pack(pady=(0, 5))
+                     font=('', 36)).pack(pady=(0, Spacing.XS))
             tk.Label(self._empty_hint, text="재고 데이터가 없습니다", bg=_bg,
                      fg=_fg, font=('맑은 고딕', 14, 'bold')).pack()
             tk.Label(self._empty_hint, 
                      text="Ctrl+O: 파일 열기 | Ctrl+N: 입고 | 파일 드래그앤드롭",
-                     bg=_bg, fg=_fg_muted, font=('맑은 고딕', 10)).pack(pady=5)
+                     bg=_bg, fg=_fg_muted, font=('맑은 고딕', 10)).pack(pady=Spacing.XS)
             
             btn_frame = tk.Frame(self._empty_hint, bg=_bg)
-            btn_frame.pack(pady=10)
+            btn_frame.pack(pady=Spacing.SM)
             
             from ..utils.constants import ttk
             from ..utils.ui_constants import apply_tooltip
             _btn_file = ttk.Button(btn_frame, text="📁 파일 선택 입고",
                                    command=lambda: self._on_open_file())
-            _btn_file.pack(side='left', padx=5)
+            _btn_file.pack(side='left', padx=Spacing.XS)
             apply_tooltip(_btn_file, "데이터베이스 파일(.db)을 선택하여 열거나, 입고용 PDF/엑셀 파일을 선택합니다.")
             _btn_manual = ttk.Button(btn_frame, text="📝 수동 입고",
                                     command=lambda: self._on_new_inbound())
-            _btn_manual.pack(side='left', padx=5)
+            _btn_manual.pack(side='left', padx=Spacing.XS)
             apply_tooltip(_btn_manual, "입고 메뉴의 원스톱 입고 또는 수동 입력으로 새 LOT/톤백을 등록합니다.")
         except (ImportError, ModuleNotFoundError) as _e:
             logger.debug(f"empty_hint: {_e}")

@@ -1,4 +1,4 @@
 SQM Inventory System
-Version: v5.7.7
-Release Date: 2026-02-16
-Notes: 릴리스 태그
+Version: v5.8.8
+Release Date: 2026-02-17
+Notes: UI Phase3(Spacing+Font) / Phase4(Dialog size)

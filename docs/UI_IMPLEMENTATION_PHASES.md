@@ -97,6 +97,11 @@
 
 **검증**: 전체 화면에서 패딩이 8의 배수로 통일되고, 폰트가 맑은 고딕·3단계로 보이는지 확인.
 
+### Phase 3 적용 현황 (v5.8.7)
+
+- **3.1 8px 그리드**: `column_toggle.py`, `toolbar_mixin.py`, `inventory_tab.py`, `tonbag_tab.py`, `help_dialogs.py`(팁 오버레이), `settings_dialog.py`(API 설정) — `padx`/`pady`/`padding` → `Spacing.XS`/`SM`/`MD`/`LG` 적용.
+- **3.2 폰트 3단계**: `column_toggle.py`(FontScale.small + FontStyle), `toolbar_mixin.py`(메뉴/탭/검색 팝업/툴팁 — `get_font_scale()`·`FontScale.heading()`/`body()`/`subtitle()`/`small()` 적용).
+
 ---
 
 ## Phase 4 — 다이얼로그 크기 표준화 (우선순위 6)
@@ -117,6 +122,11 @@
 | large | 상세·미리보기 | onestop_inbound 1200x700, lot_detail 950x720, help_dialogs 750x700, allocation_preview 950x720 등 |
 
 **검증**: 자주 쓰는 다이얼로그 5~10개 열어서 크기·비율이 비슷한지 확인.
+
+### Phase 4 적용 현황 (v5.8.7)
+
+- **DialogSize.get_geometry(parent, 'small'|'medium'|'large')** + **center_dialog(dialog, parent)** 적용.
+- 적용 파일: `settings_dialog`, `do_update_dialog`, `lot_detail_dialog`, `onestop_inbound`(메인·날짜입력·파싱결과·액션팝업), `toolbar_mixin`(검색 팝업), `help_dialogs`(가이드·환영·피드백·팁), `inventory_tab`(톤백상세·LOT이력), `tonbag_tab`(일괄출고·수동출고), `backup_handlers`, `context_menu_mixin`, `drag_drop_mixin`, `statusbar_mixin`, `keybindings_mixin`, `location_upload_preview`, `allocation_preview`, `column_mapper_dialog`, `auto_backup`, `outbound_preview_dialog`, `theme_mixin`, `test_runner_dialog`, `diagnostics_mixin`.
 
 ---
 

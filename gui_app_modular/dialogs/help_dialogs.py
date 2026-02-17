@@ -19,7 +19,7 @@ import webbrowser
 
 # UI 통일성 모듈 임포트
 try:
-    from ..utils.ui_constants import DialogSize, Spacing, FontScale, center_dialog, apply_tooltip
+    from ..utils.ui_constants import DialogSize, Spacing, FontScale, ThemeColors, center_dialog, apply_tooltip
 except ImportError:
     # 독립 실행 시 폴백
     DialogSize = None
@@ -107,10 +107,9 @@ class ShortcutGuideDialog:
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("⌨️ 단축키 가이드")
         
-        # === UI 통일성: 다이얼로그 크기 표준화 ===
+        # === UI 통일성: 다이얼로그 크기 표준화 (Phase4) ===
         if DialogSize:
-            width, height = DialogSize.calculate(self.parent, 'large')
-            self.dialog.geometry(f"{width}x{height}")
+            self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
         else:
             self.dialog.geometry("750x700")
         
@@ -296,42 +295,22 @@ class QuickTipOverlay:
         self.overlay.overrideredirect(True)
         self.overlay.attributes("-topmost", True)
         
-        # 스타일
-        frame = ttk.Frame(self.overlay, padding=15)
+        _tip_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
+        _tip_bg = ThemeColors.get('info', _tip_dark)
+        _tip_fg = ThemeColors.get('badge_text', _tip_dark)
+        # 스타일 (v5.8.7 Phase2: ThemeColors)
+        frame = ttk.Frame(self.overlay, padding=Spacing.MD)
         frame.pack(fill=tk.BOTH, expand=True)
-        
-        # 배경색 (ttkbootstrap 스타일 적용 어려우므로 직접 설정)
-        self.overlay.configure(bg="#17a2b8")
+        self.overlay.configure(bg=_tip_bg)
         frame.configure(style="info.TFrame")
         
-        # 제목
-        ttk.Label(
-            frame,
-            text=title,
-            font=("맑은 고딕", 11, "bold"),
-            foreground="white",
-            background="#17a2b8"
-        ).pack(anchor="center")
+        ttk.Label(frame, text=title, font=("맑은 고딕", 11, "bold"),
+                  foreground=_tip_fg, background=_tip_bg).pack(anchor="center")
+        ttk.Label(frame, text=content, font=("맑은 고딕", 13),
+                  foreground=_tip_fg, background=_tip_bg, wraplength=300).pack(anchor="center", pady=(Spacing.XS, 0))
         
-        # 내용
-        ttk.Label(
-            frame,
-            text=content,
-            font=("맑은 고딕", 13),
-            foreground="white",
-            background="#17a2b8",
-            wraplength=300
-        ).pack(anchor="center", pady=(5, 0))
-        
-        # 닫기 버튼
-        close_btn = ttk.Label(
-            frame,
-            text="✕",
-            font=("맑은 고딕", 12),
-            foreground="white",
-            background="#17a2b8",
-            cursor="hand2"
-        )
+        close_btn = ttk.Label(frame, text="✕", font=("맑은 고딕", 12),
+                              foreground=_tip_fg, background=_tip_bg, cursor="hand2")
         close_btn.place(relx=1.0, rely=0, anchor="ne")
         close_btn.bind("<Button-1>", lambda e: self._close())
         
@@ -451,16 +430,21 @@ LIFO 방식으로 자동 출고됩니다.
         """마법사 표시"""
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("환영합니다")
-        self.dialog.geometry("550x400")
-        self.dialog.resizable(False, False)
-        self.dialog.transient(self.parent)
-        self.dialog.grab_set()
-        
-        # 중앙 정렬
-        self.dialog.update_idletasks()
-        x = (self.dialog.winfo_screenwidth() // 2) - 275
-        y = (self.dialog.winfo_screenheight() // 2) - 200
-        self.dialog.geometry(f"+{x}+{y}")
+        if DialogSize and center_dialog:
+            self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
+            self.dialog.resizable(False, False)
+            self.dialog.transient(self.parent)
+            self.dialog.grab_set()
+            center_dialog(self.dialog, self.parent)
+        else:
+            self.dialog.geometry("550x400")
+            self.dialog.resizable(False, False)
+            self.dialog.transient(self.parent)
+            self.dialog.grab_set()
+            self.dialog.update_idletasks()
+            x = (self.dialog.winfo_screenwidth() // 2) - 275
+            y = (self.dialog.winfo_screenheight() // 2) - 200
+            self.dialog.geometry(f"+{x}+{y}")
         
         # 컨텐츠 프레임
         self.content_frame = ttk.Frame(self.dialog, padding=20)
@@ -589,15 +573,19 @@ class FeedbackDialog:
         """대화상자 표시"""
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("💬 피드백 / 문제 신고")
-        self.dialog.geometry("500x400")
-        self.dialog.resizable(False, False)
-        self.dialog.transient(self.parent)
-        
-        # 중앙 정렬
-        self.dialog.update_idletasks()
-        x = (self.dialog.winfo_screenwidth() // 2) - 250
-        y = (self.dialog.winfo_screenheight() // 2) - 200
-        self.dialog.geometry(f"+{x}+{y}")
+        if DialogSize and center_dialog:
+            self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
+            self.dialog.resizable(False, False)
+            self.dialog.transient(self.parent)
+            center_dialog(self.dialog, self.parent)
+        else:
+            self.dialog.geometry("500x400")
+            self.dialog.resizable(False, False)
+            self.dialog.transient(self.parent)
+            self.dialog.update_idletasks()
+            x = (self.dialog.winfo_screenwidth() // 2) - 250
+            y = (self.dialog.winfo_screenheight() // 2) - 200
+            self.dialog.geometry(f"+{x}+{y}")
         
         main_frame = ttk.Frame(self.dialog, padding=20)
         main_frame.pack(fill=tk.BOTH, expand=True)

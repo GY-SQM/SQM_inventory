@@ -9,7 +9,7 @@ Keyboard shortcuts and hotkey handling
 """
 
 import logging
-from ..utils.ui_constants import CustomMessageBox
+from ..utils.ui_constants import CustomMessageBox, DialogSize, center_dialog
 from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
@@ -278,12 +278,8 @@ v2.9.91 - SQM Inventory System
         popup.resizable(False, False)
         popup.transient(self.root)
         popup.grab_set()
-        try:
-            x = self.root.winfo_rootx() + max(0, (self.root.winfo_width() - 420) // 2)
-            y = self.root.winfo_rooty() + max(0, (self.root.winfo_height() - 180) // 2)
-            popup.geometry(f"420x180+{max(0, x)}+{max(0, y)}")
-        except tk.TclError:
-            popup.geometry("420x180")
+        popup.geometry(DialogSize.get_geometry(self.root, 'small'))
+        center_dialog(popup, self.root)
         frame = ttk.Frame(popup, padding=20)
         frame.pack(fill=tk.BOTH, expand=True)
         ttk.Label(frame, text="테스트용 데이터베이스를 초기화합니다.\n모든 재고·톤백·출고 데이터가 삭제됩니다.",

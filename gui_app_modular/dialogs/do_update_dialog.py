@@ -50,18 +50,19 @@ class DOUpdateDialog:
     def _create_dialog(self) -> None:
         """UI 구성"""
         from ..utils.constants import tk, ttk, BOTH, X, Y, LEFT, RIGHT, TOP, BOTTOM, W, E
-        from ..utils.ui_constants import ThemeColors, CustomMessageBox
+        from ..utils.ui_constants import ThemeColors, CustomMessageBox, DialogSize, center_dialog
 
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📋 D/O 후속 연결 — SQM v5.6.6")
-        self.dialog.geometry("750x520")
+        self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
+        center_dialog(self.dialog, self.parent)
 
         _is_dark = ThemeColors.is_dark_theme(
             getattr(self.app, 'current_theme', 'flatly') if self.app else 'flatly')
-        bg = '#2b2b2b' if _is_dark else '#f5f5f5'
-        fg = '#ffffff' if _is_dark else '#333333'
+        bg = ThemeColors.get('bg_card', _is_dark)
+        fg = ThemeColors.get('text_primary', _is_dark)
         self.dialog.configure(bg=bg)
 
         # ── 상단: 파일 선택 ──

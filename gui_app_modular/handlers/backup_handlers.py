@@ -11,7 +11,7 @@ Backup, restore, and DB maintenance functions
 import sqlite3
 import os
 import logging
-from ..utils.ui_constants import CustomMessageBox
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog
 from pathlib import Path
 from datetime import datetime
 
@@ -121,11 +121,12 @@ class BackupHandlersMixin:
         
         backups.sort(key=lambda x: x['mtime'], reverse=True)
         
-        # Create dialog
+        # Create dialog (Phase4: DialogSize)
         dialog = tk.Toplevel(self.root)
         dialog.title("Backup List")
-        dialog.geometry("600x400")
+        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
         dialog.transient(self.root)
+        center_dialog(dialog, self.root)
         
         # Treeview
         columns = ('name', 'size', 'date')
@@ -343,17 +344,22 @@ class BackupHandlersMixin:
             
             dialog = tk.Toplevel(self.root)
             dialog.title("📊 DB 구조 정보")
-            dialog.geometry("850x650")
+            dialog.geometry(DialogSize.get_geometry(self.root, 'large'))
             dialog.transient(self.root)
             dialog.grab_set()
+            center_dialog(dialog, self.root)
             
+            _bh_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+            _h_bg = ThemeColors.get('statusbar_bg', _bh_dark)
+            _h_fg = ThemeColors.get('statusbar_fg', _bh_dark)
+            _h_fg_sec = ThemeColors.get('text_secondary', _bh_dark)
             # 상단 요약
-            header = tk.Frame(dialog, bg='#2c3e50', padx=15, pady=10)
+            header = tk.Frame(dialog, bg=_h_bg, padx=15, pady=10)
             header.pack(fill=X)
             tk.Label(header, text="📊 SQM 데이터베이스 구조", font=('맑은 고딕', 16, 'bold'),
-                     bg='#2c3e50', fg='white').pack(anchor='w')
+                     bg=_h_bg, fg=_h_fg).pack(anchor='w')
             tk.Label(header, text=f"경로: {db_path}  |  크기: {db_size_mb:.2f} MB  |  엔진: SQLite (WAL)",
-                     font=('맑은 고딕', 10), bg='#2c3e50', fg='#bdc3c7').pack(anchor='w', pady=(3,0))
+                     font=('맑은 고딕', 10), bg=_h_bg, fg=_h_fg_sec).pack(anchor='w', pady=(3,0))
             
             # 테이블 목록 Treeview
             tree_frame = ttk.Frame(dialog)
@@ -421,10 +427,10 @@ class BackupHandlersMixin:
             conn.close()
             
             # 하단 요약
-            footer = tk.Frame(dialog, bg='#1a2332', padx=15, pady=8)
+            footer = tk.Frame(dialog, bg=_h_bg, padx=15, pady=8)
             footer.pack(fill=X)
             tk.Label(footer, text=f"총 {len(tables)}개 테이블  |  총 {total_rows:,}행  |  인덱스 44개",
-                     font=('맑은 고딕', 11, 'bold'), bg='#1a2332', fg='#2ecc71').pack(side=LEFT)
+                     font=('맑은 고딕', 11, 'bold'), bg=_h_bg, fg=ThemeColors.get('statusbar_icon_ok', _bh_dark)).pack(side=LEFT)
             
             tk.Button(footer, text="닫기", command=dialog.destroy,
                       font=('맑은 고딕', 10), padx=15).pack(side=RIGHT)

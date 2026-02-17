@@ -11,7 +11,7 @@ LOT 더블클릭/우클릭 시:
 
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors, apply_tooltip
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog, apply_tooltip
 
 logger = logging.getLogger(__name__)
 
@@ -50,18 +50,19 @@ class LotDetailDialogMixin:
             ORDER BY movement_date DESC
         """, (lot_no,))
 
-        # ── 테마 ──
+        # ── 테마 (v5.8.7 Phase2: ThemeColors 단일 소스) ──
         is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
-        bg = '#1a1a1a' if is_dark else ThemeColors.get('bg_card')
-        fg = '#e0e0e0' if is_dark else '#1a1a1a'
-        header_bg = '#0d1b2a' if is_dark else ThemeColors.get('text_primary')
-        card_bg = '#2a2a2a' if is_dark else '#f8f9fa'
+        bg = ThemeColors.get('bg_card', is_dark)
+        fg = ThemeColors.get('text_primary', is_dark)
+        header_bg = ThemeColors.get('statusbar_bg', is_dark) if is_dark else ThemeColors.get('text_primary', is_dark)
+        card_bg = ThemeColors.get('bg_secondary', is_dark)
 
         popup = tk.Toplevel(self.root)
         popup.title(f"LOT 상세 추적 - {lot_no}")
-        popup.geometry("950x720")
+        popup.geometry(DialogSize.get_geometry(self.root, 'large'))
         popup.transient(self.root)
         popup.grab_set()
+        center_dialog(popup, self.root)
         popup.configure(bg=bg)
 
         # ═══════════════════════════════════════════
@@ -121,7 +122,7 @@ class LotDetailDialogMixin:
         weight_items = [
             ('📥 입고', f'{init_w:,.0f} kg', ThemeColors.get('statusbar_progress')),
             ('💰 잔량', f'{curr_w:,.0f} kg', ThemeColors.get('badge_db')),
-            ('📤 출고', f'{out_w:,.0f} kg', '#e67e22'),
+            ('📤 출고', f'{out_w:,.0f} kg', ThemeColors.get('statusbar_icon_warn', is_dark)),
             ('📊 출고율', f'{pct:.1f}%', ThemeColors.get('statusbar_icon_err') if pct > 80 else ThemeColors.get('statusbar_icon_warn')),
         ]
         for label, value, color in weight_items:
@@ -196,11 +197,11 @@ class LotDetailDialogMixin:
                 idx, tb_no_disp, f'{weight:,.1f}', st, tb_type, loc, p_to, p_date, o_date
             ), tags=(tag,))
 
-        tb_tree.tag_configure('available', background=ThemeColors.get('available') if not is_dark else '#1b3a2a', foreground=fg)
-        tb_tree.tag_configure('picked', background=ThemeColors.get('picked') if not is_dark else '#3a1a1a', foreground=fg)
-        tb_tree.tag_configure('shipped', background=ThemeColors.get('shipped') if not is_dark else '#1a2a3a', foreground=fg)
-        tb_tree.tag_configure('depleted', background='#f5f5f5' if not is_dark else '#2a2a2a', foreground=fg)
-        tb_tree.tag_configure('sample', background='#e0f7fa' if not is_dark else '#1a3a3a', foreground=fg)
+        tb_tree.tag_configure('available', background=ThemeColors.get('available', is_dark), foreground=fg)
+        tb_tree.tag_configure('picked', background=ThemeColors.get('picked', is_dark), foreground=fg)
+        tb_tree.tag_configure('shipped', background=ThemeColors.get('shipped', is_dark), foreground=fg)
+        tb_tree.tag_configure('depleted', background=ThemeColors.get('bg_secondary', is_dark), foreground=ThemeColors.get('text_muted', is_dark))
+        tb_tree.tag_configure('sample', background=ThemeColors.get('available', is_dark), foreground=fg)
 
         # 톤백 요약 바
         tb_summary = tk.Frame(tab_tonbag, bg=card_bg, pady=5)
@@ -255,9 +256,9 @@ class LotDetailDialogMixin:
                 f'{qty:,.1f}', f'{bw:,.0f}', f'{aw:,.0f}', ref, rem
             ), tags=(tag,))
 
-        mv_tree.tag_configure('inbound', background=ThemeColors.get('available') if not is_dark else '#1b3a2a', foreground=fg)
-        mv_tree.tag_configure('outbound', background=ThemeColors.get('picked') if not is_dark else '#3a1a1a', foreground=fg)
-        mv_tree.tag_configure('return_mv', background='#e0f7fa' if not is_dark else '#1a3a3a', foreground=fg)
+        mv_tree.tag_configure('inbound', background=ThemeColors.get('available', is_dark), foreground=fg)
+        mv_tree.tag_configure('outbound', background=ThemeColors.get('picked', is_dark), foreground=fg)
+        mv_tree.tag_configure('return_mv', background=ThemeColors.get('available', is_dark), foreground=fg)
 
         if not movements:
             mv_tree.insert('', END, values=('', '이력 없음', '', '', '', '', '', ''))

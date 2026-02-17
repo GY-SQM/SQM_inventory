@@ -47,10 +47,10 @@ class OutboundPreviewDialogMixin:
         dialog = tk.Toplevel(self.root)
         dialog.title("Outbound Preview")
         
-        width, height = DialogSize.calculate(self.root, 'large')
-        dialog.geometry(f"{width}x{height}")
+        dialog.geometry(DialogSize.get_geometry(self.root, 'large'))
         dialog.transient(self.root)
         dialog.grab_set()
+        center_dialog(dialog, self.root)
         
         # === UI 통일성: 간격 표준화 ===
         # Summary frame
