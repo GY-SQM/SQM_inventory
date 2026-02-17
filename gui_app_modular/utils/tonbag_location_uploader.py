@@ -45,12 +45,13 @@ class TonbagLocationUploader:
         
         v5.6.1: lot_no + tonbag_no + location 양식도 지원
         v5.6.9: 로케이션 엑셀 양식 확정
-        ┌────────┬────────┬────────┬──────────┬───────────┬──────────┐
-        │ 순번   │ 입고일 │ BL No  │ lot_no   │ tonbag_no│ location │
-        ├────────┼────────┼────────┼──────────┼───────────┼──────────┤
-        │ (자동) │ 선택   │ 선택   │ 필수     │ 필수     │ 필수     │
-        │ 1      │ 2025-01│ B/L123 │ 112508.. │ 3         │ A-01-01  │
-        └────────┴────────┴────────┴──────────┴───────────┴──────────┘
+        v5.8.x: 양식2에 uid 컬럼 선택 포함 가능 (있으면 해당 값으로 매칭)
+        ┌────────┬────────┬────────┬──────────┬───────────┬──────────────┬──────────┐
+        │ 순번   │ 입고일 │ BL No  │ lot_no   │ tonbag_no│ uid (선택)   │ location │
+        ├────────┼────────┼────────┼──────────┼───────────┼──────────────┼──────────┤
+        │ (자동) │ 선택   │ 선택   │ 필수     │ 필수     │ 선택         │ 필수     │
+        │ 1      │ 2025-01│ B/L123 │ 112508.. │ 3         │ 1125081447-03│ A-01-01  │
+        └────────┴────────┴────────┴──────────┴───────────┴──────────────┴──────────┘
         로케이션 체계: 영문-숫자-숫자 (예: A-01-01)
         """
         try:
@@ -124,8 +125,8 @@ class TonbagLocationUploader:
         return True, f"✅ {len(data)}개 데이터 파싱 완료 (UID 양식)", data
     
     def _parse_lot_tonbag_format(self, df) -> Tuple[bool, str, List[Dict]]:
-        """양식 2: lot_no + tonbag_no + location (v5.6.9: 로케이션 영문-숫자-숫자 검증)"""
-        # 컬럼명 정규화 (입고일, BL No 등 선택 컬럼은 매핑만 하면 됨)
+        """양식 2: lot_no + tonbag_no + location (v5.6.9). uid 컬럼 있으면 해당 값으로 매칭 (선택)."""
+        # 컬럼명 정규화 (입고일, BL No, uid 등 선택 컬럼 포함)
         col_map = {}
         for c in df.columns:
             c_lower = c.lower().strip()
@@ -135,10 +136,13 @@ class TonbagLocationUploader:
                 col_map['tonbag_no'] = c
             elif c_lower in ('location', '위치'):
                 col_map['location'] = c
+            elif c_lower in ('uid', 'tonbag_uid'):
+                col_map['uid'] = c
         
         lot_col = col_map.get('lot_no')
         tb_col = col_map.get('tonbag_no')
         loc_col = col_map.get('location')
+        uid_col = col_map.get('uid')
         
         if not lot_col or not tb_col or not loc_col:
             return False, "❌ 필수 컬럼 필요: lot_no, tonbag_no, location", []
@@ -152,6 +156,13 @@ class TonbagLocationUploader:
             lot_no = str(row[lot_col]).strip()
             tonbag_no = str(row[tb_col]).strip()
             location = str(row[loc_col]).strip()
+            excel_uid = ''
+            if uid_col and uid_col in row.index:
+                v = row[uid_col]
+                if pd.notna(v) and str(v).strip() and str(v).lower() != 'nan':
+                    excel_uid = str(v).strip()
+            if excel_uid and excel_uid.lower() == 'nan':
+                excel_uid = ''
             
             if not lot_no or lot_no.lower() == 'nan':
                 continue
@@ -162,19 +173,22 @@ class TonbagLocationUploader:
             if not valid:
                 logger.warning(f"행 {idx + 2}: location '{location}' — {msg}")
             
-            # tonbag_no로 UID 조회
-            try:
-                tb_num = int(float(tonbag_no))
-                tonbag = self.db.fetchone(
-                    "SELECT tonbag_uid FROM inventory_tonbag WHERE lot_no = ? AND sub_lt = ?",
-                    (lot_no, tb_num))
-                if tonbag:
-                    uid = tonbag['tonbag_uid'] if isinstance(tonbag, dict) else tonbag[0]
-                else:
-                    uid = f"{lot_no}-{tb_num:02d}"
-                    logger.warning(f"톤백 미발견: {lot_no}/sub_lt={tb_num}, UID 추정: {uid}")
-            except (ValueError, TypeError):
-                uid = f"{lot_no}-{tonbag_no}"
+            # UID: 엑셀에 uid(또는 tonbag_uid) 값이 있으면 사용, 없으면 lot_no+tonbag_no로 조회/생성
+            if excel_uid:
+                uid = excel_uid
+            else:
+                try:
+                    tb_num = int(float(tonbag_no))
+                    tonbag = self.db.fetchone(
+                        "SELECT tonbag_uid FROM inventory_tonbag WHERE lot_no = ? AND sub_lt = ?",
+                        (lot_no, tb_num))
+                    if tonbag:
+                        uid = tonbag['tonbag_uid'] if isinstance(tonbag, dict) else tonbag[0]
+                    else:
+                        uid = f"{lot_no}-{tb_num:02d}"
+                        logger.warning(f"톤백 미발견: {lot_no}/sub_lt={tb_num}, UID 추정: {uid}")
+                except (ValueError, TypeError):
+                    uid = f"{lot_no}-{tonbag_no}"
             
             data.append({
                 'uid': uid,

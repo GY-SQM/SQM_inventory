@@ -1,4 +1,4 @@
 SQM Inventory System
-Version: v5.8.8
+Version: v5.8.9
 Release Date: 2026-02-17
-Notes: UI Phase3(Spacing+Font) / Phase4(Dialog size)
+Notes: One-stop inbound single screen / Real-time preview / DateEntry gui_bootstrap / Location Excel UID
