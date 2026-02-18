@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.9.1'
+__version__ = '5.9.2'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.9.2': '🧹 v5.9.2: P2 코드 위생 — except+pass 로깅 전환(11파일), bare except 제거, DB경로 통일, re.compile 모듈레벨 이동, 미사용 import 정리',
     '5.9.1': '🐛 v5.9.1: P0 크래시 버그 9건 수정, P1 릴리스 위생, 샘플 UID S0→0, 트리뷰 폰트 축소(14→11pt), 컨테이너 구분 버튼 필터바 이동, Excel round-trip 컬럼 매칭 수정',
     '5.9.0': '📄 v5.9.0: PDF/이미지 변환 통합 — 캡처 이미지(PNG/JPG/BMP/TIFF) → Excel/Word 변환 지원, 일괄 변환 이미지 포함, D/O 파싱 하이브리드(Arrival Date+Free Time), Gemini thinking model 대응, 입고 엔진·드래그앤드롭·테마·키바인딩 개선',
     '5.8.9': '🎯 v5.8.9: 원스톱 입고 한 화면 처리(업로드2 제거)·파싱 실시간 미리보기·DateEntry gui_bootstrap 통일·Location 엑셀 양식2 UID 컬럼 지원',

@@ -148,8 +148,8 @@ class DOMixin:
                 # DOData에 free_time_status 속성이 없으면 무시 (호환성)
                 try:
                     result.free_time_status = ft_status
-                except AttributeError:
-                    pass
+                except AttributeError as e:
+                    logger.debug(f"Suppressed: {e}")
 
         except ImportError:
             logger.debug("[DO] date_utils 미설치 — 기존 매핑 사용")
@@ -161,8 +161,8 @@ class DOMixin:
                     if len(parts) == 3:
                         result.arrival_date = date(
                             int(parts[0]), int(parts[1]), int(parts[2]))
-                except (ValueError, TypeError, IndexError):
-                    pass
+                except (ValueError, TypeError, IndexError) as e:
+                    logger.debug(f"Suppressed: {e}")
         except Exception as e:
             logger.warning(f"[DO] Arrival Date 하이브리드 추출 오류: {e}")
             # 기존 방식 폴백
@@ -173,8 +173,8 @@ class DOMixin:
                     if len(parts) == 3:
                         result.arrival_date = date(
                             int(parts[0]), int(parts[1]), int(parts[2]))
-                except (ValueError, TypeError, IndexError):
-                    pass
+                except (ValueError, TypeError, IndexError) as e:
+                    logger.debug(f"Suppressed: {e}")
 
         # 컨테이너/Free Time
         result.containers = []
@@ -387,8 +387,8 @@ JSON 형식으로 응답해주세요:
                         try:
                             parts = data['arrival_date'].split('-')
                             result.arrival_date = date(int(parts[0]), int(parts[1]), int(parts[2]))
-                        except (ValueError, TypeError, KeyError):
-                            pass
+                        except (ValueError, TypeError, KeyError) as e:
+                            logger.debug(f"Suppressed: {e}")
                 
                 if data.get('containers'):
                     for c in data['containers']:

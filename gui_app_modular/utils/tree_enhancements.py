@@ -28,7 +28,8 @@ def _parse_date_for_calendar(value: Optional[str]) -> date:
         if len(s) >= 10:
             return datetime.strptime(s[:10], "%Y-%m-%d").date()
         return date.today()
-    except Exception:
+    except (ValueError, TypeError) as e:
+        logger.debug(f"Suppressed: {e}")
         return date.today()
 
 

@@ -23,14 +23,14 @@ import logging
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+logger = logging.getLogger(__name__)
+
 if sys.platform == 'win32':
     try:
         sys.stdout.reconfigure(encoding='utf-8')
         sys.stderr.reconfigure(encoding='utf-8')
-    except (AttributeError, OSError):
-        pass
-
-logger = logging.getLogger(__name__)
+    except (AttributeError, OSError) as e:
+        logger.debug(f"Suppressed: {e}")
 
 try:
     from version import __version__, APP_NAME

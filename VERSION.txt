@@ -1,4 +1,4 @@
 SQM Inventory System
-Version: v5.9.1
+Version: v5.9.2
 Release Date: 2026-02-18
-Notes: P0 critical bugfix (9), P1 release hygiene, UI improvements, Excel round-trip fix
+Notes: P2 code hygiene — except+pass logging, bare except removal, DB path unification, unused import cleanup

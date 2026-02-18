@@ -109,8 +109,8 @@ class BLMixin:
                         result.shipped_on_board_date = date(
                             int(parts[0]), int(parts[1]), int(parts[2]))
                         result.ship_date = result.shipped_on_board_date
-                except (ValueError, TypeError, IndexError):
-                    pass
+                except (ValueError, TypeError, IndexError) as e:
+                    logger.debug(f"Suppressed: {e}")
 
         # 컨테이너 목록
         containers = getattr(gemini_result, 'containers', []) or []

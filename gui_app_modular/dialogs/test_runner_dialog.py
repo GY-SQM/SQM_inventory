@@ -6,23 +6,20 @@ SQM 재고관리 - 단위 테스트 러너 다이얼로그
 메뉴: 고급 → 🧪 단위 테스트
 """
 
+import logging
 import subprocess
 import sys
 import threading
 from pathlib import Path
 
-logger = None
+logger = logging.getLogger(__name__)
 
 
 def _log(msg: str) -> None:
     try:
-        import logging
-        global logger
-        if logger is None:
-            logger = logging.getLogger(__name__)
         logger.debug(msg)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Suppressed: {e}")
 
 
 def get_tests_dir() -> Path:
@@ -111,8 +108,8 @@ class TestRunnerDialog:
 
         try:
             center_dialog(self.win, self.parent)
-        except (TypeError, NameError):
-            pass
+        except (TypeError, NameError) as e:
+            logger.debug(f"Suppressed: {e}")
         self._text.config(state=tk.NORMAL)
         self._text.insert(tk.END, "Run 버튼을 눌러 tests/ 디렉터리 단위 테스트를 실행하세요.\n")
         self._text.config(state="disabled")
@@ -144,8 +141,8 @@ class TestRunnerDialog:
             btn = self._run_btn
             if tk and btn and self.win:
                 self.win.after(0, lambda: btn.config(state=tk.NORMAL))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Suppressed: {e}")
 
     def _show_result(self, returncode: int, out: str) -> None:
         if self._text is None:

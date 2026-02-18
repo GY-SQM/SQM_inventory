@@ -1214,8 +1214,8 @@ arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
                 _d = normalize_date(_arrival_str)
                 if _d:
                     result.arrival_date = _d.isoformat()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Suppressed: {e}")
             if not result.arrival_date and re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', _arrival_str[:10]):
                 result.arrival_date = _arrival_str[:10]
         result.all_dates_found = data.get('all_dates_found', [])

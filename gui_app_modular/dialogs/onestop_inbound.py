@@ -541,8 +541,8 @@ class OneStopInboundDialog(InboundDialogBase):
             try:
                 if self.dialog and self.dialog.winfo_exists():
                     self.dialog.after_cancel(self._progress_elapsed_job)
-            except (tk.TclError, ValueError):
-                pass
+            except (tk.TclError, ValueError) as e:
+                logger.debug(f"Suppressed: {e}")
         self._progress_elapsed_job = None
 
     def _progress_busy_tick(self) -> None:

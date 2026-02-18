@@ -108,7 +108,7 @@ class SQMDatabase(DatabaseMigrationMixin, DatabaseInterface):
                 from core.config import DB_PATH
                 db_path = str(DB_PATH)
             except ImportError:
-                db_path = os.path.join(os.path.dirname(__file__), 'data', 'sqm_inventory.db')
+                db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'db', 'sqm_inventory.db')
 
         self.db_path = db_path
         self.backup_dir = os.path.join(os.path.dirname(db_path) if db_path != ':memory:' else '.', 'backups')

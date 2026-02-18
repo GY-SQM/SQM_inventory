@@ -17,6 +17,8 @@ import re
 import logging
 from typing import Dict, List, Tuple, Optional, Any
 
+_RE_DATE = re.compile(r"(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{4})")
+
 logger = logging.getLogger(__name__)
 
 
@@ -181,9 +183,8 @@ def _extract_free_time_rows(bin_page) -> Tuple[List[Tuple[Optional[str], str]], 
     debug["roi_ocr_text"] = text
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     rows: List[Tuple[Optional[str], str]] = []
-    date_pat = re.compile(r"(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{4})")
     for ln in lines:
-        mdate = date_pat.search(ln)
+        mdate = _RE_DATE.search(ln)
         if not mdate:
             continue
         date_raw = mdate.group(1)
@@ -261,8 +262,8 @@ def parse_do_free_time(pdf_or_image_path: str, debug_dir: Optional[str] = None) 
     if debug_dir:
         try:
             os.makedirs(debug_dir, exist_ok=True)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug(f"Suppressed: {e}")
     pil_img = None
     if pdf_or_image_path.lower().endswith(".pdf"):
         pil_img, err = _safe_run(_render_pdf_page_to_image, pdf_or_image_path, 0, 3.0)
@@ -287,8 +288,8 @@ def parse_do_free_time(pdf_or_image_path: str, debug_dir: Optional[str] = None) 
         try:
             import cv2
             cv2.imwrite(os.path.join(debug_dir, "page_bin.png"), bin_page)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Suppressed: {e}")
     containers, err = _safe_run(_extract_containers_from_do, bin_page)
     if err:
         out["errors"].append(f"컨테이너 추출 실패: {err}")

@@ -74,24 +74,24 @@ def normalize_date(date_str: Any) -> Optional[date]:
     if m:
         try:
             return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.debug(f"Suppressed: {e}")
 
     # 2) YYYY/MM/DD
     m = re.match(r'^(\d{4})/(\d{1,2})/(\d{1,2})', s)
     if m:
         try:
             return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.debug(f"Suppressed: {e}")
 
     # 3) YYYY.MM.DD
     m = re.match(r'^(\d{4})\.(\d{1,2})\.(\d{1,2})', s)
     if m:
         try:
             return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.debug(f"Suppressed: {e}")
 
     # 4) DD/MM/YYYY 또는 DD-MM-YYYY (유럽식)
     m = re.match(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$', s)
@@ -100,8 +100,8 @@ def normalize_date(date_str: Any) -> Optional[date]:
         if 1 <= mo <= 12 and 1 <= d <= 31:
             try:
                 return date(y, mo, d)
-            except ValueError:
-                pass
+            except ValueError as e:
+                logger.debug(f"Suppressed: {e}")
 
     # 5) 영문월: "SEP 15, 2025" / "15 SEP 2025" / "September 15, 2025"
     s_upper = s.upper().replace(',', '')
@@ -110,23 +110,23 @@ def normalize_date(date_str: Any) -> Optional[date]:
     if m and m.group(1) in _MONTH_MAP:
         try:
             return date(int(m.group(3)), _MONTH_MAP[m.group(1)], int(m.group(2)))
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.debug(f"Suppressed: {e}")
     # "DD MON YYYY" 또는 "DD MONTH YYYY"
     m = re.match(r'^(\d{1,2})\s+([A-Z]+)\s+(\d{4})$', s_upper)
     if m and m.group(2) in _MONTH_MAP:
         try:
             return date(int(m.group(3)), _MONTH_MAP[m.group(2)], int(m.group(1)))
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.debug(f"Suppressed: {e}")
 
     # 6) 한글: "2025년 10월 17일"
     m = re.match(r'^(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일?', s)
     if m:
         try:
             return date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-        except ValueError:
-            pass
+        except ValueError as e:
+            logger.debug(f"Suppressed: {e}")
 
     logger.debug(f"[date_utils] normalize_date 실패: '{date_str}'")
     return None

@@ -48,7 +48,7 @@ class CustomMenuBar:
             parent: 부모 위젯 (root)
             app: SQMInventoryApp 인스턴스
         """
-        from ..utils.constants import tk, ttk, X, LEFT, RIGHT, BOTH
+        from ..utils.constants import tk, ttk, X, LEFT
         
         self.parent = parent
         self.app = app

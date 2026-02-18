@@ -9,10 +9,13 @@ SQM 핵심 로직 테스트 (v5.6.8)
 import os
 import sys
 import sqlite3
+import logging
 import tempfile
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture
@@ -27,8 +30,8 @@ def engine():
     finally:
         try:
             eng.db.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Suppressed: {e}")
         os.unlink(db_path)
 
 

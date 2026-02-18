@@ -16,7 +16,6 @@ import logging
 from pathlib import Path
 from typing import Optional
 import configparser  # v5.3.3
-from utils.path_utils import get_app_base_dir  # v5.3.4
 
 # Setup logging
 logger = logging.getLogger(__name__)
