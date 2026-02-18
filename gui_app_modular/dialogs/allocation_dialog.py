@@ -6,6 +6,7 @@ SQM v5.9.5 — Allocation 출고 예약 다이얼로그
 엑셀 업로드 → 파싱 미리보기 → 예약(RESERVED) 실행 → 현황 조회
 """
 import logging
+import time
 import tkinter as tk
 from tkinter import ttk, filedialog, BOTH, X, Y, LEFT, RIGHT, END, VERTICAL
 
@@ -110,8 +111,10 @@ class AllocationDialog:
 
         try:
             from parsers.allocation_parser import AllocationParser
+            t0 = time.perf_counter()
             parser = AllocationParser()
             result = parser.parse(path)
+            elapsed_sec = time.perf_counter() - t0
 
             self.parsed_rows = result.rows if result else []
             self.tree.delete(*self.tree.get_children())
@@ -133,9 +136,10 @@ class AllocationDialog:
             header = result.header if result else None
             customer = getattr(header, 'customer', '?') if header else '?'
             total = getattr(header, 'total_qty', 0) if header else 0
+            fname = path.split('/')[-1].split(chr(92))[-1]
             self._summary_var.set(
                 f"고객: {customer} | 총 {len(self.parsed_rows)}행 | "
-                f"총량: {total:.1f} MT | 파일: {path.split('/')[-1].split(chr(92))[-1]}"
+                f"총량: {total:.1f} MT | 파싱: {elapsed_sec:.2f}초 | {fname}"
             )
 
             if self.parsed_rows:

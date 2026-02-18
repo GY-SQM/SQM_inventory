@@ -1,4 +1,4 @@
 SQM Inventory System
-Version: v5.9.6
+Version: v5.9.7
 Release Date: 2026-02-18
-Notes: Outbound order LIFO — pick tonbag with largest sub_lt first (ORDER BY sub_lt DESC), unified across 5 outbound paths, allocation parser verified with real PT LBM 300MT data
+Notes: Picking List parser design review doc, inbound/outbound parsing elapsed time display

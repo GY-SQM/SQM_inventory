@@ -801,8 +801,10 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             if self.dialog and self.dialog.winfo_exists():
                 self.dialog.after(400, _ensure_buttons_visible)
             
-            self._update_progress(100, f"✅ 파싱 완료 — {len(self.preview_data)}개 LOT")
-            self._log_safe(f"✅ 파싱 완료: {len(self.preview_data)} LOT, {total}종 서류")
+            elapsed_sec = time.time() - getattr(self, '_progress_start_time', time.time())
+            elapsed_str = f"{elapsed_sec:.1f}초" if elapsed_sec < 60 else f"{int(elapsed_sec // 60)}분 {elapsed_sec % 60:.0f}초"
+            self._update_progress(100, f"✅ 파싱 완료 — {len(self.preview_data)}개 LOT ({elapsed_str})")
+            self._log_safe(f"✅ 파싱 완료: {len(self.preview_data)} LOT, {total}종 서류 (경과: {elapsed_str})")
         
         except (RuntimeError, ValueError) as e:
             self._update_progress(0, f"❌ 오류: {e}")

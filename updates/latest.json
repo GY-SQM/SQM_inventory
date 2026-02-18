@@ -1,7 +1,7 @@
 {
-    "version": "5.9.6",
+    "version": "5.9.7",
     "download_url": "",
-    "release_notes": "v5.9.6: Outbound order LIFO — tonbag largest number first, 5 outbound paths unified, allocation parser verified with PT LBM 300MT real data",
+    "release_notes": "v5.9.7: Picking List parser design review, inbound/outbound parsing elapsed time display",
     "sha256": "",
     "file_size": 0,
     "release_date": "2026-02-18",
