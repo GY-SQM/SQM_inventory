@@ -85,7 +85,7 @@ class OutboundHandlersMixin:
                     """SELECT sub_lt, weight, status, location 
                        FROM inventory_tonbag 
                        WHERE lot_no = ? AND status = 'AVAILABLE'
-                       ORDER BY sub_lt""",
+                       ORDER BY sub_lt DESC""",
                     (lot_no,)
                 )
                 

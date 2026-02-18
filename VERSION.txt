@@ -1,4 +1,4 @@
 SQM Inventory System
-Version: v5.9.5
+Version: v5.9.6
 Release Date: 2026-02-18
-Notes: Allocation UI — outbound reservation dialog (upload→parse→preview→reserve→execute→confirm), reservation status view, menu integration
+Notes: Outbound order LIFO — pick tonbag with largest sub_lt first (ORDER BY sub_lt DESC), unified across 5 outbound paths, allocation parser verified with real PT LBM 300MT data

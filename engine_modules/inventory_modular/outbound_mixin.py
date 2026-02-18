@@ -150,7 +150,7 @@ class OutboundMixin(InventoryBaseMixin):
             """SELECT id, sub_lt, weight FROM inventory_tonbag 
                WHERE lot_no = ? AND status = ?
                  AND COALESCE(is_sample, 0) = 0
-               ORDER BY sub_lt""",
+               ORDER BY sub_lt DESC""",
             (lot_no, STATUS_AVAILABLE)
         )
         
@@ -433,7 +433,7 @@ class OutboundMixin(InventoryBaseMixin):
                         """SELECT id, sub_lt, weight FROM inventory_tonbag
                            WHERE lot_no = ? AND status = ?
                              AND COALESCE(is_sample, 0) = 0
-                           ORDER BY sub_lt""",
+                           ORDER BY sub_lt DESC""",
                         (lot_no, STATUS_AVAILABLE)
                     )
 

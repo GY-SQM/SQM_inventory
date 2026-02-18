@@ -186,7 +186,7 @@ class PreflightMixin:
                     tonbags = self.db.fetchall("""
                         SELECT sub_lt, weight FROM inventory_tonbag
                         WHERE lot_no = ? AND status = 'AVAILABLE'
-                        ORDER BY sub_lt
+                        ORDER BY sub_lt DESC
                     """, (lot_no,))
                     
                     remaining = qty_kg

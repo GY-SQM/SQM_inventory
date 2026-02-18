@@ -555,7 +555,7 @@ class ImportHandlersMixin:
                         tonbags = self.engine.db.fetchall(
                             """SELECT id, weight FROM inventory_tonbag
                                WHERE lot_no = ? AND status = 'AVAILABLE' AND COALESCE(is_sample, 0) = 0
-                               ORDER BY sub_lt LIMIT ?""",
+                               ORDER BY sub_lt DESC LIMIT ?""",
                             (lot_no, n)
                         )
                         if not tonbags or len(tonbags) < n:
