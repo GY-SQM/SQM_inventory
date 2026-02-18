@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.9.4'
+__version__ = '5.9.5'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.9.5': '📋 v5.9.5: Allocation UI — 출고 예약 다이얼로그(파일업로드→파싱→미리보기→예약→출고→확정), 예약 현황 조회, 메뉴 연동',
     '5.9.4': '🏗️ v5.9.4: 구조 리팩토링 — 대형 파일 Mixin 분할(onestop_inbound/database), COLUMN_REGISTRY 도입(Round-trip 보장), core.config Facade 검증',
     '5.9.3': '🚀 v5.9.3: 출고/반품 로직 강화 — RESERVED 상태 추가, allocation_plan 테이블, Allocation 파서 안정화(과학표기법/Total행/GW), 반품 SOLD/RESERVED 지원',
     '5.9.2': '🧹 v5.9.2: P2 코드 위생 — except+pass 로깅 전환(11파일), bare except 제거, DB경로 통일, re.compile 모듈레벨 이동, 미사용 import 정리',

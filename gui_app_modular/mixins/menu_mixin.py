@@ -79,6 +79,11 @@ class MenuMixin:
             label="📄 배정표 출고 (Excel)",
             command=self._on_outbound_click
         )
+        outbound_menu.add_separator()
+        outbound_menu.add_command(
+            label="📋 Allocation 출고 예약",
+            command=self._on_allocation_dialog
+        )
         
         file_menu.add_separator()
         

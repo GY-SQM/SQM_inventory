@@ -1,4 +1,4 @@
 SQM Inventory System
-Version: v5.9.4
+Version: v5.9.5
 Release Date: 2026-02-18
-Notes: Structural refactoring — large file Mixin split, COLUMN_REGISTRY for Excel round-trip, core.config Facade verification
+Notes: Allocation UI — outbound reservation dialog (upload→parse→preview→reserve→execute→confirm), reservation status view, menu integration

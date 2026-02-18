@@ -543,3 +543,16 @@ class OutboundHandlersMixin:
             'summary_var': summary_var, 'customer_var': customer_var,
             'sale_ref_var': sale_ref_var, 'btn_frame': btn_frame,
         }
+
+    def _on_allocation_dialog(self) -> None:
+        """Allocation 출고 예약 다이얼로그 열기 (v5.9.5)"""
+        try:
+            from ..dialogs.allocation_dialog import AllocationDialog
+            dlg = AllocationDialog(self, self.engine)
+            dlg.show()
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Allocation 다이얼로그 오류: {e}", exc_info=True)
+            CustomMessageBox.showerror(
+                self.root, "오류",
+                f"Allocation 다이얼로그를 열 수 없습니다:\n{e}"
+            )

@@ -1,7 +1,7 @@
 {
-    "version": "5.9.4",
+    "version": "5.9.5",
     "download_url": "",
-    "release_notes": "v5.9.4: Structural refactoring — large file Mixin split (onestop_inbound/database), COLUMN_REGISTRY for Excel round-trip guarantee, core.config Facade verification",
+    "release_notes": "v5.9.5: Allocation UI — outbound reservation dialog, reservation status view, execute/confirm/cancel workflow, menu integration",
     "sha256": "",
     "file_size": 0,
     "release_date": "2026-02-18",
