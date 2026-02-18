@@ -556,6 +556,8 @@ class InventoryTabMixin:
             status_filter_normalized = None
         elif 'Available' in status_filter_raw or status_filter_raw.strip() == 'AVAILABLE':
             status_filter_normalized = 'AVAILABLE'
+        elif 'Reserved' in status_filter_raw or status_filter_raw.strip() == 'RESERVED':
+            status_filter_normalized = 'RESERVED'
         elif 'Sold' in status_filter_raw or status_filter_raw.strip() in ('PICKED', 'SOLD'):
             status_filter_normalized = 'PICKED'
         else:
@@ -603,10 +605,12 @@ class InventoryTabMixin:
                     if search_text not in searchable:
                         continue
 
-                # 상태 필터 (v5.7.5: 전체 / Available / Sold 3종, Sold = PICKED·SOLD)
+                # v5.9.3: 상태 필터 (전체 / Available / Reserved / Sold)
                 status = item.get('status', 'AVAILABLE')
                 if status_filter_normalized:
                     if status_filter_normalized == 'AVAILABLE' and status != 'AVAILABLE':
+                        continue
+                    if status_filter_normalized == 'RESERVED' and status != 'RESERVED':
                         continue
                     if status_filter_normalized == 'PICKED' and status not in ('PICKED', 'SOLD'):
                         continue
@@ -863,8 +867,12 @@ class InventoryTabMixin:
 
             cnt_total = len(inventory)
             cnt_avail = sum(1 for i in inventory if (i.get('status') or '') == 'AVAILABLE')
+            cnt_reserved = sum(1 for i in inventory if (i.get('status') or '') == 'RESERVED')
             cnt_sold = sum(1 for i in inventory if (i.get('status') or '') in ('PICKED', 'SOLD'))
-            status_values = [f"전체 ({cnt_total})", f"Available ({cnt_avail})", f"Sold ({cnt_sold})"]
+            status_values = [
+                f"전체 ({cnt_total})", f"Available ({cnt_avail})",
+                f"Reserved ({cnt_reserved})", f"Sold ({cnt_sold})"
+            ]
 
             for col, vals in filter_cols.items():
                 if col == 'status':
