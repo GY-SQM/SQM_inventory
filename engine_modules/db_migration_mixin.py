@@ -34,6 +34,7 @@ class DatabaseMigrationMixin:
         self._migrate_v423_tonbag_location()
         self._migrate_v520_tonbag_no_text()
         self._migrate_v588_con_return()
+        self._migrate_v593_allocation_plan()
 
     def _migrate_v588_con_return(self) -> None:
         """
@@ -459,3 +460,46 @@ class DatabaseMigrationMixin:
             logger.debug(f"Suppressed: {_e}")
 
         conn.commit()
+
+    def _migrate_v593_allocation_plan(self) -> None:
+        """
+        v5.9.3: allocation_plan 테이블 — Allocation 엑셀에서 파싱된 출고 계획 저장.
+        톤백을 RESERVED 상태로 예약하고, 출고일 도래 시 PICKED로 전환.
+        """
+        try:
+            self.execute("""
+                CREATE TABLE IF NOT EXISTS allocation_plan (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    lot_no TEXT NOT NULL,
+                    tonbag_id INTEGER,
+                    sub_lt INTEGER,
+                    customer TEXT,
+                    sale_ref TEXT,
+                    qty_mt REAL,
+                    outbound_date TEXT,
+                    status TEXT DEFAULT 'RESERVED',
+                    source_file TEXT,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    executed_at TEXT,
+                    cancelled_at TEXT,
+                    FOREIGN KEY (tonbag_id) REFERENCES inventory_tonbag(id)
+                )
+            """)
+            self.execute("""
+                CREATE INDEX IF NOT EXISTS idx_alloc_plan_lot 
+                ON allocation_plan(lot_no)
+            """)
+            self.execute("""
+                CREATE INDEX IF NOT EXISTS idx_alloc_plan_status 
+                ON allocation_plan(status)
+            """)
+            self.execute("""
+                CREATE INDEX IF NOT EXISTS idx_alloc_plan_date 
+                ON allocation_plan(outbound_date)
+            """)
+            logger.info("[v5.9.3] allocation_plan 테이블 생성 완료")
+        except (sqlite3.OperationalError, OSError) as e:
+            if "already exists" not in str(e).lower():
+                logger.warning(f"[v5.9.3] allocation_plan 생성 오류: {e}")
+            else:
+                logger.debug(f"[v5.9.3] allocation_plan 이미 존재")

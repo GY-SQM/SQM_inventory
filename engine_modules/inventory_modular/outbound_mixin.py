@@ -16,8 +16,10 @@ from typing import Dict, Optional
 
 from core.constants import (
     STATUS_AVAILABLE,
+    STATUS_RESERVED,
     STATUS_DEPLETED,
     STATUS_PICKED,
+    STATUS_SOLD,
 )
 
 from .base import InventoryBaseMixin
@@ -386,9 +388,272 @@ class OutboundMixin(InventoryBaseMixin):
         elif cw >= iw:
             new_status = STATUS_AVAILABLE
         else:
-            new_status = STATUS_AVAILABLE  # 부분 출고도 AVAILABLE (잔량 있음)
+            new_status = STATUS_AVAILABLE
         
         self.db.execute(
             "UPDATE inventory SET status = ? WHERE lot_no = ?",
             (new_status, lot_no)
         )
+
+    # ═══════════════════════════════════════════════════════
+    # v5.9.3: Allocation 기반 예약/실행/확정
+    # ═══════════════════════════════════════════════════════
+
+    def reserve_from_allocation(self, allocation_rows: list, source_file: str = '') -> Dict:
+        """
+        Allocation 엑셀에서 파싱된 데이터로 톤백 예약 (AVAILABLE → RESERVED).
+        allocation_plan 테이블에 계획 기록 + 톤백 상태 변경.
+
+        Args:
+            allocation_rows: AllocationRow 또는 dict 리스트
+            source_file: 원본 파일명
+
+        Returns:
+            {'success': bool, 'reserved': int, 'errors': [], 'plan_ids': []}
+        """
+        result = {'success': False, 'reserved': 0, 'errors': [], 'plan_ids': []}
+
+        try:
+            with self.db.transaction("IMMEDIATE"):
+                for alloc in allocation_rows:
+                    lot_no = str(getattr(alloc, 'lot_no', '') or alloc.get('lot_no', '')).strip()
+                    customer = str(getattr(alloc, 'sold_to', '') or alloc.get('customer', '')).strip()
+                    sale_ref = str(getattr(alloc, 'sale_ref', '') or alloc.get('sale_ref', '')).strip()
+                    qty_mt = float(getattr(alloc, 'qty_mt', 0) or alloc.get('qty_mt', 0))
+                    outbound_date = getattr(alloc, 'outbound_date', None) or alloc.get('outbound_date')
+                    sublot_count = int(getattr(alloc, 'sublot_count', 0) or alloc.get('tonbag_count', 0))
+
+                    if not lot_no:
+                        result['errors'].append("LOT 번호 누락")
+                        continue
+
+                    weight_kg = qty_mt * 1000 if qty_mt > 0 else sublot_count * 500
+
+                    tonbags = self.db.fetchall(
+                        """SELECT id, sub_lt, weight FROM inventory_tonbag
+                           WHERE lot_no = ? AND status = ?
+                             AND COALESCE(is_sample, 0) = 0
+                           ORDER BY sub_lt""",
+                        (lot_no, STATUS_AVAILABLE)
+                    )
+
+                    if not tonbags:
+                        result['errors'].append(f"가용 톤백 없음: {lot_no}")
+                        continue
+
+                    pick_count = sublot_count if sublot_count > 0 else max(1, int(weight_kg / 500))
+                    reserved_in_lot = 0
+                    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    ob_date_str = str(outbound_date) if outbound_date else None
+
+                    for tb in tonbags[:pick_count]:
+                        self.db.execute(
+                            """UPDATE inventory_tonbag SET
+                                status = ?, picked_to = ?, sale_ref = ?, updated_at = ?
+                            WHERE id = ?""",
+                            (STATUS_RESERVED, customer, sale_ref, now, tb['id'])
+                        )
+
+                        self.db.execute(
+                            """INSERT INTO allocation_plan
+                            (lot_no, tonbag_id, sub_lt, customer, sale_ref,
+                             qty_mt, outbound_date, status, source_file, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 'RESERVED', ?, ?)""",
+                            (lot_no, tb['id'], tb['sub_lt'], customer, sale_ref,
+                             qty_mt, ob_date_str, source_file, now)
+                        )
+                        reserved_in_lot += 1
+
+                    result['reserved'] += reserved_in_lot
+                    logger.info(f"[reserve] {lot_no}: {reserved_in_lot}개 톤백 RESERVED → {customer}")
+
+            result['success'] = result['reserved'] > 0
+            if result['success']:
+                result['message'] = f"예약 완료: {result['reserved']}개 톤백"
+
+        except (ValueError, TypeError, sqlite3.Error) as e:
+            logger.error(f"Allocation 예약 오류 (전체 롤백): {e}", exc_info=True)
+            result['errors'].append(str(e))
+
+        return result
+
+    def execute_reserved(self, lot_no: str = None, target_date: str = None) -> Dict:
+        """
+        RESERVED 톤백을 PICKED로 전환 (출고 실행).
+        lot_no 지정 시 해당 LOT만, target_date 지정 시 해당 날짜 이하만 실행.
+
+        Returns:
+            {'success': bool, 'executed': int, 'errors': []}
+        """
+        result = {'success': False, 'executed': 0, 'errors': []}
+
+        query = """SELECT ap.id, ap.lot_no, ap.tonbag_id, ap.sub_lt,
+                          ap.customer, ap.sale_ref, ap.outbound_date
+                   FROM allocation_plan ap
+                   WHERE ap.status = 'RESERVED'"""
+        params = []
+
+        if lot_no:
+            query += " AND ap.lot_no = ?"
+            params.append(lot_no)
+        if target_date:
+            query += " AND ap.outbound_date <= ?"
+            params.append(target_date)
+
+        try:
+            plans = self.db.fetchall(query, tuple(params))
+            if not plans:
+                result['message'] = "실행할 예약 건 없음"
+                return result
+
+            with self.db.transaction("IMMEDIATE"):
+                now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                processed_lots = set()
+
+                for plan in plans:
+                    p_lot = plan['lot_no']
+                    tb_id = plan['tonbag_id']
+
+                    tb = self.db.fetchone(
+                        "SELECT weight, status FROM inventory_tonbag WHERE id = ?",
+                        (tb_id,)
+                    )
+                    if not tb or tb['status'] != STATUS_RESERVED:
+                        result['errors'].append(f"톤백 {tb_id} 상태 불일치")
+                        continue
+
+                    tb_weight = tb['weight'] or 0
+
+                    self.db.execute(
+                        """UPDATE inventory_tonbag SET
+                            status = ?, picked_date = ?, outbound_date = ?, updated_at = ?
+                        WHERE id = ?""",
+                        (STATUS_PICKED, now, plan['outbound_date'] or now, now, tb_id)
+                    )
+
+                    self.db.execute(
+                        """UPDATE inventory SET
+                            current_weight = MAX(0, current_weight - ?),
+                            picked_weight = picked_weight + ?,
+                            updated_at = ?
+                        WHERE lot_no = ?""",
+                        (tb_weight, tb_weight, now, p_lot)
+                    )
+
+                    self.db.execute(
+                        """UPDATE allocation_plan SET status = 'EXECUTED', executed_at = ?
+                        WHERE id = ?""",
+                        (now, plan['id'])
+                    )
+
+                    self.db.execute(
+                        """INSERT INTO stock_movement
+                        (lot_no, movement_type, qty_kg, remarks, created_at)
+                        VALUES (?, 'OUTBOUND', ?, ?, ?)""",
+                        (p_lot, tb_weight,
+                         f"customer={plan['customer']}, sale_ref={plan['sale_ref']}", now)
+                    )
+
+                    processed_lots.add(p_lot)
+                    result['executed'] += 1
+
+                for pl in processed_lots:
+                    self._recalc_lot_status(pl)
+
+            result['success'] = result['executed'] > 0
+            result['message'] = f"출고 실행 완료: {result['executed']}건"
+
+        except (ValueError, TypeError, sqlite3.Error) as e:
+            logger.error(f"출고 실행 오류 (전체 롤백): {e}", exc_info=True)
+            result['errors'].append(str(e))
+
+        return result
+
+    def confirm_outbound(self, lot_no: str = None) -> Dict:
+        """
+        PICKED → SOLD 확정.
+
+        Returns:
+            {'success': bool, 'confirmed': int}
+        """
+        result = {'success': False, 'confirmed': 0, 'errors': []}
+
+        query = """SELECT id, lot_no, weight FROM inventory_tonbag
+                   WHERE status = ?"""
+        params = [STATUS_PICKED]
+        if lot_no:
+            query += " AND lot_no = ?"
+            params.append(lot_no)
+
+        try:
+            tonbags = self.db.fetchall(query, tuple(params))
+            if not tonbags:
+                result['message'] = "확정할 톤백 없음"
+                return result
+
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with self.db.transaction("IMMEDIATE"):
+                for tb in tonbags:
+                    self.db.execute(
+                        "UPDATE inventory_tonbag SET status = ?, updated_at = ? WHERE id = ?",
+                        (STATUS_SOLD, now, tb['id'])
+                    )
+                    result['confirmed'] += 1
+
+            result['success'] = result['confirmed'] > 0
+            result['message'] = f"출고 확정: {result['confirmed']}건 SOLD"
+
+        except (ValueError, TypeError, sqlite3.Error) as e:
+            logger.error(f"출고 확정 오류: {e}")
+            result['errors'].append(str(e))
+
+        return result
+
+    def cancel_reservation(self, lot_no: str = None, plan_id: int = None) -> Dict:
+        """
+        RESERVED 예약 취소 → AVAILABLE 복원.
+
+        Returns:
+            {'success': bool, 'cancelled': int}
+        """
+        result = {'success': False, 'cancelled': 0, 'errors': []}
+
+        query = "SELECT id, lot_no, tonbag_id FROM allocation_plan WHERE status = 'RESERVED'"
+        params = []
+        if lot_no:
+            query += " AND lot_no = ?"
+            params.append(lot_no)
+        if plan_id:
+            query += " AND id = ?"
+            params.append(plan_id)
+
+        try:
+            plans = self.db.fetchall(query, tuple(params))
+            if not plans:
+                result['message'] = "취소할 예약 없음"
+                return result
+
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with self.db.transaction("IMMEDIATE"):
+                for plan in plans:
+                    self.db.execute(
+                        """UPDATE inventory_tonbag SET
+                            status = ?, picked_to = NULL, sale_ref = NULL, updated_at = ?
+                        WHERE id = ?""",
+                        (STATUS_AVAILABLE, now, plan['tonbag_id'])
+                    )
+                    self.db.execute(
+                        """UPDATE allocation_plan SET status = 'CANCELLED', cancelled_at = ?
+                        WHERE id = ?""",
+                        (now, plan['id'])
+                    )
+                    result['cancelled'] += 1
+
+            result['success'] = result['cancelled'] > 0
+            result['message'] = f"예약 취소: {result['cancelled']}건"
+
+        except (ValueError, TypeError, sqlite3.Error) as e:
+            logger.error(f"예약 취소 오류: {e}")
+            result['errors'].append(str(e))
+
+        return result

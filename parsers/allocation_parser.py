@@ -248,11 +248,22 @@ class AllocationParser:
             if pd.isna(lot_raw):
                 continue
 
-            # LOT 번호를 문자열로 변환 (정수, 실수 모두 처리)
-            if isinstance(lot_raw, (int, float)):
-                lot_no = str(int(lot_raw))
+            # v5.9.3: Total/합계 행 필터링
+            row_str = ' '.join(str(v).strip().upper() for v in row_data if pd.notna(v))
+            if re.match(r'^(TOTAL|합계|SUBTOTAL|소계)', row_str):
+                continue
+
+            # LOT 번호를 문자열로 변환 (정수, 실수, 과학표기법 모두 처리)
+            if isinstance(lot_raw, float):
+                lot_no = str(int(lot_raw)) if lot_raw == int(lot_raw) else str(lot_raw).split('.')[0]
+            elif isinstance(lot_raw, int):
+                lot_no = str(lot_raw)
             else:
-                lot_no = str(lot_raw).split('.')[0]
+                s = str(lot_raw).strip()
+                if re.fullmatch(r'\d+\.?\d*[eE]\+?\d+', s):
+                    lot_no = str(int(float(s)))
+                else:
+                    lot_no = s.split('.')[0]
 
             # LOT 번호 유효성 검사 (10자리 숫자)
             if not lot_no or len(lot_no) != 10 or not lot_no.isdigit():
@@ -266,14 +277,20 @@ class AllocationParser:
                 val = row_data[col_map['product']]
                 row.product = str(val) if pd.notna(val) else header.product
 
-            # SAP NO
+            # SAP NO (v5.9.3: 과학표기법 방어)
             if 'sap_no' in col_map and col_map['sap_no'] < len(row_data):
                 val = row_data[col_map['sap_no']]
                 if pd.notna(val):
-                    if isinstance(val, (int, float)):
+                    if isinstance(val, float):
                         row.sap_no = str(int(val))
+                    elif isinstance(val, int):
+                        row.sap_no = str(val)
                     else:
-                        row.sap_no = str(val).split('.')[0]
+                        s = str(val).strip()
+                        if re.fullmatch(r'\d+\.?\d*[eE]\+?\d+', s):
+                            row.sap_no = str(int(float(s)))
+                        else:
+                            row.sap_no = s.split('.')[0]
 
             # ETA BUSAN (v2.5.4)
             if 'eta_busan' in col_map and col_map['eta_busan'] < len(row_data):
@@ -316,12 +333,15 @@ class AllocationParser:
                 if pd.notna(val):
                     row.sold_to = str(val).strip()
 
-            # GW (Gross Weight)
+            # GW (Gross Weight) — v5.9.3: MT→kg 자동 변환 (10 미만이면 MT로 간주)
             if 'gw' in col_map and col_map['gw'] < len(row_data):
                 gw_val = row_data[col_map['gw']]
                 if pd.notna(gw_val):
                     try:
-                        row.gross_weight = safe_float(gw_val)
+                        gw = safe_float(gw_val)
+                        if 0 < gw < 10:
+                            gw = gw * 1000
+                        row.gross_weight = gw
                     except (ValueError, TypeError) as _e:
                         logger.debug(f"[allocation_parser] 무시: {_e}")
 

@@ -1,4 +1,4 @@
 SQM Inventory System
-Version: v5.9.2
+Version: v5.9.3
 Release Date: 2026-02-18
-Notes: P2 code hygiene — except+pass logging, bare except removal, DB path unification, unused import cleanup
+Notes: Outbound/return logic enhancement — RESERVED status, allocation_plan table, parser hardening

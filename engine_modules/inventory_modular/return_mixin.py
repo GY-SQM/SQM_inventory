@@ -131,7 +131,7 @@ class ReturnMixin:
                         result['skipped'] += 1
                         continue
                     
-                    if tonbag['status'] not in ('PICKED', 'CONFIRMED', 'SHIPPED'):
+                    if tonbag['status'] not in ('PICKED', 'CONFIRMED', 'SHIPPED', 'SOLD', 'RESERVED'):
                         result['errors'].append(
                             f"Cannot return tonbag with status {tonbag['status']}: {lot_no}-{sub_lt}"
                         )
@@ -162,6 +162,8 @@ class ReturnMixin:
                           f"sub_lt={sub_lt}, customer={tonbag.get('picked_to','')}, reason={reason}",
                           now))
                     
+                    was_reserved = tonbag['status'] == 'RESERVED'
+
                     # v5.1.5: 톤백 상태 초기화 (picked_date도 포함)
                     self.db.execute("""
                         UPDATE inventory_tonbag 
@@ -173,15 +175,25 @@ class ReturnMixin:
                             updated_at = ?
                         WHERE lot_no = ? AND sub_lt = ?
                     """, (now, lot_no, sub_lt))
-                    
-                    # Update inventory current_weight
-                    self.db.execute("""
-                        UPDATE inventory 
-                        SET current_weight = current_weight + ?,
-                            picked_weight = MAX(0, picked_weight - ?),
-                            updated_at = ?
-                        WHERE lot_no = ?
-                    """, (tb_weight, tb_weight, now, lot_no))
+
+                    # v5.9.3: RESERVED였으면 allocation_plan도 CANCELLED 처리
+                    if was_reserved:
+                        try:
+                            self.db.execute("""
+                                UPDATE allocation_plan SET status = 'CANCELLED', cancelled_at = ?
+                                WHERE lot_no = ? AND sub_lt = ? AND status = 'RESERVED'
+                            """, (now, lot_no, sub_lt))
+                        except Exception as _e:
+                            logger.debug(f"Suppressed: {_e}")
+                    else:
+                        # PICKED/SOLD: inventory current_weight 복구
+                        self.db.execute("""
+                            UPDATE inventory 
+                            SET current_weight = current_weight + ?,
+                                picked_weight = MAX(0, picked_weight - ?),
+                                updated_at = ?
+                            WHERE lot_no = ?
+                        """, (tb_weight, tb_weight, now, lot_no))
                     
                     result['returned'] += 1
                     result['details'].append({

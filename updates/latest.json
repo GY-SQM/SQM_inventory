@@ -1,7 +1,7 @@
 {
-    "version": "5.9.2",
+    "version": "5.9.3",
     "download_url": "",
-    "release_notes": "v5.9.2: P2 code hygiene — except+pass logging, bare except removal, DB path unification, unused import cleanup",
+    "release_notes": "v5.9.3: Outbound/return logic — RESERVED status, allocation_plan table, parser hardening, return SOLD/RESERVED support",
     "sha256": "",
     "file_size": 0,
     "release_date": "2026-02-18",

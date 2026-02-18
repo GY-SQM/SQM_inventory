@@ -6,6 +6,7 @@ engine_modules.constants re-export.
 """
 from engine_modules.constants import (
     STATUS_AVAILABLE,
+    STATUS_RESERVED,
     STATUS_PICKED,
     STATUS_SOLD,
     STATUS_DEPLETED,
@@ -32,6 +33,7 @@ from engine_modules.constants import (
 
 __all__ = [
     'STATUS_AVAILABLE',
+    'STATUS_RESERVED',
     'STATUS_PICKED',
     'STATUS_SOLD',
     'STATUS_DEPLETED',
