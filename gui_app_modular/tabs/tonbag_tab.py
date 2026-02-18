@@ -269,7 +269,7 @@ class TonbagTabMixin:
         self.tonbag_status_var = tk.StringVar(value="전체 (0)")
         self._sublot_status_combo = ttk.Combobox(
             search_frame, textvariable=self.tonbag_status_var,
-            values=["전체 (0)", "Available (0)", "Reserved (0)", "Sold (0)"],
+            values=["전체 (0)", "Available (0)", "Sold (0)"],
             state="readonly", width=14
         )
         self._sublot_status_combo.pack(side=LEFT, padx=(0, Spacing.SM))
@@ -506,8 +506,8 @@ class TonbagTabMixin:
             if not tonbags:
                 tonbags = []
 
-            # v5.9.3: STATUS 옵션별 개수 (전체 / Available / Reserved / Sold)
-            _cnt_total = _cnt_avail = _cnt_sold = _cnt_reserved = 0
+            # v5.7.5: STATUS 옵션별 개수 (전체 / Available / Sold)
+            _cnt_total = _cnt_avail = _cnt_sold = 0
             _show_sample = getattr(self, '_show_sample_var', None)
             for _tb in tonbags:
                 if _tb.get('is_sample', 0) and _show_sample and not _show_sample.get():
@@ -516,27 +516,22 @@ class TonbagTabMixin:
                 _st = _tb.get('tonbag_status', _tb.get('status', 'AVAILABLE'))
                 if _st == 'AVAILABLE':
                     _cnt_avail += 1
-                elif _st == 'RESERVED':
-                    _cnt_reserved += 1
-                elif _st in ('PICKED', 'SOLD'):
+                elif _st in ('PICKED', 'SOLD', 'RESERVED'):
                     _cnt_sold += 1
             if hasattr(self, '_sublot_status_combo'):
                 self._sublot_status_combo['values'] = [
-                    f"전체 ({_cnt_total})", f"Available ({_cnt_avail})",
-                    f"Reserved ({_cnt_reserved})", f"Sold ({_cnt_sold})"
+                    f"전체 ({_cnt_total})", f"Available ({_cnt_avail})", f"Sold ({_cnt_sold})"
                 ]
                 _cur = self.tonbag_status_var.get()
                 if _cur not in self._sublot_status_combo['values'] and self._sublot_status_combo['values']:
                     self.tonbag_status_var.set(self._sublot_status_combo['values'][0])
 
-            # v5.9.3: 상태 필터 정규화 (RESERVED 추가)
+            # 상태 필터 정규화
             _raw = (status_filter or '').strip()
             if not _raw or _raw.startswith('전체'):
                 status_filter_normalized = None
             elif 'Available' in _raw or _raw == 'AVAILABLE':
                 status_filter_normalized = 'AVAILABLE'
-            elif 'Reserved' in _raw or _raw == 'RESERVED':
-                status_filter_normalized = 'RESERVED'
             elif 'Sold' in _raw or _raw in ('PICKED', 'SOLD'):
                 status_filter_normalized = 'PICKED'
             else:
@@ -589,14 +584,12 @@ class TonbagTabMixin:
                     if date_to and arrival and arrival > date_to:
                         continue
                 
-                # v5.9.3: 상태 필터 (전체 / Available / Reserved / Sold)
+                # 상태 필터 (전체 / Available / Sold)
                 status = tb.get('tonbag_status', tb.get('status', 'AVAILABLE'))
                 if status_filter_normalized:
                     if status_filter_normalized == 'AVAILABLE' and status != 'AVAILABLE':
                         continue
-                    if status_filter_normalized == 'RESERVED' and status != 'RESERVED':
-                        continue
-                    if status_filter_normalized == 'PICKED' and status not in ('PICKED', 'SOLD'):
+                    if status_filter_normalized == 'PICKED' and status not in ('PICKED', 'SOLD', 'RESERVED'):
                         continue
                 
                 # v5.0.2: 헤더 필터바 조건
