@@ -1,7 +1,7 @@
 {
-    "version": "5.9.3",
+    "version": "5.9.4",
     "download_url": "",
-    "release_notes": "v5.9.3: Outbound/return logic — RESERVED status, allocation_plan table, parser hardening, return SOLD/RESERVED support",
+    "release_notes": "v5.9.4: Structural refactoring — large file Mixin split (onestop_inbound/database), COLUMN_REGISTRY for Excel round-trip guarantee, core.config Facade verification",
     "sha256": "",
     "file_size": 0,
     "release_date": "2026-02-18",

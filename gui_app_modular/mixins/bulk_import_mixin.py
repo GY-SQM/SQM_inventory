@@ -48,13 +48,8 @@ class BulkImportMixin:
                 CustomMessageBox.showwarning(self.root, "경고", "빈 Excel 파일입니다.")
                 return
             
-            # 컬럼 정규화: 공백/하이픈 → 밑줄, 소문자, 양쪽 공백 제거
-            import re
-            def _norm(name: str) -> str:
-                return re.sub(r'[\s\-]+', '_', str(name).strip().lower())
-
-            col_norm_map = {_norm(c): c for c in df.columns}
-            df.columns = [_norm(c) for c in df.columns]
+            from core.column_registry import normalize_header
+            df.columns = [normalize_header(c) for c in df.columns]
 
             required_cols = ['lot_no', 'sap_no', 'product']
             columns_lower = list(df.columns)
