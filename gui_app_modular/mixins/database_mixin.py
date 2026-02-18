@@ -10,6 +10,7 @@ Database operations, connection management, and diagnostics
 
 import os
 import logging
+import sqlite3
 from ..utils.ui_constants import CustomMessageBox
 from datetime import datetime
 from typing import Optional, Dict, Any

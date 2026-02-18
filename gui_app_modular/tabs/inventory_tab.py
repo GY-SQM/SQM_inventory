@@ -12,6 +12,8 @@ SQM v3.9.1 — 재고 현황 탭 (18열 + 체크박스 열선택)
 """
 
 import sqlite3
+import tkinter as tk
+from tkinter import ttk
 from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog
 import logging
 
@@ -93,6 +95,8 @@ class InventoryTabMixin:
             is_dark=_is_dark_filter,
             date_from_var=self._date_from_var,
             date_to_var=self._date_to_var,
+            container_suffix_var=getattr(self, '_container_suffix_var', None),
+            on_container_suffix_toggle=getattr(self, '_on_container_suffix_toggle', None),
         )
         self._inv_filter_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
 
@@ -138,8 +142,8 @@ class InventoryTabMixin:
         # v3.8.9: 트리뷰 스타일 — 테마 인식 (글자 흐림 수정) | v5.7.5: 가독성 위해 폰트 14로 확대
         import tkinter.font as tkfont
         _style = ttk.Style()
-        _inv_font = tkfont.Font(family='맑은 고딕', size=14)
-        _inv_head_font = tkfont.Font(family='맑은 고딕', size=14, weight='bold')
+        _inv_font = tkfont.Font(family='맑은 고딕', size=11)
+        _inv_head_font = tkfont.Font(family='맑은 고딕', size=11, weight='bold')
         _row_h = _inv_font.metrics('linespace') + 6
         
         _is_dark_tv = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))

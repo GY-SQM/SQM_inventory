@@ -48,10 +48,17 @@ class BulkImportMixin:
                 CustomMessageBox.showwarning(self.root, "경고", "빈 Excel 파일입니다.")
                 return
             
-            # 컬럼 확인
+            # 컬럼 정규화: 공백/하이픈 → 밑줄, 소문자, 양쪽 공백 제거
+            import re
+            def _norm(name: str) -> str:
+                return re.sub(r'[\s\-]+', '_', str(name).strip().lower())
+
+            col_norm_map = {_norm(c): c for c in df.columns}
+            df.columns = [_norm(c) for c in df.columns]
+
             required_cols = ['lot_no', 'sap_no', 'product']
-            columns_lower = [str(c).lower() for c in df.columns]
-            
+            columns_lower = list(df.columns)
+
             missing = [c for c in required_cols if c not in columns_lower]
             if missing:
                 # v4.2.1: 상세 오류 팝업 표시

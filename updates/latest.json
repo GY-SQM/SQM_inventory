@@ -1,10 +1,10 @@
 {
-    "version": "3.2.0",
-    "download_url": "\\\\192.168.1.100\\shared\\sqm_updates\\SQM_Inventory_v3.2.0.exe",
-    "release_notes": "v3.2.0 (2026-01-25)\n\n[DOC] 문서화 완료\n• 개발자 가이드 전면 개정 (1,604줄)\n• 모든 문서 ⭐⭐⭐⭐⭐ 달성\n\n[FIX] 버그 수정\n• PDF 핸들러 리소스 누수 수정\n• 불필요한 import 제거\n\n[NEW] 신규 기능\n• 자동 업데이터\n• 암호화 설정 관리\n• 단축키 가이드 (F1)\n• 환영 마법사",
+    "version": "5.9.1",
+    "download_url": "",
+    "release_notes": "v5.9.1: P0 critical bugfix (9), P1 release hygiene, UI improvements, Excel round-trip column matching fix",
     "sha256": "",
     "file_size": 0,
-    "release_date": "2026-01-25",
+    "release_date": "2026-02-18",
     "mandatory": false,
-    "min_version": "2.9.0"
+    "min_version": "5.0.0"
 }

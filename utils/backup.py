@@ -223,7 +223,7 @@ class BackupManager:
                 date_str = parts[-2]  # 20260108
                 time_str = parts[-1]  # 123456
                 return datetime.strptime(f"{date_str}_{time_str}", "%Y%m%d_%H%M%S")
-        except ValueError:  # v2.4.5 수정: 날짜 파싱 실패
+        except ValueError as e:  # v2.4.5 수정: 날짜 파싱 실패
             logger.debug(f"[backup] 무시: {e}")
 
         # 파일 수정 시간 사용

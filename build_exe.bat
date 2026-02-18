@@ -1,9 +1,16 @@
 @echo off
 chcp 65001 > nul
-title SQM Inventory v3.2 빌드
+
+REM version.py에서 버전 읽기 (Single Source of Truth)
+for /f "tokens=2 delims='" %%v in ('python -c "from version import __version__; print(__version__)"') do set VER=%%v
+if "%VER%"=="" (
+    for /f %%v in ('python -c "from version import __version__; print(__version__)"') do set VER=%%v
+)
+
+title SQM Inventory v%VER% 빌드
 
 echo ========================================
-echo   SQM Inventory v3.2 EXE 빌드
+echo   SQM Inventory v%VER% EXE 빌드
 echo ========================================
 echo.
 
@@ -37,11 +44,11 @@ if exist "build\sqm_inventory" (
     rmdir /s /q build\sqm_inventory
 )
 
-REM 빌드 실행
+REM 빌드 실행 (spec은 루트에 위치)
 echo [빌드] PyInstaller 실행 중...
 echo.
 
-pyinstaller build/sqm_inventory.spec --clean
+pyinstaller sqm_inventory.spec --clean
 
 if errorlevel 1 (
     echo.
@@ -62,8 +69,6 @@ echo.
 echo ========================================
 echo   빌드 완료!
 echo ========================================
-echo.
-echo 실행 파일: dist\SQM_Inventory_v3.2.exe
 echo.
 dir dist\*.exe
 echo.

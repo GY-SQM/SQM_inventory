@@ -58,8 +58,9 @@ class TonbagLocationUploader:
             # Excel 읽기
             df = pd.read_excel(file_path)
             
-            # 컬럼명 정규화 (공백 제거, 소문자)
-            df.columns = df.columns.str.strip().str.lower()
+            # 컬럼명 정규화: 공백/하이픈 → 밑줄, 소문자
+            import re
+            df.columns = [re.sub(r'[\s\-]+', '_', str(c).strip().lower()) for c in df.columns]
             
             # v5.6.1: 양식 자동 감지
             # 양식 1: UID + 위치 (기존)

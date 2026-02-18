@@ -129,13 +129,9 @@ class MenuMixin:
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="도구", menu=tools_menu)
         
-        self._container_suffix_var = tk.BooleanVar(value=True)
-        tools_menu.add_checkbutton(
-            label="📦 컨테이너 구분",
-            variable=self._container_suffix_var,
-            command=self._on_container_suffix_toggle
-        )
-        tools_menu.add_separator()
+        # v5.9.0: 컨테이너 구분 → 필터바 초기화 옆으로 이동 (변수만 초기화)
+        if not hasattr(self, '_container_suffix_var'):
+            self._container_suffix_var = tk.BooleanVar(value=True)
         tools_menu.add_command(label="📋 D/O 후속 연결", command=self._on_do_update)
         tools_menu.add_separator()
         

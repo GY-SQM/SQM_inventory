@@ -415,12 +415,7 @@ class ToolbarMixin:
         m.add_separator()
         # 도구
         m.add_command(label="━━ 🔧 도구 ━━", state='disabled', font=self._tb_font_scale.heading())
-        # 컨테이너 서픽스 옵션
-        m.add_checkbutton(
-            label="  📦 컨테이너 구분 (-1, -2 표시) — 재고/톤백 CONTAINER 열 접미사 표시",
-            variable=self._container_suffix_var,
-            command=self._on_container_suffix_toggle
-        )
+        # v5.9.0: 컨테이너 구분 옵션은 필터바 초기화 옆으로 이동
         # v3.8.4: 대시보드 자동 갱신
         if not hasattr(self, '_auto_refresh_var'):
             self._auto_refresh_var = tk.BooleanVar(value=False)

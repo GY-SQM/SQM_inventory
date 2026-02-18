@@ -148,7 +148,8 @@ class HeaderFilterBar:
 
     def __init__(self, parent, tree, filter_columns: List[Tuple[str, str, int]],
                  on_filter: Callable, is_dark: bool = False,
-                 date_from_var=None, date_to_var=None):
+                 date_from_var=None, date_to_var=None,
+                 container_suffix_var=None, on_container_suffix_toggle=None):
         """
         Args:
             parent: 부모 위젯
@@ -158,6 +159,8 @@ class HeaderFilterBar:
             is_dark: 하위 호환 (사용하지 않음, ttk가 자동 처리)
             date_from_var: (선택) 기간 시작일 StringVar — 있으면 STATUS와 초기화 사이에 기간 입력 추가
             date_to_var: (선택) 기간 종료일 StringVar
+            container_suffix_var: (선택) 컨테이너 접미사 표시 BooleanVar
+            on_container_suffix_toggle: (선택) 접미사 토글 콜백
         """
         import tkinter as tk
         from tkinter import ttk
@@ -243,6 +246,16 @@ class HeaderFilterBar:
                                 command=self._reset_filters)
         _btn_reset.pack(side='left', padx=5)
         self._apply_tooltip_safe(_btn_reset, "모든 필터(컬럼 조건·기간)를 '전체'/비움으로 되돌리고 목록을 다시 불러옵니다.")
+
+        # 컨테이너 접미사(-1,-2) 표시 체크박스
+        if container_suffix_var is not None:
+            _cb_suffix = ttk.Checkbutton(
+                self.frame, text="📦 컨테이너 구분(-1,-2)",
+                variable=container_suffix_var,
+                command=on_container_suffix_toggle,
+            )
+            _cb_suffix.pack(side='left', padx=(10, 0))
+            self._apply_tooltip_safe(_cb_suffix, "CONTAINER 열의 -1, -2 접미사 표시/숨김")
 
     def pack(self, **kwargs):
         self.frame.pack(**kwargs)

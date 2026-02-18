@@ -289,43 +289,6 @@ class DatabaseMigrationMixin:
     
     def _migrate_v423_tonbag_location(self) -> None:
         """
-        v4.2.3: inventory_tonbag.location 컬럼 추가
-        
-        목적: 바코드 스캔 위치 관리
-        형식: A-1-3 (구역-열-층)
-        """
-        try:
-            # ========================================
-            # 1단계: location 컬럼 추가
-            # ========================================
-            try:
-                self.execute("ALTER TABLE inventory_tonbag ADD COLUMN location TEXT")
-                logger.info("[v4.2.3] inventory_tonbag.location 컬럼 추가 완료")
-            except (sqlite3.OperationalError, OSError) as e:
-                if "duplicate column" in str(e).lower():
-                    logger.debug(f"[v4.2.3] location 컬럼 이미 존재: {e}")
-                else:
-                    raise
-            
-            # ========================================
-            # 2단계: 인덱스 추가 (위치 검색 최적화)
-            # ========================================
-            try:
-                self.execute("CREATE INDEX IF NOT EXISTS idx_tonbag_location ON inventory_tonbag(location)")
-                logger.info("[v4.2.3] location 인덱스 생성 완료")
-            except (sqlite3.OperationalError, OSError) as e:
-                logger.debug(f"[v4.2.3] 인덱스 생성 스킵: {e}")
-            
-            self.commit()
-            logger.info("✅ [v4.2.3] 톤백 위치 관리 마이그레이션 완료")
-            
-        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
-            logger.error(f"❌ [v4.2.3] 톤백 위치 마이그레이션 실패: {e}")
-            self.rollback()
-
-    
-    def _migrate_v423_tonbag_location(self) -> None:
-        """
         v4.2.3: inventory_tonbag.location 추가 (톤백 위치 관리)
         
         컬럼:

@@ -797,6 +797,7 @@ if __name__ == '__main__':
     # --------------------------
     def _ensure_tools_menu(self):
         """Ensure there is a '도구' menu and it contains the DB migration command."""
+        from .utils.constants import tk
         try:
             menubar = getattr(self, 'menubar', None)
             if menubar is None:

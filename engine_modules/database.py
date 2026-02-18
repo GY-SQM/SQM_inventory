@@ -575,43 +575,9 @@ class SQMDatabase(DatabaseMigrationMixin, DatabaseInterface):
             except RuntimeError as _e:
                 logger.debug(f"[database] 무시: {_e}")
 
-    class _TransactionContext:
-        """
-        v5.1.2: 트랜잭션 컨텍스트 매니저
-        
-        사용법:
-            with db.transaction():
-                db.execute("INSERT ...")
-                db.execute("UPDATE ...")
-            # 자동 커밋 또는 예외 시 자동 롤백
-        """
-        def __init__(self, db_instance):
-            self._db = db_instance
-        
-        def __enter__(self):
-            self._db.begin_transaction()
-            return self._db
-        
-        def __exit__(self, exc_type, exc_val, exc_tb):
-            if exc_type is None:
-                self._db.commit()
-            else:
-                logger.error(f"트랜잭션 롤백: {exc_type.__name__}: {exc_val}")
-                self._db.rollback()
-            return False  # 예외 전파
-    
-    def transaction(self, mode: str = "IMMEDIATE"):
-        """
-        v5.1.2: 트랜잭션 컨텍스트 매니저 반환
-        v5.1.6: mode 인자 지원 (하위 호환 — 항상 IMMEDIATE)
-        
-        사용법:
-            with db.transaction():
-                db.execute("INSERT ...")
-            with db.transaction("IMMEDIATE"):  # 동일 동작
-                db.execute("UPDATE ...")
-        """
-        return self._TransactionContext(self)
+    # v5.9.0 P0-7: _TransactionContext 제거 — L212의 @contextmanager transaction()이
+    # HardStopException 보호를 포함한 유일한 구현.
+    # 기존 _TransactionContext는 HardStop 보호 없이 transaction()을 덮어쓰고 있었음.
 
     def close(self) -> None:
         """

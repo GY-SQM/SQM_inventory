@@ -82,6 +82,8 @@ class TonbagTabMixin:
                 is_dark=_is_dark_filter,
                 date_from_var=self._date_from_var,
                 date_to_var=self._date_to_var,
+                container_suffix_var=getattr(self, '_container_suffix_var', None),
+                on_container_suffix_toggle=getattr(self, '_on_container_suffix_toggle', None),
             )
             self._tonbag_filter_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
         except (ImportError, AttributeError) as e:
@@ -113,8 +115,8 @@ class TonbagTabMixin:
         # v3.8.9: 재고리스트와 동일 컬럼 + TONBAG NO 추가 (MXBG 다음) | v5.7.5: 가독성 위해 폰트 14로 확대
         import tkinter.font as tkfont
         _style = ttk.Style()
-        _tb_font = tkfont.Font(family='맑은 고딕', size=14)
-        _tb_head_font = tkfont.Font(family='맑은 고딕', size=14, weight='bold')
+        _tb_font = tkfont.Font(family='맑은 고딕', size=11)
+        _tb_head_font = tkfont.Font(family='맑은 고딕', size=11, weight='bold')
         _tb_row_h = _tb_font.metrics('linespace') + 6
         
         _is_dark_tb = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
@@ -380,7 +382,7 @@ class TonbagTabMixin:
         
         listbox = tk.Listbox(dialog, height=8)
         for tb in tonbag_list:
-            disp = 'S0' if tb['sub_lt'] == 0 else tb['sub_lt']
+            disp = '0' if tb['sub_lt'] == 0 else tb['sub_lt']
             listbox.insert('end', f"{tb['lot_no']} / {disp}")
         listbox.pack(fill='x', padx=Spacing.LG, pady=Spacing.XS)
         
@@ -633,10 +635,10 @@ class TonbagTabMixin:
                 # v5.6.3: mxbg 제거 (톤백리스트에서 불필요)
                 tonbag_no = tb.get('tonbag_no', tb.get('sub_lt', ''))
                 
-                # v5.8.5: TONBAG NO 표시 (샘플은 'S0' — 숫자와 혼동 방지)
+                # v5.9.0: TONBAG NO 표시 (샘플은 '0')
                 tonbag_no_print = tonbag_no
                 if is_sample:
-                    tonbag_no_print = 'S0'
+                    tonbag_no_print = '0'
                 
                 location = tb.get('location', '') or ''
                 
@@ -674,12 +676,12 @@ class TonbagTabMixin:
                     try: return f"{float(v):,.0f}" if v else ''
                     except (ValueError, TypeError): return str(v) if v else ''
                 
-                # UID: DB의 tonbag_uid 사용, 공란 시 lot_no-S0 / lot_no-sub_lt 로 표시 (업로드5)
+                # UID: DB의 tonbag_uid 사용, 공란 시 lot_no-0 / lot_no-sub_lt 로 표시
                 _uid = (tb.get('tonbag_uid') or '').strip()
                 if not _uid:
                     _sub = tb.get('sub_lt', tb.get('tonbag_no', ''))
                     if tb.get('is_sample') or _sub == 0 or _sub == '0' or _sub == 'S00':
-                        _uid = f"{lot_no}-S0"
+                        _uid = f"{lot_no}-0"
                     else:
                         _uid = f"{lot_no}-{_sub}"
                 # v5.8.8: _tonbag_columns 순서와 정확히 일치 (con_return 포함, 열 밀림 방지)
@@ -849,7 +851,7 @@ class TonbagTabMixin:
         info_frame.pack(fill='x')
         
         ttk.Label(info_frame, text=f"LOT NO: {lot_no}", font=fonts.body()).pack(anchor='w')
-        ttk.Label(info_frame, text=f"톤백 NO: {sub_lt if sub_lt != 0 else 'S0'}", font=fonts.body()).pack(anchor='w')
+        ttk.Label(info_frame, text=f"톤백 NO: {sub_lt if sub_lt != 0 else '0'}", font=fonts.body()).pack(anchor='w')
         
         # 출고처 입력
         dest_frame = ttk.Frame(dialog, padding=(Spacing.MD, 0, Spacing.MD, Spacing.SM))

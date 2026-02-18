@@ -1,8 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - PyInstaller 설정
-버전: 3.8.3
+버전은 version.py에서 관리 (Single Source of Truth)
 """
+
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(SPECPATH)
+sys.path.insert(0, str(PROJECT_ROOT))
+from version import __version__
 
 block_cipher = None
 
@@ -11,7 +18,6 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('settings.ini', '.'),
         ('docs/*.md', 'docs'),
     ],
     hiddenimports=[
@@ -34,6 +40,8 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+_icon_path = PROJECT_ROOT / 'assets' / 'icon.ico'
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -41,7 +49,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='SQM_Inventory_v3.8.3',
+    name=f'SQM_Inventory_v{__version__}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -54,5 +62,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/icon.ico' if (PROJECT_ROOT / 'assets/icon.ico').exists() else None,
+    icon=str(_icon_path) if _icon_path.exists() else None,
 )

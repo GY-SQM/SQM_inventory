@@ -151,13 +151,13 @@ def get_tonbag_display_no(row: Dict) -> str:
     UI 표시용 톤백 번호 문자열 반환
     
     일반: "1", "2", "3" ...
-    샘플: "S0"
+    샘플: "0"
     
     Args:
         row: 톤백 딕셔너리
     """
     if is_sample_tonbag(row):
-        return 'S0'
+        return '0'
     
     tonbag_no = row.get('tonbag_no') or row.get('sub_lt') or row.get('tonbag_no_print', '?')
     return str(tonbag_no)

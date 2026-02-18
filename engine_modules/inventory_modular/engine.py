@@ -55,6 +55,7 @@ Mixin 구성:
 
 import os
 import logging
+import sqlite3
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)

@@ -1,5 +1,4 @@
 """
-from ..utils.custom_messagebox import CustomMessageBox
 SQM v3.8.4 — 원스톱 입고 팝업
 4종 서류(PL, Invoice, BL, DO)를 한 화면에서:
   파일 선택 → 체크 표시 → 파싱 → 미리보기 → DB 업로드
@@ -8,6 +7,7 @@ SQM v3.8.4 — 원스톱 입고 팝업
 """
 import sqlite3
 import os
+from tkinter import messagebox as msgbox
 import time
 import tkinter as tk
 from tkinter import ttk, filedialog, BOTH, YES, X, Y, LEFT, RIGHT, BOTTOM, END, VERTICAL, HORIZONTAL

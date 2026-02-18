@@ -11,6 +11,7 @@ ttkbootstrap 기반 메뉴바
 
 import logging
 import os  # v5.3.5
+import tkinter as tk
 from ..utils.ui_constants import CustomMessageBox, ThemeColors
 from typing import Dict, Callable
 from utils.ui_debug import log_ui_event, safe_widget_bg  # v5.3.6
@@ -167,15 +168,9 @@ class CustomMenuBar:
         # =====================================================
         tools_menu = self._add_menu("🔧 도구")
         
-        # 컨테이너 구분
-        self.app._container_suffix_var = self.tk.BooleanVar(value=True)
-        self._add_checkbutton(
-            tools_menu, "📦 컨테이너 구분",
-            self.app._container_suffix_var,
-            self.app._on_container_suffix_toggle
-        )
-        
-        self._add_separator(tools_menu)
+        # v5.9.0: 컨테이너 구분 → 필터바 초기화 옆으로 이동 (변수만 초기화)
+        if not hasattr(self.app, '_container_suffix_var'):
+            self.app._container_suffix_var = self.tk.BooleanVar(value=True)
         
         # D/O 후속 연결 (입고 후 D/O 나중에 도착 시 LOT에 도착일/Free Time 보충)
         self._add_command(tools_menu, "📋 D/O 후속 연결", self.app._on_do_update)

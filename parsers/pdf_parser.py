@@ -467,7 +467,7 @@ class PDFParser:
             if date_match:
                 try:
                     result.invoice_date = datetime.strptime(date_match.group(1), '%d.%m.%Y').date()
-                except (ValueError, TypeError, KeyError):  # 날짜 파싱 실패 무시
+                except (ValueError, TypeError, KeyError) as e:  # 날짜 파싱 실패 무시
                     logger.debug(f"[pdf_parser] 무시: {e}")
 
             # 고객 정보
@@ -627,7 +627,7 @@ class PDFParser:
             if ship_match:
                 try:
                     result.ship_date = datetime.strptime(ship_match.group(1), '%Y-%m-%d').date()
-                except (ValueError, TypeError, KeyError):  # 날짜 파싱 실패 무시
+                except (ValueError, TypeError, KeyError) as e:  # 날짜 파싱 실패 무시
                     logger.debug(f"[pdf_parser] 무시: {e}")
 
             # Issue Date
@@ -635,7 +635,7 @@ class PDFParser:
             if issue_match:
                 try:
                     result.issue_date = datetime.strptime(issue_match.group(1), '%Y-%m-%d').date()
-                except (ValueError, TypeError, KeyError):  # 날짜 파싱 실패 무시
+                except (ValueError, TypeError, KeyError) as e:  # 날짜 파싱 실패 무시
                     logger.debug(f"[pdf_parser] 무시: {e}")
 
             # 컨테이너 추출 (형식: FFAU4840178  ML-CL0501799  40 DRY 9'6)

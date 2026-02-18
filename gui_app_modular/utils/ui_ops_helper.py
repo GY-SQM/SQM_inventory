@@ -131,7 +131,7 @@ class ErrorDialog:
                     else:
                         subprocess.run(['xdg-open', log_file])
                 except (OSError, IOError, PermissionError) as e:
-                    CustomMessageBox.show_detailed_error(self.root, "오류", str(e), exception=e)
+                    CustomMessageBox.show_detailed_error(parent, "오류", str(e), exception=e)
             
             ttk.Button(left_btns, text="📂 로그 열기",
                        command=open_log).pack(side='left', padx=(0, 5))
