@@ -4,6 +4,7 @@ SQM 재고관리 시스템 - 톤백 위치 업로드 유틸리티
 ===============================================
 
 v4.2.3: 바코드 스캔 Excel → 톤백 위치 자동 업데이트
+v5.9.8: 로케이션 4파트 지원 — 약식 A-01-01-10 (구역-열-층-칸)
 
 작성자: Ruby
 """
@@ -52,7 +53,7 @@ class TonbagLocationUploader:
         │ (자동) │ 선택   │ 선택   │ 필수     │ 필수     │ 선택         │ 필수     │
         │ 1      │ 2025-01│ B/L123 │ 112508.. │ 3         │ 1125081447-03│ A-01-01  │
         └────────┴────────┴────────┴──────────┴───────────┴──────────────┴──────────┘
-        로케이션 체계: 영문-숫자-숫자 (예: A-01-01)
+        로케이션 약식: 3파트 A-01-01 (구역-열-층) 또는 4파트 A-01-01-10 (구역-열-층-칸)
         """
         try:
             # Excel 읽기
@@ -168,7 +169,7 @@ class TonbagLocationUploader:
                 continue
             if not location or location.lower() == 'nan':
                 continue
-            # v5.6.9: 로케이션 형식 검증 (영문-숫자-숫자, 예: A-01-01)
+            # v5.6.9/v5.9.8: 로케이션 형식 검증 (3파트 A-01-01 또는 4파트 A-01-01-10)
             valid, msg = validate_location_format(location)
             if not valid:
                 logger.warning(f"행 {idx + 2}: location '{location}' — {msg}")
@@ -349,10 +350,14 @@ class TonbagLocationUploader:
 
 def validate_location_format(location: str) -> Tuple[bool, str]:
     """
-    위치 형식 검증
+    위치 형식 검증 (3파트 또는 4파트)
+    
+    허용 형식:
+      - 3파트: A-01-01 (구역-열-층)
+      - 4파트: A-01-01-10 (구역-열-층-칸) — 로케이션 약식 기본
     
     Args:
-        location: 위치 문자열 (예: A-1-3)
+        location: 위치 문자열 (예: A-01-01 또는 A-01-01-10)
         
     Returns:
         (유효여부, 메시지)
@@ -362,46 +367,48 @@ def validate_location_format(location: str) -> Tuple[bool, str]:
     
     location = location.strip()
     
-    # 길이 체크
     if len(location) > 50:
         return False, "위치가 너무 깁니다 (최대 50자)"
     
-    # 기본 형식 체크 (A-1-3 형식)
     parts = location.split('-')
-    if len(parts) != 3:
-        return False, "형식이 올바르지 않습니다 (예: A-1-3)"
+    if len(parts) not in (3, 4):
+        return False, "형식이 올바르지 않습니다 (예: A-01-01 또는 A-01-01-10)"
     
-    zone, row, level = parts
+    zone, row, level = parts[0], parts[1], parts[2]
     
     # 구역: 영문 1자
     if not zone.isalpha() or len(zone) != 1:
         return False, "구역은 영문 1자여야 합니다 (예: A)"
-    
     # 열: 숫자
     if not row.isdigit():
-        return False, "열은 숫자여야 합니다 (예: 1)"
-    
+        return False, "열은 숫자여야 합니다 (예: 01)"
     # 층: 숫자
     if not level.isdigit():
-        return False, "층은 숫자여야 합니다 (예: 3)"
+        return False, "층은 숫자여야 합니다 (예: 01)"
+    # 4파트 시 칸(베이): 숫자
+    if len(parts) == 4:
+        if not parts[3].isdigit():
+            return False, "칸(4번째)은 숫자여야 합니다 (예: A-01-01-10)"
     
     return True, "OK"
 
 
 # 테스트
 if __name__ == '__main__':
-    # 위치 형식 검증 테스트
     test_cases = [
         ("A-1-3", True),
+        ("A-01-01", True),
+        ("A-01-01-10", True),   # 4파트 약식
+        ("C-02-01-15", True),
         ("B-2-5", True),
         ("A-10-1", True),
-        ("AA-1-3", False),  # 구역 2자
-        ("A-B-3", False),   # 열이 문자
-        ("A-1", False),     # 부족
-        ("", False),        # 비어있음
+        ("AA-1-3", False),
+        ("A-B-3", False),
+        ("A-1", False),
+        ("A-1-2-3-4", False),   # 5파트 차단
+        ("A-01-03-AB", False),  # 4번째 문자 차단
+        ("", False),
     ]
-    
-    logger.debug("위치 형식 검증 테스트:")
     for location, expected in test_cases:
         valid, msg = validate_location_format(location)
         status = "✅" if valid == expected else "❌"

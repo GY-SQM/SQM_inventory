@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '5.9.8'
+__version__ = '5.9.9.1'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '5.9.9.1': '📍 v5.9.9.1: 로케이션 4파트 지원 — 약식 A-01-01-10 (구역-열-층-칸), validate_location_format 3/4파트 허용',
     '5.9.8': '🐛 v5.9.8: 경로③ Excel 출고 sale_ref/sold_to/qty_mt 전달, 반품 Excel 5종 상태 허용, AllocationParser 고객명(CATL/Panasonic 등) 패턴 리스트',
     '5.9.7': '📋 v5.9.7: Picking List 파서 설계 검토안 추가, 입고/출고 파싱 경과 시간(elapsed) 표시',
     '5.9.6': '🔄 v5.9.6: 출고 순서 LIFO — 톤백 큰번호부터 출고(ORDER BY sub_lt DESC), 5개 출고경로 통일, Allocation 파서 실데이터 검증(PT LBM 300MT)',

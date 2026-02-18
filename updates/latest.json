@@ -1,1 +1,1 @@
-{"version":"5.9.8","download_url":"","release_notes":"v5.9.8: Route③ outbound sale_ref/sold_to, return Excel 5 statuses, AllocationParser customer (CATL/Panasonic)","sha256":"","file_size":0,"release_date":"2026-02-18","mandatory":false,"min_version":"5.0.0"}
+{"version":"5.9.9.1","download_url":"","release_notes":"v5.9.9.1: Location 4-part A-01-01-10 (zone-row-level-bay), validate_location_format 3 or 4 parts","sha256":"","file_size":0,"release_date":"2026-02-18","mandatory":false,"min_version":"5.0.0"}
