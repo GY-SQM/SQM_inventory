@@ -1,0 +1,84 @@
+변수(컬럼)명,의미,타입,사용처(테이블)
+id,PK,INTEGER,"shipment, inventory, inventory_detail, inventory_tonbag, outbound, outbound_item, stock_movement, return_history, inventory_snapshot, picking_list_order, picking_list_detail, tonbag_mapping_history, allocation_plan"
+created_at,생성 시각,TIMESTAMP/TEXT,(동일 13개 테이블)
+lot_no,LOT 번호(10자리),TEXT,"inventory, inventory_detail, inventory_tonbag, outbound_item, stock_movement, return_history, picking_list_detail, tonbag_mapping_history, allocation_plan"
+status,재고/출고 상태,TEXT,"shipment, inventory, inventory_tonbag, outbound, outbound_item, allocation_plan, picking_list_order"
+remarks,비고,TEXT,"shipment, inventory, inventory_detail, outbound, outbound_item, stock_movement, picking_list_order, picking_list_detail"
+updated_at,수정 시각,TIMESTAMP,"shipment, inventory, inventory_tonbag, outbound, picking_list_order"
+sub_lt,톤백 번호(서브로트),INTEGER/TEXT,"inventory_tonbag, outbound_item, return_history, picking_list_detail, allocation_plan"
+sale_ref,판매 참조 번호,TEXT,"inventory, inventory_tonbag, outbound, allocation_plan"
+bl_no,B/L 번호,TEXT,"shipment, inventory, tonbag_mapping_history"
+container_no,컨테이너 번호,TEXT,"shipment, inventory, inventory_detail"
+destination,목적지,TEXT,"shipment, outbound, outbound_item"
+location,위치/창고 위치,TEXT,"inventory_detail, inventory_tonbag, outbound_item"
+outbound_date,출고일,DATE/TEXT,"inventory_tonbag, outbound, allocation_plan"
+customer,고객명,TEXT,"outbound, outbound_item, allocation_plan"
+sap_no,SAP 주문 번호,TEXT,"shipment, inventory"
+product,제품명,TEXT,"shipment, inventory"
+product_code,제품 코드,TEXT,"shipment, inventory"
+ship_date,선적일,DATE,"shipment, inventory"
+arrival_date,입항일,DATE,"shipment, inventory"
+vessel,선명,TEXT,"shipment, inventory"
+net_weight,순중량(kg),REAL,"inventory, inventory_detail"
+gross_weight,총중량(kg),REAL,"inventory, inventory_detail"
+mxbg_pallet,팔레트/톤백 수,INTEGER,"inventory, inventory_detail"
+con_return,컨테이너 반납일,TEXT,"inventory, inventory_tonbag"
+inbound_date,입고일,DATE/TEXT,"inventory, outbound_item"
+weight,톤백 무게(kg),REAL,"inventory_tonbag, picking_list_detail"
+source_sub_lt_raw,원본 톤백 번호(raw),TEXT,"inventory_tonbag, tonbag_mapping_history"
+source_sub_lt_hdr,원본 톤백 번호(헤더),TEXT,"inventory_tonbag, tonbag_mapping_history"
+outbound_id,출고 ID(FK),INTEGER,"outbound_item, picking_list_order"
+qty_kg,수량(kg),REAL,"outbound_item, stock_movement"
+total_lots,총 LOT 수,INTEGER,"inventory_snapshot, picking_list_order"
+folio,Folio 번호,TEXT,shipment
+origin,산지,TEXT,shipment
+total_net_weight,총 순중량,REAL,shipment
+total_gross_weight,총 총중량,REAL,shipment
+port_of_loading,적재항,TEXT,shipment
+port_of_discharge,양하항,TEXT,shipment
+lot_sqm,LOT SQM,TEXT,inventory
+initial_weight,초기 무게(kg),REAL,inventory
+current_weight,현재 잔량(kg),REAL,inventory
+picked_weight,출고된 무게(kg),REAL,inventory
+tonbag_count,톤백 개수,INTEGER,inventory
+stock_date,재고일,DATE,inventory
+salar_invoice_no,송장 번호,TEXT,inventory
+warehouse,창고,TEXT,inventory
+sold_to,판매처(고객),TEXT,inventory
+free_time,프리타임(일),INTEGER,inventory
+is_sample,샘플 여부(0/1),INTEGER,inventory_tonbag
+location_updated_at,위치 갱신 시각,TEXT,inventory_tonbag
+picked_to,출고처(고객),TEXT,inventory_tonbag
+picked_date,피킹일,TEXT,inventory_tonbag
+pick_ref,피킹 참조,TEXT,inventory_tonbag
+tonbag_uid,톤백 UID,TEXT,inventory_tonbag
+total_qty_mt,총 수량(MT),REAL,outbound
+inventory_id,재고 ID(FK),INTEGER,outbound_item
+movement_type,이동 유형,TEXT,stock_movement
+from_location,이동 전 위치,TEXT,stock_movement
+to_location,이동 후 위치,TEXT,stock_movement
+return_date,반품일,DATE,return_history
+original_customer,원 출고 고객,TEXT,return_history
+original_sale_ref,원 sale_ref,TEXT,return_history
+reason,사유,TEXT,return_history
+remark,비고,TEXT,return_history
+weight_kg,무게(kg),REAL,return_history
+snapshot_date,스냅샷 일자,DATE,inventory_snapshot
+total_tonbags,총 톤백 수,INTEGER,inventory_snapshot
+total_weight_kg,총 무게(kg),REAL,inventory_snapshot
+available_weight_kg,가용 무게(kg),REAL,inventory_snapshot
+picked_weight_kg,출고 무게(kg),REAL,inventory_snapshot
+product_summary,제품 요약,TEXT,inventory_snapshot
+sales_order,판매 오더 번호,TEXT,picking_list_order
+customer_ref,고객 참조,TEXT,picking_list_order
+picking_date,피킹 일자,TEXT,picking_list_order
+total_weight,총 무게,REAL,picking_list_order
+picking_order_id,피킹 오더 ID(FK),INTEGER,picking_list_detail
+picked_status,피킹 상태,TEXT,picking_list_detail
+picked_at,피킹 시각,TEXT,picking_list_detail
+tonbag_no,톤백 번호(문자),TEXT,tonbag_mapping_history
+tonbag_id,톤백 ID(FK),INTEGER,allocation_plan
+qty_mt,수량(MT),REAL,allocation_plan
+source_file,출처 파일명,TEXT,allocation_plan
+executed_at,실행 시각,TEXT,allocation_plan
+cancelled_at,취소 시각,TEXT,allocation_plan

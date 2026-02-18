@@ -161,17 +161,17 @@ class AllocationParser:
 
         title = header.title.upper()
 
-        # 고객명 추출
-        if "PT LBM" in title or "PT_LBM" in title:
-            header.customer = "PT LBM"
-        elif "POSCO" in title:
-            header.customer = "POSCO"
-        elif "SAMSUNG" in title:
-            header.customer = "Samsung SDI"
-        elif "LG" in title:
-            header.customer = "LG Energy"
-        elif "SK" in title:
-            header.customer = "SK On"
+        # 고객명 추출 (패턴 리스트 — CATL/Panasonic/BYD/Northvolt 등 추가 시 한 줄만 추가)
+        customer_patterns = [
+            ("PT LBM", "PT LBM"), ("PT_LBM", "PT LBM"),
+            ("POSCO", "POSCO"), ("SAMSUNG", "Samsung SDI"), ("LG ", "LG Energy"),
+            ("SK ", "SK On"), ("CATL", "CATL Korea"), ("PANASONIC", "Panasonic Energy"),
+            ("BYD", "BYD"), ("NORTHVOLT", "Northvolt"),
+        ]
+        for pattern, name in customer_patterns:
+            if pattern in title:
+                header.customer = name
+                break
 
         # 목적지 추출 (CIF xxx)
         cif_match = re.search(r'CIF\s+(\w+)', title, re.IGNORECASE)

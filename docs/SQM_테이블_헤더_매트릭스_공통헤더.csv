@@ -1,0 +1,14 @@
+테이블,id,created_at,lot_no,status,remarks,updated_at,sub_lt,sale_ref,bl_no,container_no,destination,location,outbound_date,customer,sap_no,product,product_code,ship_date,arrival_date,vessel,net_weight,gross_weight,mxbg_pallet,con_return,inbound_date,weight,source_sub_lt_raw,source_sub_lt_hdr,outbound_id,qty_kg,total_lots
+shipment,O,O,,,,O,O,,,,,,O,O,O,O,O,O,,,,,,,,,,,
+inventory,O,O,O,O,O,O,,O,O,,,,,,O,O,O,O,O,O,O,O,O,O,O,O,,,,,,,
+inventory_detail,O,O,O,,O,,,,O,,O,,,,,,,,O,O,O,,,,,,,,,,
+inventory_tonbag,O,O,O,O,,O,O,O,,,,O,O,,,,,,,,,,O,,O,O,O,,,,
+outbound,O,O,,O,O,O,,O,,,,O,,O,,,,,,,,,,,,,,,,
+outbound_item,O,O,O,O,O,,O,,,,O,O,,O,O,,,,,,,,,,O,,,O,O,
+stock_movement,O,O,O,,O,,,,,,,,,,,,,,,,,,,,,,O,,
+return_history,O,O,O,,,,O,,,,,,,,,,,,,,,,,,,,,,,
+inventory_snapshot,O,O,,,,,,,,,,,,,,,,,,,,,,,,O,O
+picking_list_order,O,O,,O,O,O,,,,,,,,,,,,,,,,,,,,O,,O
+picking_list_detail,O,O,O,,O,,O,,,,,,,,,,,,,,O,,,,,,,,
+tonbag_mapping_history,O,O,O,,,,,,O,,,,,,,,,,,,,,O,O,,,,,,
+allocation_plan,O,O,O,O,,,O,O,,,,,O,O,,,,,,,,,,,,,,,,,,

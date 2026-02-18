@@ -332,7 +332,7 @@ class AdvancedDialogsMixin:
                         col_map['tonbag_no'] = c
                     elif 'return' in cl and ('qty' in cl or 'kg' in cl):
                         col_map['return_qty'] = c
-                    elif 'reason' in cl:
+                    elif 'reason' in cl or cl == 'return_reason':
                         col_map['reason'] = c
                     elif 'remark' in cl:
                         col_map['remark'] = c
@@ -340,12 +340,15 @@ class AdvancedDialogsMixin:
                 if 'lot_no' not in col_map:
                     CustomMessageBox.showerror(dialog, "오류", "LOT NO 컬럼을 찾을 수 없습니다.")
                     return
+                if 'return_qty' not in col_map and 'reason' not in col_map:
+                    CustomMessageBox.showwarning(dialog, "안내", "RETURN QTY (KG) 또는 RETURN REASON 컬럼을 권장합니다.")
                 
                 # 미리보기 구성
                 pv_tree.delete(*pv_tree.get_children())
                 parsed_returns.clear()
                 ok_count = 0
                 err_count = 0
+                returnable_statuses = ('PICKED', 'CONFIRMED', 'SHIPPED', 'SOLD', 'RESERVED')
                 
                 for _, row in df.iterrows():
                     lot_no = str(row.get(col_map.get('lot_no', ''), '')).strip()
@@ -362,69 +365,101 @@ class AdvancedDialogsMixin:
                     if bl_no == 'nan': bl_no = ''
                     if tonbag_str == 'nan': tonbag_str = ''
                     
-                    # DB에서 LOT 정보 조회
-                    product = ''
-                    weight_kg = ''
-                    status = '?'
-                    sub_lt = 1
-                    
                     try:
-                        if tonbag_str:
-                            sub_lt = int(float(tonbag_str))
+                        return_qty_kg = float(qty_str) if qty_str and qty_str != 'nan' else 0.0
                     except (ValueError, TypeError):
-                        sub_lt = 1
+                        return_qty_kg = 0.0
                     
+                    product = ''
                     if hasattr(self, 'engine') and self.engine:
                         try:
-                            # LOT 기본 정보
                             inv = self.engine.db.fetchone(
                                 "SELECT product, bl_no FROM inventory WHERE lot_no = ?", (lot_no,))
                             if inv:
                                 product = inv['product'] if isinstance(inv, dict) else inv[0]
                                 if not bl_no:
                                     bl_no = (inv['bl_no'] if isinstance(inv, dict) else inv[1]) or ''
-                            
-                            # 톤백 정보 (특정 번호 또는 PICKED 상태)
-                            if tonbag_str:
-                                tb = self.engine.db.fetchone(
-                                    "SELECT sub_lt, weight, status FROM inventory_tonbag "
-                                    "WHERE lot_no = ? AND sub_lt = ?", (lot_no, sub_lt))
-                            else:
-                                tb = self.engine.db.fetchone(
-                                    "SELECT sub_lt, weight, status FROM inventory_tonbag "
-                                    "WHERE lot_no = ? AND status = 'PICKED' "
-                                    "ORDER BY sub_lt LIMIT 1", (lot_no,))
-                            
+                        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError):
+                            pass
+                    
+                    items_to_add = []
+                    if tonbag_str:
+                        sub_lt = 1
+                        try:
+                            sub_lt = int(float(tonbag_str))
+                        except (ValueError, TypeError):
+                            sub_lt = 1
+                        if hasattr(self, 'engine') and self.engine:
+                            tb = self.engine.db.fetchone(
+                                "SELECT sub_lt, weight, status FROM inventory_tonbag "
+                                "WHERE lot_no = ? AND sub_lt = ?", (lot_no, sub_lt))
                             if tb:
                                 sub_lt = tb['sub_lt'] if isinstance(tb, dict) else tb[0]
                                 weight_kg = tb['weight'] if isinstance(tb, dict) else tb[1]
                                 status = tb['status'] if isinstance(tb, dict) else tb[2]
-                                if not qty_str or qty_str == 'nan':
-                                    qty_str = f"{weight_kg:.1f}"
-                            else:
-                                status = 'NOT FOUND'
-                        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError):
-                            status = 'DB ERROR'
-                    
-                    # 검증
-                    is_ok = (status == 'PICKED')
-                    tag = 'ok' if is_ok else 'err'
-                    if is_ok:
-                        ok_count += 1
+                                if status in returnable_statuses:
+                                    items_to_add = [{'sub_lt': sub_lt, 'weight_kg': weight_kg, 'status': status}]
+                            if not items_to_add:
+                                items_to_add = [{'sub_lt': sub_lt, 'weight_kg': 0, 'status': 'NOT FOUND'}]
+                        else:
+                            items_to_add = [{'sub_lt': sub_lt, 'weight_kg': 0, 'status': '?'}]
+                    elif return_qty_kg > 0 and hasattr(self, 'engine') and self.engine:
+                        tonbags = self.engine.db.fetchall(
+                            """SELECT sub_lt, weight, status FROM inventory_tonbag
+                               WHERE lot_no = ? AND status IN (?,?,?,?,?)
+                               ORDER BY sub_lt DESC""",
+                            (lot_no,) + returnable_statuses)
+                        remaining_kg = return_qty_kg
+                        for tb in (tonbags or []):
+                            if remaining_kg <= 0.01:
+                                break
+                            w = float(tb['weight'] if isinstance(tb, dict) else tb[1] or 0)
+                            if w <= 0:
+                                continue
+                            items_to_add.append({
+                                'sub_lt': tb['sub_lt'] if isinstance(tb, dict) else tb[0],
+                                'weight_kg': w,
+                                'status': tb['status'] if isinstance(tb, dict) else tb[2],
+                            })
+                            remaining_kg -= w
+                        if not items_to_add:
+                            items_to_add = [{'sub_lt': 0, 'weight_kg': 0, 'status': 'NOT FOUND'}]
                     else:
-                        err_count += 1
+                        if hasattr(self, 'engine') and self.engine:
+                            tb = self.engine.db.fetchone(
+                                "SELECT sub_lt, weight, status FROM inventory_tonbag "
+                                "WHERE lot_no = ? AND status IN (?,?,?,?,?) "
+                                "ORDER BY sub_lt LIMIT 1", (lot_no,) + returnable_statuses)
+                            if tb:
+                                items_to_add = [{
+                                    'sub_lt': tb['sub_lt'] if isinstance(tb, dict) else tb[0],
+                                    'weight_kg': tb['weight'] if isinstance(tb, dict) else tb[1],
+                                    'status': tb['status'] if isinstance(tb, dict) else tb[2],
+                                }]
+                        if not items_to_add:
+                            items_to_add = [{'sub_lt': 0, 'weight_kg': 0, 'status': 'NOT FOUND'}]
                     
-                    iid = pv_tree.insert('', 'end', values=(
-                        lot_no, bl_no, sub_lt, product,
-                        f"{weight_kg:.1f}" if isinstance(weight_kg, (int, float)) else weight_kg,
-                        qty_str, reason, status, remark
-                    ), tags=(tag,))
-                    
-                    parsed_returns.append({
-                        'lot_no': lot_no, 'sub_lt': sub_lt,
-                        'reason': reason, 'remark': remark,
-                        'status': status, 'valid': is_ok,
-                    })
+                    for it in items_to_add:
+                        sub_lt = it['sub_lt']
+                        weight_kg = it['weight_kg']
+                        status = it['status']
+                        is_ok = status in returnable_statuses
+                        tag = 'ok' if is_ok else 'err'
+                        if is_ok:
+                            ok_count += 1
+                        else:
+                            err_count += 1
+                        disp_qty = qty_str if qty_str and qty_str != 'nan' else (f"{weight_kg:.1f}" if weight_kg else '')
+                        pv_tree.insert('', 'end', values=(
+                            lot_no, bl_no, sub_lt, product,
+                            f"{weight_kg:.1f}" if isinstance(weight_kg, (int, float)) else weight_kg,
+                            disp_qty, reason, status, remark
+                        ), tags=(tag,))
+                        parsed_returns.append({
+                            'lot_no': lot_no, 'sub_lt': sub_lt,
+                            'reason': reason, 'remark': remark,
+                            'status': status, 'valid': is_ok,
+                        })
                 
                 pv_tree.tag_configure('ok', foreground='#27ae60')
                 pv_tree.tag_configure('err', foreground='#e74c3c')

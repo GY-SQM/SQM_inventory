@@ -515,6 +515,7 @@ class ImportHandlersMixin:
             cols = list(df.columns)
             col_lot = next((c for c in cols if c in ('lot_no', 'lotno', 'lot')), None) or (cols[0] if cols else None)
             col_customer = next((c for c in cols if c in ('customer', '고객', 'sold_to', 'destination') or (c and 'customer' in c)), None)
+            col_sale_ref = next((c for c in cols if c in ('sale_ref', 'saleref', 'sales_ref', 'reference', 'ref') or (c and 'sale' in c and 'ref' in c)), None)
             col_tonbag = next((c for c in cols if c and ('tonbag' in c or '톤백' in c) and ('count' in c or '수' in c)), None)
             
             # 필수 항목 사전 검증: 데이터가 있는데 LOT 또는 톤백 수가 비어 있으면 에러
@@ -546,6 +547,7 @@ class ImportHandlersMixin:
                     if not lot_no:
                         continue
                     customer = safe_str(row.get(col_customer, '')).strip() if col_customer else ''
+                    sale_ref = safe_str(row.get(col_sale_ref, '')).strip() if col_sale_ref else ''
                     
                     if col_tonbag and col_tonbag in row.index:
                         n = int(safe_float(row.get(col_tonbag, 0)) or 0)
@@ -577,7 +579,10 @@ class ImportHandlersMixin:
                     result = self.engine.process_outbound([{
                         'lot_no': lot_no,
                         'weight_kg': weight_kg,
+                        'qty_mt': weight_kg / 1000.0,
                         'customer': customer,
+                        'sold_to': customer,
+                        'sale_ref': sale_ref,
                     }])
                     if result.get('success'):
                         processed += 1

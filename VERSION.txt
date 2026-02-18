@@ -1,4 +1,4 @@
 SQM Inventory System
-Version: v5.9.7
+Version: v5.9.8
 Release Date: 2026-02-18
-Notes: Picking List parser design review doc, inbound/outbound parsing elapsed time display
+Notes: Route③ outbound sale_ref/sold_to fix, return Excel 5 statuses, AllocationParser customer patterns (CATL/Panasonic)
