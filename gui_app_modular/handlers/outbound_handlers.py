@@ -733,20 +733,24 @@ class OutboundHandlersMixin:
 
         parse_picking_list_pdf = None
         try:
-            from parsers import parse_picking_list_pdf as _parse
+            from features.parsers.picking_list_parser import parse_picking_list_pdf as _parse
             parse_picking_list_pdf = _parse
         except ImportError:
             try:
-                from parsers.picking_list_parser import parse_picking_list_pdf as _parse
+                from parsers import parse_picking_list_pdf as _parse
                 parse_picking_list_pdf = _parse
             except ImportError:
-                pass
+                try:
+                    from parsers.picking_list_parser import parse_picking_list_pdf as _parse
+                    parse_picking_list_pdf = _parse
+                except ImportError:
+                    pass
 
         if not parse_picking_list_pdf:
             CustomMessageBox.showerror(
                 self.root,
                 "Picking List 파서 없음",
-                "parsers.picking_list_parser를 불러올 수 없습니다.",
+                "features.parsers 또는 parsers.picking_list_parser를 불러올 수 없습니다.",
             )
             return
 

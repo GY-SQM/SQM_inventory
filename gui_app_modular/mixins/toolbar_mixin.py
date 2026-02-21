@@ -305,11 +305,31 @@ class ToolbarMixin:
         return m
 
     def _build_outbound_menu(self) -> 'tk.Menu':
+        """v6.0.2: 출고 드롭다운 — menu_registry 기반 (Picking List·바코드·Sales Order 포함, 누락 방지)"""
         m = self._create_menu()
-        self._add_menu_items(m, [
-            ('📋 Allocation 입력 (파일 / 붙여넣기)', lambda: self._safe_call('_on_allocation_input_unified')),
-            ('📤 빠른 출고 (붙여넣기)', lambda: self._safe_call('_on_quick_outbound_paste')),
-        ])
+        items = []
+        try:
+            from ..menu_registry import FILE_MENU_OUTBOUND_ITEMS
+            for entry in FILE_MENU_OUTBOUND_ITEMS:
+                label, method_name = entry[0], entry[1]
+                optional = entry[2] if len(entry) > 2 else False
+                if optional and not callable(getattr(self, method_name, None)):
+                    continue
+                items.append((label, lambda mn=method_name: self._safe_call(mn)))
+            self._add_menu_items(m, items)
+        except ImportError:
+            self._add_menu_items(m, [
+                ('📋 Allocation 입력 (파일 / 붙여넣기)', lambda: self._safe_call('_on_allocation_input_unified')),
+                ('📋 Picking List 업로드 (PDF)', lambda: self._safe_call('_on_picking_list_upload')),
+            ])
+        # 빠른 출고 — 구분선 아래 고정 (패치 호환)
+        m.add_separator()
+        _font = getattr(self, '_dropdown_font', ('맑은 고딕', 11))
+        m.add_command(
+            label="  📤 빠른 출고 (붙여넣기)",
+            command=lambda: self._safe_call('_on_quick_outbound_paste'),
+            font=_font,
+        )
         return m
 
     def _build_report_menu(self) -> 'tk.Menu':

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '6.0.2'
+__version__ = '6.0.3'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '6.0.3': '📋 v6.0.3: features/parsers Picking List 파서·엔진 (pdfplumber+Gemini 폴백, RESERVED→PICKED), 툴바 출고 메뉴 menu_registry 반영, 미리보기 dict 형식 지원',
     '6.0.2': '📋 v6.0.2: 메뉴 단일 소스(menu_registry) · v6.0.0 DB 마이그레이션(picking/sold 테이블) · Picking List PDF 파싱 UI(파일선택→미리보기)',
     '6.0.1': '📋 v6.0.1: 총괄 화물 리스트 탭 — 상태 필터(전체/판매가능/판매배정/판매화물 결정/출고), 판매배정=Allocation(RESERVED)만 표시, 모든 리스트 헤더 오름·내림차순 정렬(▲▼)',
     '6.0.0': '🎯 v6.0.0: 입고/반품/로케이션 UX — 스프레드시트 붙여넣기(입고·로케이션), 반품 소량/다량 분리·필수4열 검증·반품수량(갯수), 출고 결과 상세 요약, 톤백 리스트 LOCATION 보강, 메뉴명 정리(PDF 스캔 입고·엑셀 수동 입고)',
