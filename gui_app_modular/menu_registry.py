@@ -11,12 +11,16 @@ custom_menubar.py 와 menu_mixin.py 의 네이티브 메뉴가 동일한 항목�
 - optional=True 이면 app에 해당 메서드가 있을 때만 메뉴에 추가됩니다.
 """
 
-# 입고 서브메뉴에 들어갈 항목 (순서 유지)
+# 입고 서브메뉴에 들어갈 항목 (순서 유지, v6.0.6 3단계: 단일 소스)
+# optional=True 이면 app에 해당 메서드가 있을 때만 메뉴에 추가
 FILE_MENU_INBOUND_ITEMS = [
     ("📄 PDF 스캔 입고", "_on_pdf_inbound"),
     ("📊 엑셀 파일 수동 입고", "_bulk_import_inventory_simple"),
     ("📋 D/O 후속 연결", "_on_do_update"),
-    ("🔄 반품 (재입고)", "_show_return_dialog"),  # 없으면 _show_return_safe 등 fallback 사용
+    ("📍 톤백 위치 매핑", "_on_tonbag_location_upload", True),
+    ("📋 입고현황 불러오기", "_bulk_import_inventory", True),
+    ("📂 반품 입고 (Excel)", "_on_return_inbound_upload"),
+    ("🔄 반품 (재입고)", "_show_return_dialog"),  # 소량/다량 반품 다이얼로그
 ]
 
 # 출고 서브메뉴에 들어갈 항목 (순서 유지)

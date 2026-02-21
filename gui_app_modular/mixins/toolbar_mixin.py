@@ -289,19 +289,38 @@ class ToolbarMixin:
         return style_name
 
     def _build_inbound_menu(self) -> 'tk.Menu':
+        """v6.0.6 3단계: 입고 드롭다운 — menu_registry 기반 (custom_menubar·네이티브 메뉴와 동일 항목)"""
         m = self._create_menu()
-        self._add_menu_items(m, [
-            ('📥 PDF 스캔 입고',       lambda: self._safe_call('_on_pdf_inbound')),
-            ('📝 엑셀 파일 수동 입고',  lambda: self._safe_call('_bulk_import_inventory_simple')),
-            None,
-            ('📋 입고현황 불러오기',    lambda: self._safe_call('_bulk_import_inventory')),
-            ('📍 톤백 위치 매핑',      lambda: self._safe_call('_on_tonbag_location_upload')),
-            None,
-        ])
-        return_sub = self._create_menu()
-        return_sub.add_command(label="  📝 소량 반품 (1~2건)", command=lambda: self._show_return_dialog(0))
-        return_sub.add_command(label="  📂 다량 반품 (Excel)", command=lambda: self._show_return_dialog(1))
-        m.add_cascade(label="  🔄 반품 (재입고)", menu=return_sub)
+        try:
+            from ..menu_registry import FILE_MENU_INBOUND_ITEMS
+            for entry in FILE_MENU_INBOUND_ITEMS:
+                label, method_name = entry[0], entry[1]
+                optional = entry[2] if len(entry) > 2 else False
+                if optional and not callable(getattr(self, method_name, None)):
+                    continue
+                if method_name == "_show_return_dialog":
+                    m.add_separator()
+                    return_sub = self._create_menu()
+                    _show_return = getattr(self, "_show_return_dialog", None)
+                    if callable(_show_return):
+                        return_sub.add_command(label="  📝 소량 반품 (1~2건)", command=lambda: _show_return(0))
+                        return_sub.add_command(label="  📂 다량 반품 (Excel)", command=lambda: _show_return(1))
+                    m.add_cascade(label=f"  {label}", menu=return_sub)
+                else:
+                    m.add_command(label=f"  {label}", command=lambda mn=method_name: self._safe_call(mn))
+        except ImportError:
+            self._add_menu_items(m, [
+                ('📄 PDF 스캔 입고', lambda: self._safe_call('_on_pdf_inbound')),
+                ('📊 엑셀 파일 수동 입고', lambda: self._safe_call('_bulk_import_inventory_simple')),
+                ('📂 반품 입고 (Excel)', lambda: self._safe_call('_on_return_inbound_upload')),
+                None,
+            ])
+            return_sub = self._create_menu()
+            _show_return = getattr(self, "_show_return_dialog", None)
+            if callable(_show_return):
+                return_sub.add_command(label="  📝 소량 반품 (1~2건)", command=lambda: _show_return(0))
+                return_sub.add_command(label="  📂 다량 반품 (Excel)", command=lambda: _show_return(1))
+            m.add_cascade(label="  🔄 반품 (재입고)", menu=return_sub)
         return m
 
     def _build_outbound_menu(self) -> 'tk.Menu':
