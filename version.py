@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '6.0.4'
+__version__ = '6.0.5'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '6.0.5': '🎨 v6.0.5: 상태명 한글화 2단계 — PDF/Excel/컨텍스트메뉴 한글 표시, STATUS_DISPLAY_TO_DB 역매핑',
     '6.0.4': '🎯 v6.0.4: process_outbound 1단계(SOURCE/QUICK/EXCEL·allocation_plan.source·8건 제한)·반품 형식 통일·Excel/데이터 입력 원칙 전역',
     '6.0.3': '📋 v6.0.3: features/parsers Picking List·Sales Order 엔진 (RESERVED→PICKED→SOLD/PENDING), 툴바 출고 menu_registry, 미리보기 dict 지원',
     '6.0.2': '📋 v6.0.2: 메뉴 단일 소스(menu_registry) · v6.0.0 DB 마이그레이션(picking/sold 테이블) · Picking List PDF 파싱 UI(파일선택→미리보기)',

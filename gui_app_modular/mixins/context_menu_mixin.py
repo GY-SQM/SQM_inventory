@@ -11,7 +11,10 @@ Right-click context menus for treeviews
 import sqlite3
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog, apply_modal_window_options
+from ..utils.ui_constants import (
+    CustomMessageBox, ThemeColors, DialogSize, center_dialog, apply_modal_window_options,
+    STATUS_DISPLAY_TO_DB,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -251,6 +254,8 @@ class ContextMenuMixin:
             return
         
         try:
+            from ..utils.excel_file_helper import get_unique_excel_path
+            file_path = get_unique_excel_path(file_path)
             # Get full data for selected LOTs
             placeholders = ','.join(['?'] * len(lot_numbers))
             lots = self.engine.db.fetchall(
@@ -300,7 +305,9 @@ class ContextMenuMixin:
         
         for item_id in selection:
             values = self.tree_sublot.item(item_id, 'values')
-            if values and values[6] == 'AVAILABLE':  # status column
+            # 톤백 트리는 상태를 한글로 표시 → DB 비교 시 역매핑 또는 한글 직접 비교
+            status_display = values[6] if len(values) > 6 else ''
+            if values and (status_display == '판매가능' or STATUS_DISPLAY_TO_DB.get(status_display) == 'AVAILABLE'):
                 self.selected_tonbags.add(item_id)
         
         self._set_status(f"Selected tonbags: {len(self.selected_tonbags)}")
@@ -323,55 +330,61 @@ class ContextMenuMixin:
         CustomMessageBox.showinfo(self.root, "Info", "Tonbag edit feature - coming soon")
     
     def _change_tonbag_status(self) -> None:
-        """Change tonbag status from context menu"""
+        """톤백 상태 변경 (v6.0.4 2단계: 한글 표시·저장 시 DB값 변환)"""
         from ..utils.constants import tk, ttk
         
         selection = self.tree_sublot.selection()
         if not selection:
             return
         
-        # Get current values
         values = self.tree_sublot.item(selection[0], 'values')
         if not values:
             return
         
-        lot_no = values[2]  # lot_no column
-        sub_lt = values[3]  # sub_lt column
-        current_status = values[6]  # status column
+        lot_no = values[1]   # lot_no column (0=row_num, 1=lot_no)
+        sub_lt_display = values[2]   # tonbag_no_print (표시: 1, 2, S0 등)
+        try:
+            sub_lt_int = 0 if str(sub_lt_display).strip().upper().startswith('S') or str(sub_lt_display).strip() in ('', '0') else int(float(str(sub_lt_display)))
+        except (ValueError, TypeError):
+            sub_lt_int = 0
+        current_status_display = values[6] if len(values) > 6 else ''  # 한글 상태명
         
-        # Status options
-        statuses = ['AVAILABLE', 'PICKED', 'SOLD', 'SAMPLE', 'BLOCKED']
+        # 콤보 옵션: 한글 표시 (DB 저장 시 역매핑)
+        status_options = ['판매가능', '판매배정', '판매화물 결정', '출고', '소진', '선적', '반품']
         
-        # Simple dialog (Phase4: DialogSize)
         dialog = tk.Toplevel(self.root)
-        dialog.title("Change Status")
+        dialog.title("상태 변경")
         dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
         center_dialog(dialog, self.root)
         
-        ttk.Label(dialog, text=f"LOT: {lot_no}, Tonbag: {sub_lt}").pack(pady=10)
-        ttk.Label(dialog, text=f"Current: {current_status}").pack()
+        ttk.Label(dialog, text=f"LOT: {lot_no}, 톤백: {sub_lt_display}").pack(pady=10)
+        ttk.Label(dialog, text=f"현재: {current_status_display}").pack()
         
-        status_var = tk.StringVar(value=current_status)
-        combo = ttk.Combobox(dialog, textvariable=status_var, values=statuses, state='readonly')
+        status_var = tk.StringVar(value=current_status_display if current_status_display in status_options else status_options[0])
+        combo = ttk.Combobox(dialog, textvariable=status_var, values=status_options, state='readonly')
         combo.pack(pady=10)
         
         def save_status():
-            new_status = status_var.get()
+            new_display = status_var.get().strip()
+            new_status = STATUS_DISPLAY_TO_DB.get(new_display)
+            if not new_status:
+                CustomMessageBox.showwarning(self.root, "상태", "선택한 상태를 DB 값으로 변환할 수 없습니다.")
+                return
             try:
                 self.engine.db.execute(
                     "UPDATE inventory_tonbag SET status = ? WHERE lot_no = ? AND sub_lt = ?",
-                    (new_status, lot_no, int(sub_lt))
+                    (new_status, lot_no, sub_lt_int)
                 )
-                self._log(f"Tonbag status changed: {lot_no}-{sub_lt} -> {new_status}")
+                self._log(f"톤백 상태 변경: {lot_no}-{sub_lt_display} → {new_display}")
                 dialog.destroy()
                 self._refresh_tonbag()
             except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
-                CustomMessageBox.showerror(self.root, "Error", f"Status change failed: {e}")
+                CustomMessageBox.showerror(self.root, "오류", f"상태 변경 실패: {e}")
         
-        ttk.Button(dialog, text="Save", command=save_status).pack(pady=10)
+        ttk.Button(dialog, text="저장", command=save_status).pack(pady=10)
     
     def _setup_search_context_menu(self) -> None:
         """Setup search treeview context menu"""

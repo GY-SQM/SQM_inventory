@@ -89,7 +89,7 @@ def generate_daily_inventory_report(engine, output_dir: str = 'output/reports') 
         summary_data = [
             ['항목', '수치'],
             ['총 LOT 수', f"{total_lots}개"],
-            ['가용 LOT', f"{avail_lots}개"],
+            ['판매가능 LOT', f"{avail_lots}개"],
             ['총 입고량', f"{initial_mt:,.1f} MT"],
             ['현재 잔량', f"{total_mt:,.1f} MT"],
             ['Out %', f"{((initial_mt - total_mt) / max(initial_mt, 1) * 100):,.1f}%"],
@@ -125,12 +125,13 @@ def generate_daily_inventory_report(engine, output_dir: str = 'output/reports') 
             
             header = ['LOT NO', 'SAP NO', 'PRODUCT', 'STATUS', 'Inbound(MT)', 'Balance(MT)', 'Out %']
             data = [header]
-            
+            from .ui_constants import get_status_display as _status_display
             for item in inventory:
                 lot_no = item.get('lot_no', '')
                 sap_no = item.get('sap_no', '')
                 product = item.get('product', '')
-                status = item.get('status', '')
+                status_raw = item.get('status', '')
+                status = _status_display(status_raw) or status_raw
                 init_w = float(item.get('initial_weight', 0) or 0) / 1000
                 curr_w = float(item.get('current_weight', 0) or 0) / 1000
                 pct = ((init_w - curr_w) / max(init_w, 0.001)) * 100
@@ -611,11 +612,12 @@ def generate_lot_outbound_history_pdf(engine, lot_no: str, history: List[dict],
     elements.append(Spacer(1, 6*mm))
 
     tb_data = [['No.', '톤백#', '중량(kg)', '구분', '상태', '출고처', '출고/예정일']]
-    status_map = {'PICKED': '출고', 'SOLD': 'Sold', 'SHIPPED': '선적', 'RESERVED': '예약'}
+    from .ui_constants import get_status_display
     for idx, row in enumerate(history, 1):
         is_sample = row.get('is_sample') or 0
         tb_type = '샘플' if is_sample else '정규'
-        st = status_map.get(str(row.get('tonbag_status', '')).strip(), str(row.get('tonbag_status', '')))
+        _st = str(row.get('tonbag_status', '')).strip()
+        st = get_status_display(_st) or _st
         tb_data.append([
             str(idx), str(row.get('sub_lt', '')),
             f"{float(row.get('weight', 0) or 0):,.0f}",

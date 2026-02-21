@@ -19,7 +19,7 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-# 화물(톤백) 상태 표시명 — 전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고
+# 화물(톤백) 상태 표시명 — 전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고 (v6.0.4 2단계 한글화)
 STATUS_DISPLAY = {
     'AVAILABLE': '판매가능',
     'RESERVED': '판매배정',
@@ -27,7 +27,11 @@ STATUS_DISPLAY = {
     'SOLD': '출고',
     'SHIPPED': '선적',
     'DEPLETED': '소진',
+    'RETURNED': '반품',
 }
+
+# 한글 표시명 → DB 값 (필터·다이얼로그 저장 시 사용)
+STATUS_DISPLAY_TO_DB = {v: k for k, v in STATUS_DISPLAY.items()}
 
 
 def get_status_display(status: str) -> str:

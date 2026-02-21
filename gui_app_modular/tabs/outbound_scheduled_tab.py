@@ -10,7 +10,7 @@ LOT 클릭 시 출고/톤백·샘플 이력 팝업 (Excel/PDF 출력 가능)
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
-from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options
+from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options, get_status_display
 import logging
 
 logger = logging.getLogger(__name__)
@@ -148,7 +148,6 @@ class OutboundScheduledTabMixin:
         self._ob_split_panel.set_detail_title(f"📋 Allocation 이력 — {lot_no}")
         try:
             history = self.engine.get_lot_outbound_history(lot_no)
-            status_map = {'PICKED': '📤 출고', 'SOLD': 'Sold', 'SHIPPED': '🚢 선적', 'RESERVED': '🔒 예약'}
             for idx, row in enumerate(history or [], 1):
                 st = str(row.get('tonbag_status', '')).strip()
                 is_sample = row.get('is_sample') or 0
@@ -157,7 +156,7 @@ class OutboundScheduledTabMixin:
                 weight = float(row.get('weight', 0) or 0)
                 customer = str(row.get('customer', '')).strip()
                 out_date = str(row.get('out_date', ''))[:10] if row.get('out_date') else ''
-                status_txt = status_map.get(st, st)
+                status_txt = ('🔒 ' if st == 'RESERVED' else '') + (get_status_display(st) or st)
                 self._ob_alloc_detail_tree.insert('', END, values=(
                     idx, sub_lt, f"{weight:,.0f}", tb_type, status_txt, customer, out_date))
         except Exception as e:
@@ -214,9 +213,6 @@ class OutboundScheduledTabMixin:
         tree.configure(yscrollcommand=sb.set)
         tree.pack(side=LEFT, fill=BOTH, expand=True, padx=Spacing.XS, pady=Spacing.XS)
         sb.pack(side='right', fill='y', pady=Spacing.XS)
-        status_map = {
-            'PICKED': '📤 출고', 'SOLD': 'Sold', 'SHIPPED': '🚢 선적', 'RESERVED': '🔒 예약',
-        }
         for idx, row in enumerate(rows, 1):
             st = str(row.get('tonbag_status', '')).strip()
             is_sample = row.get('is_sample') or 0
@@ -225,7 +221,7 @@ class OutboundScheduledTabMixin:
             weight = float(row.get('weight', 0) or 0)
             customer = str(row.get('customer', '')).strip()
             out_date = str(row.get('out_date', ''))[:10] if row.get('out_date') else ''
-            status_txt = status_map.get(st, st)
+            status_txt = ('🔒 ' if st == 'RESERVED' else '') + (get_status_display(st) or st)
             tree.insert('', END, values=(
                 str(row.get('lot_no', '')), sub_lt, f"{weight:,.0f}", tb_type, status_txt, customer, out_date))
         if not rows:
@@ -376,10 +372,6 @@ class OutboundScheduledTabMixin:
         tree.pack(side=LEFT, fill=BOTH, expand=True, padx=Spacing.XS, pady=Spacing.XS)
         sb.pack(side='right', fill='y', pady=Spacing.XS)
 
-        status_map = {
-            'PICKED': '📤 출고', 'SOLD': 'Sold', 'SHIPPED': '🚢 선적',
-            'RESERVED': '🔒 예약',
-        }
         for idx, row in enumerate(history, 1):
             st = str(row.get('tonbag_status', '')).strip()
             is_sample = row.get('is_sample') or 0
@@ -388,7 +380,7 @@ class OutboundScheduledTabMixin:
             weight = float(row.get('weight', 0) or 0)
             customer = str(row.get('customer', '')).strip()
             out_date = str(row.get('out_date', ''))[:10] if row.get('out_date') else ''
-            status_txt = status_map.get(st, st)
+            status_txt = ('🔒 ' if st == 'RESERVED' else '') + (get_status_display(st) or st)
             tree.insert('', END, values=(idx, sub_lt, f"{weight:,.0f}", tb_type, status_txt, customer, out_date))
 
         if not history:
@@ -465,7 +457,8 @@ class OutboundScheduledTabMixin:
         import re
         rows = []
         for idx, row in enumerate(history, 1):
-            st = str(row.get('tonbag_status', '')).strip()
+            st_raw = str(row.get('tonbag_status', '')).strip()
+            st = get_status_display(st_raw) or st_raw
             is_sample = row.get('is_sample') or 0
             tb_type = '샘플' if is_sample else '정규'
             rows.append({
