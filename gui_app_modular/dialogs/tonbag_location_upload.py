@@ -63,14 +63,20 @@ def show_tonbag_location_upload_dialog(
     from .location_upload_preview import LocationUploadPreviewDialog
     from ..utils.custom_messagebox import CustomMessageBox
 
-    # 1) 선택 다이얼로그: 붙여넣기 / 파일 열기
+    # 1) 선택 다이얼로그 — Excel/데이터 입력 원칙 통일 (데이터 붙여넣기 / 파일 업로드)
+    from ..utils.ui_constants import (
+        UPLOAD_CHOICE_HEADER, UPLOAD_CHOICE_PASTE, UPLOAD_CHOICE_UPLOAD,
+        UPLOAD_CHOICE_BTN_PASTE, UPLOAD_CHOICE_BTN_UPLOAD,
+    )
     choice_win = tk.Toplevel(parent)
     choice_win.title("📍 톤백 위치 매핑")
     choice_win.transient(parent)
     choice_win.resizable(False, False)
     frm = ttk.Frame(choice_win, padding=20)
     frm.pack(fill=tk.BOTH, expand=True)
-    ttk.Label(frm, text="데이터 입력 방식을 선택하세요.", font=("맑은 고딕", 10)).pack(pady=(0, 12))
+    ttk.Label(frm, text=UPLOAD_CHOICE_HEADER, font=("맑은 고딕", 10)).pack(pady=(0, 12))
+    ttk.Label(frm, text=UPLOAD_CHOICE_PASTE, font=("맑은 고딕", 9), wraplength=380, justify=tk.LEFT).pack(anchor="w", pady=(0, 6))
+    ttk.Label(frm, text=UPLOAD_CHOICE_UPLOAD, font=("맑은 고딕", 9), wraplength=380, justify=tk.LEFT).pack(anchor="w", pady=(0, 12))
     btn_frm = ttk.Frame(frm)
     btn_frm.pack(pady=4)
     chosen = {"value": None}
@@ -87,8 +93,8 @@ def show_tonbag_location_upload_dialog(
         chosen["value"] = None
         choice_win.destroy()
 
-    ttk.Button(btn_frm, text="📋 데이터 붙여넣기", command=on_paste).pack(side=tk.LEFT, padx=6)
-    ttk.Button(btn_frm, text="📂 파일 열기", command=on_file).pack(side=tk.LEFT, padx=6)
+    ttk.Button(btn_frm, text=UPLOAD_CHOICE_BTN_PASTE, command=on_paste).pack(side=tk.LEFT, padx=6)
+    ttk.Button(btn_frm, text=UPLOAD_CHOICE_BTN_UPLOAD, command=on_file).pack(side=tk.LEFT, padx=6)
     ttk.Button(btn_frm, text="취소", command=on_cancel).pack(side=tk.LEFT, padx=6)
     choice_win.geometry("+%d+%d" % (parent.winfo_rootx() + 80, parent.winfo_rooty() + 80))
     choice_win.grab_set()

@@ -572,11 +572,13 @@ class OutboundHandlersMixin:
         center_dialog(win, self.root)
         f = ttk.Frame(win, padding=(20, 20, 20, 32))
         f.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(f, text="Allocation 데이터 입력 방법을 선택하세요.", font=('맑은 고딕', 12, 'bold')).pack(anchor='w', pady=(0, 12))
-        ttk.Label(f, text="① Allocation Excel 파일을 불러옵니다.\n   → 미리보기 후 예약(RESERVED) 실행.",
-                  font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 10))
-        ttk.Label(f, text="② 내장 Allocation 템플릿에 데이터를 붙여넣기(Ctrl+V) 합니다.\n   → 붙여넣기 후 미리보기 → 예약 실행.",
-                  font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 24))
+        from ..utils.ui_constants import (
+            UPLOAD_CHOICE_HEADER, UPLOAD_CHOICE_PASTE, UPLOAD_CHOICE_UPLOAD,
+            UPLOAD_CHOICE_BTN_PASTE, UPLOAD_CHOICE_BTN_UPLOAD,
+        )
+        ttk.Label(f, text=UPLOAD_CHOICE_HEADER, font=('맑은 고딕', 12, 'bold')).pack(anchor='w', pady=(0, 12))
+        ttk.Label(f, text=UPLOAD_CHOICE_PASTE, font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 10))
+        ttk.Label(f, text=UPLOAD_CHOICE_UPLOAD, font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 24))
         btn_f = ttk.Frame(f)
         btn_f.pack(anchor='center')
         def on_file():
@@ -585,8 +587,8 @@ class OutboundHandlersMixin:
         def on_paste():
             result[0] = 'paste'
             win.destroy()
-        ttk.Button(btn_f, text="📂 파일 불러오기", command=on_file, width=22).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_f, text="📋 템플릿 붙여넣기", command=on_paste, width=22).pack(side=tk.LEFT)
+        ttk.Button(btn_f, text=UPLOAD_CHOICE_BTN_UPLOAD, command=on_file, width=22).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_f, text=UPLOAD_CHOICE_BTN_PASTE, command=on_paste, width=22).pack(side=tk.LEFT)
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.wait_window(win)
 

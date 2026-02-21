@@ -27,10 +27,18 @@ class SimpleExcelOutboundMixin:
     """심플 엑셀 출고 Mixin"""
 
     def _on_simple_excel_outbound(self) -> None:
-        """심플 엑셀 출고 — 파일 선택 → 미리보기 → 확정"""
+        """심플 엑셀 출고 — Excel/데이터 입력 원칙: 데이터 붙여넣기 vs 파일 업로드 → 미리보기 → 확정"""
         from utils.constants import tk, ttk, filedialog, BOTH, YES
         from ..utils.custom_messagebox import CustomMessageBox
 
+        choice = "upload"
+        if hasattr(self, "_show_template_or_upload_choice"):
+            choice = self._show_template_or_upload_choice("심플 출고", "simple_outbound")
+            if choice is None:
+                return
+            if choice == "template":
+                self._show_simple_outbound_paste_dialog()
+                return
         file_path = filedialog.askopenfilename(
             title="심플 출고 엑셀 선택",
             filetypes=[
@@ -130,6 +138,55 @@ class SimpleExcelOutboundMixin:
         except (ValueError, TypeError, KeyError) as e:
             logger.error(f"심플 엑셀 출고 오류: {e}", exc_info=True)
             CustomMessageBox.error(None, "오류", f"파일 처리 중 오류:\n{e}")
+
+    def _show_simple_outbound_paste_dialog(self) -> None:
+        """심플 출고 — 내장 형식에 데이터 붙여넣기 후 미리보기 (Excel/데이터 입력 원칙)."""
+        from ..utils.paste_table_dialog import show_paste_table_dialog
+        from ..utils.custom_messagebox import CustomMessageBox
+
+        columns = [
+            ("lot_no", "LOT NO", 120),
+            ("weight_kg", "Weight(Kg)", 100),
+            ("customer", "Customer", 130),
+            ("sale_ref", "Sale Ref", 100),
+        ]
+
+        def on_confirm(rows: list) -> None:
+            if not rows:
+                CustomMessageBox.showwarning(self.root, "경고", "입력된 데이터가 없습니다.")
+                return
+            outbound_items = []
+            for r in rows:
+                lot_no = str(r.get("lot_no") or "").strip()
+                if not lot_no:
+                    continue
+                try:
+                    w = float(str(r.get("weight_kg") or "0").replace(",", ""))
+                except (ValueError, TypeError):
+                    continue
+                if w <= 0:
+                    continue
+                outbound_items.append({
+                    "lot_no": lot_no,
+                    "weight_kg": w,
+                    "customer": str(r.get("customer") or "").strip(),
+                    "sale_ref": str(r.get("sale_ref") or "").strip(),
+                })
+            if not outbound_items:
+                CustomMessageBox.showwarning(self.root, "경고", "유효한 출고 데이터(LOT NO, Weight(Kg))가 없습니다.")
+                return
+            self._show_simple_outbound_preview(outbound_items)
+
+        show_paste_table_dialog(
+            self.root,
+            title="📤 심플 출고 데이터 (붙여넣기)",
+            columns=columns,
+            instruction="아래 표에 Excel 등에서 복사한 출고 데이터를 붙여넣기(Ctrl+V) 한 뒤 [미리보기]를 누르세요. 형식: LOT NO, Weight(Kg) 필수.",
+            confirm_text="미리보기",
+            cancel_text="취소",
+            on_confirm=on_confirm,
+            min_size=(700, 400),
+        )
 
     def _show_simple_outbound_preview(self, items: List[Dict]) -> None:
         """심플 출고 미리보기"""

@@ -5,6 +5,7 @@ SQM 재고관리 - Excel 입고 처리 핸들러
 
 v2.9.91 - gui_app.py에서 분리
 v5.8.9: 3가지 매핑(수동 입고/빠른 출고/위치) 시 템플릿 열기 vs 파일 업로드 선택
+v6.0: Excel/데이터 입력 원칙 통일 — 프로그램 내장 형식 → 데이터 붙여넣기 또는 파일 업로드 (AGENTS.md)
 
 Excel 파일 입고 처리, 컬럼 자동 인식, 데이터 변환
 """
@@ -50,10 +51,14 @@ class ImportHandlersMixin:
     """
     
     def _show_template_or_upload_choice(self, title: str, kind: str) -> Optional[str]:
-        """템플릿 열기(프로그램이 생성·열기) vs 파일 업로드 선택. 반환: 'template' | 'upload' | None(취소)."""
+        """Excel/데이터 입력 원칙: 데이터 붙여넣기 vs 파일 업로드 선택. 반환: 'template' | 'upload' | None(취소)."""
         import tkinter as tk
         from tkinter import ttk
-        from ..utils.ui_constants import center_dialog, ThemeColors, DialogSize, apply_modal_window_options
+        from ..utils.ui_constants import (
+            center_dialog, DialogSize, apply_modal_window_options,
+            UPLOAD_CHOICE_HEADER, UPLOAD_CHOICE_PASTE, UPLOAD_CHOICE_UPLOAD,
+            UPLOAD_CHOICE_BTN_PASTE, UPLOAD_CHOICE_BTN_UPLOAD,
+        )
         result = [None]
         win = tk.Toplevel(self.root)
         win.title(title)
@@ -65,11 +70,9 @@ class ImportHandlersMixin:
         center_dialog(win, self.root)
         f = ttk.Frame(win, padding=(20, 20, 20, 32))
         f.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(f, text="다음 중 선택하세요.", font=('맑은 고딕', 12, 'bold')).pack(anchor='w', pady=(0, 12))
-        ttk.Label(f, text="① 프로그램이 엑셀 템플릿을 만들어 열어줍니다.\n   → 열린 시트에 복사·붙여넣기 하거나 직접 입력한 뒤 저장하고,\n   아래 [파일 업로드]에서 해당 파일을 선택하면 됩니다.",
-                  font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 10))
-        ttk.Label(f, text="② 이미 채운 엑셀 파일을 바로 업로드합니다.",
-                  font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 24))
+        ttk.Label(f, text=UPLOAD_CHOICE_HEADER, font=('맑은 고딕', 12, 'bold')).pack(anchor='w', pady=(0, 12))
+        ttk.Label(f, text=UPLOAD_CHOICE_PASTE, font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 10))
+        ttk.Label(f, text=UPLOAD_CHOICE_UPLOAD, font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 24))
         btn_wrap = ttk.Frame(f)
         btn_wrap.pack(fill=tk.X, pady=(0, 8))
         btn_f = ttk.Frame(btn_wrap)
@@ -80,8 +83,8 @@ class ImportHandlersMixin:
         def on_upload():
             result[0] = 'upload'
             win.destroy()
-        ttk.Button(btn_f, text="📄 템플릿 열기", command=on_template, width=22).pack(side=tk.LEFT, padx=(0, 8))
-        ttk.Button(btn_f, text="📤 엑셀 파일 업로드", command=on_upload, width=22).pack(side=tk.LEFT)
+        ttk.Button(btn_f, text=UPLOAD_CHOICE_BTN_PASTE, command=on_template, width=22).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_f, text=UPLOAD_CHOICE_BTN_UPLOAD, command=on_upload, width=22).pack(side=tk.LEFT)
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.wait_window(win)
         return result[0]
@@ -143,7 +146,22 @@ class ImportHandlersMixin:
             return
         df = pd.DataFrame(rows)
         self._import_inbound_from_dataframe(df)
-    
+
+    def _show_return_inbound_spreadsheet_dialog(self) -> None:
+        """반품 입고 형식 스프레드시트(입고와 동일 + PICKING NO, 반품사유) — 붙여넣기 후 DB 반영."""
+        from ..utils.paste_table_dialog import show_paste_table_dialog
+        columns = [(c[0], c[1], c[2]) for c in self.RETURN_TEMPLATE_COLUMNS]
+        show_paste_table_dialog(
+            self.root,
+            title="📝 반품 입고 데이터 (붙여넣기)",
+            columns=columns,
+            instruction="아래 표에 Excel 등에서 복사한 반품 데이터를 붙여넣기(Ctrl+V) 한 뒤 [DB 반영]을 누르세요. 형식은 입고 템플릿과 동일하며 PICKING NO·반품사유가 필수입니다.",
+            confirm_text="DB 반영",
+            cancel_text="취소",
+            on_confirm=self._on_return_inbound_paste_confirm,
+            min_size=(800, 440),
+        )
+
     def _bulk_import_inventory_simple(self, file_path: str = None) -> None:
         """
         간단한 Excel 입고 처리.
@@ -700,7 +718,7 @@ class ImportHandlersMixin:
                             (lot_no, n)
                         )
                         if not tonbags or len(tonbags) < n:
-                            errors.append(f"행 {idx+2}: 가용 톤백 부족 — {lot_no} (요청 {n}개, 가용 {len(tonbags) if tonbags else 0}개)")
+                            errors.append(f"행 {idx+2}: 판매가능 톤백 부족 — {lot_no} (요청 {n}개, 판매가능 {len(tonbags) if tonbags else 0}개)")
                             continue
                         weight_kg = sum(float(t.get('weight') or 0) for t in tonbags[:n])
                     else:
@@ -712,7 +730,7 @@ class ImportHandlersMixin:
                             continue
                         weight_kg = float(lot_row.get('current_weight') or 0)
                         if weight_kg <= 0:
-                            errors.append(f"행 {idx+2}: 가용 재고 0 — {lot_no}")
+                            errors.append(f"행 {idx+2}: 판매가능 재고 0 — {lot_no}")
                             continue
                     
                     result = self.engine.process_outbound([{
@@ -769,9 +787,12 @@ class ImportHandlersMixin:
             ws['A1'] = "출고 템플릿 v5.8.9 — 톤백 리스트와 동일 형식. 진한색 컬럼은 필수(LOT NO, 출고 톤백 수, 고객명). 2행=DB필드명."
             ws['A1'].font = Font(bold=True, size=11, color="2C3E50")
             ws.row_dimensions[1].height = 28
+            for col in range(1, ncols + 1):
+                ws.cell(row=1, column=col).border = thin_border
             for col, (db_field, display, width, req_out, _) in enumerate(headers, 1):
                 ws.cell(row=2, column=col, value=db_field)
                 ws.cell(row=2, column=col).font = Font(size=8, color="999999")
+                ws.cell(row=2, column=col).border = thin_border
             ws.row_dimensions[2].height = 14
             for col, (db_field, display, width, req_out, _) in enumerate(headers, 1):
                 cell = ws.cell(row=3, column=col, value=display + (' *' if db_field in required_outbound else ''))
@@ -860,6 +881,11 @@ class ImportHandlersMixin:
         ('initial_weight', 'Inbound(Kg)', 100, False),
         ('outbound_weight', 'Outbound(Kg)', 100, False),
     ]
+    # 반품 입고 = 입고 형식과 동일 + PICKING NO, 반품사유 (v6.0)
+    RETURN_TEMPLATE_COLUMNS = list(INVENTORY_TEMPLATE_COLUMNS) + [
+        ('picking_no', 'PICKING NO', 120, True),
+        ('return_reason', '반품사유', 100, True),
+    ]
     # 톤백 리스트(tonbag_tab._tonbag_columns)와 동일한 컬럼·순서. No. 포함 시 업로드에서 무시.
     TONBAG_TEMPLATE_COLUMNS = [
         ('row_num', 'No.', 50, False, False),
@@ -918,8 +944,11 @@ class ImportHandlersMixin:
             for col, (db_field, display, width, _) in enumerate(headers, 1):
                 ws.cell(row=2, column=col, value=db_field)
                 ws.cell(row=2, column=col).font = Font(size=8, color="999999")
+                ws.cell(row=2, column=col).border = thin_border
             ws.row_dimensions[2].height = 14
-            
+            for col in range(1, ncols + 1):
+                ws.cell(row=1, column=col).border = thin_border
+
             for col, (db_field, display, width, _) in enumerate(headers, 1):
                 cell = ws.cell(row=3, column=col, value=display + (' *' if db_field in required_inbound else ''))
                 cell.font = header_font
@@ -928,19 +957,22 @@ class ImportHandlersMixin:
                 cell.border = thin_border
                 col_letter = openpyxl.utils.get_column_letter(col)
                 ws.column_dimensions[col_letter].width = min(width, 20)
-            
+
             for row in range(4, 8):
                 for c in range(1, ncols + 1):
                     cell = ws.cell(row=row, column=c, value='')
                     cell.fill = sample_fill
                     cell.border = thin_border
-            
+
             ws2 = wb.create_sheet("안내")
             ws2.cell(row=1, column=1, value="필수 항목(진한색) 없으면 업로드 시 오류가 납니다.")
             ws2.cell(row=1, column=1).font = Font(bold=True)
             for i, (field, display, _, req) in enumerate(headers, 2):
                 ws2.cell(row=i, column=1, value=field)
                 ws2.cell(row=i, column=2, value=display + (" (필수)" if req else ""))
+                ws2.cell(row=i, column=1).border = thin_border
+                ws2.cell(row=i, column=2).border = thin_border
+            ws2.cell(row=1, column=2).border = thin_border
             ws2.column_dimensions['A'].width = 20
             ws2.column_dimensions['B'].width = 24
             

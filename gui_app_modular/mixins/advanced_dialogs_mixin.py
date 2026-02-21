@@ -24,6 +24,106 @@ logger = logging.getLogger(__name__)
 class AdvancedDialogsMixin:
     """고급 다이얼로그 Mixin"""
 
+    def _on_return_inbound_upload(self) -> None:
+        """v6.0: 반품 입고 — [템플릿 열기(붙여넣기)] vs [파일 업로드] 선택 후 파싱·DB 반영 (입고 형식과 동일)."""
+        choice = self._show_template_or_upload_choice("반품 입고", "return_inbound")
+        if choice is None:
+            return
+        if choice == "template":
+            self._show_return_inbound_spreadsheet_dialog()
+            return
+        from ..utils.constants import filedialog
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title="반품 입고 Excel 선택",
+            filetypes=[("Excel files", "*.xlsx;*.xls"), ("All files", "*.*")],
+        )
+        if not path or not path.strip():
+            return
+        self._apply_return_inbound_after_parse(path, source_file=path)
+
+    def _on_return_inbound_paste_confirm(self, rows: list) -> None:
+        """반품 입고 붙여넣기 확인 시 파싱 후 DB 반영."""
+        from features.parsers.return_inbound_parser import parse_return_inbound_from_rows
+        parse_result = parse_return_inbound_from_rows(rows)
+        if not parse_result.get("parse_ok") or parse_result.get("errors"):
+            err_msg = "\n".join(parse_result.get("errors", ["파싱 실패"]))
+            CustomMessageBox.showerror(
+                self.root,
+                "반품 입고 — 검증 실패",
+                "필수 항목(LOT NO, NET(Kg), PICKING NO, 반품사유) 누락 또는 오류.\n\n" + err_msg,
+            )
+            return
+        n = len(parse_result.get("items", []))
+        if n == 0:
+            CustomMessageBox.showwarning(self.root, "반품 입고", "처리할 행이 없습니다.")
+            return
+        if not CustomMessageBox.askyesno(
+            self.root,
+            "반품 입고 확인",
+            f"총 {n}건을 반품 입고 처리합니다.\nPICKING NO 매칭 실패 시 전체가 중단됩니다.\n계속하시겠습니까?",
+        ):
+            return
+        self._apply_return_inbound_after_parse(parse_result, source_file="(붙여넣기)", skip_confirm=True)
+
+    def _apply_return_inbound_after_parse(
+        self, parse_result_or_path, source_file: str = "", skip_confirm: bool = False
+    ) -> None:
+        """반품 파싱 결과 또는 Excel 경로를 받아 검증 후 DB 반영. skip_confirm=True면 확인 대화상자 생략(붙여넣기에서 이미 표시)."""
+        if isinstance(parse_result_or_path, str):
+            path = parse_result_or_path
+            try:
+                from features.parsers.return_inbound_parser import parse_return_inbound_excel
+                parse_result = parse_return_inbound_excel(path)
+            except ImportError:
+                CustomMessageBox.showerror(
+                    self.root,
+                    "반품 입고",
+                    "features.parsers.return_inbound_parser를 불러올 수 없습니다.",
+                )
+                return
+            source_file = path
+        else:
+            parse_result = parse_result_or_path
+        if not parse_result.get("parse_ok") or parse_result.get("errors"):
+            err_msg = "\n".join(parse_result.get("errors", ["파싱 실패"]))
+            CustomMessageBox.showerror(
+                self.root,
+                "반품 입고 — 검증 실패",
+                "필수 항목(LOT NO, WEIGHT(MT) 또는 NET(Kg), PICKING NO, REASON) 누락 또는 오류.\n\n" + err_msg,
+            )
+            return
+        n = len(parse_result.get("items", []))
+        if n == 0:
+            CustomMessageBox.showwarning(self.root, "반품 입고", "처리할 행이 없습니다.")
+            return
+        if not skip_confirm and not CustomMessageBox.askyesno(
+            self.root,
+            "반품 입고 확인",
+            f"총 {n}건을 반품 입고 처리합니다.\nPICKING NO 매칭 실패 시 전체가 중단됩니다.\n계속하시겠습니까?",
+        ):
+            return
+        try:
+            from features.parsers.return_inbound_engine import apply_return_inbound_to_db
+            r = apply_return_inbound_to_db(self.engine, parse_result, source_file)
+            self._log(f"✅ 반품 입고 완료: {r.get('returned', 0)}건")
+            CustomMessageBox.showinfo(
+                self.root,
+                "반품 입고 완료",
+                f"반품 입고 처리 완료\n\n반영: {r.get('returned', 0)}건",
+            )
+            if hasattr(self, "_refresh_inventory"):
+                self._refresh_inventory()
+            if hasattr(self, "_refresh_tonbag"):
+                self._refresh_tonbag()
+            if hasattr(self, "_refresh_dashboard"):
+                self._refresh_dashboard()
+        except RuntimeError as e:
+            CustomMessageBox.showerror(self.root, "반품 입고 오류", str(e))
+        except Exception as e:
+            logger.exception("반품 입고 처리 중 오류")
+            CustomMessageBox.showerror(self.root, "반품 입고 오류", str(e))
+
     def _show_return_dialog(self, initial_tab: int = 0) -> None:
         """v4.1.4: 반품 처리 다이얼로그 — initial_tab: 0=소량(단건), 1=다량(Excel)."""
         from ..utils.constants import tk, ttk, BOTH
@@ -336,17 +436,62 @@ class AdvancedDialogsMixin:
         pv_tree.pack(side=LEFT, fill=BOTH, expand=True)
         pv_sb.pack(side=RIGHT, fill=Y)
         
-        summary_var = tk.StringVar(value="Excel 파일을 업로드하세요")
+        summary_var = tk.StringVar(value="데이터 붙여넣기 또는 파일 업로드하세요")
         ttk.Label(tab_excel, textvariable=summary_var, font=('맑은 고딕', 11, 'bold')).pack(pady=3)
         
         # 파싱된 반품 데이터 저장
         parsed_returns = []
         
+        def _show_bulk_return_input_choice():
+            """Excel/데이터 입력 원칙: 데이터 붙여넣기 vs 파일 업로드 선택 후 진행"""
+            from ..utils.ui_constants import (
+                UPLOAD_CHOICE_HEADER, UPLOAD_CHOICE_PASTE, UPLOAD_CHOICE_UPLOAD,
+                UPLOAD_CHOICE_BTN_PASTE, UPLOAD_CHOICE_BTN_UPLOAD,
+            )
+            from ..utils.ui_constants import center_dialog, DialogSize, apply_modal_window_options
+            result = [None]
+            win = tk.Toplevel(dialog)
+            win.title("다량 반품 데이터 입력")
+            apply_modal_window_options(win)
+            win.transient(dialog)
+            win.grab_set()
+            win.geometry(DialogSize.get_geometry(dialog, 'small'))
+            win.minsize(400, 260)
+            center_dialog(win, dialog)
+            f = ttk.Frame(win, padding=(20, 20, 20, 32))
+            f.pack(fill=tk.BOTH, expand=True)
+            ttk.Label(f, text=UPLOAD_CHOICE_HEADER, font=('맑은 고딕', 12, 'bold')).pack(anchor='w', pady=(0, 12))
+            ttk.Label(f, text=UPLOAD_CHOICE_PASTE, font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 10))
+            ttk.Label(f, text=UPLOAD_CHOICE_UPLOAD, font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 24))
+            btn_f = ttk.Frame(f)
+            btn_f.pack(anchor='center')
+            def on_paste():
+                result[0] = 'paste'
+                win.destroy()
+            def on_upload():
+                result[0] = 'upload'
+                win.destroy()
+            ttk.Button(btn_f, text=UPLOAD_CHOICE_BTN_PASTE, command=on_paste, width=22).pack(side=tk.LEFT, padx=(0, 8))
+            ttk.Button(btn_f, text=UPLOAD_CHOICE_BTN_UPLOAD, command=on_upload, width=22).pack(side=tk.LEFT)
+            win.protocol("WM_DELETE_WINDOW", win.destroy)
+            win.wait_window(win)
+            return result[0]
+        
         def _upload_return_excel():
-            """Excel 업로드 → DB 조회 → 미리보기"""
+            """Excel/데이터 입력 원칙: 선택 후 파일 업로드 또는 붙여넣기 → DB 조회 → 미리보기"""
             from ..utils.constants import filedialog
             import pandas as pd
             
+            choice = _show_bulk_return_input_choice()
+            if not choice:
+                return
+            if choice == "paste":
+                CustomMessageBox.showinfo(
+                    dialog, "다량 반품 데이터 입력",
+                    "다량 반품은 프로그램 내장 형식과 동일합니다.\n"
+                    "반품 양식 다운로드 후 엑셀에 채워 [파일 업로드]를 선택하거나,\n"
+                    "입고 메뉴의 [반품 입고 (Excel)]에서 데이터 붙여넣기를 사용하세요.")
+                return
             fp = filedialog.askopenfilename(
                 title="반품 Excel 선택", filetypes=[("Excel files", "*.xlsx *.xls")])
             if not fp:
@@ -581,10 +726,10 @@ class AdvancedDialogsMixin:
                 CustomMessageBox.showwarning(dialog, "안내", "반품 엔진을 찾을 수 없습니다.")
         
         try:
-            ttk.Button(top_bar, text="📂 Excel 업로드", command=_upload_return_excel,
+            ttk.Button(top_bar, text="📂 데이터 입력", command=_upload_return_excel,
                        bootstyle="warning").pack(side='left', padx=5)
         except TypeError:
-            ttk.Button(top_bar, text="📂 Excel 업로드", command=_upload_return_excel).pack(side='left', padx=5)
+            ttk.Button(top_bar, text="📂 데이터 입력", command=_upload_return_excel).pack(side='left', padx=5)
         
         ex_btn = ttk.Frame(tab_excel)
         ex_btn.pack(pady=8)
@@ -829,7 +974,7 @@ class AdvancedDialogsMixin:
                                show='headings', height=15)
             
             for col, text, w in [('date','날짜',100), ('lots','LOT수',60),
-                                 ('total','총재고(MT)',100), ('avail','가용(MT)',100),
+                                 ('total','총재고(MT)',100), ('avail','판매가능(MT)',100),
                                  ('picked','출고(MT)',100)]:
                 tree.heading(col, text=text)
                 tree.column(col, width=w, anchor='e' if col != 'date' else 'w')
@@ -943,6 +1088,11 @@ class AdvancedDialogsMixin:
                 
                 if not save_path:
                     return
+                try:
+                    from ..utils.excel_file_helper import get_unique_excel_path
+                    save_path = get_unique_excel_path(save_path)
+                except ImportError:
+                    pass
                 
                 import openpyxl
                 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side

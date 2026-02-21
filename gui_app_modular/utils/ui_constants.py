@@ -19,6 +19,34 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+# 화물(톤백) 상태 표시명 — 전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고
+STATUS_DISPLAY = {
+    'AVAILABLE': '판매가능',
+    'RESERVED': '판매배정',
+    'PICKED': '판매화물 결정',
+    'SOLD': '출고',
+    'SHIPPED': '선적',
+    'DEPLETED': '소진',
+}
+
+
+def get_status_display(status: str) -> str:
+    """DB 상태값 → 화면 표시명. 없으면 원문 반환."""
+    if not status:
+        return ''
+    return STATUS_DISPLAY.get(str(status).strip().upper(), str(status))
+
+
+# ═══════════════════════════════════════════════════════════════
+# Excel/데이터 입력 원칙 — 전체 프로그램 통일 (AGENTS.md Upload Principle)
+# ═══════════════════════════════════════════════════════════════
+# 형식은 프로그램 내장 → 사용자는 [데이터 붙여넣기] 또는 [파일 업로드] 중 하나 선택
+UPLOAD_CHOICE_HEADER = "프로그램이 정한 형식은 내장되어 있습니다. 다음 중 하나를 선택하세요."
+UPLOAD_CHOICE_PASTE = "① 데이터 붙여넣기: 프로그램 화면에 표가 열립니다. Excel 등에서 복사한 데이터를 붙여넣기(Ctrl+V) 한 뒤 반영합니다."
+UPLOAD_CHOICE_UPLOAD = "② 파일 업로드: 이미 채운 엑셀 파일을 선택하여 업로드합니다."
+UPLOAD_CHOICE_BTN_PASTE = "📋 데이터 붙여넣기"
+UPLOAD_CHOICE_BTN_UPLOAD = "📤 파일 업로드"
+
 
 # ═══════════════════════════════════════════════════════════════
 # 1. 화면 해상도 기반 크기 계산
