@@ -16,7 +16,7 @@ v3.8.4 - advanced_features_mixin에서 분리
 import os
 import sqlite3
 import logging
-from ..utils.ui_constants import CustomMessageBox
+from ..utils.ui_constants import CustomMessageBox, apply_modal_window_options
 
 logger = logging.getLogger(__name__)
 
@@ -24,25 +24,31 @@ logger = logging.getLogger(__name__)
 class AdvancedDialogsMixin:
     """고급 다이얼로그 Mixin"""
 
-    def _show_return_dialog(self) -> None:
-        """v4.1.4: 반품 처리 다이얼로그 — 분할 리팩토링"""
+    def _show_return_dialog(self, initial_tab: int = 0) -> None:
+        """v4.1.4: 반품 처리 다이얼로그 — initial_tab: 0=소량(단건), 1=다량(Excel)."""
         from ..utils.constants import tk, ttk, BOTH
-        
+
         dialog = tk.Toplevel(self.root)
         dialog.title("🔄 반품 처리")
         dialog.geometry("780x650")
+        apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
-        
+
         ttk.Label(dialog, text="반품 처리", font=('맑은 고딕', 18, 'bold')).pack(pady=8)
 
         nb = ttk.Notebook(dialog)
         nb.pack(fill=BOTH, expand=True, padx=10, pady=5)
 
-        # TAB 1: 단건 반품
+        # TAB 0: 단건 반품 (소량)
         self._build_return_single_tab(nb, dialog)
-        # TAB 2: Excel 일괄 반품
+        # TAB 1: Excel 일괄 반품 (다량)
         self._build_return_excel_tab(nb, dialog)
+
+        try:
+            nb.select(initial_tab)
+        except (tk.TclError, TypeError, IndexError) as _e:
+            logger.debug(f"Notebook select: {_e}")
 
     def _build_return_single_tab(self, nb, dialog) -> None:
         """반품 다이얼로그 — TAB 1: 단건 입력"""
@@ -55,17 +61,31 @@ class AdvancedDialogsMixin:
         frame.pack(fill=X, padx=15, pady=10)
         
         ttk.Label(frame, text="LOT 번호:").grid(row=0, column=0, sticky='e', padx=5, pady=5)
-        lot_entry = ttk.Entry(frame, width=30)
-        lot_entry.grid(row=0, column=1, padx=5, pady=5)
+        lot_combo = ttk.Combobox(frame, width=27, state='readonly')
+        lot_combo.grid(row=0, column=1, padx=5, pady=5)
+        # LOT 번호 목록 DB에서 로드
+        def _load_lot_list():
+            if not hasattr(self, 'engine') or not self.engine:
+                return
+            try:
+                rows = self.engine.db.fetchall(
+                    "SELECT DISTINCT lot_no FROM inventory_tonbag ORDER BY lot_no")
+                lots = [r['lot_no'] if isinstance(r, dict) else r[0] for r in (rows or [])]
+                lot_combo['values'] = lots if lots else ["(등록된 LOT 없음)"]
+                if lots:
+                    lot_combo.set(lots[0])
+            except (ValueError, TypeError, AttributeError) as e:
+                logger.debug(f"LOT 목록 조회 오류: {e}")
+        _load_lot_list()
         
         ttk.Label(frame, text="Tonbag No:").grid(row=1, column=0, sticky='e', padx=5, pady=5)
         tonbag_combo = ttk.Combobox(frame, width=27, state='readonly')
         tonbag_combo.grid(row=1, column=1, padx=5, pady=5)
-        tonbag_combo.set("← LOT 번호 입력 후 자동 조회")
+        tonbag_combo.set("← LOT 번호 선택 후 자동 조회")
         
         def _on_lot_change(event=None):
-            lot_no = lot_entry.get().strip()
-            if not lot_no or not hasattr(self, 'engine'):
+            lot_no = (lot_combo.get() or '').strip()
+            if not lot_no or not hasattr(self, 'engine') or lot_no == "(등록된 LOT 없음)":
                 return
             try:
                 rows = self.engine.db.fetchall(
@@ -89,8 +109,9 @@ class AdvancedDialogsMixin:
             except (ValueError, TypeError, AttributeError) as e:
                 logger.debug(f"톤백 조회 오류: {e}")
         
-        lot_entry.bind('<FocusOut>', _on_lot_change)
-        lot_entry.bind('<Return>', _on_lot_change)
+        lot_combo.bind('<<ComboboxSelected>>', _on_lot_change)
+        lot_combo.bind('<FocusOut>', _on_lot_change)
+        lot_combo.bind('<Return>', _on_lot_change)
         
         def _on_tonbag_select(event=None):
             sel = tonbag_combo.get()
@@ -119,27 +140,55 @@ class AdvancedDialogsMixin:
         note_text.grid(row=4, column=1, padx=5, pady=5)
         
         def _process_single_return():
-            lot_no = lot_entry.get().strip()
+            lot_no = (lot_combo.get() or '').strip()
+            tonbag_sel = tonbag_combo.get().strip()
             qty_str = qty_entry.get().strip()
             reason = reason_combo.get()
             note = note_text.get("1.0", "end").strip()
-            if not lot_no:
-                CustomMessageBox.showwarning(dialog, "입력 필요", "LOT 번호를 입력하세요.")
+
+            # 최소 데이터: LOT 번호, Tonbag 선택, 반품 수량(kg)
+            if not lot_no or lot_no == "(등록된 LOT 없음)":
+                CustomMessageBox.showwarning(dialog, "입력 필요",
+                    "LOT 번호를 목록에서 선택하세요.\n\n화물 정합성을 위해 LOT 번호는 필수입니다.")
+                lot_combo.focus_set()
+                return
+            if not tonbag_sel or tonbag_sel == "← LOT 번호 선택 후 자동 조회" or tonbag_sel == "톤백 없음":
+                CustomMessageBox.showwarning(dialog, "입력 필요",
+                    "LOT 번호 선택 후 반품할 톤백을 선택하세요.\n\nTonbag No는 필수입니다.")
+                lot_combo.focus_set()
                 return
             if not qty_str:
-                CustomMessageBox.showwarning(dialog, "입력 필요", "반품 수량을 입력하세요.")
+                CustomMessageBox.showwarning(dialog, "입력 필요",
+                    "반품 수량(kg)을 입력하세요.\n\n화물 무게 정합성을 위해 반품 수량은 필수입니다.")
+                qty_entry.focus_set()
                 return
             try:
                 qty = float(qty_str)
                 if qty <= 0:
                     raise ValueError
             except ValueError:
-                CustomMessageBox.showwarning(dialog, "입력 오류", "올바른 수량을 입력하세요.")
+                CustomMessageBox.showwarning(dialog, "입력 오류",
+                    "반품 수량에는 0보다 큰 숫자(kg)를 입력하세요.")
+                qty_entry.focus_set()
                 return
+
+            # 무게 정합성: 반품 수량이 해당 톤백 무게를 초과하면 경고
+            tonbag_kg = None
+            if '(' in tonbag_sel and 'kg' in tonbag_sel:
+                try:
+                    tonbag_kg = float(tonbag_sel.split('(')[1].split('kg')[0].strip())
+                except (ValueError, TypeError, IndexError) as _e:
+                    logger.debug(f"톤백 무게 파싱: {_e}")
+            if tonbag_kg is not None and qty > tonbag_kg:
+                CustomMessageBox.showwarning(dialog, "무게 정합성 경고",
+                    f"반품 수량({qty:,.2f} kg)이 해당 톤백 무게({tonbag_kg:,.2f} kg)를 초과합니다.\n\n"
+                    "수정해 주세요. (반품 수량 ≤ 톤백 무게)")
+                qty_entry.focus_set()
+                return
+
             if not CustomMessageBox.askyesno(dialog, "반품 확인",
                 f"LOT: {lot_no}\n수량: {qty:,.2f} kg\n사유: {reason}\n\n반품 처리하시겠습니까?"):
                 return
-            tonbag_sel = tonbag_combo.get()
             sub_lt_val = 1
             if tonbag_sel and tonbag_sel[0].isdigit():
                 try:
@@ -218,11 +267,11 @@ class AdvancedDialogsMixin:
                         ('mxbg_pallet', 'MXBG', 70, False),
                     ]
                 return_extra = [
-                    ('return_qty_kg', 'RETURN QTY (KG)', 16, True),
+                    ('return_qty_kg', '반품수량(갯수)', 16, True),
                     ('return_reason', 'RETURN REASON', 20, True),
                 ]
                 headers = list(inv_cols) + return_extra
-                required_return = {'lot_no', 'return_qty_kg', 'return_reason'}
+                required_return = {'lot_no', 'bl_no', 'return_qty_kg', 'return_reason'}
                 wb = openpyxl.Workbook()
                 ws = wb.active
                 ws.title = "반품 데이터"
@@ -233,7 +282,7 @@ class AdvancedDialogsMixin:
                 thin = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
                 ncols = len(headers)
                 ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
-                ws['A1'] = "🔄 반품 템플릿 v5.8.9 — 재고 리스트와 동일 형식. 진한색 컬럼은 필수(LOT NO, 반품수량, 사유). 2행=DB필드명."
+                ws['A1'] = "🔄 반품 템플릿 — 필수: Lot No, BL NO, 톤백중량(DB조회), 반품수량(갯수), 사유. 2행=DB필드명."
                 ws['A1'].font = Font(bold=True, size=11, color="C0392B")
                 ws.row_dimensions[1].height = 28
                 for col, h in enumerate(headers, 1):
@@ -268,17 +317,17 @@ class AdvancedDialogsMixin:
         file_var = tk.StringVar(value="파일을 선택하세요...")
         ttk.Label(top_bar, textvariable=file_var, foreground='gray').pack(side='left', padx=10, fill=X, expand=True)
         
-        # 미리보기 Treeview
+        # 미리보기 Treeview — 필수 4열: Lot No, BL NO, 톤백중량, 반품수량(갯수)
         pv_frame = ttk.LabelFrame(tab_excel, text="반품 미리보기 (DB 자동 조회)")
         pv_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
-        
+        ttk.Label(pv_frame, text="※ 필수: Lot No, BL NO, 톤백중량, 반품수량(갯수) — 네 열 중 하나라도 비면 반품 업로드 시 오류 표시", font=('맑은 고딕', 9)).pack(anchor='w')
         cols = ('lot_no', 'bl_no', 'tonbag_no', 'product', 'weight_kg',
                 'return_qty', 'reason', 'status', 'remark')
         pv_tree = ttk.Treeview(pv_frame, columns=cols, show='headings', height=10)
         for cid, txt, w in [
-            ('lot_no', 'LOT NO', 100), ('bl_no', 'BL NO', 100),
+            ('lot_no', 'LOT NO *', 100), ('bl_no', 'BL NO *', 100),
             ('tonbag_no', 'Tonbag#', 65), ('product', 'Product', 90),
-            ('weight_kg', '톤백중량(kg)', 90), ('return_qty', '반품수량(kg)', 90),
+            ('weight_kg', '톤백중량(kg) *', 90), ('return_qty', '반품수량(갯수) *', 90),
             ('reason', '사유', 100), ('status', '상태', 70), ('remark', '비고', 100)]:
             pv_tree.heading(cid, text=txt)
             pv_tree.column(cid, width=w, anchor='center' if cid in ('tonbag_no','status') else 'w')
@@ -332,6 +381,8 @@ class AdvancedDialogsMixin:
                         col_map['tonbag_no'] = c
                     elif 'return' in cl and ('qty' in cl or 'kg' in cl):
                         col_map['return_qty'] = c
+                    elif '반품수량' in str(c) or 'return_qty' in cl:
+                        col_map['return_qty'] = c
                     elif 'reason' in cl or cl == 'return_reason':
                         col_map['reason'] = c
                     elif 'remark' in cl:
@@ -343,18 +394,21 @@ class AdvancedDialogsMixin:
                 if 'return_qty' not in col_map and 'reason' not in col_map:
                     CustomMessageBox.showwarning(dialog, "안내", "RETURN QTY (KG) 또는 RETURN REASON 컬럼을 권장합니다.")
                 
-                # 미리보기 구성
+                # 미리보기 구성 + 필수 4열 검증 (Lot No, BL NO, 톤백중량, 반품수량(갯수))
                 pv_tree.delete(*pv_tree.get_children())
                 parsed_returns.clear()
                 ok_count = 0
                 err_count = 0
+                required_missing_rows = []  # 필수 누락 행 번호(Excel 1-based)
                 returnable_statuses = ('PICKED', 'CONFIRMED', 'SHIPPED', 'SOLD', 'RESERVED')
-                
-                for _, row in df.iterrows():
+                data_start_row = header_row + 2  # Excel 1-based 첫 데이터 행
+
+                for idx, row in df.iterrows():
                     lot_no = str(row.get(col_map.get('lot_no', ''), '')).strip()
                     if not lot_no or lot_no == 'nan':
                         continue
-                    
+                    excel_row = data_start_row + int(idx)
+
                     bl_no = str(row.get(col_map.get('bl_no', ''), '')).strip()
                     tonbag_str = str(row.get(col_map.get('tonbag_no', ''), '')).strip()
                     qty_str = str(row.get(col_map.get('return_qty', ''), '')).strip()
@@ -364,12 +418,12 @@ class AdvancedDialogsMixin:
                     if remark == 'nan': remark = ''
                     if bl_no == 'nan': bl_no = ''
                     if tonbag_str == 'nan': tonbag_str = ''
-                    
+
                     try:
                         return_qty_kg = float(qty_str) if qty_str and qty_str != 'nan' else 0.0
                     except (ValueError, TypeError):
                         return_qty_kg = 0.0
-                    
+
                     product = ''
                     if hasattr(self, 'engine') and self.engine:
                         try:
@@ -381,7 +435,16 @@ class AdvancedDialogsMixin:
                                     bl_no = (inv['bl_no'] if isinstance(inv, dict) else inv[1]) or ''
                         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError):
                             pass
-                    
+
+                    # 필수 4열 검증: Lot No, BL NO, 톤백중량, 반품수량(갯수)
+                    missing_this_row = []
+                    if not lot_no or lot_no == 'nan':
+                        missing_this_row.append('Lot No')
+                    if not bl_no or bl_no == 'nan':
+                        missing_this_row.append('BL NO')
+                    if not qty_str or qty_str == 'nan' or return_qty_kg <= 0:
+                        missing_this_row.append('반품수량(갯수)')
+
                     items_to_add = []
                     if tonbag_str:
                         sub_lt = 1
@@ -438,12 +501,18 @@ class AdvancedDialogsMixin:
                                 }]
                         if not items_to_add:
                             items_to_add = [{'sub_lt': 0, 'weight_kg': 0, 'status': 'NOT FOUND'}]
-                    
+
+                    has_tonbag_weight = any(float(it.get('weight_kg', 0) or 0) > 0 for it in items_to_add)
+                    if not has_tonbag_weight:
+                        missing_this_row.append('톤백중량')
+                    if missing_this_row:
+                        required_missing_rows.append((excel_row, missing_this_row))
+
                     for it in items_to_add:
                         sub_lt = it['sub_lt']
                         weight_kg = it['weight_kg']
                         status = it['status']
-                        is_ok = status in returnable_statuses
+                        is_ok = status in returnable_statuses and not missing_this_row
                         tag = 'ok' if is_ok else 'err'
                         if is_ok:
                             ok_count += 1
@@ -463,6 +532,14 @@ class AdvancedDialogsMixin:
                 
                 pv_tree.tag_configure('ok', foreground='#27ae60')
                 pv_tree.tag_configure('err', foreground='#e74c3c')
+                
+                if required_missing_rows:
+                    lines = [f"  행 {r}: {', '.join(m)}" for r, m in required_missing_rows[:20]]
+                    if len(required_missing_rows) > 20:
+                        lines.append(f"  ... 외 {len(required_missing_rows) - 20}행")
+                    CustomMessageBox.showerror(dialog, "필수 항목 누락",
+                        "반품 업로드 시 Lot No, BL NO, 톤백중량, 반품수량(갯수) 네 열은 필수입니다.\n\n"
+                        "다음 행에 필수 항목이 비어 있습니다:\n\n" + "\n".join(lines) + "\n\n수정 후 다시 업로드하세요.")
                 
                 summary_var.set(f"✅ 반품 가능: {ok_count}건  |  ❌ 불가: {err_count}건  |  총: {ok_count + err_count}건")
                 
@@ -534,6 +611,7 @@ class AdvancedDialogsMixin:
         dialog = tk.Toplevel(self.root)
         dialog.title("📄 문서 변환 (OCR/PDF)")
         dialog.geometry("500x400")
+        apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
         
@@ -627,6 +705,7 @@ class AdvancedDialogsMixin:
         dialog = tk.Toplevel(self.root)
         dialog.title("📋 출고 이력 조회")
         dialog.geometry("900x500")
+        apply_modal_window_options(dialog)
         dialog.transient(self.root)
         
         # 필터
@@ -670,7 +749,7 @@ class AdvancedDialogsMixin:
         def do_search():
             tree.delete(*tree.get_children())
             try:
-                query = "SELECT id, lot_no, movement_type, qty_kg, customer, movement_date, created_at FROM stock_movement WHERE 1=1"
+                query = "SELECT id, lot_no, movement_type, qty_kg, '' AS customer, created_at AS movement_date, created_at FROM stock_movement WHERE 1=1"
                 params = []
                 
                 mv_type = type_var.get()
@@ -742,6 +821,7 @@ class AdvancedDialogsMixin:
             dialog = tk.Toplevel(self.root)
             dialog.title("📊 재고 추이 (최근 30일)")
             dialog.geometry("800x400")
+            apply_modal_window_options(dialog)
             dialog.transient(self.root)
             
             # 표 형태
@@ -782,6 +862,7 @@ class AdvancedDialogsMixin:
         dialog = tk.Toplevel(self.root)
         dialog.title("📄 거래명세서 생성")
         dialog.geometry("400x250")
+        apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
         
@@ -820,16 +901,33 @@ class AdvancedDialogsMixin:
                 CustomMessageBox.showwarning(dialog, "입력 필요", "고객명을 선택하세요.")
                 return
             
-            # 출고 데이터 조회
+            # 출고 데이터 조회 (customer 컬럼 없어도 동작)
             try:
-                movements = self.engine.db.fetchall("""
-                    SELECT lot_no, movement_type, qty_kg, customer, 
-                           movement_date, created_at
-                    FROM stock_movement 
-                    WHERE customer = ? AND movement_type = 'OUTBOUND'
-                      AND movement_date >= ? AND movement_date <= ?
-                    ORDER BY movement_date
-                """, (customer, date_from, date_to + ' 23:59:59'))
+                for q, p in [
+                    ("""SELECT lot_no, movement_type, qty_kg, customer, 
+                            COALESCE(movement_date, created_at) AS movement_date, created_at
+                        FROM stock_movement 
+                        WHERE customer = ? AND movement_type = 'OUTBOUND'
+                          AND COALESCE(movement_date, created_at) >= ? AND COALESCE(movement_date, created_at) <= ?
+                        ORDER BY created_at""",
+                     (customer, date_from, date_to + ' 23:59:59')),
+                    ("""SELECT lot_no, movement_type, qty_kg, '' AS customer, 
+                            created_at AS movement_date, created_at
+                        FROM stock_movement 
+                        WHERE movement_type = 'OUTBOUND'
+                          AND created_at >= ? AND created_at <= ?
+                        ORDER BY created_at""",
+                     (date_from, date_to + ' 23:59:59')),
+                ]:
+                    try:
+                        movements = self.engine.db.fetchall(q, p)
+                        break
+                    except (sqlite3.OperationalError,) as e:
+                        if "no such column" in str(e).lower():
+                            continue
+                        raise
+                else:
+                    movements = []
                 
                 if not movements:
                     CustomMessageBox.showinfo(dialog, "결과 없음", "해당 기간 출고 이력이 없습니다.")

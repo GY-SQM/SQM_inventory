@@ -108,8 +108,8 @@ class CustomMenuBar:
         
         # v5.6.5: 입고 — PDF 원스톱 + Excel 2개만
         inbound_sub = self._add_submenu(file_menu, "📥 입고 (Ctrl+I)")
-        self._add_command(inbound_sub, "📄 PDF 입고 (원스톱)", self.app._on_pdf_inbound)
-        self._add_command(inbound_sub, "📊 Excel 입고", self.app._bulk_import_inventory_simple)
+        self._add_command(inbound_sub, "📄 PDF 스캔 입고", self.app._on_pdf_inbound)
+        self._add_command(inbound_sub, "📊 엑셀 파일 수동 입고", self.app._bulk_import_inventory_simple)
         self._add_command(inbound_sub, "📋 D/O 후속 연결", self.app._on_do_update)
         self._add_separator(inbound_sub)
         self._add_command(inbound_sub, "🔄 반품 (재입고)", self._show_return_safe)

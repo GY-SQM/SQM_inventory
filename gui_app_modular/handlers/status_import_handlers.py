@@ -24,36 +24,36 @@ class StatusImportHandlersMixin:
     """
     
     def _import_outbound_excel(self) -> None:
-        """Import outbound status from Excel (tonbag level)"""
+        """출고 결과 Excel 불러오기 — 파일 선택 후 상세 요약 다이얼로그 표시, 사용자 확인 후 DB 반영."""
         from ..utils.constants import filedialog
-        
-        file_path = filedialog.askopenfilename(
-            title="Select Outbound Status Excel",
-            filetypes=[("Excel files", "*.xlsx;*.xls"), ("All files", "*.*")]
-        )
-        
+        import tkinter as tk
+        from tkinter import ttk
+
+        file_path = getattr(self, '_pending_file', None)
+        if file_path:
+            delattr(self, '_pending_file')
+        if not file_path:
+            file_path = filedialog.askopenfilename(
+                title="출고 결과 Excel 선택",
+                filetypes=[("Excel files", "*.xlsx;*.xls"), ("All files", "*.*")]
+            )
         if not file_path:
             return
-        
-        self._set_status("Loading outbound status...")
+
+        self._set_status("출고 결과 로딩 중...")
         self._log(f"Outbound Excel: {os.path.basename(file_path)}")
-        
+
         try:
             import pandas as pd
-            
-            # Check sheets
+
             xls = pd.ExcelFile(file_path)
             if 'outbound' in [s.lower() for s in xls.sheet_names]:
                 df = pd.read_excel(file_path, sheet_name='outbound')
             else:
                 df = pd.read_excel(file_path, sheet_name=0)
-            
             self._log(f"  -> {len(df)} rows loaded")
-            
-            # Normalize column names
+
             df.columns = [str(c).strip().upper().replace(' ', '_') for c in df.columns]
-            
-            # Column mapping
             col_map = {
                 'LOT_NO': ['LOT_NO', 'LOTNO', 'LOT', 'LOT_NUMBER'],
                 'SUB_LT': ['SUB_LT', 'SUBLT', 'SUB_LOT', 'SUBLOT', 'TONBAG_NO', 'TONBAG'],
@@ -61,112 +61,163 @@ class StatusImportHandlersMixin:
                 'OUTBOUND_DATE': ['OUTBOUND_DATE', 'OUTBOUNDDATE', 'PICK_DATE', 'PICKED_DATE', 'SOLD_DATE', 'DATE'],
                 'SALE_REF': ['SALE_REF', 'SALEREF', 'PICK_REF', 'SALE_REFERENCE'],
             }
-            
+
             def find_col(candidates):
                 for c in candidates:
                     if c in df.columns:
                         return c
                 return None
-            
-            # Required columns
+
             lot_col = find_col(col_map['LOT_NO'])
             sub_col = find_col(col_map['SUB_LT'])
-            
             if not lot_col or not sub_col:
-                missing = []
-                if not lot_col:
-                    missing.append("LOT NO")
+                missing = ["LOT NO"] if not lot_col else []
                 if not sub_col:
-                    missing.append("SUB LT (Tonbag No)")
-                CustomMessageBox.showerror(self.root, "Error", f"Required columns missing: {missing}")
+                    missing.append("SUB LT (톤백 NO)")
+                CustomMessageBox.showerror(self.root, "컬럼 누락", f"필수 컬럼이 없습니다: {missing}")
+                self._set_status("Ready")
                 return
-            
-            # Optional columns
+
             customer_col = find_col(col_map['CUSTOMER'])
             date_col = find_col(col_map['OUTBOUND_DATE'])
             ref_col = find_col(col_map['SALE_REF'])
-            
-            # Process data
-            updated = 0
-            not_found = 0
-            already_picked = 0
-            
-            with self.engine.db.transaction():
-                for idx, row in df.iterrows():
-                    lot_no = str(row.get(lot_col, ''))
-                    if not lot_no or lot_no == 'nan':
-                        continue
-                    
-                    # Clean LOT number
-                    if '.' in lot_no:
-                        lot_no = lot_no.split('.')[0]
-                    
-                    tonbag_no = self._safe_int(row.get(sub_col, 0))
-                    customer = str(row.get(customer_col, '')) if customer_col and pd.notna(row.get(customer_col)) else ''
-                    sale_ref = str(row.get(ref_col, '')) if ref_col and pd.notna(row.get(ref_col)) else ''
-                    outbound_date = self._safe_date(row.get(date_col)) if date_col else date.today()
-                    
-                    # Check tonbag exists
-                    existing = self.engine.db.fetchone(
-                        "SELECT id, status FROM inventory_tonbag WHERE lot_no=? AND sub_lt=?",
-                        (lot_no, tonbag_no)
-                    )
-                    
-                    if not existing:
-                        not_found += 1
-                        continue
-                    
-                    if existing['status'] == 'PICKED':
-                        already_picked += 1
-                        continue
-                    
-                    # Update to picked
-                    self.engine.db.execute("""
-                        UPDATE inventory_tonbag SET
-                            status = 'PICKED',
-                            picked_to = ?,
-                            pick_ref = ?,
-                            outbound_date = ?,
-                            picked_date = ?,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE lot_no = ? AND sub_lt = ?
-                    """, (customer, sale_ref, outbound_date, outbound_date, lot_no, tonbag_no))
-                    updated += 1
-            
-            self._log(f"OK Outbound: {updated} processed, {not_found} not found, {already_picked} already picked")
-            
-            # Generate report
-            report_path = None
-            if updated > 0:
-                try:
-                    report_path = self._generate_outbound_report(file_path, updated)
-                    self._log(f"Report: {report_path}")
-                except (ValueError, TypeError, AttributeError) as e:
-                    self._log(f"WARNING Report generation failed: {e}")
-            
-            msg = (f"Outbound Status Import Complete\n\n"
-                   f"• Processed: {updated}\n"
-                   f"• Not Found: {not_found}\n"
-                   f"• Already Picked: {already_picked}")
-            
-            if report_path:
-                msg += f"\n\nReport: {os.path.basename(report_path)}"
-                if CustomMessageBox.askyesno(self.root, "Complete", msg + "\n\nOpen report?"):
-                    self._open_file(report_path)
-            else:
-                CustomMessageBox.showinfo(self.root, "Complete", msg)
-            
-            self._refresh_inventory()
-            self._refresh_tonbag()
-            
+
+            # 상세 요약용 행 목록 (상태: 적용가능 / 재고없음 / 이미출고)
+            preview_rows = []
+            for idx, row in df.iterrows():
+                lot_no = str(row.get(lot_col, ''))
+                if not lot_no or lot_no == 'nan':
+                    continue
+                if '.' in lot_no:
+                    lot_no = lot_no.split('.')[0]
+                tonbag_no = self._safe_int(row.get(sub_col, 0))
+                customer = str(row.get(customer_col, '')) if customer_col and pd.notna(row.get(customer_col)) else ''
+                sale_ref = str(row.get(ref_col, '')) if ref_col and pd.notna(row.get(ref_col)) else ''
+                outbound_date = self._safe_date(row.get(date_col)) if date_col else date.today()
+                existing = self.engine.db.fetchone(
+                    "SELECT id, status FROM inventory_tonbag WHERE lot_no=? AND sub_lt=?",
+                    (lot_no, tonbag_no)
+                )
+                if not existing:
+                    status = "재고없음"
+                elif existing['status'] == 'PICKED':
+                    status = "이미출고"
+                else:
+                    status = "적용가능"
+                preview_rows.append((lot_no, tonbag_no, customer, str(outbound_date), sale_ref or '', status))
+
+            if not preview_rows:
+                CustomMessageBox.showwarning(self.root, "안내", "출고 데이터가 없습니다.")
+                self._set_status("Ready")
+                return
+
+            # 상세 요약 다이얼로그
+            win = tk.Toplevel(self.root)
+            win.title("출고 결과 — 상세 요약")
+            win.transient(self.root)
+            win.resizable(True, True)
+            win.minsize(620, 400)
+            from ..utils.ui_constants import apply_modal_window_options, center_dialog
+            apply_modal_window_options(win)
+
+            frm = ttk.Frame(win, padding=12)
+            frm.pack(fill=tk.BOTH, expand=True)
+            ttk.Label(frm, text="출고 내용을 확인한 뒤 [DB 반영]을 누르세요.", font=("맑은 고딕", 11, "bold")).pack(anchor=tk.W, pady=(0, 8))
+            cols = ("lot_no", "sub_lt", "customer", "outbound_date", "sale_ref", "status")
+            tree = ttk.Treeview(frm, columns=cols, show="headings", height=14, selectmode="extended")
+            for c, h in [("lot_no", "LOT NO"), ("sub_lt", "톤백 NO"), ("customer", "고객"), ("outbound_date", "출고일"), ("sale_ref", "SALE REF"), ("status", "상태")]:
+                tree.heading(c, text=h)
+                tree.column(c, width=90 if c != "customer" else 140, anchor="w")
+            scroll_y = ttk.Scrollbar(frm, orient=tk.VERTICAL, command=tree.yview)
+            scroll_x = ttk.Scrollbar(frm, orient=tk.HORIZONTAL, command=tree.xview)
+            tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+            scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
+            tree.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
+            for r in preview_rows:
+                tree.insert("", "end", values=r)
+            cnt_ok = sum(1 for r in preview_rows if r[5] == "적용가능")
+            cnt_nf = sum(1 for r in preview_rows if r[5] == "재고없음")
+            cnt_done = sum(1 for r in preview_rows if r[5] == "이미출고")
+            summary = f"총 {len(preview_rows)}건  |  적용가능: {cnt_ok}건  |  재고없음: {cnt_nf}건  |  이미출고: {cnt_done}건"
+            ttk.Label(frm, text=summary, font=("맑은 고딕", 10)).pack(anchor=tk.W, pady=6)
+
+            def do_apply():
+                win.destroy()
+                self._set_status("출고 결과 반영 중...")
+                updated = 0
+                not_found = 0
+                already_picked = 0
+                with self.engine.db.transaction():
+                    for idx, row in df.iterrows():
+                        lot_no = str(row.get(lot_col, ''))
+                        if not lot_no or lot_no == 'nan':
+                            continue
+                        if '.' in lot_no:
+                            lot_no = lot_no.split('.')[0]
+                        tonbag_no = self._safe_int(row.get(sub_col, 0))
+                        customer = str(row.get(customer_col, '')) if customer_col and pd.notna(row.get(customer_col)) else ''
+                        sale_ref = str(row.get(ref_col, '')) if ref_col and pd.notna(row.get(ref_col)) else ''
+                        outbound_date = self._safe_date(row.get(date_col)) if date_col else date.today()
+                        existing = self.engine.db.fetchone(
+                            "SELECT id, status FROM inventory_tonbag WHERE lot_no=? AND sub_lt=?",
+                            (lot_no, tonbag_no)
+                        )
+                        if not existing:
+                            not_found += 1
+                            continue
+                        if existing['status'] == 'PICKED':
+                            already_picked += 1
+                            continue
+                        self.engine.db.execute("""
+                            UPDATE inventory_tonbag SET
+                                status = 'PICKED',
+                                picked_to = ?,
+                                pick_ref = ?,
+                                outbound_date = ?,
+                                picked_date = ?,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE lot_no = ? AND sub_lt = ?
+                        """, (customer, sale_ref, outbound_date, outbound_date, lot_no, tonbag_no))
+                        updated += 1
+                self._log(f"OK Outbound: {updated} processed, {not_found} not found, {already_picked} already picked")
+                report_path = None
+                if updated > 0:
+                    try:
+                        report_path = self._generate_outbound_report(file_path, updated)
+                        self._log(f"Report: {report_path}")
+                    except (ValueError, TypeError, AttributeError) as e:
+                        self._log(f"WARNING Report generation failed: {e}")
+                msg = (f"출고 결과 반영 완료\n\n• 반영: {updated}건\n• 재고 없음: {not_found}건\n• 이미 출고: {already_picked}건")
+                if report_path:
+                    msg += f"\n\n보고서: {os.path.basename(report_path)}"
+                    if CustomMessageBox.askyesno(self.root, "완료", msg + "\n\n보고서를 열까요?"):
+                        self._open_file(report_path)
+                else:
+                    CustomMessageBox.showinfo(self.root, "완료", msg)
+                if hasattr(self, '_refresh_inventory'):
+                    self._refresh_inventory()
+                if hasattr(self, '_refresh_tonbag'):
+                    self._refresh_tonbag()
+                self._set_status("Ready")
+
+            def do_cancel():
+                win.destroy()
+                self._set_status("Ready")
+
+            btn_frm = ttk.Frame(frm)
+            btn_frm.pack(fill=tk.X, pady=(10, 0))
+            ttk.Button(btn_frm, text="DB 반영", command=do_apply).pack(side=tk.LEFT, padx=4)
+            ttk.Button(btn_frm, text="취소", command=do_cancel).pack(side=tk.LEFT, padx=4)
+            center_dialog(win, self.root)
+
         except (OSError, IOError, PermissionError) as e:
             self._log(f"X Outbound import error: {e}")
-            CustomMessageBox.showerror(self.root, "Error", f"Outbound import failed:\n{e}")
-        
+            CustomMessageBox.showerror(self.root, "오류", f"출고 결과 불러오기 실패:\n{e}")
         self._set_status("Ready")
     
     def _import_location_excel(self) -> None:
-        """Import location mapping from Excel"""
+        """톤백 리스트(inventory_tonbag) 전용 로케이션 매핑. 재고 리스트(LOT 리스트)는 사용하지 않음."""
         from ..utils.constants import filedialog
         import re
         
@@ -183,46 +234,52 @@ class StatusImportHandlersMixin:
         
         try:
             import pandas as pd
-            
+            from core.column_registry import normalize_header
+
             # Read file
             if file_path.lower().endswith('.csv'):
                 df = pd.read_csv(file_path)
             else:
                 df = pd.read_excel(file_path, sheet_name=0)
-            
+
+            # Normalize column names with column_registry (LOT NO, TONBAG NO, SUB LT, location 등 통일 인식)
+            raw_columns = [str(c).strip() for c in df.columns]
+            df.columns = [normalize_header(c) for c in raw_columns]
+
+            # 헤더가 2행인 경우(1행=제목, 2행=DB필드명): 첫 행에 필수 컬럼이 없으면 2행을 헤더로 재시도
+            required_canonical = {'lot_no', 'sub_lt', 'location'}
+            if not required_canonical.issubset(set(df.columns)):
+                try:
+                    if file_path.lower().endswith('.csv'):
+                        df2 = pd.read_csv(file_path, header=1)
+                    else:
+                        df2 = pd.read_excel(file_path, sheet_name=0, header=1)
+                    df2.columns = [normalize_header(str(c).strip()) for c in df2.columns]
+                    if required_canonical.issubset(set(df2.columns)):
+                        df = df2
+                except Exception:
+                    pass
+
             self._log(f"  -> {len(df)} rows loaded")
-            
-            # Normalize column names
-            df.columns = [str(c).strip().upper().replace(' ', '_') for c in df.columns]
-            
-            # Column mapping
-            col_map = {
-                'LOT_NO': ['LOT_NO', 'LOTNO', 'LOT'],
-                'SUB_LT': ['SUB_LT', 'SUBLT', 'SUB_LOT', 'SUBLOT', 'TONBAG_NO', 'TONBAG'],
-                'LOCATION': ['LOCATION', 'LOC', 'WAREHOUSE_LOCATION', 'POSITION'],
-            }
-            
-            def find_col(candidates):
-                for c in candidates:
-                    c_norm = c.upper().replace(' ', '_')
-                    if c_norm in df.columns:
-                        return c_norm
-                return None
-            
-            # Required columns
-            lot_col = find_col(col_map['LOT_NO'])
-            sub_col = find_col(col_map['SUB_LT'])
-            loc_col = find_col(col_map['LOCATION'])
-            
+
+            # Required columns (canonical: lot_no, sub_lt, location — column_registry와 동일)
+            lot_col = 'lot_no' if 'lot_no' in df.columns else None
+            sub_col = 'sub_lt' if 'sub_lt' in df.columns else None
+            loc_col = 'location' if 'location' in df.columns else None
+
             if not lot_col or not sub_col or not loc_col:
                 missing = []
                 if not lot_col:
                     missing.append("LOT NO")
                 if not sub_col:
-                    missing.append("SUB LT")
+                    missing.append("SUB LT / TONBAG NO")
                 if not loc_col:
                     missing.append("LOCATION")
-                CustomMessageBox.showerror(self.root, "Error", f"Required columns missing: {missing}")
+                CustomMessageBox.showerror(
+                    self.root, "Error",
+                    f"Required columns missing: {missing}\n\n"
+                    f"현재 컬럼: {list(df.columns)}"
+                )
                 return
             
             # Process data
@@ -267,8 +324,8 @@ class StatusImportHandlersMixin:
                     
                     location = str(loc_raw).strip().upper()
                     
-                    # Validate location format (G5-01-02-03 or similar)
-                    if not re.match(r'^G[56]-\d{2}-\d{2}-\d{2}$', location):
+                    # Validate location format: G5-01-02-03 (3파트) 또는 A-01-01-10 (4파트) 등
+                    if not re.match(r'^[A-Z0-9]+-\d{2}-\d{2}(-\d{2})?$', location):
                         self._log(f"WARNING Invalid location format: {location}")
                         # Still save even if format doesn't match
                     

@@ -12,7 +12,7 @@ import sqlite3
 import logging
 import tkinter as tk
 from tkinter import ttk
-from ..utils.ui_constants import ThemeColors, Spacing, FontScale, FontStyle, get_font_scale, DialogSize, center_dialog
+from ..utils.ui_constants import ThemeColors, Spacing, FontScale, FontStyle, get_font_scale, DialogSize, center_dialog, apply_modal_window_options
 from utils.ui_debug import log_ui_event, safe_widget_bg  # v5.3.6
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ class ToolbarMixin:
 
         # v3.8.9: overflow 체크 비활성화 (탭은 항상 row2에 고정)
         # self.root.bind('<Configure>', self._check_toolbar_overflow)
-        self._tab_index_map = {'inventory': 0, 'tonbag': 1, 'dashboard': 2, 'log': 3}
+        self._tab_index_map = {'inventory': 0, 'outbound_scheduled': 1, 'tonbag': 2, 'dashboard': 3, 'log': 4}
         self._active_tab_key = 'inventory'
 
     # ═══════════════════════════════════════════════════════
@@ -291,26 +291,38 @@ class ToolbarMixin:
     def _build_inbound_menu(self) -> 'tk.Menu':
         m = self._create_menu()
         self._add_menu_items(m, [
-            ('📥 PDF 입고 (원스톱)',    lambda: self._safe_call('_on_pdf_inbound')),
-            ('📝 Excel 입고',          lambda: self._safe_call('_bulk_import_inventory_simple')),
+            ('📥 PDF 스캔 입고',       lambda: self._safe_call('_on_pdf_inbound')),
+            ('📝 엑셀 파일 수동 입고',  lambda: self._safe_call('_bulk_import_inventory_simple')),
             None,
-            ('📦 톤백 위치 매핑',      lambda: self._safe_call('_on_location_mapping_choice')),
             ('📋 입고현황 불러오기',    lambda: self._safe_call('_bulk_import_inventory')),
-            ('📥 샘플 Excel 다운로드', lambda: self._safe_call('_download_inbound_template')),
+            ('📍 톤백 위치 매핑',      lambda: self._safe_call('_on_tonbag_location_upload')),
             None,
-            ('🔄 반품 (재입고)',       lambda: self._safe_call('_show_return_dialog')),
         ])
+        return_sub = self._create_menu()
+        return_sub.add_command(label="  📝 소량 반품 (1~2건)", command=lambda: self._show_return_dialog(0))
+        return_sub.add_command(label="  📂 다량 반품 (Excel)", command=lambda: self._show_return_dialog(1))
+        m.add_cascade(label="  🔄 반품 (재입고)", menu=return_sub)
         return m
 
     def _build_outbound_menu(self) -> 'tk.Menu':
         m = self._create_menu()
+        sample_sub = self._create_menu()
+        sample_sub.add_command(label="  샘플 1 불러오기", command=lambda: self._load_allocation_sample(1))
+        sample_sub.add_command(label="  샘플 2 불러오기", command=lambda: self._load_allocation_sample(2))
+        sample_sub.add_command(label="  샘플 3 불러오기", command=lambda: self._load_allocation_sample(3))
+        sample_sub.add_separator()
+        sample_sub.add_command(label="  샘플 3개 생성", command=lambda: self._safe_call('_generate_allocation_samples'))
         self._add_menu_items(m, [
+            ('📥 Allocation Table 불러오기 (재고 반영)', lambda: self._safe_call('_on_allocation_dialog')),
+            None,
             ('📤 빠른 출고',                    lambda: self._safe_call('_on_simple_outbound')),
             ('📤 심플 엑셀 출고',               lambda: self._safe_call('_on_simple_excel_outbound')),
             ('📋 출고 Allocation Table',        lambda: self._safe_call('_on_outbound_click')),
             ('📥 Allocation Table 샘플 다운로드', lambda: self._safe_call('_download_outbound_template')),
+        ])
+        m.add_cascade(label="  📂 Allocation 샘플 불러오기", menu=sample_sub)
+        self._add_menu_items(m, [
             ('📥 출고 템플릿(톤백 수) 다운로드',  lambda: self._safe_call('_on_outbound_tonbag_choice')),
-            ('🎲 가상 Allocation Table 생성',   lambda: self._safe_call('_generate_virtual_allocation')),
             None,
             ('📋 출고 결과',                     lambda: self._safe_call('_import_outbound_excel')),
         ])
@@ -463,8 +475,10 @@ class ToolbarMixin:
         tab_defs = [
             ('inventory', '📦 재고리스트',
              'LOT 단위 재고 현황. 필터·기간·상태로 검색하고, 더블클릭 시 LOT 상세·톤백 목록을 볼 수 있습니다.'),
+            ('outbound_scheduled', '📋 출고예정',
+             '재고 리스트에서 Allocation(예약) 삭감 반영. Balance=잔량-예약. LOT 더블클릭 시 출고 이력 팝업(Excel/PDF 출력).'),
             ('tonbag',    '🎒 톤백리스트',
-             '톤백 단위 현황. 선택 후 일괄 출고·라벨 출력·위치 업로드 등이 가능합니다.'),
+             '톤백 단위 현황. 선택 후 일괄 출고·라벨 출력 등이 가능합니다.'),
             ('dashboard', '📊 통계',
              '제품별·기간별 입출고 통계, 알림, 최근 7일 차트 등 대시보드를 표시합니다.'),
             ('log',       '📝 로그',
@@ -571,7 +585,7 @@ class ToolbarMixin:
         popup = tk.Toplevel(self.root)
         popup.title("🔍 검색")
         popup.geometry(DialogSize.get_geometry(self.root, 'medium'))
-        popup.resizable(True, True)
+        apply_modal_window_options(popup)
         popup.transient(self.root)
         popup.grab_set()
         center_dialog(popup, self.root)
@@ -1119,7 +1133,7 @@ class ToolbarMixin:
 
     def _refresh_all_data(self) -> None:
         try:
-            for fn in ['_refresh_inventory', '_refresh_tonbag', '_refresh_dashboard']:
+            for fn in ['_refresh_inventory', '_refresh_outbound_scheduled', '_refresh_tonbag', '_refresh_dashboard']:
                 if hasattr(self, fn): getattr(self, fn)()
             self._log("🔄 전체 새로고침 완료")
         except (RuntimeError, OSError) as e:

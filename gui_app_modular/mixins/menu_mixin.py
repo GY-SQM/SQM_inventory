@@ -96,8 +96,8 @@ class MenuMixin:
         # v5.6.5: 업로드 메뉴 간소화 — PDF 입고(원스톱) + Excel 입고
         upload_menu = tk.Menu(file_menu, tearoff=0, font=('맑은 고딕', 14))
         file_menu.add_cascade(label="📥 업로드 메뉴", menu=upload_menu)
-        upload_menu.add_command(label="  📄  PDF 입고 (원스톱)", command=self._on_pdf_inbound, font=('맑은 고딕', 14))
-        upload_menu.add_command(label="  📊  Excel 입고", command=self._bulk_import_inventory_simple, font=('맑은 고딕', 14))
+        upload_menu.add_command(label="  📄  PDF 스캔 입고", command=self._on_pdf_inbound, font=('맑은 고딕', 14))
+        upload_menu.add_command(label="  📊  엑셀 파일 수동 입고", command=self._bulk_import_inventory_simple, font=('맑은 고딕', 14))
         upload_menu.add_command(label="  📋  D/O 후속 연결", command=self._on_do_update, font=('맑은 고딕', 14))
         upload_menu.add_separator()
         upload_menu.add_command(label="  📤  출고 (Excel)", command=self._on_outbound_click, font=('맑은 고딕', 14))
