@@ -1,7 +1,7 @@
 # SQM v6.0.3 Release Notes
 
 **Release Date:** 2026-02-22  
-**Phase:** Picking List 파서·엔진 통합 · 툴바 출고 메뉴 정리
+**Phase:** Picking List · Sales Order 엔진 통합 · 툴바 출고 메뉴 정리
 
 ---
 
@@ -47,6 +47,14 @@
 - **DB 반영:** `features.parsers.picking_engine.apply_picking_list_to_db` 존재 시 미리보기에서 "DB 반영 (RESERVED → PICKED)" 버튼 노출 및 실행.
 - **파일:** `gui_app_modular/handlers/outbound_handlers.py`
 
+### 5. features/parsers — Sales Order Excel 엔진 (4·5단계)
+
+- **features/parsers/sales_order_engine.py (신규)**
+  - **SalesOrderParser:** Excel 파싱 — Row 1에서 Sales order No, 헤더에서 LOT NO·Picking No·Destination·NW·CT/PLT 등. 헤더 별칭·대소문자 무시 매핑.
+  - **SalesOrderEngine:** picking_table 매칭(LOT NO + Picking No) → SOLD 처리, 미매칭 시 PENDING 보관. CT/PLT 우선, 없으면 NW÷500 역산. 잔여 PICKED 집계(5단계 경고용). **retry_pending(sales_order_no)** 시 current_weight 차감·stock_movement 기록 포함.
+  - 진입점: `apply_sales_order_to_db(engine, file_path)` — 실패 시 `RuntimeError`.
+- **의존:** `pandas`, `openpyxl` (Excel 읽기).
+
 ---
 
 ## 변경된/추가된 파일
@@ -60,6 +68,8 @@
 | `gui_app_modular/mixins/toolbar_mixin.py` | 출고 메뉴 menu_registry 기반, Picking List 항목 포함 |
 | `gui_app_modular/dialogs/picking_list_preview_dialog.py` | dict 형식 doc 지원 (요약/경고/테이블 분기) |
 | `gui_app_modular/handlers/outbound_handlers.py` | features.parsers 파서 우선, DB 반영 apply_picking_list_to_db 연동 |
+| `features/parsers/sales_order_engine.py` | **신규** — Sales Order Excel 파서·엔진 (PICKED→SOLD/PENDING, retry_pending) |
+| `features/parsers/__init__.py` | SalesOrderParser, SalesOrderEngine, apply_sales_order_to_db 노출 추가 |
 | `docs/RELEASE_NOTES_v603.md` | **신규** |
 
 ---
