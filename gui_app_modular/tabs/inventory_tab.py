@@ -14,7 +14,7 @@ SQM v3.9.1 — 재고 현황 탭 (18열 + 체크박스 열선택)
 import sqlite3
 import tkinter as tk
 from tkinter import ttk
-from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options
+from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options, get_status_display
 import logging
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,23 @@ class InventoryTabMixin:
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         _inv_bg = ThemeColors.get('bg_secondary', _is_dark)
 
+        # LOT 리스트 / 톤백 리스트 전환 (v7.0: 재고 리스트 → LOT 리스트 명칭)
+        self._inv_view_switch_var = tk.StringVar(value='recovery')
+        inv_switch_frame = ttk.Frame(self.tab_inventory)
+        inv_switch_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+        ttk.Radiobutton(
+            inv_switch_frame, text="📦 LOT 리스트", variable=self._inv_view_switch_var, value='recovery',
+            command=self._on_inv_view_switch
+        ).pack(side=LEFT, padx=Spacing.XS)
+        ttk.Radiobutton(
+            inv_switch_frame, text="🎒 톤백 리스트", variable=self._inv_view_switch_var, value='tonbag',
+            command=self._on_inv_view_switch
+        ).pack(side=LEFT, padx=Spacing.XS)
+
+        # 재고 뷰 컨테이너 (필터/토글/버튼/스플릿 패널)
+        self._inv_recovery_container = ttk.Frame(self.tab_inventory)
+        self._inv_recovery_container.pack(fill=BOTH, expand=YES)
+
         # 열 표시 상태 딕셔너리
         self._inv_col_visible = {}
         for col_id, _, _, _, default_visible in INVENTORY_COLUMNS:
@@ -78,7 +95,7 @@ class InventoryTabMixin:
         # ═══════════════════════════════════════════════════════
         # v4.0.6: 헤더 필터 바
         # ═══════════════════════════════════════════════════════
-        from ..utils.tree_enhancements import HeaderFilterBar, apply_striped_rows
+        from ..utils.tree_enhancements import HeaderFilterBar, apply_striped_rows, TreeviewTotalFooter
         
         _is_dark_filter = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         inv_filter_cols = [
@@ -90,7 +107,7 @@ class InventoryTabMixin:
             ('status',       'STATUS',      90),
         ]
         self._inv_filter_bar = HeaderFilterBar(
-            self.tab_inventory, None, inv_filter_cols,
+            self._inv_recovery_container, None, inv_filter_cols,
             on_filter=self._on_inv_filter_apply,
             is_dark=_is_dark_filter,
             date_from_var=self._date_from_var,
@@ -105,7 +122,7 @@ class InventoryTabMixin:
             from ..utils.column_toggle import ColumnToggleBar
             toggleable_cols = [(c[0], c[1], c[4]) for c in INVENTORY_COLUMNS]
             self._inv_toggle_bar = ColumnToggleBar(
-                self.tab_inventory,
+                self._inv_recovery_container,
                 None,  # Treeview는 나중에 연결
                 toggleable_cols,
                 is_dark=_is_dark_filter
@@ -118,14 +135,14 @@ class InventoryTabMixin:
         # 재고 탭 Excel 내보내기 버튼 (재고리스트 = option 3)
         try:
             from ..utils.ui_constants import apply_tooltip
-            inv_btn_frame = ttk.Frame(self.tab_inventory)
+            inv_btn_frame = ttk.Frame(self._inv_recovery_container)
             inv_btn_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
             btn_inv_export = ttk.Button(
                 inv_btn_frame, text="📥 Excel 내보내기",
                 command=lambda: self._on_export_click(option=3)
             )
             btn_inv_export.pack(side=LEFT, padx=Spacing.XS)
-            apply_tooltip(btn_inv_export, '재고 리스트를 Excel(루비리 양식) 파일로 내보내기')
+            apply_tooltip(btn_inv_export, 'LOT 리스트를 Excel(루비리 양식) 파일로 내보내기')
         except Exception as _e:
             logger.debug(f"재고 Excel 버튼 생성 실패: {_e}")
 
@@ -134,7 +151,7 @@ class InventoryTabMixin:
         # ═══════════════════════════════════════════════════════
         from ..utils.split_panel import MasterDetailSplitPanel
         self._inv_split_panel = MasterDetailSplitPanel(
-            self.tab_inventory,
+            self._inv_recovery_container,
             detail_title="🎒 톤백 상세 (선택 LOT)",
             master_weight=3,
             detail_weight=1
@@ -223,6 +240,15 @@ class InventoryTabMixin:
         v_scroll.pack(side=RIGHT, fill=Y)
         h_scroll.pack(side='bottom', fill=X)
 
+        # 하단 총합 (합계 가능한 숫자 컬럼만)
+        inv_sum_cols = ['current_weight', 'net_weight', 'initial_weight', 'outbound_weight', 'mxbg_pallet']
+        self._inv_total_footer = TreeviewTotalFooter(
+            tree_frame, self.tree_inventory, inv_sum_cols,
+            column_display_names={'current_weight': 'Balance(Kg)', 'net_weight': 'NET(Kg)',
+                                 'initial_weight': 'Inbound(Kg)', 'outbound_weight': 'Outbound(Kg)', 'mxbg_pallet': 'MXBG'}
+        )
+        self._inv_total_footer.pack(fill=X, pady=(2, 0))
+
         # v5.7.5: 하단 요약바 제거 (LOT/톤백/입고/잔량/출고/가용/소진/출고율)
 
         # 테마 색상
@@ -249,6 +275,70 @@ class InventoryTabMixin:
 
         # v5.9.7: 상세 패널 — 선택 LOT의 톤백 테이블
         self._setup_inv_tonbag_detail_panel()
+
+        # 톤백 보기 뷰 (재고리스트 탭 안 메뉴) — 초기에는 숨김
+        self._inv_tonbag_container = ttk.Frame(self.tab_inventory)
+        tb_bar = ttk.Frame(self._inv_tonbag_container)
+        tb_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+        ttk.Button(tb_bar, text="🔄 새로고침", command=self._refresh_inv_tonbag_view).pack(side=LEFT, padx=Spacing.XS)
+        tb_tree_frame = ttk.Frame(self._inv_tonbag_container)
+        tb_tree_frame.pack(fill=BOTH, expand=YES)
+        _tb_cols = ('row_num', 'lot_no', 'tonbag_no', 'status', 'weight', 'uid', 'location')
+        self._inv_tonbag_tree = ttk.Treeview(tb_tree_frame, columns=_tb_cols, show='headings', height=22, selectmode='extended')
+        for cid, txt, w in [
+            ('row_num', 'No.', 50), ('lot_no', 'LOT NO', 120), ('tonbag_no', 'TONBAG NO', 90),
+            ('status', 'STATUS', 90), ('weight', 'Balance(Kg)', 100), ('uid', 'UID', 120), ('location', 'LOCATION', 100),
+        ]:
+            self._inv_tonbag_tree.heading(cid, text=txt)
+            self._inv_tonbag_tree.column(cid, width=w)
+        _sb = ttk.Scrollbar(tb_tree_frame, orient=VERTICAL, command=self._inv_tonbag_tree.yview)
+        _sb2 = ttk.Scrollbar(tb_tree_frame, orient='horizontal', command=self._inv_tonbag_tree.xview)
+        self._inv_tonbag_tree.configure(yscrollcommand=_sb.set, xscrollcommand=_sb2.set)
+        self._inv_tonbag_tree.pack(side=LEFT, fill=BOTH, expand=YES)
+        _sb.pack(side='right', fill='y')
+        _sb2.pack(side='bottom', fill=X)
+        self._inv_tonbag_footer = TreeviewTotalFooter(
+            tb_tree_frame, self._inv_tonbag_tree, ['weight'],
+            column_display_names={'weight': 'Balance(Kg)'}
+        )
+        self._inv_tonbag_footer.pack(fill=X, pady=(2, 0))
+
+    def _on_inv_view_switch(self) -> None:
+        """재고 보기 / 톤백 보기 전환"""
+        mode = getattr(self, '_inv_view_switch_var', None) and self._inv_view_switch_var.get() or 'recovery'
+        if mode == 'tonbag':
+            self._inv_recovery_container.pack_forget()
+            self._inv_tonbag_container.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
+            self._refresh_inv_tonbag_view()
+        else:
+            self._inv_tonbag_container.pack_forget()
+            self._inv_recovery_container.pack(fill=BOTH, expand=YES)
+
+    def _refresh_inv_tonbag_view(self) -> None:
+        """재고리스트 탭 내 톤백 보기 트리 새로고침"""
+        if not hasattr(self, '_inv_tonbag_tree'):
+            return
+        for c in self._inv_tonbag_tree.get_children():
+            self._inv_tonbag_tree.delete(c)
+        try:
+            tonbags = self.engine.get_tonbags_with_inventory() if hasattr(self.engine, 'get_tonbags_with_inventory') else []
+            if not tonbags and hasattr(self.engine, 'get_tonbags'):
+                tonbags = self.engine.get_tonbags() or []
+            for idx, tb in enumerate(tonbags, 1):
+                lot_no = str(tb.get('lot_no', ''))
+                sub_lt = tb.get('sub_lt', '')
+                tonbag_no = tb.get('tonbag_no') or (f"{sub_lt:>3}" if sub_lt != '' else '-')
+                _s = tb.get('tonbag_status') or tb.get('status', 'AVAILABLE')
+                _disp = get_status_display(_s) or _s
+                st = ('✅ ' if _s == 'AVAILABLE' else ('🔒 ' if _s == 'RESERVED' else '')) + _disp
+                w = float(tb.get('weight', tb.get('current_weight', 0)) or 0)
+                uid = str(tb.get('tonbag_uid', ''))
+                loc = str(tb.get('location', ''))
+                self._inv_tonbag_tree.insert('', 'end', values=(idx, lot_no, tonbag_no, st, f"{w:,.0f}", uid, loc))
+            if hasattr(self, '_inv_tonbag_footer') and self._inv_tonbag_footer:
+                self._inv_tonbag_footer.update_totals()
+        except Exception as e:
+            logger.debug(f"톤백 보기 새로고침: {e}")
 
     def _setup_inv_tonbag_detail_panel(self) -> None:
         """재고 탭 상세 패널: 톤백 테이블"""
@@ -291,9 +381,10 @@ class InventoryTabMixin:
                    FROM inventory_tonbag WHERE lot_no = ? ORDER BY sub_lt""",
                 (lot_no,)
             )
-            status_icons = {'AVAILABLE': '✅ 가용', 'PICKED': 'Sold', 'SOLD': 'Sold', 'RESERVED': '🔒 예약'}
             for tb in (tonbags or []):
-                st = status_icons.get(tb.get('status'), tb.get('status') or '')
+                _s = tb.get('status', 'AVAILABLE')
+                _disp = get_status_display(_s) or _s
+                st = ('✅ ' if _s == 'AVAILABLE' else ('🔒 ' if _s == 'RESERVED' else '')) + _disp
                 self._inv_tonbag_detail_tree.insert('', 'end', values=(
                     tb.get('sub_lt'), f"{(tb.get('weight') or 0):,.0f}",
                     st, tb.get('location') or '', tb.get('picked_to') or '',
@@ -458,10 +549,9 @@ class InventoryTabMixin:
             tree.heading(col, text=text)
             tree.column(col, width=w, anchor='center')
         
-        status_icons = {'AVAILABLE': '✅ 가용', 'PICKED': 'Sold', 'SOLD': 'Sold'}
-        
         for i, tb in enumerate(tonbags):
-            status_text = status_icons.get(tb['status'], tb['status'] or '')
+            _s = tb.get('status', 'AVAILABLE')
+            status_text = get_status_display(_s) or _s
             tags = ('stripe',) if i % 2 == 1 else ()
             tree.insert('', 'end', values=(
                 tb['sub_lt'], f"{(tb['weight'] or 0):,.0f}",
@@ -479,7 +569,7 @@ class InventoryTabMixin:
         
         total = sum((tb['weight'] or 0) for tb in tonbags)
         avail = sum((tb['weight'] or 0) for tb in tonbags if tb['status'] == 'AVAILABLE')
-        _ttk.Label(dlg, text=f"합계: {len(tonbags)}개 / {total:,.0f}kg (가용: {avail:,.0f}kg)",
+        _ttk.Label(dlg, text=f"합계: {len(tonbags)}개 / {total:,.0f}kg (판매가능: {avail:,.0f}kg)",
                   font=('', 13, 'bold')).pack(side='bottom', pady=Spacing.XS)
     
     def _quick_outbound_from_context(self, lot_no: str) -> None:
@@ -615,21 +705,26 @@ class InventoryTabMixin:
             self.tree_inventory.delete(item)
 
         search_text = self.search_var.get().strip().lower()
-        # v5.7.5: STATUS는 헤더 필터바에서 "전체 (N)" / "Available (M)" / "Sold (K)" 중 하나
+        # STATUS: 전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고 5종 (DB: AVAILABLE, RESERVED, PICKED, SOLD)
         status_filter_raw = '전체'
         if hasattr(self, '_inv_filter_bar') and 'status' in getattr(self._inv_filter_bar, 'filter_vars', {}):
             status_filter_raw = (self._inv_filter_bar.get_filters().get('status') or
                                  self._inv_filter_bar.filter_vars['status'].get() or '전체')
         if not isinstance(status_filter_raw, str):
             status_filter_raw = str(status_filter_raw or '전체')
-        if not status_filter_raw.strip() or status_filter_raw.startswith('전체'):
+        _raw = status_filter_raw.strip()
+        if not _raw or _raw.startswith('전체'):
             status_filter_normalized = None
-        elif 'Available' in status_filter_raw or status_filter_raw.strip() == 'AVAILABLE':
+        elif '판매가능' in _raw:
             status_filter_normalized = 'AVAILABLE'
-        elif 'Sold' in status_filter_raw or status_filter_raw.strip() in ('PICKED', 'SOLD'):
+        elif '판매배정' in _raw:
+            status_filter_normalized = 'RESERVED'
+        elif '판매화물 결정' in _raw:
             status_filter_normalized = 'PICKED'
+        elif '출고' in _raw:
+            status_filter_normalized = 'SOLD'
         else:
-            status_filter_normalized = status_filter_raw.strip()
+            status_filter_normalized = _raw.upper() if _raw in ('AVAILABLE', 'RESERVED', 'PICKED', 'SOLD') else None
 
         # 콤보 검색 조건
         combo_filters = {}
@@ -673,13 +768,10 @@ class InventoryTabMixin:
                     if search_text not in searchable:
                         continue
 
-                # 상태 필터 (전체 / Available / Sold)
+                # 상태 필터 (전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고)
                 status = item.get('status', 'AVAILABLE')
-                if status_filter_normalized:
-                    if status_filter_normalized == 'AVAILABLE' and status != 'AVAILABLE':
-                        continue
-                    if status_filter_normalized == 'PICKED' and status not in ('PICKED', 'SOLD', 'RESERVED'):
-                        continue
+                if status_filter_normalized and status != status_filter_normalized:
+                    continue
                 
                 # 콤보 검색 필터 + 헤더 필터바
                 skip = False
@@ -720,7 +812,7 @@ class InventoryTabMixin:
                         vals.append(str(item.get('customs_status', '') or ''))
                         continue
                     elif col_id == 'avail_bags':
-                        # v5.6.0/v5.6.9: Avail = 현재 가용 톤백 수 실시간 (출고↓ 반품↑)
+                        # v5.6.0/v5.6.9: Avail = 현재 판매가능 톤백 수 실시간 (출고↓ 반품↑)
                         try:
                             tb_row = self.engine.db.fetchone(
                                 "SELECT COUNT(*) as cnt FROM inventory_tonbag "
@@ -749,17 +841,9 @@ class InventoryTabMixin:
                             v = f"{int(float(v)):,}" if v else ''
                         except (ValueError, TypeError):
                             v = str(v)
-                    # U2: 상태 아이콘
+                    # U2: 화물 상태 표시 (전체/판매가능/판매배정/판매화물 결정/출고)
                     elif col_id == 'status':
-                        status_icons = {
-                            'AVAILABLE': '✅ 가용',
-                            'PICKED': 'Sold',
-                            'SOLD': 'Sold',
-                            'RESERVED': '🔒 예약',
-                            'SHIPPED': '🚢 선적',
-                            'DEPLETED': '❌ 소진',
-                        }
-                        v = status_icons.get(str(v), str(v))
+                        v = get_status_display(str(v)) or str(v)
                     else:
                         v = str(v)
                     vals.append(v)
@@ -792,7 +876,9 @@ class InventoryTabMixin:
                 background=_stripe_bg, foreground=_text_color)
 
             self._refresh_summary()
-            
+            if hasattr(self, '_inv_total_footer') and self._inv_total_footer:
+                self._inv_total_footer.update_totals()
+
             # v3.9.9: 빈 상태 안내 — 비표시 (사용자 요청)
             self._hide_empty_state_hint()
             
@@ -897,7 +983,7 @@ class InventoryTabMixin:
             line = (
                 f"📦 LOT: {total_lots:,}  🎒 톤백: {tb_avail:,}/{tb_total:,}  "
                 f"📥 입고: {initial_mt:,.1f} MT  💰 잔량: {current_mt:,.1f} MT  "
-                f"📤 출고: {picked_mt:,.1f} MT  ✅ 가용: {avail_lots:,}  ❌ 소진: {depleted:,}  |  📊 출고율: {pct:.1f}%"
+                f"📤 출고: {picked_mt:,.1f} MT  ✅ 판매가능: {avail_lots:,}  ❌ 소진: {depleted:,}  |  📊 출고율: {pct:.1f}%"
             )
             self._inv_summary_label.config(text=line)
         except (ValueError, TypeError, KeyError) as e:
@@ -912,7 +998,7 @@ class InventoryTabMixin:
         self._refresh_inventory()
     
     def _update_inv_filter_values(self, inventory) -> None:
-        """v4.0.6: 필터 드롭다운에 실제 데이터 값 채우기. v5.7.5: STATUS는 전체/Available/Sold 3종 + 개수 표시."""
+        """v4.0.6: 필터 드롭다운에 실제 데이터 값 채우기. STATUS는 전체/판매가능/판매배정/판매화물 결정/출고 5종 + 개수."""
         if not hasattr(self, '_inv_filter_bar'):
             return
         try:
@@ -930,8 +1016,13 @@ class InventoryTabMixin:
 
             cnt_total = len(inventory)
             cnt_avail = sum(1 for i in inventory if (i.get('status') or '') == 'AVAILABLE')
-            cnt_sold = sum(1 for i in inventory if (i.get('status') or '') in ('PICKED', 'SOLD', 'RESERVED'))
-            status_values = [f"전체 ({cnt_total})", f"Available ({cnt_avail})", f"Sold ({cnt_sold})"]
+            cnt_reserved = sum(1 for i in inventory if (i.get('status') or '') == 'RESERVED')
+            cnt_picked = sum(1 for i in inventory if (i.get('status') or '') == 'PICKED')
+            cnt_sold = sum(1 for i in inventory if (i.get('status') or '') == 'SOLD')
+            status_values = [
+                f"전체 ({cnt_total})", f"판매가능 ({cnt_avail})", f"판매배정 ({cnt_reserved})",
+                f"판매화물 결정 ({cnt_picked})", f"출고 ({cnt_sold})",
+            ]
 
             for col, vals in filter_cols.items():
                 if col == 'status':
@@ -1146,7 +1237,7 @@ class InventoryTabMixin:
                 product_values = ['전체'] + [dict(row)['product'] for row in products if row]
                 self._inv_filter_bar.product_combo['values'] = product_values
             
-            # STATUS 목록은 v5.7.5에서 _update_inv_filter_values에서 전체/Available/Sold(개수)로 설정
+            # STATUS 목록은 _update_inv_filter_values에서 전체/판매가능/판매배정/판매화물 결정/출고(개수)로 설정
 
             logger.debug("✅ 필터 드롭다운 채우기 완료")
         

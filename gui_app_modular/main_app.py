@@ -227,11 +227,11 @@ class SQMInventoryApp:
         self.tab_summary = self.tab_dashboard  # 통계는 대시보드에 통합
         self.tab_pivot = ttk.Frame(self.notebook)  # 호환성 (사용 안 함)
         
-        # Add tabs to notebook — 0=총괄 화물 리스트, 1=재고리스트, 2=출고예정, 3=톤백리스트, 4=대시보드, 5=로그
-        self.notebook.add(self.tab_cargo_overview, text="  📋 총괄 화물 리스트  ")
-        self.notebook.add(self.tab_inventory, text="  📦 재고리스트  ")
-        self.notebook.add(self.tab_outbound_scheduled, text="  📋 출고예정  ")
-        self.notebook.add(self.tab_tonbag, text="  🎒 톤백리스트  ")
+        # v7.0 4단계 탭: AVAILABLE → ALLOCATION → PICKED → SOLD, 그 다음 대시보드·로그
+        self.notebook.add(self.tab_inventory, text="  📦 AVAILABLE  ")
+        self.notebook.add(self.tab_cargo_overview, text="  📋 ALLOCATION  ")
+        self.notebook.add(self.tab_outbound_scheduled, text="  🚛 PICKED  ")
+        self.notebook.add(self.tab_tonbag, text="  ✅ SOLD  ")
         self.notebook.add(self.tab_dashboard, text="  📊 대시보드  ")
         self.notebook.add(self.tab_log, text="  📝 로그  ")
         
@@ -255,9 +255,9 @@ class SQMInventoryApp:
         if hasattr(self, '_setup_summary_tab_content'):
             self._setup_summary_tab_content()
         
-        # v3.8.4: 시작 시 첫 탭 (0번 = 총괄 화물 리스트)
+        # v7.0: 시작 시 첫 탭 (0번 = AVAILABLE)
         try:
-            self.notebook.select(0)  # index 0 = 총괄 화물 리스트
+            self.notebook.select(0)  # index 0 = AVAILABLE (LOT 리스트)
         except (ValueError, TypeError, AttributeError) as _e:
             logger.debug(f"{type(_e).__name__}: {_e}")
         except (ValueError, TypeError, AttributeError) as _e:
@@ -267,8 +267,8 @@ class SQMInventoryApp:
         def _on_notebook_tab_changed(event):
             try:
                 idx = self.notebook.index(self.notebook.select())
-                # index → tab_key 역매핑 (0=총괄 화물, 1=재고, 2=출고예정, 3=톤백, 4=대시보드, 5=로그)
-                idx_to_key = {0: 'cargo_overview', 1: 'inventory', 2: 'outbound_scheduled', 3: 'tonbag', 4: 'dashboard', 5: 'log'}
+                # v7.0: 0=AVAILABLE(inventory), 1=ALLOCATION(cargo), 2=PICKED(outbound_scheduled), 3=SOLD(tonbag), 4=대시보드, 5=로그
+                idx_to_key = {0: 'inventory', 1: 'cargo_overview', 2: 'outbound_scheduled', 3: 'tonbag', 4: 'dashboard', 5: 'log'}
                 key = idx_to_key.get(idx)
                 if key and hasattr(self, '_active_tab_key'):
                     self._active_tab_key = key

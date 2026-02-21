@@ -306,7 +306,7 @@ class OutboundHandlersMixin:
         _badd = ttk.Button(btn_frame, text="Add Selected", command=on_get_selected_lot,
                            **btn_style_outline)
         _badd.pack(side=LEFT, padx=20)
-        apply_tooltip(_badd, "재고 리스트에서 선택한 LOT를 출고 목록에 추가합니다. 여러 LOT를 쉼표로 구분해 넣을 수 있습니다.")
+        apply_tooltip(_badd, "LOT 리스트에서 선택한 LOT를 출고 목록에 추가합니다. 여러 LOT를 쉼표로 구분해 넣을 수 있습니다.")
         
         # Center dialog
         dialog.update_idletasks()

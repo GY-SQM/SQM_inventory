@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '6.0.7'
+__version__ = '6.0.8'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '6.0.8': '🎨 v6.0.8: 4단계 탭 구조(AVAILABLE/ALLOCATION/PICKED/SOLD) · 재고리스트→LOT 리스트 명칭 통일',
     '6.0.7': '📋 v6.0.7: UI 메뉴 menu_registry 기반 정리(3단계) — 입고 단일 소스·툴바 입고 registry 적용',
     '6.0.6': '🔧 v6.0.6: 유지보수 및 소규모 개선',
     '6.0.5': '🎨 v6.0.5: 상태명 한글화 2단계 — PDF/Excel/컨텍스트메뉴 한글 표시, STATUS_DISPLAY_TO_DB 역매핑',

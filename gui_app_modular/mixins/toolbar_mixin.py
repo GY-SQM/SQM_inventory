@@ -110,8 +110,9 @@ class ToolbarMixin:
 
         # v3.8.9: overflow 체크 비활성화 (탭은 항상 row2에 고정)
         # self.root.bind('<Configure>', self._check_toolbar_overflow)
-        self._tab_index_map = {'cargo_overview': 0, 'inventory': 1, 'outbound_scheduled': 2, 'tonbag': 3, 'dashboard': 4, 'log': 5}
-        self._active_tab_key = 'cargo_overview'
+        # v7.0: 4단계 탭 순서 — AVAILABLE(0), ALLOCATION(1), PICKED(2), SOLD(3), 대시보드(4), 로그(5)
+        self._tab_index_map = {'inventory': 0, 'cargo_overview': 1, 'outbound_scheduled': 2, 'tonbag': 3, 'dashboard': 4, 'log': 5}
+        self._active_tab_key = 'inventory'
 
     # ═══════════════════════════════════════════════════════
     # 메뉴 생성 헬퍼 (v3.8.4: 항목 간격 확대)
@@ -354,7 +355,7 @@ class ToolbarMixin:
     def _build_report_menu(self) -> 'tk.Menu':
         m = self._create_menu()
         self._add_menu_items(m, [
-            ('📊 재고리스트 Excel',  lambda: self._on_export_click(option=3)),
+            ('📊 LOT 리스트 Excel',  lambda: self._on_export_click(option=3)),
             ('🎒 톤백리스트 Excel',  lambda: self._on_export_click(option=4)),
             None,
             ('📋 입출고 이력 조회', lambda: self._safe_call('_show_outbound_history')),
@@ -495,19 +496,20 @@ class ToolbarMixin:
     def _build_tab_buttons(self) -> None:
         """v5.5.3 patch_01: 탭 버튼 — 밑줄+텍스트 스타일 (메뉴와 통일)"""
         f = self._toolbar_font
+        # v7.0: 4단계 메인 탭 (LOT 리스트 → 전체 톤백 펼치기 / 행 클릭 시 해당 LOT 톤백)
         tab_defs = [
-            ('cargo_overview', '📋 총괄 화물 리스트',
-             '상태별 화물만 표시: 전체 / 판매가능 / 판매배정(Allocation) / 판매화물 결정 / 출고. 헤더 클릭으로 오름·내림차순 정렬.'),
-            ('inventory', '📦 재고리스트',
-             'LOT 단위 재고 현황. 필터·기간·상태로 검색하고, 더블클릭 시 LOT 상세·톤백 목록을 볼 수 있습니다.'),
-            ('outbound_scheduled', '📋 출고예정',
-             '재고 리스트에서 Allocation(예약) 삭감 반영. Balance=잔량-예약. LOT 더블클릭 시 출고 이력 팝업(Excel/PDF 출력).'),
-            ('tonbag',    '🎒 톤백리스트',
-             '톤백 단위 현황. 선택 후 일괄 출고·라벨 출력 등이 가능합니다.'),
+            ('inventory', '📦 AVAILABLE',
+             'LOT 리스트(판매가능). 필터·검색 후 더블클릭 시 LOT 상세·톤백. [전체 톤백 펼치기]로 해당 상태 톤백 일괄 표시.'),
+            ('cargo_overview', '📋 ALLOCATION',
+             'LOT 리스트(판매배정). 상태별 화물. 헤더 클릭 오름·내림차순. [전체 톤백 펼치기]로 톤백 일괄 표시.'),
+            ('outbound_scheduled', '🚛 PICKED',
+             'LOT 리스트(판매화물 결정). 출고 예정·Balance=잔량-예약. LOT 더블클릭 시 출고 이력 팝업.'),
+            ('tonbag', '✅ SOLD',
+             'LOT/톤백 리스트(출고 완료). 톤백 단위 현황. 일괄 출고·라벨 출력 등.'),
             ('dashboard', '📊 대시보드',
-             'AVAILABLE/RESERVED/PICKED/SOLD 4단계 현황, 알림, 최근 7일 차트 등 대시보드를 표시합니다.'),
-            ('log',       '📝 로그',
-             '시스템·작업 로그를 확인합니다. 오류 추적이나 동작 확인에 사용하세요.'),
+             '4단계 현황, 알림, 최근 7일 차트 등.'),
+            ('log', '📝 로그',
+             '시스템·작업 로그. 오류 추적·동작 확인.'),
         ]
         self._tab_buttons = {}
         # v5.7.5: 탭은 상단 메뉴보다 작게 (Phase3: FontScale.small + Spacing)
@@ -605,7 +607,7 @@ class ToolbarMixin:
     # ═══════════════════════════════════════════════════════
 
     def _show_search_popup(self) -> None:
-        """v3.8.9: 검색 팝업 — DB 데이터 로드 + 재고리스트 필터링"""
+        """v3.8.9: 검색 팝업 — DB 데이터 로드 + LOT 리스트 필터링"""
         f = self._toolbar_font
         popup = tk.Toplevel(self.root)
         popup.title("🔍 검색")
@@ -696,7 +698,7 @@ class ToolbarMixin:
         main.columnconfigure(1, weight=1)
 
         def do_search():
-            """검색 실행 → 재고리스트 필터링"""
+            """검색 실행 → LOT 리스트 필터링"""
             # _inv_search_combos를 StringVar 기반으로 설정
             self._inv_search_combos = {}
             for field in ('sap_no', 'bl_no', 'lot_no'):
@@ -710,7 +712,7 @@ class ToolbarMixin:
             if hasattr(self, 'status_var'):
                 self.status_var.set(svars['status'].get())
             
-            # 재고리스트 탭으로 이동 + 새로고침
+            # AVAILABLE(LOT 리스트) 탭으로 이동 + 새로고침
             try:
                 self.notebook.select(self.tab_inventory)
             except (AttributeError, RuntimeError) as _e:
