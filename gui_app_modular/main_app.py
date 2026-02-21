@@ -214,8 +214,9 @@ class SQMInventoryApp:
         except (RuntimeError, ValueError) as _e:
             logger.debug(f"main_app: {_e}")
         
-        # Create tab frames (v5.9.6: 5개 탭 - 출고 예정 추가)
+        # Create tab frames (v5.9.6: 5개 + 총괄 화물 리스트)
         self.tab_dashboard = ttk.Frame(self.notebook)
+        self.tab_cargo_overview = ttk.Frame(self.notebook)
         self.tab_inventory = ttk.Frame(self.notebook)
         self.tab_outbound_scheduled = ttk.Frame(self.notebook)
         self.tab_tonbag = ttk.Frame(self.notebook)
@@ -226,16 +227,17 @@ class SQMInventoryApp:
         self.tab_summary = self.tab_dashboard  # 통계는 대시보드에 통합
         self.tab_pivot = ttk.Frame(self.notebook)  # 호환성 (사용 안 함)
         
-        # Add tabs to notebook (v5.9.6: 5개 탭)
-        # notebook 순서: 0=재고리스트, 1=출고예정, 2=톤백리스트, 3=통계, 4=로그
+        # Add tabs to notebook — 0=총괄 화물 리스트, 1=재고리스트, 2=출고예정, 3=톤백리스트, 4=대시보드, 5=로그
+        self.notebook.add(self.tab_cargo_overview, text="  📋 총괄 화물 리스트  ")
         self.notebook.add(self.tab_inventory, text="  📦 재고리스트  ")
         self.notebook.add(self.tab_outbound_scheduled, text="  📋 출고예정  ")
         self.notebook.add(self.tab_tonbag, text="  🎒 톤백리스트  ")
-        self.notebook.add(self.tab_dashboard, text="  📊 통계  ")
+        self.notebook.add(self.tab_dashboard, text="  📊 대시보드  ")
         self.notebook.add(self.tab_log, text="  📝 로그  ")
         
-        # Setup individual tabs (v5.9.6: 5개 탭 — 출고 예정 추가)
+        # Setup individual tabs
         for tab_name, setup_fn in [
+            ('CargoOverview', self._setup_cargo_overview_tab),
             ('Dashboard', self._setup_dashboard_tab),
             ('Inventory', self._setup_inventory_tab),
             ('OutboundScheduled', self._setup_outbound_scheduled_tab),
@@ -253,9 +255,9 @@ class SQMInventoryApp:
         if hasattr(self, '_setup_summary_tab_content'):
             self._setup_summary_tab_content()
         
-        # v3.8.4: 시작 시 재고리스트 탭 (0번 = 첫 탭, 깜빡임 없음)
+        # v3.8.4: 시작 시 첫 탭 (0번 = 총괄 화물 리스트)
         try:
-            self.notebook.select(0)  # index 0 = 재고리스트
+            self.notebook.select(0)  # index 0 = 총괄 화물 리스트
         except (ValueError, TypeError, AttributeError) as _e:
             logger.debug(f"{type(_e).__name__}: {_e}")
         except (ValueError, TypeError, AttributeError) as _e:
@@ -265,22 +267,27 @@ class SQMInventoryApp:
         def _on_notebook_tab_changed(event):
             try:
                 idx = self.notebook.index(self.notebook.select())
-                # index → tab_key 역매핑 (v5.9.6: 5탭 순서)
-                idx_to_key = {0: 'inventory', 1: 'outbound_scheduled', 2: 'tonbag', 3: 'dashboard', 4: 'log'}
+                # index → tab_key 역매핑 (0=총괄 화물, 1=재고, 2=출고예정, 3=톤백, 4=대시보드, 5=로그)
+                idx_to_key = {0: 'cargo_overview', 1: 'inventory', 2: 'outbound_scheduled', 3: 'tonbag', 4: 'dashboard', 5: 'log'}
                 key = idx_to_key.get(idx)
                 if key and hasattr(self, '_active_tab_key'):
                     self._active_tab_key = key
                     self._highlight_active_tab()
                 
                 # v3.8.9: 탭 전환 시 자동 새로고침
-                if key == 'inventory' and hasattr(self, '_refresh_inventory'):
+                if key == 'cargo_overview' and hasattr(self, '_refresh_cargo_overview'):
+                    self._refresh_cargo_overview()
+                elif key == 'inventory' and hasattr(self, '_refresh_inventory'):
                     self._refresh_inventory()
                 elif key == 'outbound_scheduled' and hasattr(self, '_refresh_outbound_scheduled'):
                     self._refresh_outbound_scheduled()
                 elif key == 'tonbag' and hasattr(self, '_refresh_tonbag'):
                     self._refresh_tonbag()
-                elif key == 'dashboard' and hasattr(self, '_refresh_summary'):
-                    self._refresh_summary()
+                elif key == 'dashboard':
+                    if hasattr(self, '_refresh_dashboard') and callable(self._refresh_dashboard):
+                        self._refresh_dashboard()
+                    elif hasattr(self, '_refresh_summary'):
+                        self._refresh_summary()
                 
                 # v3.9.4: 탭 전환 시 상태바 + 하단 통계 갱신
                 if hasattr(self, '_update_statusbar_summary'):
@@ -416,40 +423,41 @@ class SQMInventoryApp:
             logger.debug(f"스냅샷 저장 실패 (무시): {e}")
 
     def _startup_integrity_check(self) -> None:
-        """v3.8.4: 시작 시 데이터 정합성 검사"""
+        """v3.8.4: 시작 시 데이터 정합성 검사. 경고/에러 시 발생 위치·작업을 로그에 명시."""
+        _where, _what = "시작 시 정합성 검사", "데이터 정합성 검사"
         try:
             if not self.engine or not hasattr(self.engine, 'db'):
                 return
-            
+
             from core.validators import InventoryValidator
             validator = InventoryValidator(db=self.engine.db)
             result = validator.check_data_integrity()
-            
+
             issues = []
             if result.errors:
                 for e in result.errors:
                     issues.append(f"🔴 {e}")
-                    self._log(f"🔴 정합성 오류: {e}")
+                    self._log(f"🔴 정합성 오류: {e}", level="error", where=_where, what=_what)
             if result.warnings:
                 for w in result.warnings:
                     issues.append(f"🟡 {w}")
-                    self._log(f"🟡 정합성 경고: {w}")
-            
+                    self._log(f"🟡 정합성 경고: {w}", level="warning", where=_where, what=_what)
+
             if issues:
                 from .utils.custom_messagebox import CustomMessageBox
                 msg = "시작 시 데이터 정합성 검사 결과:\n\n"
                 msg += "\n".join(issues[:10])
                 if len(issues) > 10:
                     msg += f"\n\n... 외 {len(issues) - 10}건"
-                
+
                 if result.errors:
                     msg += "\n\n[설정/도구 → 정합성 복구]에서 자동 수정할 수 있습니다."
                     CustomMessageBox.showwarning(self.root, "⚠️ 정합성 검사", msg)
                 else:
-                    self._log("⚠️ 정합성 경고 발견 (경미)")
+                    self._log("경미한 경고 발견 (위 항목 참고).", level="warning", where=_where, what=_what)
             else:
-                self._log("✅ 데이터 정합성 검사 통과")
-                
+                self._log("데이터 정합성 검사 통과", level="info", where=_where, what=_what)
+
         except (ImportError, ModuleNotFoundError) as e:
             logger.debug(f"정합성 검사 스킵: {e}")
     
@@ -540,6 +548,7 @@ from .mixins import (
 )
 
 from .tabs import (
+    CargoOverviewTabMixin,
     DashboardTabMixin,
     InventoryTabMixin,
     OutboundScheduledTabMixin,
@@ -592,6 +601,7 @@ class SQMInventoryAppFull(
     ThemeMixin,
     AdvancedFeaturesMixin,
     # Tabs
+    CargoOverviewTabMixin,
     DashboardTabMixin,
     DashboardDataMixin,
     InventoryTabMixin,

@@ -12,7 +12,7 @@ v5.5.2 - 재고 리스트(Inventory) UI 기준 통일
 
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors, Spacing
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, Spacing, get_status_display
 logger = logging.getLogger(__name__)
 
 
@@ -61,7 +61,7 @@ class TonbagTabMixin:
         
         self._tonbag_filter_bar = None
         try:
-            from ..utils.tree_enhancements import HeaderFilterBar
+            from ..utils.tree_enhancements import HeaderFilterBar, TreeviewTotalFooter
             
             if not hasattr(self, '_date_from_var'):
                 self._date_from_var = tk.StringVar()
@@ -152,10 +152,12 @@ class TonbagTabMixin:
             selectmode='extended', style='Tb.Treeview'
         )
         
+        self._tonbag_sort_column = None
+        self._tonbag_sort_reverse = False
         for col_id, label, width, anchor, visible in self._tonbag_columns:
             self.tree_sublot.heading(
                 col_id, text=label,
-                command=lambda c=col_id: self._sort_treeview(self.tree_sublot, c)
+                command=lambda c=col_id: self._sort_tonbag_treeview(c)
             )
             if visible:
                 self.tree_sublot.column(col_id, width=width, anchor=anchor, minwidth=50)
@@ -188,6 +190,14 @@ class TonbagTabMixin:
         scrollbar_x.pack(side='bottom', fill=X)
         self.tree_sublot.pack(side=LEFT, fill=BOTH, expand=YES)
         scrollbar_y.pack(side=RIGHT, fill=Y)
+
+        tb_sum_cols = ['current_weight', 'net_weight', 'initial_weight', 'outbound_weight', 'free_time']
+        self._tonbag_total_footer = TreeviewTotalFooter(
+            tree_frame, self.tree_sublot, tb_sum_cols,
+            column_display_names={'current_weight': 'Balance(Kg)', 'net_weight': 'NET(Kg)',
+                                 'initial_weight': 'Inbound(Kg)', 'outbound_weight': 'Outbound(Kg)', 'free_time': 'FREE TIME'}
+        )
+        self._tonbag_total_footer.pack(fill=X, pady=(2, 0))
 
         self.tree_sublot.bind('<<TreeviewSelect>>', self._on_tonbag_selection_change)
 
@@ -276,19 +286,19 @@ class TonbagTabMixin:
         search_frame = ttk.Frame(_inner)
         search_frame.pack(side=RIGHT)
         
-        # v5.7.5: STATUS = 전체 / Available / Sold 3종, 개수 표시 (Sold = 기존 Picked 표기 변경)
+        # STATUS = 전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고 5종, 개수 표시
         _lbl_status = ttk.Label(search_frame, text="상태:")
         _lbl_status.pack(side=LEFT, padx=(0, Spacing.XS))
-        apply_tooltip(_lbl_status, "톤백 상태로 필터: 전체 / Available(판매 가능) / Sold(출고 완료). 괄호 안 숫자는 해당 개수.")
+        apply_tooltip(_lbl_status, "톤백 상태로 필터: 전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고. 괄호 안 숫자는 해당 개수.")
         self.tonbag_status_var = tk.StringVar(value="전체 (0)")
         self._sublot_status_combo = ttk.Combobox(
             search_frame, textvariable=self.tonbag_status_var,
-            values=["전체 (0)", "Available (0)", "Sold (0)"],
-            state="readonly", width=14
+            values=["전체 (0)", "판매가능 (0)", "판매배정 (0)", "판매화물 결정 (0)", "출고 (0)"],
+            state="readonly", width=18
         )
         self._sublot_status_combo.pack(side=LEFT, padx=(0, Spacing.SM))
         self._sublot_status_combo.bind('<<ComboboxSelected>>', self._on_tonbag_filter)
-        apply_tooltip(self._sublot_status_combo, "전체 / Available / Sold 중 선택하면 목록이 해당 상태만 표시됩니다. 숫자는 현재 데이터 기준 개수.")
+        apply_tooltip(self._sublot_status_combo, "전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고 중 선택하면 목록이 해당 상태만 표시됩니다. 숫자는 현재 데이터 기준 개수.")
         
         self._show_sample_var = tk.BooleanVar(value=True)  # v5.6.1: 샘플 기본 표시
         self._chk_show_sample = ttk.Checkbutton(
@@ -512,9 +522,8 @@ class TonbagTabMixin:
                    FROM inventory_tonbag WHERE lot_no = ? ORDER BY sub_lt""",
                 (lot_no,)
             )
-            status_icons = {'AVAILABLE': '✅ 가용', 'PICKED': 'Sold', 'SOLD': 'Sold', 'RESERVED': '🔒 예약'}
             for tb in (tonbags or []):
-                st = status_icons.get(tb.get('status'), tb.get('status') or '')
+                st = get_status_display(tb.get('status')) or tb.get('status') or ''
                 self._tb_lot_detail_tree.insert('', 'end', values=(
                     tb.get('sub_lt'), f"{(tb.get('weight') or 0):,.0f}",
                     st, tb.get('location') or '', tb.get('picked_to') or '',
@@ -530,6 +539,31 @@ class TonbagTabMixin:
     def _on_tonbag_filter_refresh(self) -> None:
         """v3.9.5: 샘플 체크박스 변경 시 새로고침"""
         self._refresh_tonbag()
+
+    def _sort_tonbag_treeview(self, col: str) -> None:
+        """톤백 트리 헤더 클릭 시 오름차순/내림차순 정렬 (헤더 ▲▼ 표시)"""
+        tree = self.tree_sublot
+        if self._tonbag_sort_column == col:
+            self._tonbag_sort_reverse = not self._tonbag_sort_reverse
+        else:
+            self._tonbag_sort_column = col
+            self._tonbag_sort_reverse = False
+        items = [(tree.set(item, col), item) for item in tree.get_children('')]
+        numeric_cols = ['row_num', 'current_weight', 'net_weight', 'initial_weight', 'outbound_weight']
+        if col in numeric_cols:
+            def sort_key(x):
+                try:
+                    return float(str(x[0]).replace(',', ''))
+                except (ValueError, TypeError):
+                    return 0
+        else:
+            sort_key = lambda x: (x[0] or '').lower()
+        items.sort(key=sort_key, reverse=self._tonbag_sort_reverse)
+        for idx, (_, item) in enumerate(items):
+            tree.move(item, '', idx)
+        arrow = " ▼" if self._tonbag_sort_reverse else " ▲"
+        for c_id, c_label, _, _, _ in self._tonbag_columns:
+            tree.heading(c_id, text=f"{c_label}{arrow}" if c_id == col else c_label)
     
     def _refresh_tonbag(self) -> None:
         """v3.8.9: 톤백 목록 새로고침 — 재고리스트 컬럼 + TONBAG NO"""
@@ -582,8 +616,8 @@ class TonbagTabMixin:
             if not tonbags:
                 tonbags = []
 
-            # v5.7.5: STATUS 옵션별 개수 (전체 / Available / Sold)
-            _cnt_total = _cnt_avail = _cnt_sold = 0
+            # STATUS 옵션별 개수: 전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고
+            _cnt_total = _cnt_avail = _cnt_reserved = _cnt_picked = _cnt_sold = 0
             _show_sample = getattr(self, '_show_sample_var', None)
             for _tb in tonbags:
                 if _tb.get('is_sample', 0) and _show_sample and not _show_sample.get():
@@ -592,24 +626,36 @@ class TonbagTabMixin:
                 _st = _tb.get('tonbag_status', _tb.get('status', 'AVAILABLE'))
                 if _st == 'AVAILABLE':
                     _cnt_avail += 1
-                elif _st in ('PICKED', 'SOLD', 'RESERVED'):
+                elif _st == 'RESERVED':
+                    _cnt_reserved += 1
+                elif _st == 'PICKED':
+                    _cnt_picked += 1
+                elif _st == 'SOLD':
                     _cnt_sold += 1
             if hasattr(self, '_sublot_status_combo'):
                 self._sublot_status_combo['values'] = [
-                    f"전체 ({_cnt_total})", f"Available ({_cnt_avail})", f"Sold ({_cnt_sold})"
+                    f"전체 ({_cnt_total})",
+                    f"판매가능 ({_cnt_avail})",
+                    f"판매배정 ({_cnt_reserved})",
+                    f"판매화물 결정 ({_cnt_picked})",
+                    f"출고 ({_cnt_sold})",
                 ]
                 _cur = self.tonbag_status_var.get()
                 if _cur not in self._sublot_status_combo['values'] and self._sublot_status_combo['values']:
                     self.tonbag_status_var.set(self._sublot_status_combo['values'][0])
 
-            # 상태 필터 정규화
+            # 상태 필터 정규화 (표시명 → DB 값)
             _raw = (status_filter or '').strip()
             if not _raw or _raw.startswith('전체'):
                 status_filter_normalized = None
-            elif 'Available' in _raw or _raw == 'AVAILABLE':
+            elif '판매가능' in _raw:
                 status_filter_normalized = 'AVAILABLE'
-            elif 'Sold' in _raw or _raw in ('PICKED', 'SOLD'):
+            elif '판매배정' in _raw:
+                status_filter_normalized = 'RESERVED'
+            elif '판매화물 결정' in _raw:
                 status_filter_normalized = 'PICKED'
+            elif '출고' in _raw:
+                status_filter_normalized = 'SOLD'
             else:
                 status_filter_normalized = _raw
 
@@ -660,13 +706,10 @@ class TonbagTabMixin:
                     if date_to and arrival and arrival > date_to:
                         continue
                 
-                # 상태 필터 (전체 / Available / Sold)
+                # 상태 필터 (전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고)
                 status = tb.get('tonbag_status', tb.get('status', 'AVAILABLE'))
-                if status_filter_normalized:
-                    if status_filter_normalized == 'AVAILABLE' and status != 'AVAILABLE':
-                        continue
-                    if status_filter_normalized == 'PICKED' and status not in ('PICKED', 'SOLD', 'RESERVED'):
-                        continue
+                if status_filter_normalized and status != status_filter_normalized:
+                    continue
                 
                 # v5.0.2: 헤더 필터바 조건
                 if hasattr(self, '_tonbag_filter_bar'):
@@ -768,7 +811,7 @@ class TonbagTabMixin:
                     sap_no,                                          #  4. sap_no
                     bl_no,                                           #  5. bl_no
                     product,                                         #  6. product
-                    ('Sold' if status in ('PICKED', 'SOLD') else status),  #  7. tonbag_status
+                    get_status_display(status),  #  7. tonbag_status
                     _fmt(tb_balance),                                #  8. current_weight (Balance(Kg))
                     _uid,                                            #  9. tonbag_uid
                     container,                                       # 10. container_no
@@ -802,8 +845,9 @@ class TonbagTabMixin:
                 background=ThemeColors.get('bg_secondary', _dk), foreground=ThemeColors.get('text_muted', _dk))
             self.tree_sublot.tag_configure('stripe',
                 background=ThemeColors.get('tree_stripe', _dk), foreground=_text_color)
-            
-            # v5.7.5: 하단 요약 라벨 제거로 업데이트 생략
+
+            if hasattr(self, '_tonbag_total_footer') and self._tonbag_total_footer:
+                self._tonbag_total_footer.update_totals()
 
             # v4.2.2: 테이블 스타일 줄무늬 새로고침
             try:

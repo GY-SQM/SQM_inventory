@@ -96,10 +96,9 @@ class QueryMixin:
                                           lot_no: str = None) -> List[Dict]:
         """
         출고 예정 테이블 — 재고 리스트에서 Allocation(예약) 삭감 반영.
-        current_weight_after_allocation = current_weight - allocated_kg
-
-        Returns:
-            inventory 항목 + allocated_kg, allocated_count, current_weight_after_allocation
+        정의: 출고 예정 = 재고리스트 - allocation_plan(RESERVED)
+        - 행 개수: 재고리스트와 동일(LOT 단위).
+        - Balance(Kg) = current_weight - allocated_kg → sum(Balance) = sum(재고 현재고) - sum(예약 Kg).
         """
         base = self.get_inventory(status=status, product=product, lot_no=lot_no)
         if not base:
@@ -179,6 +178,45 @@ class QueryMixin:
             return out
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             logger.error(f"출고 이력 조회 오류: {e}")
+            return []
+
+    def get_all_tonbag_outbound_status(self) -> List[Dict]:
+        """
+        전체 LOT에 대한 톤백 예정/이력 — RESERVED, PICKED, SOLD, SHIPPED 톤백 전부.
+        톤백포함 뷰용.
+        """
+        try:
+            try:
+                rows = self.db.fetchall("""
+                    SELECT t.lot_no, t.id, t.sub_lt, t.weight, t.status AS tonbag_status,
+                           t.is_sample, t.picked_to, t.picked_date, t.outbound_date,
+                           ap.customer AS alloc_customer, ap.outbound_date AS alloc_outbound_date
+                    FROM inventory_tonbag t
+                    LEFT JOIN allocation_plan ap ON ap.tonbag_id = t.id AND ap.status IN ('RESERVED','EXECUTED')
+                    WHERE t.status IN ('PICKED','SOLD','SHIPPED','RESERVED')
+                    ORDER BY t.lot_no, COALESCE(t.outbound_date, t.picked_date, ap.outbound_date, '') DESC, t.sub_lt
+                """)
+            except sqlite3.OperationalError as _e:
+                if 'allocation_plan' in str(_e).lower():
+                    rows = self.db.fetchall("""
+                        SELECT lot_no, id, sub_lt, weight, status AS tonbag_status,
+                               is_sample, picked_to, picked_date, outbound_date,
+                               picked_to AS alloc_customer, outbound_date AS alloc_outbound_date
+                        FROM inventory_tonbag
+                        WHERE status IN ('PICKED','SOLD','SHIPPED','RESERVED')
+                        ORDER BY lot_no, COALESCE(outbound_date, picked_date, '') DESC, sub_lt
+                    """)
+                else:
+                    raise
+            out = []
+            for r in rows:
+                d = dict(r)
+                d['customer'] = d.get('picked_to') or d.get('alloc_customer') or ''
+                d['out_date'] = d.get('outbound_date') or d.get('picked_date') or d.get('alloc_outbound_date') or ''
+                out.append(d)
+            return out
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
+            logger.error(f"전체 톤백 출고 현황 조회 오류: {e}")
             return []
 
     def get_lot_detail(self, lot_no: str) -> Dict:
@@ -362,6 +400,120 @@ class QueryMixin:
             return _rows_to_dicts(rows)
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             logger.error(f"고객별 재고 조회 오류: {e}")
+            return []
+
+    def get_cargo_overview_counts(self) -> Dict:
+        """총괄 화물 상태별 LOT 개수 (콤보 표시용)."""
+        try:
+            total = self.db.fetchone("SELECT COUNT(*) AS c FROM inventory")
+            cnt_total = total.get('c', 0) if isinstance(total, dict) else (total[0] if total else 0)
+            # AVAILABLE: RESERVED/PICKED/SOLD 톤백이 하나도 없는 LOT
+            avail = self.db.fetchone("""
+                SELECT COUNT(DISTINCT i.lot_no) AS c FROM inventory i
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM inventory_tonbag t
+                    WHERE t.lot_no = i.lot_no AND t.status IN ('RESERVED','PICKED','SOLD','SHIPPED','DEPLETED')
+                )
+                AND EXISTS (SELECT 1 FROM inventory_tonbag t2 WHERE t2.lot_no = i.lot_no)
+            """)
+            cnt_avail = avail.get('c', 0) if isinstance(avail, dict) else (avail[0] if avail else 0)
+            try:
+                res = self.db.fetchone("""
+                    SELECT COUNT(DISTINCT t.lot_no) AS c FROM allocation_plan ap
+                    JOIN inventory_tonbag t ON ap.tonbag_id = t.id WHERE ap.status = 'RESERVED'
+                """)
+                cnt_reserved = res.get('c', 0) if isinstance(res, dict) else (res[0] if res else 0)
+            except sqlite3.OperationalError:
+                cnt_reserved = 0
+            picked = self.db.fetchone("SELECT COUNT(DISTINCT lot_no) AS c FROM inventory_tonbag WHERE status = 'PICKED'")
+            cnt_picked = picked.get('c', 0) if isinstance(picked, dict) else (picked[0] if picked else 0)
+            sold = self.db.fetchone("SELECT COUNT(DISTINCT lot_no) AS c FROM inventory_tonbag WHERE status = 'SOLD'")
+            cnt_sold = sold.get('c', 0) if isinstance(sold, dict) else (sold[0] if sold else 0)
+            return {'total': cnt_total, 'AVAILABLE': cnt_avail, 'RESERVED': cnt_reserved, 'PICKED': cnt_picked, 'SOLD': cnt_sold}
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
+            logger.debug(f"총괄 화물 개수 조회: {e}")
+            return {'total': 0, 'AVAILABLE': 0, 'RESERVED': 0, 'PICKED': 0, 'SOLD': 0}
+
+    def get_cargo_overview_lots(self, status_filter: str = None) -> List[Dict]:
+        """
+        총괄 화물 리스트용 — 상태별 LOT 목록.
+        - 전체: 모든 inventory LOT.
+        - AVAILABLE(판매가능): 톤백이 모두 AVAILABLE/SAMPLE인 LOT만 (RESERVED/PICKED/SOLD 없음).
+        - RESERVED(판매배정): allocation_plan(RESERVED)에 포함된 LOT만 (고객 Allocation 테이블).
+        - PICKED(판매화물 결정): 톤백 중 PICKED가 있는 LOT만.
+        - SOLD(출고): 톤백 중 SOLD가 있는 LOT만.
+        """
+        if not status_filter or status_filter in ('전체', 'ALL', ''):
+            return self.get_inventory()
+        try:
+            status = str(status_filter).strip().upper()
+            if status == 'AVAILABLE':
+                # 판매가능: RESERVED/PICKED/SOLD 톤백이 하나도 없는 LOT
+                lot_nos = self.db.fetchall("""
+                    SELECT DISTINCT i.lot_no FROM inventory i
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM inventory_tonbag t
+                        WHERE t.lot_no = i.lot_no AND t.status IN ('RESERVED','PICKED','SOLD','SHIPPED','DEPLETED')
+                    )
+                    AND EXISTS (SELECT 1 FROM inventory_tonbag t2 WHERE t2.lot_no = i.lot_no)
+                """)
+            elif status == 'RESERVED':
+                # 판매배정: allocation_plan(RESERVED)에 있는 LOT만
+                try:
+                    lot_nos = self.db.fetchall("""
+                        SELECT DISTINCT t.lot_no
+                        FROM allocation_plan ap
+                        JOIN inventory_tonbag t ON ap.tonbag_id = t.id
+                        WHERE ap.status = 'RESERVED'
+                    """)
+                except sqlite3.OperationalError as _e:
+                    if 'allocation_plan' in str(_e).lower():
+                        return []
+                    raise
+            elif status in ('PICKED', 'SOLD', 'SHIPPED', 'DEPLETED'):
+                lot_nos = self.db.fetchall("""
+                    SELECT DISTINCT lot_no FROM inventory_tonbag
+                    WHERE status = ?
+                """, (status,))
+            else:
+                return self.get_inventory()
+            if not lot_nos:
+                return []
+            placeholders = ','.join('?' * len(lot_nos))
+            lot_list = [r.get('lot_no') if isinstance(r, dict) else r[0] for r in lot_nos]
+            q = f"""
+                SELECT id, lot_no, sap_no, bl_no, product, product_code,
+                       container_no, lot_sqm, sold_to, warehouse, status, location, vessel,
+                       initial_weight, current_weight, picked_weight,
+                       net_weight, gross_weight, mxbg_pallet,
+                       salar_invoice_no, ship_date, arrival_date, con_return, free_time,
+                       customs, stock_date, inbound_date, created_at, updated_at
+                FROM inventory
+                WHERE lot_no IN ({placeholders})
+                ORDER BY COALESCE(arrival_date, created_at) DESC, lot_no
+            """
+            try:
+                rows = self.db.fetchall(q, tuple(lot_list))
+            except sqlite3.OperationalError as e:
+                if "no such column" in str(e).lower():
+                    q_fb = f"""
+                        SELECT id, lot_no, sap_no, bl_no, product, product_code,
+                               container_no, lot_sqm, sold_to, warehouse, status, '' AS location, vessel,
+                               initial_weight, current_weight, picked_weight,
+                               net_weight, gross_weight, mxbg_pallet,
+                               salar_invoice_no, ship_date, arrival_date, con_return, free_time,
+                               '' AS customs, stock_date, '' AS inbound_date, created_at, updated_at
+                        FROM inventory
+                        WHERE lot_no IN ({placeholders})
+                        ORDER BY COALESCE(arrival_date, created_at) DESC, lot_no
+                    """
+                    rows = self.db.fetchall(q_fb, tuple(lot_list))
+                else:
+                    raise
+            from engine_modules.tonbag_compat import normalize_all_rows
+            return normalize_all_rows(_rows_to_dicts(rows))
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
+            logger.error(f"총괄 화물 조회 오류: {e}")
             return []
 
     def search_lots(self, keyword: str = None, **filters) -> List[Dict]:

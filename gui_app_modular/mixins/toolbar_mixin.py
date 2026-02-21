@@ -110,8 +110,8 @@ class ToolbarMixin:
 
         # v3.8.9: overflow 체크 비활성화 (탭은 항상 row2에 고정)
         # self.root.bind('<Configure>', self._check_toolbar_overflow)
-        self._tab_index_map = {'inventory': 0, 'outbound_scheduled': 1, 'tonbag': 2, 'dashboard': 3, 'log': 4}
-        self._active_tab_key = 'inventory'
+        self._tab_index_map = {'cargo_overview': 0, 'inventory': 1, 'outbound_scheduled': 2, 'tonbag': 3, 'dashboard': 4, 'log': 5}
+        self._active_tab_key = 'cargo_overview'
 
     # ═══════════════════════════════════════════════════════
     # 메뉴 생성 헬퍼 (v3.8.4: 항목 간격 확대)
@@ -306,25 +306,9 @@ class ToolbarMixin:
 
     def _build_outbound_menu(self) -> 'tk.Menu':
         m = self._create_menu()
-        sample_sub = self._create_menu()
-        sample_sub.add_command(label="  샘플 1 불러오기", command=lambda: self._load_allocation_sample(1))
-        sample_sub.add_command(label="  샘플 2 불러오기", command=lambda: self._load_allocation_sample(2))
-        sample_sub.add_command(label="  샘플 3 불러오기", command=lambda: self._load_allocation_sample(3))
-        sample_sub.add_separator()
-        sample_sub.add_command(label="  샘플 3개 생성", command=lambda: self._safe_call('_generate_allocation_samples'))
         self._add_menu_items(m, [
-            ('📥 Allocation Table 불러오기 (재고 반영)', lambda: self._safe_call('_on_allocation_dialog')),
-            None,
-            ('📤 빠른 출고',                    lambda: self._safe_call('_on_simple_outbound')),
-            ('📤 심플 엑셀 출고',               lambda: self._safe_call('_on_simple_excel_outbound')),
-            ('📋 출고 Allocation Table',        lambda: self._safe_call('_on_outbound_click')),
-            ('📥 Allocation Table 샘플 다운로드', lambda: self._safe_call('_download_outbound_template')),
-        ])
-        m.add_cascade(label="  📂 Allocation 샘플 불러오기", menu=sample_sub)
-        self._add_menu_items(m, [
-            ('📥 출고 템플릿(톤백 수) 다운로드',  lambda: self._safe_call('_on_outbound_tonbag_choice')),
-            None,
-            ('📋 출고 결과',                     lambda: self._safe_call('_import_outbound_excel')),
+            ('📋 Allocation 입력 (파일 / 붙여넣기)', lambda: self._safe_call('_on_allocation_input_unified')),
+            ('📤 빠른 출고 (붙여넣기)', lambda: self._safe_call('_on_quick_outbound_paste')),
         ])
         return m
 
@@ -473,14 +457,16 @@ class ToolbarMixin:
         """v5.5.3 patch_01: 탭 버튼 — 밑줄+텍스트 스타일 (메뉴와 통일)"""
         f = self._toolbar_font
         tab_defs = [
+            ('cargo_overview', '📋 총괄 화물 리스트',
+             '상태별 화물만 표시: 전체 / 판매가능 / 판매배정(Allocation) / 판매화물 결정 / 출고. 헤더 클릭으로 오름·내림차순 정렬.'),
             ('inventory', '📦 재고리스트',
              'LOT 단위 재고 현황. 필터·기간·상태로 검색하고, 더블클릭 시 LOT 상세·톤백 목록을 볼 수 있습니다.'),
             ('outbound_scheduled', '📋 출고예정',
              '재고 리스트에서 Allocation(예약) 삭감 반영. Balance=잔량-예약. LOT 더블클릭 시 출고 이력 팝업(Excel/PDF 출력).'),
             ('tonbag',    '🎒 톤백리스트',
              '톤백 단위 현황. 선택 후 일괄 출고·라벨 출력 등이 가능합니다.'),
-            ('dashboard', '📊 통계',
-             '제품별·기간별 입출고 통계, 알림, 최근 7일 차트 등 대시보드를 표시합니다.'),
+            ('dashboard', '📊 대시보드',
+             'AVAILABLE/RESERVED/PICKED/SOLD 4단계 현황, 알림, 최근 7일 차트 등 대시보드를 표시합니다.'),
             ('log',       '📝 로그',
              '시스템·작업 로그를 확인합니다. 오류 추적이나 동작 확인에 사용하세요.'),
         ]

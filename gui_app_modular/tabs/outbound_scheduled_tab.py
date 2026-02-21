@@ -51,6 +51,8 @@ class OutboundScheduledTabMixin:
                    command=lambda: self._on_export_outbound_scheduled()).pack(side=LEFT, padx=Spacing.XS)
         ttk.Button(btn_frame, text="🔄 새로고침",
                    command=self._refresh_outbound_scheduled).pack(side=LEFT, padx=Spacing.XS)
+        ttk.Button(btn_frame, text="📦 톤백포함",
+                   command=self._show_tonbag_included_popup).pack(side=LEFT, padx=Spacing.XS)
 
         # v5.9.7: 스플릿 패널 (마스터-상세)
         from ..utils.split_panel import MasterDetailSplitPanel
@@ -62,6 +64,15 @@ class OutboundScheduledTabMixin:
         )
         self._ob_split_panel.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
 
+        # 합계 바 (하단): 출고 예정 = 재고리스트 − Allocation → 개수·총합 일치
+        self._ob_footer_frame = ttk.Frame(self.tab_outbound_scheduled)
+        self._ob_footer_frame.pack(fill=X, padx=Spacing.XS, pady=(Spacing.XS, 0))
+        self._ob_footer_label = ttk.Label(
+            self._ob_footer_frame,
+            text="LOT 0건 | Balance(Kg) 합계: 0 | 예약(Kg) 합계: 0 | 예약(개) 합계: 0  (출고 예정 = 재고리스트 − Allocation)"
+        )
+        self._ob_footer_label.pack(anchor="w")
+
         # 마스터 영역: 트리뷰
         tree_frame = ttk.Frame(self._ob_split_panel.get_master_container())
         tree_frame.pack(fill=BOTH, expand=YES)
@@ -71,9 +82,13 @@ class OutboundScheduledTabMixin:
             tree_frame, columns=all_cols, show="headings", height=20,
             selectmode='extended'
         )
-
+        self._ob_sort_column = None
+        self._ob_sort_reverse = False
         for col_id, label, width, anchor, _ in OUTBOUND_SCHEDULED_COLUMNS:
-            self.tree_outbound_scheduled.heading(col_id, text=label)
+            self.tree_outbound_scheduled.heading(
+                col_id, text=label,
+                command=lambda c=col_id: self._sort_outbound_scheduled_tree(c)
+            )
             self.tree_outbound_scheduled.column(col_id, width=width, anchor=anchor)
 
         v_scroll = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree_outbound_scheduled.yview)
@@ -94,8 +109,12 @@ class OutboundScheduledTabMixin:
 
     def _setup_ob_allocation_detail_panel(self) -> None:
         """출고예정 탭 상세 패널: Allocation 이력"""
-        from ..utils.constants import ttk, VERTICAL, BOTH, LEFT, END
+        from ..utils.constants import ttk, VERTICAL, BOTH, LEFT, END, X
         detail_container = self._ob_split_panel.get_detail_container()
+        # 톤백포함 버튼 (전체 LOT 톤백 예정 현황 팝업)
+        ob_detail_bar = ttk.Frame(detail_container)
+        ob_detail_bar.pack(fill=X, pady=(0, Spacing.XS))
+        ttk.Button(ob_detail_bar, text="📦 톤백포함 (전체 LOT)", command=self._show_tonbag_included_popup).pack(side=LEFT, padx=Spacing.XS)
         cols = ('no', 'sub_lt', 'weight', 'type', 'status', 'customer', 'out_date')
         self._ob_alloc_detail_tree = ttk.Treeview(
             detail_container, columns=cols, show='headings', height=8
@@ -157,6 +176,63 @@ class OutboundScheduledTabMixin:
         if lot_no:
             self._show_lot_outbound_history_popup(lot_no)
 
+    def _show_tonbag_included_popup(self) -> None:
+        """톤백포함 — 전체 LOT에 대한 톤백 예정/이력 (RESERVED, PICKED, SOLD, SHIPPED)"""
+        from ..utils.constants import ttk, BOTH, LEFT, END, X
+        from ..utils.ui_constants import apply_tooltip
+        try:
+            rows = self.engine.get_all_tonbag_outbound_status()
+        except Exception as e:
+            logger.debug(f"톤백포함 조회: {e}")
+            rows = []
+        popup = tk.Toplevel(self.root)
+        popup.title("📦 톤백포함 — 전체 LOT 톤백 예정/이력")
+        popup.geometry(DialogSize.get_geometry(self.root, 'large'))
+        apply_modal_window_options(popup)
+        popup.transient(self.root)
+        center_dialog(popup, self.root)
+        is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        bg = ThemeColors.get('bg_card', is_dark)
+        fg = ThemeColors.get('text_primary', is_dark)
+        popup.configure(bg=bg)
+        header = tk.Frame(popup, bg=bg, padx=15, pady=10)
+        header.pack(fill=X)
+        tk.Label(header, text=f"전체 LOT 톤백 예정/이력 — {len(rows)}건",
+                 font=('맑은 고딕', 12, 'bold'), bg=bg, fg=fg).pack(anchor='w')
+        tk.Label(header, text="RESERVED·PICKED·SOLD·SHIPPED 상태 톤백 (LOT별 정렬)",
+                 font=('맑은 고딕', 9), bg=bg, fg=ThemeColors.get('text_secondary', is_dark)).pack(anchor='w')
+        cols = ('lot_no', 'sub_lt', 'weight', 'type', 'status', 'customer', 'out_date')
+        tree = ttk.Treeview(popup, columns=cols, show='headings', height=20)
+        for cid, txt, w in [
+            ('lot_no', 'LOT NO', 120), ('sub_lt', '톤백#', 60), ('weight', '중량(kg)', 90),
+            ('type', '구분', 70), ('status', '상태', 90), ('customer', '출고처', 120),
+            ('out_date', '출고/예정일', 100),
+        ]:
+            tree.heading(cid, text=txt)
+            tree.column(cid, width=w)
+        sb = ttk.Scrollbar(popup, orient='vertical', command=tree.yview)
+        tree.configure(yscrollcommand=sb.set)
+        tree.pack(side=LEFT, fill=BOTH, expand=True, padx=Spacing.XS, pady=Spacing.XS)
+        sb.pack(side='right', fill='y', pady=Spacing.XS)
+        status_map = {
+            'PICKED': '📤 출고', 'SOLD': 'Sold', 'SHIPPED': '🚢 선적', 'RESERVED': '🔒 예약',
+        }
+        for idx, row in enumerate(rows, 1):
+            st = str(row.get('tonbag_status', '')).strip()
+            is_sample = row.get('is_sample') or 0
+            tb_type = '🧪 샘플' if is_sample else '📦 정규'
+            sub_lt = row.get('sub_lt', 0) or (0 if is_sample else '')
+            weight = float(row.get('weight', 0) or 0)
+            customer = str(row.get('customer', '')).strip()
+            out_date = str(row.get('out_date', ''))[:10] if row.get('out_date') else ''
+            status_txt = status_map.get(st, st)
+            tree.insert('', END, values=(
+                str(row.get('lot_no', '')), sub_lt, f"{weight:,.0f}", tb_type, status_txt, customer, out_date))
+        if not rows:
+            tree.insert('', END, values=('', '데이터 없음', '', '', '', '', ''))
+        ttk.Button(popup, text="닫기", command=popup.destroy).pack(pady=Spacing.XS)
+        popup.bind('<Escape>', lambda e: popup.destroy())
+
     def _refresh_outbound_scheduled(self) -> None:
         """출고 예정 테이블 새로고침"""
         if not hasattr(self, 'tree_outbound_scheduled'):
@@ -166,8 +242,17 @@ class OutboundScheduledTabMixin:
 
         try:
             data = self.engine.get_inventory_outbound_scheduled()
+            total_balance_kg = 0.0
+            total_alloc_kg = 0.0
+            total_alloc_count = 0
             for idx, item in enumerate(data, 1):
                 lot_no = str(item.get('lot_no', ''))
+                balance = float(item.get('current_weight_after_allocation', 0) or 0)
+                alloc_kg = float(item.get('allocated_kg', 0) or 0)
+                alloc_cnt = int(item.get('allocated_count', 0) or 0)
+                total_balance_kg += balance
+                total_alloc_kg += alloc_kg
+                total_alloc_count += alloc_cnt
                 vals = [
                     str(idx),
                     lot_no,
@@ -175,9 +260,9 @@ class OutboundScheduledTabMixin:
                     str(item.get('bl_no', '')),
                     str(item.get('product', '')),
                     str(item.get('status', '')),
-                    f"{float(item.get('current_weight_after_allocation', 0) or 0):,.0f}",
-                    f"{float(item.get('allocated_kg', 0) or 0):,.0f}",
-                    str(item.get('allocated_count', 0) or 0),
+                    f"{balance:,.0f}",
+                    f"{alloc_kg:,.0f}",
+                    str(alloc_cnt),
                     f"{float(item.get('net_weight', 0) or 0):,.0f}",
                     str(item.get('container_no', '')),
                     str(item.get('ship_date', ''))[:10] if item.get('ship_date') else '',
@@ -186,15 +271,51 @@ class OutboundScheduledTabMixin:
                     f"{float(item.get('initial_weight', 0) or 0):,.0f}",
                 ]
                 self.tree_outbound_scheduled.insert('', 'end', values=vals)
+            # 합계 바 갱신 (출고 예정 = 재고 - Allocation → 개수·총합 일치)
+            if hasattr(self, '_ob_footer_label'):
+                self._ob_footer_label.config(
+                    text=f"LOT {len(data)}건 | Balance(Kg) 합계: {total_balance_kg:,.0f} | "
+                         f"예약(Kg) 합계: {total_alloc_kg:,.0f} | 예약(개) 합계: {total_alloc_count}  "
+                         f"(출고 예정 = 재고리스트 − Allocation)"
+                )
         except Exception as e:
             logger.error(f"출고 예정 새로고침 오류: {e}")
             if hasattr(self, '_log'):
                 self._log(f"⚠️ 출고 예정 조회 오류: {e}")
+            if hasattr(self, '_ob_footer_label'):
+                self._ob_footer_label.config(text="LOT 0건 | 조회 오류  (출고 예정 = 재고리스트 − Allocation)")
+
+    def _sort_outbound_scheduled_tree(self, col: str) -> None:
+        """출고 예정 트리 헤더 클릭 시 오름차순/내림차순 정렬"""
+        tree = self.tree_outbound_scheduled
+        if self._ob_sort_column == col:
+            self._ob_sort_reverse = not self._ob_sort_reverse
+        else:
+            self._ob_sort_column = col
+            self._ob_sort_reverse = False
+        items = [(tree.set(item, col), item) for item in tree.get_children('')]
+        numeric_cols = ['row_num', 'current_weight_after_allocation', 'allocated_kg', 'allocated_count',
+                       'net_weight', 'initial_weight']
+        if col in numeric_cols:
+            def sort_key(x):
+                try:
+                    return float(str(x[0]).replace(',', ''))
+                except (ValueError, TypeError):
+                    return 0
+        else:
+            sort_key = lambda x: (x[0] or '').lower()
+        items.sort(key=sort_key, reverse=self._ob_sort_reverse)
+        for idx, (_, item) in enumerate(items):
+            tree.move(item, '', idx)
+        arrow = " ▼" if self._ob_sort_reverse else " ▲"
+        for c_id, c_label, _, _, _ in OUTBOUND_SCHEDULED_COLUMNS:
+            tree.heading(c_id, text=f"{c_label}{arrow}" if c_id == col else c_label)
 
     def _on_export_outbound_scheduled(self) -> None:
-        """출고 예정 테이블 Excel 내보내기"""
+        """출고 예정 테이블 Excel 내보내기 (같은 이름 있으면 _1, _2 ... 로 저장)"""
         from tkinter import filedialog
         from ..utils.ui_constants import CustomMessageBox
+        from ..utils.excel_file_helper import get_unique_excel_path
         path = filedialog.asksaveasfilename(
             defaultextension='.xlsx',
             filetypes=[('Excel', '*.xlsx')],
@@ -202,6 +323,7 @@ class OutboundScheduledTabMixin:
         )
         if not path:
             return
+        path = get_unique_excel_path(path)
         try:
             self._export_outbound_scheduled_excel(path)
             CustomMessageBox.showinfo(self.root, "완료", f"저장 완료:\n{path}")
@@ -277,12 +399,14 @@ class OutboundScheduledTabMixin:
         btn_bar.pack(fill=X, padx=10)
 
         def _export_excel():
+            from ..utils.excel_file_helper import get_unique_excel_path
             path = filedialog.asksaveasfilename(
                 defaultextension='.xlsx',
                 filetypes=[('Excel', '*.xlsx')],
                 initialfile=f"출고이력_{lot_no}.xlsx"
             )
             if path:
+                path = get_unique_excel_path(path)
                 try:
                     self._export_lot_outbound_history_excel(lot_no, path, history)
                     from ..utils.ui_constants import CustomMessageBox
