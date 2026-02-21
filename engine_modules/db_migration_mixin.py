@@ -37,6 +37,7 @@ class DatabaseMigrationMixin:
         self._migrate_v591_tonbag_fk_columns()
         self._migrate_v593_allocation_plan()
         self._migrate_v599_missing_columns()
+        self._migrate_v600_picking_sold_tables()
 
     def _migrate_v588_con_return(self) -> None:
         """
@@ -112,6 +113,156 @@ class DatabaseMigrationMixin:
         except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
             logger.error(f"[v5.9.9] missing columns 마이그레이션 실패: {e}")
             self.rollback()
+
+    def _migrate_v600_picking_sold_tables(self) -> None:
+        """
+        v6.0.0: SQM v6.0 4단계 상태 모델 — picking_table + sold_table 신규 생성
+                allocation_plan 컬럼 확장 (picking_no, bl_no, outbound_id 추가)
+
+        상태 모델:
+            AVAILABLE → RESERVED(allocation_plan) → PICKED(picking_table) → SOLD(sold_table)
+
+        Picking List PDF 파싱 결과 저장:
+            picking_table: Batch number(lot_no) + Quantity(MT/KG) + customer_ref(Picking No)
+
+        Sales Order Excel 처리 결과 저장:
+            sold_table: LOT NO + Picking No 매칭 → SOLD 또는 PENDING
+        """
+        try:
+            # STEP 1. allocation_plan 컬럼 확장
+            extra_cols = [
+                ("picking_no", "TEXT"),
+                ("bl_no", "TEXT"),
+                ("outbound_id", "TEXT"),
+            ]
+            for col_name, col_type in extra_cols:
+                try:
+                    self.execute(
+                        f"ALTER TABLE allocation_plan ADD COLUMN {col_name} {col_type}"
+                    )
+                    logger.info(f"[v6.0.0] allocation_plan.{col_name} 컬럼 추가")
+                except (sqlite3.OperationalError, OSError) as e:
+                    if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                        logger.debug(f"[v6.0.0] allocation_plan.{col_name} 이미 존재")
+                    else:
+                        raise
+            self.commit()
+
+            # STEP 2. picking_table 신규 생성
+            self.execute("""
+                CREATE TABLE IF NOT EXISTS picking_table (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    lot_no           TEXT    NOT NULL,
+                    tonbag_id        INTEGER,
+                    sub_lt           INTEGER,
+                    tonbag_uid       TEXT,
+                    picking_no       TEXT,
+                    sales_order_no   TEXT,
+                    outbound_id      TEXT,
+                    customer         TEXT,
+                    plan_loading     TEXT,
+                    creation_date    TEXT,
+                    source_file      TEXT,
+                    qty_mt           REAL,
+                    qty_kg           REAL,
+                    unit             TEXT,
+                    is_sample        INTEGER DEFAULT 0,
+                    storage_location TEXT,
+                    status           TEXT DEFAULT 'ACTIVE',
+                    picking_date     TEXT DEFAULT (datetime('now')),
+                    sold_date        TEXT,
+                    created_by       TEXT DEFAULT 'system',
+                    remark           TEXT,
+                    FOREIGN KEY (lot_no)    REFERENCES inventory(lot_no),
+                    FOREIGN KEY (tonbag_id) REFERENCES inventory_tonbag(id)
+                )
+            """)
+            for idx_sql in [
+                "CREATE INDEX IF NOT EXISTS idx_picking_lot       ON picking_table(lot_no)",
+                "CREATE INDEX IF NOT EXISTS idx_picking_no        ON picking_table(picking_no)",
+                "CREATE INDEX IF NOT EXISTS idx_picking_sales_ord ON picking_table(sales_order_no)",
+                "CREATE INDEX IF NOT EXISTS idx_picking_uid       ON picking_table(tonbag_uid)",
+                "CREATE INDEX IF NOT EXISTS idx_picking_status    ON picking_table(status)",
+                "CREATE INDEX IF NOT EXISTS idx_picking_date      ON picking_table(picking_date)",
+            ]:
+                try:
+                    self.execute(idx_sql)
+                except (sqlite3.OperationalError, OSError) as _e:
+                    logger.debug(f"[v6.0.0] picking_table 인덱스 스킵: {_e}")
+            self.commit()
+            logger.info("[v6.0.0] picking_table 생성 완료")
+
+            # STEP 3. sold_table 신규 생성
+            self.execute("""
+                CREATE TABLE IF NOT EXISTS sold_table (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    lot_no           TEXT    NOT NULL,
+                    tonbag_id        INTEGER,
+                    sub_lt           INTEGER,
+                    tonbag_uid       TEXT,
+                    picking_id       INTEGER,
+                    sales_order_no   TEXT,
+                    sales_order_file TEXT,
+                    picking_no       TEXT,
+                    sap_no           TEXT,
+                    bl_no            TEXT,
+                    customer         TEXT,
+                    sku              TEXT,
+                    delivery_date    TEXT,
+                    sold_qty_mt      REAL,
+                    sold_qty_kg      REAL,
+                    ct_plt           INTEGER,
+                    status           TEXT DEFAULT 'PENDING',
+                    sold_date        TEXT,
+                    created_at       TEXT DEFAULT (datetime('now')),
+                    confirmed_by     TEXT,
+                    created_by       TEXT DEFAULT 'system',
+                    remark           TEXT,
+                    FOREIGN KEY (lot_no)     REFERENCES inventory(lot_no),
+                    FOREIGN KEY (tonbag_id)  REFERENCES inventory_tonbag(id),
+                    FOREIGN KEY (picking_id) REFERENCES picking_table(id)
+                )
+            """)
+            for idx_sql in [
+                "CREATE INDEX IF NOT EXISTS idx_sold_lot        ON sold_table(lot_no)",
+                "CREATE INDEX IF NOT EXISTS idx_sold_uid        ON sold_table(tonbag_uid)",
+                "CREATE INDEX IF NOT EXISTS idx_sold_order_no   ON sold_table(sales_order_no)",
+                "CREATE INDEX IF NOT EXISTS idx_sold_picking_no ON sold_table(picking_no)",
+                "CREATE INDEX IF NOT EXISTS idx_sold_status     ON sold_table(status)",
+                "CREATE INDEX IF NOT EXISTS idx_sold_date       ON sold_table(sold_date)",
+                "CREATE INDEX IF NOT EXISTS idx_sold_customer   ON sold_table(customer)",
+            ]:
+                try:
+                    self.execute(idx_sql)
+                except (sqlite3.OperationalError, OSError) as _e:
+                    logger.debug(f"[v6.0.0] sold_table 인덱스 스킵: {_e}")
+            self.commit()
+            logger.info("[v6.0.0] sold_table 생성 완료")
+
+            # STEP 4. inventory_tonbag 컬럼 추가
+            tonbag_extra_cols = [
+                ("picking_id", "INTEGER"),
+                ("sold_id", "INTEGER"),
+                ("picking_no", "TEXT"),
+            ]
+            for col_name, col_type in tonbag_extra_cols:
+                try:
+                    self.execute(
+                        f"ALTER TABLE inventory_tonbag ADD COLUMN {col_name} {col_type}"
+                    )
+                    logger.info(f"[v6.0.0] inventory_tonbag.{col_name} 추가")
+                except (sqlite3.OperationalError, OSError) as e:
+                    if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                        logger.debug(f"[v6.0.0] inventory_tonbag.{col_name} 이미 존재")
+                    else:
+                        raise
+            self.commit()
+            logger.info("✅ [v6.0.0] picking_table + sold_table Migration 완료")
+
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"❌ [v6.0.0] Migration 실패: {e}")
+            self.rollback()
+            raise
 
     def _migrate_v591_tonbag_fk_columns(self) -> None:
         """

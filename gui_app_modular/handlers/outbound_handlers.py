@@ -78,9 +78,9 @@ class OutboundHandlersMixin:
                 product = lot_info['product'] or '-'
                 
                 if avail_kg < qty_kg - 0.01:
-                    warnings.append(f"재고 부족: {lot_no} (가용: {avail_kg:.0f}kg, 요청: {qty_kg:.0f}kg)")
+                    warnings.append(f"재고 부족: {lot_no} (판매가능: {avail_kg:.0f}kg, 요청: {qty_kg:.0f}kg)")
                 
-                # 가용 톤백 조회
+                # 판매가능 톤백 조회
                 tonbags = self.engine.db.fetchall(
                     """SELECT sub_lt, weight, status, location 
                        FROM inventory_tonbag 
@@ -544,8 +544,170 @@ class OutboundHandlersMixin:
             'sale_ref_var': sale_ref_var, 'btn_frame': btn_frame,
         }
 
+    def _on_allocation_input_unified(self, initial_file: str = None) -> None:
+        """Allocation 입력 통합: 파일 불러오기 vs 템플릿 붙여넣기. initial_file 있으면 선택 없이 해당 파일로 열기(드래그 등)."""
+        from ..utils.constants import filedialog
+        from ..utils.ui_constants import center_dialog, ThemeColors, DialogSize, apply_modal_window_options
+        import tkinter as tk
+        from tkinter import ttk
+
+        if initial_file:
+            try:
+                from ..dialogs.allocation_dialog import AllocationDialog
+                dlg = AllocationDialog(self, self.engine)
+                dlg.show(initial_file=initial_file)
+            except (ImportError, AttributeError) as e:
+                logger.error(f"Allocation 다이얼로그 오류: {e}", exc_info=True)
+                CustomMessageBox.showerror(self.root, "오류", f"Allocation 열기 실패:\n{e}")
+            return
+
+        result = [None]
+        win = tk.Toplevel(self.root)
+        win.title("Allocation 입력")
+        apply_modal_window_options(win)
+        win.transient(self.root)
+        win.grab_set()
+        win.geometry(DialogSize.get_geometry(self.root, 'small'))
+        win.minsize(420, 260)
+        center_dialog(win, self.root)
+        f = ttk.Frame(win, padding=(20, 20, 20, 32))
+        f.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(f, text="Allocation 데이터 입력 방법을 선택하세요.", font=('맑은 고딕', 12, 'bold')).pack(anchor='w', pady=(0, 12))
+        ttk.Label(f, text="① Allocation Excel 파일을 불러옵니다.\n   → 미리보기 후 예약(RESERVED) 실행.",
+                  font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 10))
+        ttk.Label(f, text="② 내장 Allocation 템플릿에 데이터를 붙여넣기(Ctrl+V) 합니다.\n   → 붙여넣기 후 미리보기 → 예약 실행.",
+                  font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 24))
+        btn_f = ttk.Frame(f)
+        btn_f.pack(anchor='center')
+        def on_file():
+            result[0] = 'file'
+            win.destroy()
+        def on_paste():
+            result[0] = 'paste'
+            win.destroy()
+        ttk.Button(btn_f, text="📂 파일 불러오기", command=on_file, width=22).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_f, text="📋 템플릿 붙여넣기", command=on_paste, width=22).pack(side=tk.LEFT)
+        win.protocol("WM_DELETE_WINDOW", win.destroy)
+        win.wait_window(win)
+
+        choice = result[0]
+        if not choice:
+            return
+        try:
+            from ..dialogs.allocation_dialog import AllocationDialog
+            dlg = AllocationDialog(self, self.engine)
+            if choice == 'file':
+                path = filedialog.askopenfilename(
+                    parent=self.root, title="Allocation Excel 선택",
+                    filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+                )
+                if path:
+                    dlg.show(initial_file=path)
+                return
+            if choice == 'paste':
+                from ..utils.paste_table_dialog import show_paste_table_dialog
+                ALLOC_PASTE_COLUMNS = [
+                    ('lot_no', 'LOT NO', 110),
+                    ('sap_no', 'SAP NO', 100),
+                    ('product', 'Product', 140),
+                    ('qty_mt', 'QTY (MT)', 80),
+                    ('sold_to', 'CUSTOMER', 130),
+                    ('sale_ref', 'SALE REF', 120),
+                    ('outbound_date', 'OUTBOUND DATE', 100),
+                    ('warehouse', 'WH', 60),
+                ]
+
+                def on_paste_confirm(rows: list):
+                    if not rows:
+                        CustomMessageBox.showwarning(self.root, "경고", "붙여넣기 데이터가 없습니다.")
+                        return
+                    normalized = []
+                    for r in rows:
+                        try:
+                            qty = float(str(r.get('qty_mt', '0')).replace(',', '').strip() or 0)
+                        except (ValueError, TypeError):
+                            qty = 0.0
+                        if not str(r.get('lot_no', '')).strip():
+                            continue
+                        row = dict(r)
+                        row['qty_mt'] = qty
+                        row['sublot_count'] = max(1, int(qty / 0.5))
+                        normalized.append(row)
+                    if not normalized:
+                        CustomMessageBox.showwarning(self.root, "경고", "유효한 LOT NO·QTY 행이 없습니다.")
+                        return
+                    dlg = AllocationDialog(self, self.engine)
+                    dlg.show_with_data(normalized)
+
+                show_paste_table_dialog(
+                    self.root,
+                    title="📋 Allocation 데이터 (붙여넣기)",
+                    columns=ALLOC_PASTE_COLUMNS,
+                    instruction="아래 표에 Excel 등에서 복사한 Allocation 데이터를 붙여넣기(Ctrl+V) 한 뒤 [확인]을 누르세요. LOT NO, QTY (MT), CUSTOMER 등.",
+                    confirm_text="확인",
+                    cancel_text="취소",
+                    on_confirm=on_paste_confirm,
+                    min_size=(800, 440),
+                )
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Allocation 입력 오류: {e}", exc_info=True)
+            CustomMessageBox.showerror(self.root, "오류", f"Allocation 입력 실패:\n{e}")
+
+    def _on_quick_outbound_paste(self) -> None:
+        """빠른 출고: 가운데 선택 창 없이 바로 붙여넣기 테이블만 열기. 컬럼 유지, 확인 시 Allocation 미리보기 → 예약."""
+        try:
+            from ..dialogs.allocation_dialog import AllocationDialog
+            from ..utils.paste_table_dialog import show_paste_table_dialog
+
+            ALLOC_PASTE_COLUMNS = [
+                ('lot_no', 'LOT NO', 110),
+                ('sap_no', 'SAP NO', 100),
+                ('product', 'Product', 140),
+                ('qty_mt', 'QTY (MT)', 80),
+                ('sold_to', 'CUSTOMER', 130),
+                ('sale_ref', 'SALE REF', 120),
+                ('outbound_date', 'OUTBOUND DATE', 100),
+                ('warehouse', 'WH', 60),
+            ]
+
+            def on_paste_confirm(rows: list):
+                if not rows:
+                    CustomMessageBox.showwarning(self.root, "경고", "붙여넣기 데이터가 없습니다.")
+                    return
+                normalized = []
+                for r in rows:
+                    try:
+                        qty = float(str(r.get('qty_mt', '0')).replace(',', '').strip() or 0)
+                    except (ValueError, TypeError):
+                        qty = 0.0
+                    if not str(r.get('lot_no', '')).strip():
+                        continue
+                    row = dict(r)
+                    row['qty_mt'] = qty
+                    row['sublot_count'] = max(1, int(qty / 0.5))
+                    normalized.append(row)
+                if not normalized:
+                    CustomMessageBox.showwarning(self.root, "경고", "유효한 LOT NO·QTY 행이 없습니다.")
+                    return
+                dlg = AllocationDialog(self, self.engine)
+                dlg.show_with_data(normalized)
+
+            show_paste_table_dialog(
+                self.root,
+                title="📤 빠른 출고 (붙여넣기)",
+                columns=ALLOC_PASTE_COLUMNS,
+                instruction="아래 표에 Excel 등에서 복사한 출고 데이터를 붙여넣기(Ctrl+V) 한 뒤 [확인]을 누르세요. LOT NO, QTY (MT), CUSTOMER 등.",
+                confirm_text="확인",
+                cancel_text="취소",
+                on_confirm=on_paste_confirm,
+                min_size=(800, 440),
+            )
+        except (ImportError, AttributeError) as e:
+            logger.error(f"빠른 출고 오류: {e}", exc_info=True)
+            CustomMessageBox.showerror(self.root, "오류", f"빠른 출고 열기 실패:\n{e}")
+
     def _on_allocation_dialog(self) -> None:
-        """Allocation 출고 예약 다이얼로그 열기 (v5.9.5)"""
+        """Allocation 출고 예약 다이얼로그 열기 (v5.9.5). 통합 메뉴에서는 _on_allocation_input_unified 사용."""
         try:
             from ..dialogs.allocation_dialog import AllocationDialog
             dlg = AllocationDialog(self, self.engine)
@@ -556,3 +718,68 @@ class OutboundHandlersMixin:
                 self.root, "오류",
                 f"Allocation 다이얼로그를 열 수 없습니다:\n{e}"
             )
+
+    def _on_picking_list_upload(self) -> None:
+        """v6.0: Picking List PDF 업로드 — 파일 선택 → 파싱 → 결과 미리보기"""
+        from ..utils.constants import filedialog
+
+        path = filedialog.askopenfilename(
+            parent=self.root,
+            title="Picking List PDF 선택",
+            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
+        )
+        if not path or not path.strip():
+            return
+
+        parse_picking_list_pdf = None
+        try:
+            from parsers import parse_picking_list_pdf as _parse
+            parse_picking_list_pdf = _parse
+        except ImportError:
+            try:
+                from parsers.picking_list_parser import parse_picking_list_pdf as _parse
+                parse_picking_list_pdf = _parse
+            except ImportError:
+                pass
+
+        if not parse_picking_list_pdf:
+            CustomMessageBox.showerror(
+                self.root,
+                "Picking List 파서 없음",
+                "parsers.picking_list_parser를 불러올 수 없습니다.",
+            )
+            return
+
+        try:
+            doc = parse_picking_list_pdf(path)
+        except Exception as e:
+            logger.exception("Picking List PDF 파싱 오류")
+            CustomMessageBox.show_detailed_error(
+                self.root,
+                "파싱 오류",
+                "PDF 파싱 중 오류가 발생했습니다.",
+                exception=e,
+            )
+            return
+
+        on_apply = None
+        try:
+            from features.parsers.picking_engine import apply_picking_list_to_db
+            def _apply(d, p):
+                apply_picking_list_to_db(self.engine, d, p)
+                CustomMessageBox.showinfo(self.root, "완료", "DB 반영이 완료되었습니다.")
+            on_apply = _apply
+        except ImportError:
+            logger.debug("features.parsers.picking_engine 없음 — DB 반영 버튼 비표시")
+
+        from ..dialogs.picking_list_preview_dialog import PickingListPreviewDialog
+        PickingListPreviewDialog(self.root, doc, path, on_apply_clicked=on_apply)
+
+    def _on_barcode_scan_upload(self) -> None:
+        """v6.0: 바코드 스캔 파일 업로드 (준비 중)"""
+        CustomMessageBox.showinfo(
+            self.root, "바코드 스캔 업로드",
+            "바코드 스캔 파일(CSV/Excel) 업로드 기능은 준비 중입니다.\n"
+            "창고 직원이 스캔한 파일을 업로드하면\n"
+            "스캔된 톤백만 PICKED → SOLD로 전환됩니다."
+        )

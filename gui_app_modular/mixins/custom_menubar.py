@@ -89,6 +89,7 @@ class CustomMenuBar:
     def _create_menus(self) -> None:
         """v4.1.4: 메뉴 재구성 — 카테고리별 분할"""
         self._create_file_menu()
+        self._create_report_menu()
         self._create_tools_menu()
         self._create_features_menu()
         self._create_view_menu()
@@ -96,23 +97,45 @@ class CustomMenuBar:
         self._create_product_menu()
 
     def _create_file_menu(self) -> None:
-        """1. 📁 파일 메뉴"""
+        """1. 📁 파일 메뉴 (입고/출고는 menu_registry 단일 정의 사용)"""
         from ..utils.constants import (
             HAS_GEMINI, HAS_DB_PROTECTION, HAS_FEATURES, HAS_FEATURES_V2
         )
+        from ..menu_registry import FILE_MENU_INBOUND_ITEMS, FILE_MENU_OUTBOUND_ITEMS
         
         # =====================================================
-        # 1. 파일 메뉴 (v5.6.5: 입고 경로 단일화)
+        # 1. 파일 메뉴 (v5.6.5: 입고 경로 단일화 / v6: menu_registry 단일 소스)
         # =====================================================
         file_menu = self._add_menu("📁 파일")
         
-        # v5.6.5: 입고 — PDF 원스톱 + Excel 2개만
+        # 입고 — menu_registry 기반
         inbound_sub = self._add_submenu(file_menu, "📥 입고 (Ctrl+I)")
-        self._add_command(inbound_sub, "📄 PDF 스캔 입고", self.app._on_pdf_inbound)
-        self._add_command(inbound_sub, "📊 엑셀 파일 수동 입고", self.app._bulk_import_inventory_simple)
-        self._add_command(inbound_sub, "📋 D/O 후속 연결", self.app._on_do_update)
+        for entry in FILE_MENU_INBOUND_ITEMS:
+            label, method_name = entry[0], entry[1]
+            if method_name == "_show_return_dialog":
+                self._add_separator(inbound_sub)
+            optional = entry[2] if len(entry) > 2 else False
+            callback = getattr(self.app, method_name, None)
+            if method_name == "_show_return_dialog" and not callable(callback):
+                callback = getattr(self, "_show_return_safe", None)
+            if optional and not callable(callback):
+                continue
+            if callable(callback):
+                self._add_command(inbound_sub, label, callback)
         self._add_separator(inbound_sub)
-        self._add_command(inbound_sub, "🔄 반품 (재입고)", self._show_return_safe)
+        
+        self._add_separator(file_menu)
+        
+        # 출고 — menu_registry 단일 소스 (Picking List 등 누락 방지)
+        outbound_sub = self._add_submenu(file_menu, "📤 출고")
+        for entry in FILE_MENU_OUTBOUND_ITEMS:
+            label, method_name = entry[0], entry[1]
+            optional = entry[2] if len(entry) > 2 else False
+            if optional and (not hasattr(self.app, method_name) or not callable(getattr(self.app, method_name))):
+                continue
+            callback = getattr(self.app, method_name, None)
+            if callable(callback):
+                self._add_command(outbound_sub, label, callback)
         
         self._add_separator(file_menu)
         
@@ -157,6 +180,15 @@ class CustomMenuBar:
         
         self._add_separator(file_menu)
         self._add_command(file_menu, "종료", self.parent.quit)
+
+    def _create_report_menu(self) -> None:
+        """보고서 메뉴 (거래 명세서 등)"""
+        report_menu = self._add_menu("📝 보고서")
+        self._add_command(report_menu, "📄 거래 명세서", self.app._generate_invoice_pdf)
+        self._add_separator(report_menu)
+        self._add_command(report_menu, "📦 재고 현황 보고서", self.app._generate_inventory_pdf_report)
+        self._add_command(report_menu, "📈 입출고 내역", self.app._generate_transaction_pdf)
+        self._add_command(report_menu, "🔖 LOT 상세", self.app._generate_lot_detail_pdf)
         
     def _create_tools_menu(self) -> None:
         """2. 🔧 도구 메뉴"""
@@ -187,11 +219,10 @@ class CustomMenuBar:
         # v3.8.4: 문서 변환 (OCR)
         self._add_command(tools_menu, "📷 문서 변환 (OCR/PDF)", self._show_doc_convert_safe)
         
-        # PDF 보고서
+        # PDF 보고서 (거래 명세서는 상단 보고서 메뉴로 이동)
         report_sub = self._add_submenu(tools_menu, "📋 PDF 보고서")
         self._add_command(report_sub, "📦 재고 현황 보고서", self.app._generate_inventory_pdf_report)
         self._add_command(report_sub, "📈 입출고 내역", self.app._generate_transaction_pdf)
-        self._add_command(report_sub, "📝 거래 명세서", self.app._generate_invoice_pdf)
         self._add_command(report_sub, "📤 출고 확인서", self.app._generate_outbound_confirm_pdf)
         self._add_command(report_sub, "🔖 LOT 상세", self.app._generate_lot_detail_pdf)
         report_sub.add_separator()
@@ -523,9 +554,9 @@ class CustomMenuBar:
         _sec = ThemeColors.get('text_secondary', _gd)
         _pri = ThemeColors.get('text_primary', _gd)
         statuses = [
-            ('✅ AVAILABLE', '가용', ThemeColors.get('badge_db', _gd), ThemeColors.get('available', _gd),
+            ('✅ AVAILABLE', '판매가능', ThemeColors.get('badge_db', _gd), ThemeColors.get('available', _gd),
              '출고 가능한 정상 재고. 입고 완료 후 기본 상태.'),
-            ('📤 PICKED', '출고 지정', ThemeColors.get('statusbar_icon_warn', _gd), ThemeColors.get('picked', _gd),
+            ('📤 PICKED', '판매화물 결정', ThemeColors.get('statusbar_icon_warn', _gd), ThemeColors.get('picked', _gd),
              '출고 배정(Allocation) 완료. 아직 선적 전.'),
             ('✔️ CONFIRMED', '출고 확정', ThemeColors.get('info', _gd), ThemeColors.get('tree_select_bg', _gd),
              '출고 확정됨. PICKED → CONFIRMED 전환 후 선적 대기.'),
@@ -533,8 +564,8 @@ class CustomMenuBar:
              '실제 출하(선적) 완료. 창고에서 나간 상태.'),
             ('❌ DEPLETED', '소진', ThemeColors.get('text_muted', _gd), ThemeColors.get('bg_secondary', _gd),
              '해당 LOT/톤백의 재고가 모두 소진됨. 0 kg.'),
-            ('🔒 RESERVED', '예약', ThemeColors.get('statusbar_icon_warn', _gd), ThemeColors.get('reserved', _gd),
-             '특정 고객/주문에 예약된 재고. 다른 출고에 사용 불가.'),
+            ('🔒 RESERVED', '판매배정', ThemeColors.get('statusbar_icon_warn', _gd), ThemeColors.get('reserved', _gd),
+             '특정 고객/주문에 배정된 재고. 다른 출고에 사용 불가.'),
             ('🧪 SAMPLE', '샘플', ThemeColors.get('success', _gd), ThemeColors.get('available', _gd),
              '샘플 톤백(1kg). 정규 재고와 별도 관리. is_sample=1'),
         ]
@@ -699,7 +730,7 @@ class CustomMenuBarMixin:
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="파일", menu=file_menu)
         file_menu.add_command(label="입고", command=self._on_pdf_inbound)
-        file_menu.add_command(label="출고", command=self._on_simple_outbound)
+        file_menu.add_command(label="출고 Allocation", command=self._on_allocation_input_unified)
         file_menu.add_separator()
         file_menu.add_command(label="종료", command=self.root.quit)
         

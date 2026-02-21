@@ -64,26 +64,26 @@ class MenuMixin:
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="파일", menu=file_menu)
         
+        from ..menu_registry import FILE_MENU_INBOUND_ITEMS, FILE_MENU_OUTBOUND_ITEMS
+        
         file_menu.add_command(
             label="📥 PDF 입고  (Ctrl+I)",
             command=self._on_pdf_inbound
         )
         
+        # 출고 서브메뉴 — menu_registry 단일 소스 (Picking List 등 누락 방지)
         outbound_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="📤 출고", menu=outbound_menu)
-        outbound_menu.add_command(
-            label="📋 간편 출고 (LOT 입력)  (Ctrl+O)",
-            command=self._on_simple_outbound
-        )
-        outbound_menu.add_command(
-            label="📄 배정표 출고 (Excel)",
-            command=self._on_outbound_click
-        )
-        outbound_menu.add_separator()
-        outbound_menu.add_command(
-            label="📋 Allocation 출고 예약",
-            command=self._on_allocation_dialog
-        )
+        for entry in FILE_MENU_OUTBOUND_ITEMS:
+            label, method_name = entry[0], entry[1]
+            optional = entry[2] if len(entry) > 2 else False
+            if optional and (not hasattr(self, method_name) or not callable(getattr(self, method_name))):
+                continue
+            cmd = getattr(self, method_name, None)
+            if callable(cmd):
+                outbound_menu.add_command(label=label, command=cmd)
+        if hasattr(self, '_on_quick_outbound_paste') and callable(self._on_quick_outbound_paste):
+            outbound_menu.add_command(label="📤 빠른 출고 (붙여넣기)", command=self._on_quick_outbound_paste)
         
         file_menu.add_separator()
         
@@ -93,21 +93,36 @@ class MenuMixin:
         
         file_menu.add_separator()
         
-        # v5.6.5: 업로드 메뉴 간소화 — PDF 입고(원스톱) + Excel 입고
-        upload_menu = tk.Menu(file_menu, tearoff=0, font=('맑은 고딕', 14))
+        # 업로드 메뉴 — menu_registry 기반 (입고 + 출고 동일 목록)
+        _font = ('맑은 고딕', 14)
+        upload_menu = tk.Menu(file_menu, tearoff=0, font=_font)
         file_menu.add_cascade(label="📥 업로드 메뉴", menu=upload_menu)
-        upload_menu.add_command(label="  📄  PDF 스캔 입고", command=self._on_pdf_inbound, font=('맑은 고딕', 14))
-        upload_menu.add_command(label="  📊  엑셀 파일 수동 입고", command=self._bulk_import_inventory_simple, font=('맑은 고딕', 14))
-        upload_menu.add_command(label="  📋  D/O 후속 연결", command=self._on_do_update, font=('맑은 고딕', 14))
+        for entry in FILE_MENU_INBOUND_ITEMS:
+            if entry[1] == "_show_return_dialog":
+                continue
+            label, method_name = entry[0], entry[1]
+            cmd = getattr(self, method_name, None)
+            if callable(cmd):
+                upload_menu.add_command(label="  " + label, command=cmd, font=_font)
         upload_menu.add_separator()
-        upload_menu.add_command(label="  📤  출고 (Excel)", command=self._on_outbound_click, font=('맑은 고딕', 14))
+        for entry in FILE_MENU_OUTBOUND_ITEMS:
+            label, method_name = entry[0], entry[1]
+            optional = entry[2] if len(entry) > 2 else False
+            if optional and (not hasattr(self, method_name) or not callable(getattr(self, method_name))):
+                continue
+            cmd = getattr(self, method_name, None)
+            if callable(cmd):
+                upload_menu.add_command(label="  " + label, command=cmd, font=_font)
         upload_menu.add_separator()
-        upload_menu.add_command(
-            label="  🔄  반품 (재입고)",
-            command=lambda: self._show_return_dialog() if hasattr(self, '_show_return_dialog')
-                    else CustomMessageBox.showinfo(self.root, "반품", "반품 기능 필요"),
-            font=('맑은 고딕', 14)
-        )
+        _return_cmd = getattr(self, "_show_return_dialog", None)
+        if callable(_return_cmd):
+            upload_menu.add_command(label="  🔄  반품 (재입고)", command=_return_cmd, font=_font)
+        else:
+            upload_menu.add_command(
+                label="  🔄  반품 (재입고)",
+                command=lambda: CustomMessageBox.showinfo(self.root, "반품", "반품 기능 필요"),
+                font=_font
+            )
         
         export_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="💾 내보내기  (Ctrl+E)", menu=export_menu)
@@ -127,6 +142,16 @@ class MenuMixin:
         
         file_menu.add_separator()
         file_menu.add_command(label="종료", command=self.root.quit)
+
+        # =====================================================
+        # 보고서 메뉴 (거래 명세서 등)
+        # =====================================================
+        report_top_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="보고서", menu=report_top_menu)
+        report_top_menu.add_command(label="📄 거래 명세서", command=self._generate_invoice_pdf)
+        report_top_menu.add_command(label="📦 재고 현황", command=self._generate_inventory_pdf)
+        report_top_menu.add_command(label="📈 입출고 내역", command=self._generate_transaction_pdf)
+        report_top_menu.add_command(label="🔖 LOT 상세", command=self._generate_lot_detail_pdf)
         
         # =====================================================
         # 도구 메뉴
@@ -153,7 +178,6 @@ class MenuMixin:
         tools_menu.add_cascade(label="📋 PDF 보고서", menu=report_menu)
         report_menu.add_command(label="📦 재고 현황", command=self._generate_inventory_pdf)
         report_menu.add_command(label="📈 입출고 내역", command=self._generate_transaction_pdf)
-        report_menu.add_command(label="📝 거래 명세서", command=self._generate_invoice_pdf)
         report_menu.add_command(label="🔖 LOT 상세", command=self._generate_lot_detail_pdf)
         tools_menu.add_separator()
         
@@ -245,8 +269,8 @@ class MenuMixin:
         shortcuts = [
             ('<Control-i>', self._on_pdf_inbound),
             ('<Control-I>', self._on_pdf_inbound),
-            ('<Control-o>', self._on_simple_outbound),
-            ('<Control-O>', self._on_simple_outbound),
+            ('<Control-o>', self._on_allocation_input_unified),
+            ('<Control-O>', self._on_allocation_input_unified),
             ('<Control-e>', lambda: self._on_export_click(6)),
             ('<Control-E>', lambda: self._on_export_click(6)),
             ('<Control-b>', self._on_backup_click),
