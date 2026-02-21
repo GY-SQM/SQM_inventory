@@ -178,7 +178,7 @@ class FeaturesV2Mixin:
                 return
             
             try:
-                result = self.engine.process_outbound(batch_items)
+                result = self.engine.process_outbound(batch_items, source='EXCEL', stop_at_picked=False)
                 
                 if result.get('success'):
                     CustomMessageBox.showinfo(self.root, "Complete",

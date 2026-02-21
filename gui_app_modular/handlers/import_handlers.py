@@ -740,7 +740,7 @@ class ImportHandlersMixin:
                         'customer': customer,
                         'sold_to': customer,
                         'sale_ref': sale_ref,
-                    }])
+                    }], source='EXCEL', stop_at_picked=False)
                     if result.get('success'):
                         processed += 1
                     else:

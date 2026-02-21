@@ -36,6 +36,7 @@ class DatabaseMigrationMixin:
         self._migrate_v588_con_return()
         self._migrate_v591_tonbag_fk_columns()
         self._migrate_v593_allocation_plan()
+        self._migrate_v5992_allocation_source()
         self._migrate_v599_missing_columns()
         self._migrate_v600_picking_sold_tables()
 
@@ -826,3 +827,14 @@ class DatabaseMigrationMixin:
                 logger.warning(f"[v5.9.3] allocation_plan 생성 오류: {e}")
             else:
                 logger.debug(f"[v5.9.3] allocation_plan 이미 존재")
+
+    def _migrate_v5992_allocation_source(self) -> None:
+        """v5.9.92: allocation_plan.source — 출고 경로 구분 (AUTO/QUICK/EXCEL 등)."""
+        try:
+            self.execute("ALTER TABLE allocation_plan ADD COLUMN source TEXT DEFAULT 'AUTO'")
+            logger.info("[v5.9.92] allocation_plan.source 컬럼 추가 완료")
+        except (sqlite3.OperationalError, OSError) as e:
+            if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                logger.debug("[v5.9.92] allocation_plan.source 이미 존재")
+            else:
+                logger.warning(f"[v5.9.92] allocation_plan.source 추가 오류: {e}")

@@ -197,6 +197,14 @@ class OutboundHandlersMixin:
                 CustomMessageBox.showwarning(self.root, "입력 필요", "Preview 후 톤백을 선택하거나 LOT를 입력하세요.")
                 return
             
+            # v5.9.92: 빠른 출고는 최대 8건(LOT) 제한
+            if len(allocation_items) > 8:
+                CustomMessageBox.showwarning(
+                    self.root, "제한 초과",
+                    "빠른 출고는 최대 8건(LOT)까지 가능합니다.\n현재 %d건 선택됨." % len(allocation_items)
+                )
+                return
+            
             # v5.0.9: 톤백/샘플 구분 카운트
             from ..dialogs.allocation_preview import _is_sample_item
             tonbag_items = [i for i in allocation_items if not _is_sample_item(i)]
@@ -216,14 +224,18 @@ class OutboundHandlersMixin:
             if not CustomMessageBox.askyesno(self.root, "출고 확인", confirm_msg):
                 return
             
-            # Execute (v3.8.4: All-or-Nothing)
+            # Execute (v3.8.4: All-or-Nothing, v5.9.92: QUICK, stop_at_picked=True)
             try:
-                # process_outbound_safe 우선 시도 (All-or-Nothing)
                 if hasattr(self.engine, 'process_outbound_safe'):
                     try:
-                        result = self.engine.process_outbound_safe(allocation_items)
+                        result = self.engine.process_outbound_safe(
+                            allocation_items, source='QUICK', stop_at_picked=True
+                        )
+                    except TypeError:
+                        result = self.engine.process_outbound(
+                            allocation_items, source='QUICK', stop_at_picked=True
+                        )
                     except (ValueError, RuntimeError, sqlite3.OperationalError) as pf_err:
-                        # PreflightError 등 출고 검증 에러
                         err_msg = str(pf_err)
                         display_msg = err_msg[:500] + '...' if len(err_msg) > 500 else err_msg
                         self._log(f"❌ 출고 검증 실패 (All-or-Nothing): {display_msg[:200]}")
@@ -231,7 +243,9 @@ class OutboundHandlersMixin:
                             f"All-or-Nothing 검증에서 오류가 발견되어\n전체 출고가 중단되었습니다.\n\n{display_msg}")
                         return
                 else:
-                    result = self.engine.process_outbound(allocation_items)
+                    result = self.engine.process_outbound(
+                        allocation_items, source='QUICK', stop_at_picked=True
+                    )
                 
                 if result.get('success') or result.get('processed', 0) > 0:
                     processed = result.get('lots_processed', result.get('processed', 0))
@@ -398,32 +412,36 @@ class OutboundHandlersMixin:
                 callback(preview_items)
     
     def _execute_outbound(self, preview_items, alloc_data) -> None:
-        """v4.0.5: 사용자 확인 후 실제 DB 반영"""
+        """v4.0.5: 사용자 확인 후 실제 DB 반영. v5.9.92: AllocationRow → dict 변환 후 process_outbound(EXCEL)."""
         try:
-            if hasattr(self.engine, 'process_outbound_safe'):
-                result = self.engine.process_outbound_safe(alloc_data)
-                processed = result.get('lots_processed', 0)
+            # AllocationRow → dict 리스트 변환 (process_outbound는 dict 기대)
+            if hasattr(alloc_data, 'rows'):
+                items = []
+                for row in alloc_data.rows:
+                    items.append({
+                        'lot_no': getattr(row, 'lot_no', ''),
+                        'weight_kg': (getattr(row, 'qty_mt', 0) or 0) * 1000.0,
+                        'qty_mt': getattr(row, 'qty_mt', 0),
+                        'customer': getattr(row, 'sold_to', '') or getattr(row, 'customer', ''),
+                        'sold_to': getattr(row, 'sold_to', ''),
+                        'sale_ref': getattr(row, 'sale_ref', ''),
+                    })
             else:
-                # Fallback: 건별 처리
-                processed = 0
-                errors = []
-                for alloc in alloc_data.rows if hasattr(alloc_data, 'rows') else [alloc_data]:
-                    try:
-                        self.engine.process_outbound(alloc)
-                        processed += 1
-                    except (ValueError, TypeError, AttributeError) as e:
-                        errors.append(str(e))
-                
-                if errors:
-                    self._log(f"⚠️ 출고: {processed}건 성공, {len(errors)}건 오류")
-                    CustomMessageBox.showwarning(
-                        self.root, "출고 부분 완료",
-                        f"처리: {processed}건\n오류: {len(errors)}건\n\n{errors[0]}")
-                    if hasattr(self, '_refresh_inventory'):
-                        self._refresh_inventory()
-                    if hasattr(self, '_refresh_tonbag'):
-                        self._refresh_tonbag()
-                    return
+                items = list(preview_items) if preview_items else []
+            
+            if not items:
+                self._log("⚠️ 출고할 항목 없음")
+                CustomMessageBox.showwarning(self.root, "출고", "출고할 항목이 없습니다.")
+                return
+            
+            result = self.engine.process_outbound(items, source='EXCEL', stop_at_picked=False)
+            processed = result.get('lots_processed', result.get('processed', 0))
+            
+            if not result.get('success') and result.get('errors'):
+                self._log(f"⚠️ 출고 오류: {result['errors'][:3]}")
+                CustomMessageBox.showwarning(
+                    self.root, "출고 완료",
+                    f"처리: {processed}건\n오류: {result['errors'][0]}")
             
             # 화면 새로고침
             if hasattr(self, '_refresh_inventory'):

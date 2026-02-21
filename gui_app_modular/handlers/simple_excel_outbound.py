@@ -282,7 +282,7 @@ class SimpleExcelOutboundMixin:
                         'weight_kg': weight_kg,
                         'customer': customer,
                         'sale_ref': sale_ref,
-                    })
+                    }, source='EXCEL', stop_at_picked=False)
                     if result.get('success'):
                         success += 1
                     else:
