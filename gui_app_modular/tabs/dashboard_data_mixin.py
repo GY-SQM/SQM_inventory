@@ -195,12 +195,12 @@ class DashboardDataMixin:
                 'sample_cnt': (inb_arrival['sample_cnt'] or 0) if inb_arrival else 0
             }
 
-            # 금일 출고 (stock_movement 기준)
+            # 금일 출고 (stock_movement 기준) — created_at 사용 (movement_date 있으면 migration으로 추가됨)
             out = self.engine.db.fetchone("""
                 SELECT COALESCE(SUM(qty_kg), 0) AS total_kg,
                        COUNT(*) AS total_cnt
                 FROM stock_movement
-                WHERE movement_type = 'OUTBOUND' AND DATE(movement_date) = DATE(?)
+                WHERE movement_type = 'OUTBOUND' AND DATE(created_at) = DATE(?)
             """, (today,))
             
             # ✅ v4.1.8: Row 객체 안전 접근
@@ -500,11 +500,11 @@ class DashboardDataMixin:
                 row = cursor.fetchone()
                 inbound = (row[0] or 0) if row else 0
                 
-                # 출고
+                # 출고 — created_at 사용 (movement_date 컬럼 없어도 동작)
                 cursor.execute('''
                     SELECT COALESCE(SUM(qty_kg), 0) 
                     FROM stock_movement 
-                    WHERE movement_type = 'OUTBOUND' AND DATE(movement_date) = DATE(?)
+                    WHERE movement_type = 'OUTBOUND' AND DATE(created_at) = DATE(?)
                 ''', (date,))
                 row = cursor.fetchone()
                 outbound = (row[0] or 0) if row else 0

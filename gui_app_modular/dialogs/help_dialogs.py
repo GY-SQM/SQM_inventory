@@ -19,7 +19,7 @@ import webbrowser
 
 # UI 통일성 모듈 임포트
 try:
-    from ..utils.ui_constants import DialogSize, Spacing, FontScale, ThemeColors, center_dialog, apply_tooltip
+    from ..utils.ui_constants import DialogSize, Spacing, FontScale, ThemeColors, center_dialog, apply_tooltip, apply_modal_window_options
 except ImportError:
     # 독립 실행 시 폴백
     DialogSize = None
@@ -27,6 +27,7 @@ except ImportError:
     FontScale = None
     center_dialog = None
     apply_tooltip = lambda w, t: None
+    apply_modal_window_options = lambda w: None
 
 
 class ShortcutGuideDialog:
@@ -60,6 +61,9 @@ class ShortcutGuideDialog:
             ("Ctrl+F", "검색창 포커스"),
             ("Ctrl+R", "전체 새로고침"),
             ("Esc", "검색 취소 / 대화상자 닫기"),
+        ],
+        "시스템": [
+            ("Ctrl+Q", "강제 종료"),
         ],
         "데이터": [
             ("Ctrl+C", "선택 항목 복사"),
@@ -113,7 +117,7 @@ class ShortcutGuideDialog:
         else:
             self.dialog.geometry("750x700")
         
-        self.dialog.resizable(True, True)
+        apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
         
         # 아이콘 (있으면)
@@ -432,13 +436,13 @@ LIFO 방식으로 자동 출고됩니다.
         self.dialog.title("환영합니다")
         if DialogSize and center_dialog:
             self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
-            self.dialog.resizable(False, False)
+            apply_modal_window_options(self.dialog)
             self.dialog.transient(self.parent)
             self.dialog.grab_set()
             center_dialog(self.dialog, self.parent)
         else:
             self.dialog.geometry("550x400")
-            self.dialog.resizable(False, False)
+            apply_modal_window_options(self.dialog)
             self.dialog.transient(self.parent)
             self.dialog.grab_set()
             self.dialog.update_idletasks()
@@ -575,12 +579,12 @@ class FeedbackDialog:
         self.dialog.title("💬 피드백 / 문제 신고")
         if DialogSize and center_dialog:
             self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
-            self.dialog.resizable(False, False)
+            apply_modal_window_options(self.dialog)
             self.dialog.transient(self.parent)
             center_dialog(self.dialog, self.parent)
         else:
             self.dialog.geometry("500x400")
-            self.dialog.resizable(False, False)
+            apply_modal_window_options(self.dialog)
             self.dialog.transient(self.parent)
             self.dialog.update_idletasks()
             x = (self.dialog.winfo_screenwidth() // 2) - 250

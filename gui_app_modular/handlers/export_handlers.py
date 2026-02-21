@@ -96,21 +96,24 @@ class ExportHandlersMixin:
             CustomMessageBox.showerror(self.root, "Error", f"Export failed\n{e}")
     
     def _open_file(self, file_path: str) -> None:
-        """Open file with default application"""
+        """Open file with default application. Excel 동일 이름 열림 시 순번 붙여서 오픈 제안."""
+        from ..utils.excel_file_helper import open_excel_with_fallback
 
-        
-        try:
-            system = platform.system()
-            if system == 'Windows':
-                os.startfile(file_path)
-            elif system == 'Darwin':  # macOS
-                subprocess.run(['open', file_path], check=True)
-            else:  # Linux
-                subprocess.run(['xdg-open', file_path], check=True)
+        def _ask_yes(title: str, msg: str) -> bool:
+            return CustomMessageBox.askyesno(self.root, title, msg)
+
+        ok = open_excel_with_fallback(
+            self.root, file_path,
+            ask_yes=_ask_yes,
+        )
+        if ok:
             self._log(f"File opened: {os.path.basename(file_path)}")
-        except (OSError, IOError, PermissionError) as e:
-            self._log(f"WARNING Failed to open file: {e}")
-            CustomMessageBox.showwarning(self.root, "Open Failed", f"Cannot open file.\n\n{file_path}")
+        else:
+            self._log("WARNING Failed to open file (or user chose no)")
+            CustomMessageBox.showwarning(
+                self.root, "파일 열기",
+                "같은 이름의 파일이 열려있습니다.\n파일을 닫은 후 다시 시도하세요."
+            )
     
     def _export_tonbag_list(self) -> None:
         """Export tonbag list to Excel"""

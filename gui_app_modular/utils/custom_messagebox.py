@@ -7,7 +7,7 @@ ui_constants.py에서 분리
 """
 import logging
 
-from .ui_constants import FontScale, Spacing, ColumnWidth, ThemeColors, center_dialog
+from .ui_constants import FontScale, Spacing, ColumnWidth, ThemeColors, center_dialog, apply_modal_window_options
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ class CustomMessageBox:
         dialog.title(title)
         dialog.transient(parent)
         dialog.grab_set()
-        dialog.resizable(False, False)
+        apply_modal_window_options(dialog)
         
         # 폰트 스케일
         try:

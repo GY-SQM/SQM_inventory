@@ -11,11 +11,12 @@ logger = logging.getLogger(__name__)
 try:
     import tkinter as tk
     from tkinter import ttk
-    from ..utils.ui_constants import DialogSize, center_dialog
+    from ..utils.ui_constants import DialogSize, center_dialog, apply_modal_window_options
 except ImportError as _e:
     logger.debug(f"column_mapper_dialog: {_e}")
     DialogSize = None
     center_dialog = None
+    apply_modal_window_options = lambda w: None
 
 
 # SQM 필수/선택 필드 정의
@@ -50,7 +51,7 @@ class ColumnMapperDialog:
             self.dialog.geometry(DialogSize.get_geometry(parent, 'medium'))
         else:
             self.dialog.geometry("750x550")
-        self.dialog.resizable(True, True)
+        apply_modal_window_options(self.dialog)
         self.dialog.minsize(500, 400)
         self.dialog.transient(parent)
         self.dialog.grab_set()

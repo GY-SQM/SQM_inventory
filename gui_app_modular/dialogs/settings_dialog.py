@@ -12,7 +12,7 @@ v3.6.0 - UI 통일성 적용
 import os
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors, Spacing, DialogSize, center_dialog, apply_tooltip
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, Spacing, DialogSize, center_dialog, apply_tooltip, apply_modal_window_options
 logger = logging.getLogger(__name__)
 
 
@@ -37,7 +37,7 @@ class SettingsDialogMixin:
         dialog = tk.Toplevel(self.root)
         dialog.title("🔐 API 키 보안 설정")
         dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
-        dialog.resizable(True, True)
+        apply_modal_window_options(dialog)
         dialog.minsize(400, 350)
         dialog.transient(self.root)
         dialog.grab_set()

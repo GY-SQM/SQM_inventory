@@ -413,15 +413,21 @@ class OutboundMixin(InventoryBaseMixin):
         """
         result = {'success': False, 'reserved': 0, 'errors': [], 'plan_ids': []}
 
+        def _alloc_val(alloc, key, default=None):
+            """AllocationRow(dataclass) 또는 dict 모두 지원"""
+            if isinstance(alloc, dict):
+                return alloc.get(key, default)
+            return getattr(alloc, key, default)
+
         try:
             with self.db.transaction("IMMEDIATE"):
                 for alloc in allocation_rows:
-                    lot_no = str(getattr(alloc, 'lot_no', '') or alloc.get('lot_no', '')).strip()
-                    customer = str(getattr(alloc, 'sold_to', '') or alloc.get('customer', '')).strip()
-                    sale_ref = str(getattr(alloc, 'sale_ref', '') or alloc.get('sale_ref', '')).strip()
-                    qty_mt = float(getattr(alloc, 'qty_mt', 0) or alloc.get('qty_mt', 0))
-                    outbound_date = getattr(alloc, 'outbound_date', None) or alloc.get('outbound_date')
-                    sublot_count = int(getattr(alloc, 'sublot_count', 0) or alloc.get('tonbag_count', 0))
+                    lot_no = str(_alloc_val(alloc, 'lot_no') or '').strip()
+                    customer = str(_alloc_val(alloc, 'sold_to') or _alloc_val(alloc, 'customer') or '').strip()
+                    sale_ref = str(_alloc_val(alloc, 'sale_ref') or '').strip()
+                    qty_mt = float(_alloc_val(alloc, 'qty_mt') or 0)
+                    outbound_date = _alloc_val(alloc, 'outbound_date')
+                    sublot_count = int(_alloc_val(alloc, 'sublot_count') or _alloc_val(alloc, 'tonbag_count') or 0)
 
                     if not lot_no:
                         result['errors'].append("LOT 번호 누락")

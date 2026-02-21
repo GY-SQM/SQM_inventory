@@ -50,11 +50,12 @@ class DOUpdateDialog:
     def _create_dialog(self) -> None:
         """UI 구성"""
         from ..utils.constants import tk, ttk, BOTH, X, Y, LEFT, RIGHT, TOP, BOTTOM, W, E
-        from ..utils.ui_constants import ThemeColors, CustomMessageBox, DialogSize, center_dialog
+        from ..utils.ui_constants import ThemeColors, CustomMessageBox, DialogSize, center_dialog, apply_modal_window_options
 
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📋 D/O 후속 연결 — SQM v5.6.6")
         self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
+        apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
         center_dialog(self.dialog, self.parent)

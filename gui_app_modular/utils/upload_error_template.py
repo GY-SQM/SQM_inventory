@@ -101,6 +101,16 @@ class UploadErrorTemplate:
             ],
             'example': '기존 LOT: 1125072340\n신규 LOT: 1125072341'
         },
+        'all_duplicate_lot': {
+            'title': '모든 LOT 중복',
+            'description': '선택한 서류의 모든 LOT가 이미 DB에 존재합니다. 첫 입고와 같은 파일을 다시 업로드하신 것일 수 있습니다.',
+            'solution': [
+                '두 번째 입고라면 새 shipment의 Packing List·Invoice·B/L 서류를 선택하세요.',
+                '같은 서류를 다시 업로드할 필요는 없습니다.',
+                '재고 탭에서 이미 저장된 LOT를 확인하세요.'
+            ],
+            'example': '첫 입고 완료 후 → 같은 파일 재선택 시 이 오류 발생'
+        },
         
         'file_format': {
             'title': '파일 형식 오류',
@@ -136,6 +146,26 @@ class UploadErrorTemplate:
                 '대소문자 구분 없음'
             ],
             'example': 'LOT NO (O) / Lot No (O) / 로트번호 (X)'
+        },
+        'db_schema': {
+            'title': 'DB 스키마 불일치(업데이트 필요)',
+            'description': '현재 프로그램이 기대하는 DB 컬럼이 기존 DB에 없습니다. 엑셀/파일 문제가 아닙니다.',
+            'solution': [
+                '프로그램을 완전히 종료한 뒤 DB 백업을 먼저 수행하세요. (data/db/sqm_inventory.db 복사)',
+                '앱을 다시 실행하면 자동 마이그레이션이 누락 컬럼을 추가합니다.',
+                'inventory_tonbag에 inventory_id, sap_no, bl_no, inbound_date 등이 없으면 이 오류가 납니다.',
+            ],
+            'example': 'table inventory_tonbag has no column named inventory_id'
+        },
+        'db_error': {
+            'title': 'DB 저장 오류',
+            'description': '데이터베이스 저장 중 오류가 발생했습니다.',
+            'solution': [
+                'DB 파일이 다른 프로그램에서 사용 중이 아닌지 확인하세요.',
+                'data/db 폴더 쓰기 권한을 확인하세요.',
+                '오류 메시지를 확인한 뒤 관리자에게 문의하세요.',
+            ],
+            'example': ''
         }
     }
     
@@ -172,14 +202,15 @@ class UploadErrorTemplate:
             value = item.get('value', '')
             column = item.get('column', '')
             missing_columns = item.get('missing_columns', [])  # ['LOT NO', 'PRODUCT'] 등
+            row_label = f"행 {row_num}" if row_num != '?' else "행 번호 미상(전체/DB 오류 등)"
             
             if missing_columns:
                 cols_str = ', '.join(missing_columns)
-                failed_details.append(f"  • 행 {row_num}: [{cols_str}] 비어 있음")
+                failed_details.append(f"  • {row_label}: [{cols_str}] 비어 있음")
             elif column:
-                failed_details.append(f"  • 행 {row_num}, {column}: {value}")
+                failed_details.append(f"  • {row_label}, {column}: {value}")
             else:
-                failed_details.append(f"  • 행 {row_num}: {value}")
+                failed_details.append(f"  • {row_label}: {value}")
         
         if len(failed_rows) > 10:
             failed_details.append(f"  • ... 외 {len(failed_rows) - 10}건")

@@ -58,7 +58,8 @@ def main():
         ok = run_self_diagnostic()
         sys.exit(0 if ok else 1)
 
-    if "--no-mac-check" not in sys.argv:
+    # MAC/GUID(PC Guard) 체크: 기본 비활성화. 필요 시 --mac-check 로만 검사 수행
+    if "--mac-check" in sys.argv:
         try:
             from security.mac_guard import verify_pc
             if not verify_pc(show_gui_error=True):

@@ -22,9 +22,12 @@ class TonbagLocationUploader:
     def __init__(self, db_engine):
         """
         Args:
-            db_engine: SQMDatabase 인스턴스
+            db_engine: SQMDatabase 인스턴스 또는 SQMInventoryEngineV3(엔진 전달 시 .db 사용)
         """
-        self.db = db_engine
+        # 엔진이 전달되면 engine.db, DB가 전달되면 그대로 사용
+        self.db = getattr(db_engine, 'db', db_engine)
+        if self.db is None:
+            raise ValueError("db_engine에 DB가 없습니다 (engine.db가 None)")
     
     def parse_excel(self, file_path: str) -> Tuple[bool, str, List[Dict]]:
         """
@@ -47,6 +50,7 @@ class TonbagLocationUploader:
         v5.6.1: lot_no + tonbag_no + location 양식도 지원
         v5.6.9: 로케이션 엑셀 양식 확정
         v5.8.x: 양식2에 uid 컬럼 선택 포함 가능 (있으면 해당 값으로 매칭)
+        현장(입고/출고)은 UID를 모름 — LOT NO + 톤백 NO + LOCATION만 전달, 프로그램이 UID 자동 매칭
         ┌────────┬────────┬────────┬──────────┬───────────┬──────────────┬──────────┐
         │ 순번   │ 입고일 │ BL No  │ lot_no   │ tonbag_no│ uid (선택)   │ location │
         ├────────┼────────┼────────┼──────────┼───────────┼──────────────┼──────────┤
@@ -56,27 +60,57 @@ class TonbagLocationUploader:
         로케이션 약식: 3파트 A-01-01 (구역-열-층) 또는 4파트 A-01-01-10 (구역-열-층-칸)
         """
         try:
-            # Excel 읽기
-            df = pd.read_excel(file_path)
-            
+            # 매핑 파일 형식: 1행=타이틀, 2행=요약(선택), 3행=헤더, 4행~=데이터
+            peek = pd.read_excel(file_path, header=None, nrows=4)
+            first_cell = str(peek.iloc[0, 0]) if peek.size else ""
+            header_row = 2 if ("SQM" in first_cell and "로케이션" in first_cell) else 0
+            df = pd.read_excel(file_path, header=header_row)
+            # 빈 행 제거(제목/요약만 있는 파일 시)
+            df = df.dropna(how='all').reset_index(drop=True)
+
             from core.column_registry import normalize_header
             df.columns = [normalize_header(c) for c in df.columns]
-            
+
+            # 3행=헤더로 읽었는데 필수 컬럼이 없으면 2행을 헤더로 재시도 (1행 타이틀만 있는 경우)
+            # 톤백번호: column_registry가 TONBAG NO → sub_lt 로 정규화하므로 sub_lt도 후보에 포함
+            if header_row == 2:
+                required = {'lot_no', 'tonbag_no', 'location'}
+                has_required = (
+                    any(c in df.columns for c in ('lot_no', 'lot', 'lotno')) and
+                    any(c in df.columns for c in ('tonbag_no', 'tonbag', 'tb_no', 'sub_lt')) and
+                    any(c in df.columns for c in ('location', '위치'))
+                )
+                if not has_required and len(peek) > 1:
+                    df2 = pd.read_excel(file_path, header=1)
+                    df2 = df2.dropna(how='all').reset_index(drop=True)
+                    df2.columns = [normalize_header(c) for c in df2.columns]
+                    if any(c in df2.columns for c in ('lot_no', 'lot', 'lotno')) and any(c in df2.columns for c in ('location', '위치')):
+                        df = df2
+                        header_row = 1
+
             # v5.6.1: 양식 자동 감지
             # 양식 1: UID + 위치 (기존)
             # 양식 2: lot_no + tonbag_no + location (신규)
-            
+            # TONBAG NO 헤더는 column_registry에서 sub_lt로 정규화되므로 sub_lt도 톤백번호 후보
             has_uid = 'uid' in df.columns or 'tonbag_uid' in df.columns
             has_lot = any(c in df.columns for c in ('lot_no', 'lot', 'lotno'))
-            has_tb = any(c in df.columns for c in ('tonbag_no', 'tonbag', 'tb_no'))
+            has_tb = any(c in df.columns for c in ('tonbag_no', 'tonbag', 'tb_no', 'sub_lt'))
             has_loc = any(c in df.columns for c in ('location', '위치'))
             
             if has_lot and has_tb and has_loc:
                 # 양식 2: lot_no + tonbag_no + location (입고일, BL No 선택 컬럼 무시)
-                return self._parse_lot_tonbag_format(df)
+                ok, msg, data = self._parse_lot_tonbag_format(df)
+                if ok and data and header_row > 0:
+                    for item in data:
+                        item['row_num'] += header_row
+                return ok, msg, data
             elif has_uid and has_loc:
                 # 양식 1: UID + 위치 (기존)
-                return self._parse_uid_format(df)
+                ok, msg, data = self._parse_uid_format(df)
+                if ok and data and header_row > 0:
+                    for item in data:
+                        item['row_num'] += header_row
+                return ok, msg, data
             else:
                 return False, (
                     "❌ 지원하는 양식이 아닙니다.\n\n"
@@ -88,7 +122,75 @@ class TonbagLocationUploader:
         except (ValueError, TypeError, KeyError, OSError) as e:
             logger.error(f"Excel 파싱 실패: {e}")
             return False, f"❌ Excel 파싱 실패: {e}", []
-    
+
+    def parse_pasted_text(self, text: str) -> Tuple[bool, str, List[Dict]]:
+        """
+        붙여넣은 텍스트(TSV/CSV) 파싱. 헤더 포함 시 첫 줄을 컬럼명으로 사용.
+        양식: lot_no, tonbag_no, uid(선택), location 또는 uid, 위치
+        """
+        try:
+            from core.column_registry import normalize_header
+            lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
+            if not lines:
+                return False, "❌ 붙여넣은 데이터가 비어 있습니다.", []
+            # 구분자: 탭 우선, 없으면 쉼표
+            first = lines[0]
+            delim = "\t" if "\t" in first else ","
+            parts_list = [ln.split(delim) for ln in lines]
+            max_cols = max(len(p) for p in parts_list)
+            # 컬럼 수 맞추기
+            for p in parts_list:
+                while len(p) < max_cols:
+                    p.append("")
+            # 첫 줄이 헤더인지 판단 (lot_no, uid, location 등 키워드 포함)
+            first_row = [str(x).strip() for x in parts_list[0]]
+            normalized_first = [normalize_header(c) for c in first_row]
+            has_lot = any(c in normalized_first for c in ("lot_no", "lot", "lotno"))
+            has_tb = any(c in normalized_first for c in ("tonbag_no", "tonbag", "tb_no", "sub_lt"))
+            has_loc = any(c in normalized_first for c in ("location", "위치"))
+            has_uid = any(c in normalized_first for c in ("uid", "tonbag_uid"))
+            if has_lot and has_tb and has_loc:
+                header_row = normalized_first
+                data_start = 1
+            elif has_uid and has_loc:
+                header_row = normalized_first
+                data_start = 1
+            else:
+                # 헤더 없음: 2열 = uid, location / 3열 = lot_no, tonbag_no, location / 4열 = + uid
+                if max_cols >= 4:
+                    header_row = ["lot_no", "tonbag_no", "uid", "location"][:max_cols]
+                elif max_cols >= 3:
+                    header_row = ["lot_no", "tonbag_no", "location"][:max_cols]
+                else:
+                    header_row = ["uid", "location"]
+                data_start = 0
+            # DataFrame 생성
+            import pandas as pd
+            col_count = min(len(header_row), max_cols)
+            header_row = header_row[:col_count]
+            data_rows = []
+            for i in range(data_start, len(parts_list)):
+                row = parts_list[i][:col_count]
+                data_rows.append(row)
+            if not data_rows:
+                return False, "❌ 데이터 행이 없습니다.", []
+            df = pd.DataFrame(data_rows, columns=header_row)
+            df.columns = [normalize_header(c) for c in df.columns]
+            has_lot = any(c in df.columns for c in ("lot_no", "lot", "lotno"))
+            has_tb = any(c in df.columns for c in ("tonbag_no", "tonbag", "tb_no", "sub_lt"))
+            has_loc = any(c in df.columns for c in ("location", "위치"))
+            has_uid = any(c in df.columns for c in ("uid", "tonbag_uid"))
+            if has_lot and has_tb and has_loc:
+                return self._parse_lot_tonbag_format(df)
+            if has_uid and has_loc:
+                return self._parse_uid_format(df)
+            return False, (
+                "❌ 지원하는 양식이 아닙니다. 헤더: lot_no, tonbag_no, location 또는 uid, 위치"
+            ), []
+        except Exception as e:
+            logger.error(f"붙여넣기 파싱 실패: {e}")
+            return False, f"❌ 파싱 실패: {e}", []
+
     def _parse_uid_format(self, df) -> Tuple[bool, str, List[Dict]]:
         """양식 1: UID + 위치"""
         if 'uid' not in df.columns:
@@ -126,14 +228,15 @@ class TonbagLocationUploader:
         return True, f"✅ {len(data)}개 데이터 파싱 완료 (UID 양식)", data
     
     def _parse_lot_tonbag_format(self, df) -> Tuple[bool, str, List[Dict]]:
-        """양식 2: lot_no + tonbag_no + location (v5.6.9). uid 컬럼 있으면 해당 값으로 매칭 (선택)."""
+        """양식 2: (LOT 번호, 톤백 번호) 한 쌍 + location. 현장 업로드 = 이 쌍으로 재고와 일치시킨 뒤 로케이션 반영."""
         # 컬럼명 정규화 (입고일, BL No, uid 등 선택 컬럼 포함)
+        # TONBAG NO → sub_lt 로 정규화되므로 sub_lt도 톤백번호 컬럼으로 인정
         col_map = {}
         for c in df.columns:
             c_lower = c.lower().strip()
             if c_lower in ('lot_no', 'lot', 'lotno'):
                 col_map['lot_no'] = c
-            elif c_lower in ('tonbag_no', 'tonbag', 'tb_no'):
+            elif c_lower in ('tonbag_no', 'tonbag', 'tb_no', 'sub_lt'):
                 col_map['tonbag_no'] = c
             elif c_lower in ('location', '위치'):
                 col_map['location'] = c
@@ -152,9 +255,20 @@ class TonbagLocationUploader:
         if len(df) == 0:
             return False, "❌ 유효한 데이터가 없습니다", []
         
+        def _norm_lot(s):
+            s = str(s).strip()
+            if s.lower() == 'nan' or not s:
+                return s
+            try:
+                if '.' in s and s.endswith('.0'):
+                    return str(int(float(s)))
+            except (ValueError, TypeError):
+                pass
+            return s
+
         data = []
         for idx, row in df.iterrows():
-            lot_no = str(row[lot_col]).strip()
+            lot_no = _norm_lot(row[lot_col])
             tonbag_no = str(row[tb_col]).strip()
             location = str(row[loc_col]).strip()
             excel_uid = ''
@@ -201,23 +315,26 @@ class TonbagLocationUploader:
         
         if len(data) == 0:
             return False, "❌ 유효한 데이터가 없습니다", []
+        # 3행=헤더인데 첫 행이 헤더 문자열로 들어온 경우 한 행만 제거 (헤더가 데이터로 포함된 경우)
+        if len(data) > 0:
+            r0 = data[0]
+            lot0 = str(r0.get('lot_no', '')).strip().lower()
+            tb0 = str(r0.get('tonbag_no', '')).strip().lower()
+            if (lot0 in ('lot_no', 'lot', 'lotno', 'lot no') and
+                    tb0 in ('tonbag_no', 'tonbag', 'tb_no', 'tonbag no', 'sub_lt')):
+                data = data[1:]
+        if len(data) == 0:
+            return False, "❌ 유효한 데이터가 없습니다 (헤더만 있음)", []
         return True, f"✅ {len(data)}개 데이터 파싱 완료 (LOT+톤백 양식)", data
     
     def validate_and_match(self, data: List[Dict]) -> Dict:
         """
-        UID 매칭 및 유효성 검증
+        톤백 리스트(inventory_tonbag) 전용. 재고 리스트(LOT 리스트) DB는 사용하지 않음.
+        매칭 키: (LOT 번호, 톤백 번호) 한 쌍 — 현장 (LOT, 톤백번호)와 톤백 리스트 (lot_no, sub_lt) 일치 후
+        해당 톤백 행의 location 컬럼에 업로드한 로케이션 반영.
         
-        Args:
-            data: 파싱된 데이터 리스트
-            
         Returns:
-            {
-                'matched': [...],    # 매칭 성공
-                'not_found': [...],  # UID 없음
-                'total': int,
-                'success_count': int,
-                'fail_count': int
-            }
+            matched, not_found, total, success_count, fail_count
         """
         result = {
             'matched': [],
@@ -227,48 +344,101 @@ class TonbagLocationUploader:
             'fail_count': 0
         }
         
+        def _norm_lot_no(val):
+            if val is None:
+                return ''
+            s = str(val).strip()
+            if not s or s.lower() == 'nan':
+                return ''
+            try:
+                f = float(s)
+                if f == int(f):
+                    return str(int(f))
+            except (ValueError, TypeError):
+                pass
+            return s
+
         for item in data:
-            uid = item['uid']
+            raw_lot = item.get('lot_no')
+            lot_no = _norm_lot_no(raw_lot)
+            tonbag_no = item.get('tonbag_no', '')
             location = item['location']
             row_num = item['row_num']
-            
-            # DB에서 UID로 톤백 조회
-            tonbag = self.db.fetchone("""
-                SELECT 
-                    t.id,
-                    t.tonbag_uid,
-                    t.lot_no,
-                    t.sub_lt,
-                    t.location AS current_location,
-                    i.product
-                FROM inventory_tonbag t
-                LEFT JOIN inventory i ON t.inventory_id = i.id
-                WHERE t.tonbag_uid = ?
-            """, (uid,))
-            
-            if tonbag:
-                # 매칭 성공
-                result['matched'].append({
-                    'uid': uid,
-                    'location': location,
-                    'row_num': row_num,
-                    'tonbag_id': tonbag['id'],
-                    'lot_no': tonbag['lot_no'],
-                    'sub_lt': tonbag['sub_lt'],
-                    'product': tonbag['product'] or '',
-                    'current_location': tonbag['current_location'] or '',
-                    'location_changed': tonbag['current_location'] != location
-                })
-                result['success_count'] += 1
-            else:
-                # UID 없음
+            uid = item.get('uid', '')
+            tb_str = str(tonbag_no).strip()
+            if tb_str in ('', 'nan'):
                 result['not_found'].append({
-                    'uid': uid,
-                    'location': location,
-                    'row_num': row_num,
-                    'reason': 'UID를 찾을 수 없습니다'
+                    'uid': uid, 'location': location, 'row_num': row_num,
+                    'reason': f'톤백 번호 없음 (LOT: {lot_no})'
                 })
                 result['fail_count'] += 1
+                continue
+            # S00/S0 등 샘플 표기 → sub_lt=0, 그 외는 숫자로 변환
+            tb_upper = tb_str.upper()
+            if tb_upper in ('S00', 'S0'):
+                sub_lt_val = 0
+            elif tb_upper.startswith('S') and len(tb_upper) > 1 and tb_upper[1:].strip().isdigit():
+                try:
+                    sub_lt_val = int(tb_upper[1:].strip())
+                except (ValueError, TypeError):
+                    sub_lt_val = 0
+            else:
+                try:
+                    sub_lt_val = int(float(tb_str))
+                except (ValueError, TypeError):
+                    result['not_found'].append({
+                        'uid': uid, 'location': location, 'row_num': row_num,
+                        'reason': f'톤백 번호 형식 오류: {tonbag_no}'
+                    })
+                    result['fail_count'] += 1
+                    continue
+
+            # 톤백 리스트(inventory_tonbag) 전용 — 재고 리스트(LOT 리스트/inventory)는 사용하지 않음
+            tonbag = self.db.fetchone("""
+                SELECT t.id, t.tonbag_uid, t.lot_no, t.sub_lt,
+                       t.location AS current_location, i.product
+                FROM inventory_tonbag t
+                LEFT JOIN inventory i ON t.inventory_id = i.id
+                WHERE t.lot_no = ? AND t.sub_lt = ?
+            """, (lot_no, sub_lt_val))
+            # DB에 공백/숫자형 차이 있을 수 있어 fallback: trim(lot_no), sub_lt 문자 비교
+            if tonbag is None and lot_no:
+                tonbag = self.db.fetchone("""
+                    SELECT t.id, t.tonbag_uid, t.lot_no, t.sub_lt,
+                           t.location AS current_location, i.product
+                    FROM inventory_tonbag t
+                    LEFT JOIN inventory i ON t.inventory_id = i.id
+                    WHERE trim(cast(t.lot_no as text)) = ? AND (t.sub_lt = ? OR cast(t.sub_lt as text) = ?)
+                """, (lot_no, sub_lt_val, str(sub_lt_val)))
+            if tonbag is None and uid:
+                tonbag = self.db.fetchone("""
+                    SELECT t.id, t.tonbag_uid, t.lot_no, t.sub_lt,
+                           t.location AS current_location, i.product
+                    FROM inventory_tonbag t
+                    LEFT JOIN inventory i ON t.inventory_id = i.id
+                    WHERE t.tonbag_uid = ?
+                """, (uid,))
+
+            if tonbag is None:
+                result['not_found'].append({
+                    'uid': uid, 'location': location, 'row_num': row_num,
+                    'reason': f'(LOT·톤백번호 쌍) 톤백 리스트에 없음: LOT {lot_no} / 톤백 {sub_lt_val}'
+                })
+                result['fail_count'] += 1
+                continue
+            
+            result['matched'].append({
+                'uid': tonbag.get('tonbag_uid') or uid,
+                'location': location,
+                'row_num': row_num,
+                'tonbag_id': tonbag['id'],
+                'lot_no': tonbag['lot_no'],
+                'sub_lt': tonbag['sub_lt'],
+                'product': tonbag['product'] or '',
+                'current_location': tonbag['current_location'] or '',
+                'location_changed': (tonbag['current_location'] or '') != location
+            })
+            result['success_count'] += 1
         
         return result
     
@@ -293,10 +463,13 @@ class TonbagLocationUploader:
                     tonbag_id = item['tonbag_id']
                     location = item['location']
                     
-                    # 위치 업데이트
+                    # 톤백 리스트(inventory_tonbag)만 갱신 — 재고 리스트(inventory)는 건드리지 않음
+                    # location_updated_at, updated_at 함께 갱신 (v4.2.3 마이그레이션 컬럼)
                     self.db.execute("""
                         UPDATE inventory_tonbag
-                        SET location = ?
+                        SET location = ?,
+                            location_updated_at = datetime('now', 'localtime'),
+                            updated_at = datetime('now', 'localtime')
                         WHERE id = ?
                     """, (location, tonbag_id))
                     

@@ -38,9 +38,11 @@ class UploadErrorDialog:
         
     def show(self) -> None:
         """팝업 표시"""
+        from .ui_constants import apply_modal_window_options
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title(self.title_text)
         self.dialog.geometry("700x600")
+        apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
         

@@ -243,7 +243,7 @@ class DragDropMixin:
         ttk.Button(body, text="📥 입고 (신규 LOT 등록)", command=do_inbound, **btn_style).pack(pady=4)
         ttk.Button(body, text="📤 출고 (톤백 PICK)", command=do_outbound, **btn_style).pack(pady=4)
         ttk.Button(body, text="📊 출고 상태 업데이트", command=do_status, **btn_style).pack(pady=4)
-        ttk.Button(body, text="📍 위치 매핑", command=do_location, **btn_style).pack(pady=4)
+        ttk.Button(body, text="📍 톤백 위치 매핑", command=do_location, **btn_style).pack(pady=4)
         
         ttk.Button(body, text="취소", command=dialog.destroy).pack(pady=10)
         dialog.bind('<Escape>', lambda e: dialog.destroy())
@@ -293,11 +293,10 @@ class DragDropMixin:
         """Process CSV file import"""
 
         
-        # CSV typically used for location mapping
-        if CustomMessageBox.askyesno(self.root, "CSV Import",
-            f"Import CSV file?\n\n{os.path.basename(file_path)}\n\n"
-            f"This will be processed as location mapping."):
-            self._import_location_excel_with_file(file_path)
+        # CSV: 톤백 위치 업로드 기능 제거됨 — 입고로 처리할지만 안내
+        if CustomMessageBox.askyesno(self.root, "CSV 가져오기",
+            f"CSV 파일을 입고 Excel로 처리할까요?\n\n{os.path.basename(file_path)}"):
+            self._bulk_import_inventory_simple(file_path)
     
     def _import_outbound_excel_with_file(self, file_path: str) -> None:
         """Import outbound status with pre-selected file"""
@@ -307,7 +306,9 @@ class DragDropMixin:
             self._import_outbound_excel()
     
     def _import_location_excel_with_file(self, file_path: str) -> None:
-        """Import location with pre-selected file"""
-        if hasattr(self, '_import_location_excel'):
-            self._pending_file = file_path
-            self._import_location_excel()
+        """로케이션 Excel로 톤백 리스트(lot_no·톤백번호 동일 행) location 반영 후 톤백 리스트 새로고침."""
+        from ..dialogs.tonbag_location_upload import run_location_upload_with_file
+        def _after_upload():
+            if hasattr(self, '_refresh_tonbag') and callable(self._refresh_tonbag):
+                self._refresh_tonbag()
+        run_location_upload_with_file(self.root, self.engine, file_path, callback=_after_upload)

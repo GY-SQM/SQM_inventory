@@ -14,7 +14,7 @@ SQM v3.9.1 — 재고 현황 탭 (18열 + 체크박스 열선택)
 import sqlite3
 import tkinter as tk
 from tkinter import ttk
-from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog
+from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options
 import logging
 
 logger = logging.getLogger(__name__)
@@ -128,12 +128,22 @@ class InventoryTabMixin:
             apply_tooltip(btn_inv_export, '재고 리스트를 Excel(루비리 양식) 파일로 내보내기')
         except Exception as _e:
             logger.debug(f"재고 Excel 버튼 생성 실패: {_e}")
-        
+
         # ═══════════════════════════════════════════════════════
-        # 트리뷰 (18열)
+        # v5.9.7: 스플릿 패널 (마스터-상세) — 재고 리스트 + 톤백 상세
         # ═══════════════════════════════════════════════════════
-        tree_frame = ttk.Frame(self.tab_inventory)
-        tree_frame.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
+        from ..utils.split_panel import MasterDetailSplitPanel
+        self._inv_split_panel = MasterDetailSplitPanel(
+            self.tab_inventory,
+            detail_title="🎒 톤백 상세 (선택 LOT)",
+            master_weight=3,
+            detail_weight=1
+        )
+        self._inv_split_panel.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
+
+        # 마스터 영역: 트리뷰
+        tree_frame = ttk.Frame(self._inv_split_panel.get_master_container())
+        tree_frame.pack(fill=BOTH, expand=YES)
         self._inv_tree_frame = tree_frame
 
         # 모든 18열로 생성
@@ -233,8 +243,64 @@ class InventoryTabMixin:
 
         # 이벤트
         self.tree_inventory.bind('<Double-1>', self._on_lot_double_click)
+        self.tree_inventory.bind('<<TreeviewSelect>>', self._on_inv_selection_change)
         # U5: 우클릭 컨텍스트 메뉴
         self.tree_inventory.bind('<Button-3>', self._on_inventory_right_click)
+
+        # v5.9.7: 상세 패널 — 선택 LOT의 톤백 테이블
+        self._setup_inv_tonbag_detail_panel()
+
+    def _setup_inv_tonbag_detail_panel(self) -> None:
+        """재고 탭 상세 패널: 톤백 테이블"""
+        from ..utils.constants import ttk, VERTICAL, BOTH, LEFT
+        detail_container = self._inv_split_panel.get_detail_container()
+        cols = ('sub_lt', 'weight', 'status', 'location', 'picked_to', 'outbound_date')
+        self._inv_tonbag_detail_tree = ttk.Treeview(
+            detail_container, columns=cols, show='headings', height=8
+        )
+        for cid, txt, w in [
+            ('sub_lt', '톤백#', 60), ('weight', '중량(kg)', 90),
+            ('status', '상태', 90), ('location', '위치', 80),
+            ('picked_to', '출고처', 120), ('outbound_date', '출고일', 100)
+        ]:
+            self._inv_tonbag_detail_tree.heading(cid, text=txt)
+            self._inv_tonbag_detail_tree.column(cid, width=w)
+        sb = ttk.Scrollbar(detail_container, orient=VERTICAL, command=self._inv_tonbag_detail_tree.yview)
+        self._inv_tonbag_detail_tree.configure(yscrollcommand=sb.set)
+        self._inv_tonbag_detail_tree.pack(side=LEFT, fill=BOTH, expand=True)
+        sb.pack(side='right', fill='y')
+
+    def _on_inv_selection_change(self, event) -> None:
+        """재고 선택 변경 → 톤백 상세 패널 갱신"""
+        sel = self.tree_inventory.selection()
+        if not sel or not hasattr(self, '_inv_tonbag_detail_tree'):
+            return
+        item = self.tree_inventory.item(sel[0])
+        vals = item.get('values', [])
+        if len(vals) < 2:
+            return
+        lot_no = str(vals[1]).strip()
+        if not lot_no:
+            return
+        for c in self._inv_tonbag_detail_tree.get_children():
+            self._inv_tonbag_detail_tree.delete(c)
+        self._inv_split_panel.set_detail_title(f"🎒 톤백 상세 — {lot_no}")
+        try:
+            tonbags = self.engine.db.fetchall(
+                """SELECT sub_lt, weight, status, location, picked_to, outbound_date
+                   FROM inventory_tonbag WHERE lot_no = ? ORDER BY sub_lt""",
+                (lot_no,)
+            )
+            status_icons = {'AVAILABLE': '✅ 가용', 'PICKED': 'Sold', 'SOLD': 'Sold', 'RESERVED': '🔒 예약'}
+            for tb in (tonbags or []):
+                st = status_icons.get(tb.get('status'), tb.get('status') or '')
+                self._inv_tonbag_detail_tree.insert('', 'end', values=(
+                    tb.get('sub_lt'), f"{(tb.get('weight') or 0):,.0f}",
+                    st, tb.get('location') or '', tb.get('picked_to') or '',
+                    str(tb.get('outbound_date') or '')[:10]
+                ))
+        except Exception as e:
+            logger.debug(f"톤백 상세 로드: {e}")
 
     # ═══════════════════════════════════════════════════════
     # 열 선택 체크박스 팝업
@@ -377,6 +443,7 @@ class InventoryTabMixin:
         dlg = tk.Toplevel(self.root)
         dlg.title(f"🎒 톤백 상세 — {lot_no}")
         dlg.geometry(DialogSize.get_geometry(self.root, 'medium'))
+        apply_modal_window_options(dlg)
         dlg.transient(self.root)
         center_dialog(dlg, self.root)
         
@@ -428,8 +495,10 @@ class InventoryTabMixin:
         import tkinter as tk
         from tkinter import ttk as _ttk
         
+        # customer, movement_date 컬럼 없어도 동작 (base 스키마: movement_type, qty_kg, created_at)
         movements = self.engine.db.fetchall(
-            """SELECT movement_type, qty_kg, customer, movement_date, created_at
+            """SELECT movement_type, qty_kg,
+                   '' AS customer, created_at AS movement_date, created_at
                FROM stock_movement WHERE lot_no = ? ORDER BY created_at DESC""",
             (lot_no,)
         )
@@ -437,6 +506,7 @@ class InventoryTabMixin:
         dlg = tk.Toplevel(self.root)
         dlg.title(f"📊 LOT 이력 — {lot_no}")
         dlg.geometry(DialogSize.get_geometry(self.root, 'medium'))
+        apply_modal_window_options(dlg)
         dlg.transient(self.root)
         center_dialog(dlg, self.root)
         
@@ -723,11 +793,8 @@ class InventoryTabMixin:
 
             self._refresh_summary()
             
-            # v3.9.9: 빈 상태 안내 (데이터 없을 때)
-            if not self.tree_inventory.get_children():
-                self._show_empty_state_hint()
-            else:
-                self._hide_empty_state_hint()
+            # v3.9.9: 빈 상태 안내 — 비표시 (사용자 요청)
+            self._hide_empty_state_hint()
             
             # v3.8.7: 재고 탭 하단 통계 갱신
             self._refresh_inv_stats()
@@ -1003,11 +1070,11 @@ class InventoryTabMixin:
             from ..utils.constants import ttk
             from ..utils.ui_constants import apply_tooltip
             _btn_file = ttk.Button(btn_frame, text="📁 파일 선택 입고",
-                                   command=lambda: self._on_open_file())
+                                   command=lambda: (self._hide_empty_state_hint(), self._on_open_file()))
             _btn_file.pack(side='left', padx=Spacing.XS)
             apply_tooltip(_btn_file, "데이터베이스 파일(.db)을 선택하여 열거나, 입고용 PDF/엑셀 파일을 선택합니다.")
             _btn_manual = ttk.Button(btn_frame, text="📝 수동 입고",
-                                    command=lambda: self._on_new_inbound())
+                                    command=lambda: (self._hide_empty_state_hint(), self._on_new_inbound()))
             _btn_manual.pack(side='left', padx=Spacing.XS)
             apply_tooltip(_btn_manual, "입고 메뉴의 원스톱 입고 또는 수동 입력으로 새 LOT/톤백을 등록합니다.")
         except (ImportError, ModuleNotFoundError) as _e:

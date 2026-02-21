@@ -19,77 +19,72 @@ class OutboundTemplateMixin:
     """출고 템플릿 및 Allocation Table Mixin"""
 
     def _download_outbound_template(self) -> None:
-        """v3.9.2: 출고 Allocation Table 샘플 Excel 템플릿 생성
+        """화주 Allocation 양식 템플릿 생성 — 붙여넣기 또는 업로드용
         
-        업로드된 양식 기준:
-        Row 1: 타이틀 (Allocation - 제품명 수량)
-        Row 2: 합계 행
-        Row 3: 헤더 (Product, SAP NO, Date in stock, QTY(MT), Lot No, WH, Customs, Export, SOLD TO, SALE REF, GW)
-        Row 4~: 데이터 (일반 + 샘플)
+        화주 표준 양식:
+        Row 1: 타이틀 (Allocation - PT LBM - September / CIF Semarang - 300MT of MIc9000)
+        Row 2: 합계 QTY
+        Row 3: Product | SAP NO | ETA BUSAN | Date in stock | QTY (MT) | Lot No | WH | Customs | GW | SALE REF
+        Row 4~: 데이터 (템플릿에 붙여넣기하거나, 이 양식으로 파일 작성 후 업로드)
         """
         from ..utils.constants import filedialog
-        
+
         file_path = filedialog.asksaveasfilename(
-            title="출고 Allocation Table 샘플 저장",
+            title="출고 Allocation Table 템플릿 저장",
             defaultextension=".xlsx",
-            initialfile="출고_Allocation_Table_샘플.xlsx",
+            initialfile="Allocation_Table_템플릿.xlsx",
             filetypes=[("Excel files", "*.xlsx")]
         )
-        
+
         if not file_path:
             return
-        
+
         try:
             import openpyxl
             from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             from openpyxl.utils import get_column_letter
-            
+
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "Allocation Table"
-            
+
             # === 스타일 정의 ===
             title_font = Font(bold=True, size=14, color="2C3E50")
             header_font = Font(bold=True, color="FFFFFF", size=10)
             data_font = Font(size=10)
-            sample_font = Font(size=10, color="0066CC")  # 샘플은 파란색
-            header_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
-            data_fill = PatternFill(start_color="F7F9FC", end_color="F7F9FC", fill_type="solid")
-            sample_fill = PatternFill(start_color="EBF5FB", end_color="EBF5FB", fill_type="solid")
-            return_fill = PatternFill(start_color="FDEBD0", end_color="FDEBD0", fill_type="solid")
-            split_fill = PatternFill(start_color="E8F8F5", end_color="E8F8F5", fill_type="solid")
-            summary_fill = PatternFill(start_color="FFF9C4", end_color="FFF9C4", fill_type="solid")
+            header_fill = PatternFill(start_color="548235", end_color="548235", fill_type="solid")  # 초록 배경
+            sale_ref_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")  # SALE REF 연한 초록
             thin_border = Border(
                 left=Side(style='thin'), right=Side(style='thin'),
                 top=Side(style='thin'), bottom=Side(style='thin')
             )
             center = Alignment(horizontal='center', vertical='center')
             right_align = Alignment(horizontal='right', vertical='center')
-            
-            # === Row 1: 타이틀 ===
-            ws.merge_cells('A1:K1')
-            ws['A1'] = "Allocation - LBM AP 450MT"
+
+            # === Row 1: 타이틀 (화주 양식) ===
+            ws.merge_cells('A1:J1')
+            ws['A1'] = "Allocation - PT LBM - September / CIF Semarang - 300MT of MIc9000"
             ws['A1'].font = title_font
             ws.row_dimensions[1].height = 30
-            
-            # === Row 2: 합계 (나중에 채움) ===
+
+            # === Row 2: 합계 QTY (E열) ===
             ws.row_dimensions[2].height = 20
-            
-            # === Row 3: 헤더 ===
+            ws.cell(row=2, column=5, value=300.06)
+            ws['E2'].number_format = '#,##0.0000'
+
+            # === Row 3: 헤더 (화주 양식 — 10컬럼) ===
             headers = [
-                ('Product',       16),
-                ('SAP NO',        14),
+                ('Product', 16),
+                ('SAP NO', 14),
+                ('ETA BUSAN', 14),
                 ('Date in stock', 14),
-                ('QTY (MT)',      12),
-                ('Lot No',        14),
-                ('WH',             8),
-                ('Customs',       12),
-                ('Export',        12),
-                ('SOLD TO',       28),
-                ('SALE REF',      12),
-                ('GW',            12),
+                ('QTY (MT)', 12),
+                ('Lot No', 14),
+                ('WH', 8),
+                ('Customs', 12),
+                ('GW', 12),
+                ('SALE REF', 12),
             ]
-            
             for col, (text, width) in enumerate(headers, 1):
                 cell = ws.cell(row=3, column=col, value=text)
                 cell.font = header_font
@@ -97,153 +92,47 @@ class OutboundTemplateMixin:
                 cell.alignment = center
                 cell.border = thin_border
                 ws.column_dimensions[get_column_letter(col)].width = width
-            
-            # === Row 4~: 샘플 데이터 ===
-            # 업로드한 양식 기반: 일반 톤백 + 샘플 톤백 + 반송/분할반송
+
+            # === Row 4~: 샘플 데이터 (화주 양식 기준, 붙여넣기 시 참고용) ===
             sample_lots = [
-                '1125072340', '1125072341', '1125072342', '1125072343',
-                '1125072405', '1125072406', '1125072407', '1125072408',
-                '1125072409', '1125072410', '1125072411', '1125072412',
+                '1125052654', '1125052707', '1125052708', '1125052709', '1125052710',
+                '1125052711', '1125052712', '1125052713', '1125052714', '1125052715',
+                '1125052716', '1125052717', '1125052718',
             ]
-            
-            row_num = 4
-            
-            # --- 반송 (일반 톤백) ---
-            for lot in sample_lots[:12]:
-                vals = ['MIC9000', '2200032833', '2025-09-18', 5.0, lot,
-                        'GY', 'Uncleared', '반송',
-                        'LBM AP - Q4 2025 2nd 450MT', '2929', 5.13]
-                fill = return_fill
+            for i, lot in enumerate(sample_lots, 4):
+                vals = ['MIC9000', '2200032552', '', '2025-07-29', 5, lot, 'GY', 'Cleared', 5.13, '1955']
                 for col, val in enumerate(vals, 1):
-                    cell = ws.cell(row=row_num, column=col, value=val)
+                    cell = ws.cell(row=i, column=col, value=val)
                     cell.font = data_font
-                    cell.fill = fill
                     cell.border = thin_border
-                    if col in (4, 11):  # QTY, GW
+                    cell.fill = sale_ref_fill if col == 10 else None
+                    if col in (5, 9):  # QTY (MT), GW
                         cell.number_format = '#,##0.000'
                         cell.alignment = right_align
                     else:
                         cell.alignment = center
-                row_num += 1
-            
-            # --- 반송 (샘플 톤백) ---
-            for lot in sample_lots[:12]:
-                vals = ['MIC9000 Sample', '2200032833', '2025-09-18', 0.001, lot,
-                        'GY', 'Uncleared', '반송',
-                        'LBM AP - Q4 2025 2nd 450MT', '2929', 0.00125]
-                for col, val in enumerate(vals, 1):
-                    cell = ws.cell(row=row_num, column=col, value=val)
-                    cell.font = sample_font
-                    cell.fill = sample_fill
-                    cell.border = thin_border
-                    if col in (4, 11):
-                        cell.number_format = '#,##0.000'
-                        cell.alignment = right_align
-                    else:
-                        cell.alignment = center
-                row_num += 1
-            
-            # --- 분할/반송 (일반 톤백) ---
-            split_lots = [
-                '1125081215', '1125081222', '1125081223', '1125081224',
-                '1125081314', '1125081315',
-            ]
-            for lot in split_lots:
-                vals = ['MIC9000', '2200032833', '2025-10-05', 5.0, lot,
-                        'GY', 'Cleared', '분할/반송',
-                        'LBM AP - Q4 2025 2nd 450MT', '2929', 5.13]
-                for col, val in enumerate(vals, 1):
-                    cell = ws.cell(row=row_num, column=col, value=val)
-                    cell.font = data_font
-                    cell.fill = split_fill
-                    cell.border = thin_border
-                    if col in (4, 11):
-                        cell.number_format = '#,##0.000'
-                        cell.alignment = right_align
-                    else:
-                        cell.alignment = center
-                row_num += 1
-            
-            # --- 분할/반송 (샘플 톤백) ---
-            for lot in split_lots:
-                vals = ['MIC9000 Sample', '2200032833', '2025-10-05', 0.001, lot,
-                        'GY', 'Cleared', '분할/반송',
-                        'LBM AP - Q4 2025 2nd 450MT', '2929', 0.00125]
-                for col, val in enumerate(vals, 1):
-                    cell = ws.cell(row=row_num, column=col, value=val)
-                    cell.font = sample_font
-                    cell.fill = sample_fill
-                    cell.border = thin_border
-                    if col in (4, 11):
-                        cell.number_format = '#,##0.000'
-                        cell.alignment = right_align
-                    else:
-                        cell.alignment = center
-                row_num += 1
-            
-            # === Row 2: 합계 채우기 ===
-            last_data = row_num - 1
-            ws.cell(row=2, column=3, value="합계").font = Font(bold=True, size=10)
-            ws.cell(row=2, column=4, value=f"=SUM(D4:D{last_data})").font = Font(bold=True)
-            ws['D2'].number_format = '#,##0.000'
-            ws.cell(row=2, column=10, value="합계 GW").font = Font(bold=True, size=10)
-            ws.cell(row=2, column=11, value=f"=SUM(K4:K{last_data})").font = Font(bold=True)
-            ws['K2'].number_format = '#,##0.000'
-            
-            # === 오른쪽 요약 테이블 (N~S열) ===
-            summary_start_col = 14  # N열
-            sum_headers = ['Export', 'SAP NO', 'Product', 'Lot No', '합계 : QTY (MT)', '합계 : GW']
-            for i, h in enumerate(sum_headers):
-                cell = ws.cell(row=3, column=summary_start_col + i, value=h)
-                cell.font = header_font
-                cell.fill = header_fill
-                cell.alignment = center
-                cell.border = thin_border
-                ws.column_dimensions[get_column_letter(summary_start_col + i)].width = 16
-            
-            # 요약 데이터
-            summary_data = [
-                ['반송', '2200032833', '', '', 90.012, 92.363],
-                ['반송 요약', '', '', '', 90.012, 92.363],
-                ['분할/반송', '2200032833', '', '', 30.006, 30.780],
-                ['분할/반송 요약', '', '', '', 30.006, 30.780],
-                ['총합계', '', '', '', 120.018, 123.143],
-            ]
-            for r, data in enumerate(summary_data, 4):
-                for c, val in enumerate(data):
-                    cell = ws.cell(row=r, column=summary_start_col + c, value=val)
-                    cell.border = thin_border
-                    cell.alignment = center
-                    if c >= 4:
-                        cell.number_format = '#,##0.000'
-                        cell.alignment = right_align
-                    if '요약' in str(data[0]) or '총합계' in str(data[0]):
-                        cell.font = Font(bold=True)
-                        cell.fill = summary_fill
-            
+
+            # === Row 2: 합계 수식 (데이터 추가 시 자동 반영) ===
+            last_row = 3 + len(sample_lots)
+            ws['E2'].value = f"=SUM(E4:E{last_row})"
+            ws['E2'].number_format = '#,##0.0000'
+
             # === 작성 안내 시트 ===
             ws2 = wb.create_sheet("📋 작성 안내")
             guides = [
-                ("📋 출고 Allocation Table 작성 안내", ""),
+                ("📋 Allocation Table (화주 양식) 작성 안내", ""),
                 ("", ""),
                 ("구분", "설명"),
-                ("Row 1", "타이틀: 'Allocation - [제품] [수량]'"),
-                ("Row 2", "합계 행 (자동 계산)"),
-                ("Row 3", "헤더: Product | SAP NO | Date in stock | QTY(MT) | Lot No | WH | Customs | Export | SOLD TO | SALE REF | GW"),
-                ("Row 4~", "데이터 행 (일반 + 샘플)"),
+                ("Row 1", "타이틀: 'Allocation - 고객 - 기간 / 목적지 - 수량MT of 제품'"),
+                ("Row 2", "합계 QTY (E열, 수식 또는 직접 입력)"),
+                ("Row 3", "헤더: Product | SAP NO | ETA BUSAN | Date in stock | QTY (MT) | Lot No | WH | Customs | GW | SALE REF"),
+                ("Row 4~", "데이터 행 — 이 템플릿에 붙여넣기하거나, 이 양식으로 파일 작성 후 업로드"),
                 ("", ""),
-                ("★ Export 유형", ""),
-                ("반송", "전량 반송 (입고분 그대로 반출)"),
-                ("분할/반송", "일부 반송 (분할 후 일부만 반출)"),
-                ("출고", "일반 출고 (판매)"),
-                ("", ""),
-                ("★ 샘플 톤백", ""),
-                ("Product", "원래 제품명 + ' Sample' (예: MIC9000 Sample)"),
-                ("QTY (MT)", "0.001 (= 1kg)"),
-                ("GW", "0.00125"),
+                ("★ 사용 방법", ""),
+                ("방법 1", "템플릿 다운로드 → 4행부터 데이터 붙여넣기 → 저장 → 업로드"),
+                ("방법 2", "화주에서 받은 Allocation Excel을 그대로 업로드"),
                 ("", ""),
                 ("★ 필수 항목", "Product, QTY (MT), Lot No"),
-                ("★ 색상 규칙", "연한 주황=반송, 연한 초록=분할/반송, 연한 파랑=샘플"),
             ]
             for r, (a, b) in enumerate(guides, 1):
                 ws2.cell(row=r, column=1, value=a)
@@ -253,23 +142,22 @@ class OutboundTemplateMixin:
                 elif r == 3:
                     ws2.cell(row=r, column=1).font = Font(bold=True)
                     ws2.cell(row=r, column=2).font = Font(bold=True)
-            ws2.column_dimensions['A'].width = 25
-            ws2.column_dimensions['B'].width = 60
-            
+            ws2.column_dimensions['A'].width = 28
+            ws2.column_dimensions['B'].width = 70
+
             try:
                 from gui_app_modular.utils.report_footer import add_gy_logistics_footer
                 add_gy_logistics_footer(ws)
             except (ImportError, ModuleNotFoundError) as _e:
                 logger.debug(f'Suppressed: {_e}')
             wb.save(file_path)
-            
-            self._log(f"✅ 출고 Allocation Table 샘플 저장: {file_path}")
+
+            self._log(f"✅ Allocation Table 템플릿 저장: {file_path}")
             CustomMessageBox.showinfo(self.root, "완료",
-                f"출고 Allocation Table 샘플이 저장되었습니다.\n\n"
+                f"Allocation Table 템플릿(화주 양식)이 저장되었습니다.\n\n"
                 f"파일: {file_path}\n\n"
-                "★ 3행 헤더에 'Product', 'QTY (MT)', 'Lot No'가 필수\n"
-                "★ 샘플은 Product에 'Sample' 추가, QTY=0.001\n"
-                "★ Export: 반송/분할반송/출고 구분")
+                "★ 4행부터 데이터 붙여넣기 후 저장하거나,\n"
+                "★ 화주에서 받은 동일 양식 Excel을 그대로 업로드하세요.")
                 
         except ImportError:
             CustomMessageBox.showerror(self.root, "오류", "openpyxl 패키지가 필요합니다.\npip install openpyxl")
@@ -470,3 +358,81 @@ class OutboundTemplateMixin:
         except (RuntimeError, ValueError) as e:
             logger.error(f"가상 Allocation 생성 오류: {e}", exc_info=True)
             CustomMessageBox.show_detailed_error(self.root, "오류", "생성 실패", exception=e)
+
+    def _generate_allocation_samples(self) -> None:
+        """화주 양식(PT LBM / CN Semarang) Allocation 샘플 Excel 3개 생성"""
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        project_root = Path(__file__).resolve().parent.parent.parent
+        script_path = project_root / "scripts" / "generate_allocation_from_tonbag.py"
+        out_dir = project_root / "generated_allocation"
+
+        if not script_path.exists():
+            CustomMessageBox.showerror(self.root, "오류", f"스크립트 없음: {script_path}")
+            return
+
+        try:
+            result = subprocess.run(
+                [sys.executable, str(script_path)],
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=60,
+            )
+            out = (result.stdout or '') + (result.stderr or '')
+            if result.returncode == 0:
+                self._log("✅ Allocation 샘플 3개 생성 완료")
+                CustomMessageBox.showinfo(
+                    self.root, "완료",
+                    f"Allocation Table 샘플 3개 생성 완료\n\n"
+                    f"출력 폴더:\n{out_dir}\n\n"
+                    f"파일: Allocation_샘플_1.xlsx, 2.xlsx, 3.xlsx"
+                )
+            else:
+                logger.warning(f"Allocation 샘플 생성 비정상 종료: {result.returncode}\n{out}")
+                CustomMessageBox.showwarning(
+                    self.root, "경고",
+                    f"생성 중 오류 발생 (코드 {result.returncode})\n\n{out[:500]}"
+                )
+        except subprocess.TimeoutExpired:
+            CustomMessageBox.showerror(self.root, "오류", "생성 시간 초과(60초)")
+        except Exception as e:
+            logger.error(f"Allocation 샘플 생성 오류: {e}", exc_info=True)
+            CustomMessageBox.show_detailed_error(self.root, "오류", "Allocation 샘플 생성 실패", exception=e)
+
+    def _load_allocation_sample(self, sample_num: int) -> None:
+        """Allocation 샘플 파일 불러오기 → Allocation 출고 예약 다이얼로그에 로드"""
+        from pathlib import Path
+
+        project_root = Path(__file__).resolve().parent.parent.parent
+        out_dir = project_root / "generated_allocation"
+        fname = f"Allocation_샘플_{sample_num}.xlsx"
+        file_path = out_dir / fname
+
+        if not file_path.exists():
+            ok = CustomMessageBox.askyesno(
+                self.root, "샘플 없음",
+                f"샘플 파일이 없습니다.\n{fname}\n\n"
+                "먼저 샘플 3개를 생성할까요?"
+            )
+            if ok:
+                self._generate_allocation_samples()
+                if not file_path.exists():
+                    return
+            else:
+                return
+
+        try:
+            from ..dialogs.allocation_dialog import AllocationDialog
+            dlg = AllocationDialog(self, self.engine)
+            dlg.show(initial_file=str(file_path))
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Allocation 다이얼로그 오류: {e}", exc_info=True)
+            CustomMessageBox.showerror(
+                self.root, "오류",
+                f"Allocation 다이얼로그를 열 수 없습니다:\n{e}"
+            )

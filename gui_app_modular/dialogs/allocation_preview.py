@@ -14,7 +14,7 @@ from tkinter import ttk
 from typing import List, Dict, Callable
 from datetime import datetime
 
-from ..utils.ui_constants import DialogSize, center_dialog
+from ..utils.ui_constants import DialogSize, center_dialog, apply_modal_window_options
 
 
 def _is_sample_item(item: Dict) -> bool:
@@ -61,6 +61,7 @@ class AllocationPreviewDialog:
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("📋 출고 Allocation 미리보기")
         self.dialog.geometry(DialogSize.get_geometry(parent, 'large'))
+        apply_modal_window_options(self.dialog)
         self.dialog.transient(parent)
         self.dialog.grab_set()
         center_dialog(self.dialog, parent)

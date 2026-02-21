@@ -10,7 +10,7 @@ import time
 import tkinter as tk
 from tkinter import ttk, filedialog, BOTH, X, Y, LEFT, RIGHT, END, VERTICAL
 
-from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog, CustomMessageBox
+from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog, CustomMessageBox, apply_modal_window_options
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +38,25 @@ class AllocationDialog:
         self.parsed_rows = []
         self.source_file = ""
 
-    def show(self):
+    def show(self, initial_file: str = None):
+        """다이얼로그 표시. initial_file이 있으면 해당 파일 로드 후 파싱"""
         self.dialog = tk.Toplevel(self.root)
         self.dialog.title("📋 Allocation 출고 예약")
         self.dialog.geometry("1100x650")
-        center_dialog(self.dialog, 1100, 650)
+        apply_modal_window_options(self.dialog)
+        center_dialog(self.dialog, self.root)
         self.dialog.transient(self.root)
         self.dialog.grab_set()
+        # 다크 테마 시 배경 검은색 문제 방지 — 명시적 bg/fg 설정
+        _is_dark = ThemeColors.is_dark_theme(getattr(self.app, 'current_theme', 'flatly'))
+        _bg = ThemeColors.get('bg_card', _is_dark)
+        self.dialog.configure(bg=_bg)
         self._create_widgets()
+        self.dialog.update_idletasks()
+        if initial_file:
+            self._file_var.set(initial_file)
+            self.source_file = initial_file
+            self.dialog.after(100, self._parse_file)  # 위젯 완료 후 파싱
 
     def _create_widgets(self):
         top = ttk.Frame(self.dialog, padding=8)
@@ -55,7 +66,6 @@ class AllocationDialog:
         self._file_var = tk.StringVar()
         ttk.Entry(top, textvariable=self._file_var, width=60, state='readonly').pack(side=LEFT, fill=X, expand=True, padx=(0, 5))
         ttk.Button(top, text="📂 파일 선택", command=self._select_file).pack(side=LEFT, padx=(0, 5))
-        ttk.Button(top, text="🔍 파싱", command=self._parse_file).pack(side=LEFT)
 
         tree_frame = ttk.Frame(self.dialog, padding=8)
         tree_frame.pack(fill=BOTH, expand=True)
@@ -102,6 +112,7 @@ class AllocationDialog:
         if path:
             self._file_var.set(path)
             self.source_file = path
+            self._parse_file()  # 파일 선택 시 자동 파싱
 
     def _parse_file(self):
         path = self._file_var.get()
@@ -286,7 +297,9 @@ class AllocationDialog:
             status_win = tk.Toplevel(self.dialog)
             status_win.title("📊 Allocation 예약 현황")
             status_win.geometry("900x400")
-            center_dialog(status_win, 900, 400)
+            _is_dark = ThemeColors.is_dark_theme(getattr(self.app, 'current_theme', 'flatly'))
+            status_win.configure(bg=ThemeColors.get('bg_card', _is_dark))
+            center_dialog(status_win, self.dialog)
             status_win.transient(self.dialog)
 
             cols = ('lot_no', 'customer', 'sale_ref', 'qty_mt', 'outbound_date', 'status', 'tb_count', 'created_at')
@@ -316,5 +329,7 @@ class AllocationDialog:
                 self.app._refresh_inventory()
             if hasattr(self.app, '_refresh_tonbag'):
                 self.app._refresh_tonbag()
+            if hasattr(self.app, '_refresh_outbound_scheduled'):
+                self.app._refresh_outbound_scheduled()
         except (RuntimeError, ValueError) as e:
             logger.debug(f"새로고침 실패: {e}")

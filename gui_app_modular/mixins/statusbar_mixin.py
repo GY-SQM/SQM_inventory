@@ -175,9 +175,16 @@ class StatusBarMixin:
         self.root.after(1000, self._check_module_status)
     
     def _set_status(self, message: str) -> None:
-        """Set status bar message"""
+        """Set status bar message — 동시에 로그 탭에도 기록 (v5.9.9)"""
         if hasattr(self, 'status_var_bar'):
             self.status_var_bar.set(message)
+        if message and message.strip() and hasattr(self, '_log'):
+            if message.strip() == 'Ready':
+                return
+            try:
+                self._log(message)
+            except (RuntimeError, ValueError, AttributeError):
+                pass
     
     def _update_statusbar_summary(self) -> None:
         """v3.9.4: 상태바 실시간 재고 요약 갱신 (샘플 제외)"""

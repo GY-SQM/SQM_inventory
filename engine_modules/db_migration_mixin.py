@@ -34,7 +34,9 @@ class DatabaseMigrationMixin:
         self._migrate_v423_tonbag_location()
         self._migrate_v520_tonbag_no_text()
         self._migrate_v588_con_return()
+        self._migrate_v591_tonbag_fk_columns()
         self._migrate_v593_allocation_plan()
+        self._migrate_v599_missing_columns()
 
     def _migrate_v588_con_return(self) -> None:
         """
@@ -54,6 +56,176 @@ class DatabaseMigrationMixin:
             self.commit()
         except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
             logger.error(f"[v5.8.8] con_return 마이그레이션 실패: {e}")
+            self.rollback()
+
+    def _migrate_v599_missing_columns(self) -> None:
+        """
+        v5.9.9: 누락된 컬럼 추가 (query_mixin, dashboard, inventory_tab 오류 방지)
+        - inventory.customs: 통관 상태
+        - inventory.location: 보관 위치
+        - stock_movement.movement_date: 이동 시각 (created_at에서 백필)
+        - stock_movement.customer: 고객
+        """
+        try:
+            # inventory.customs
+            try:
+                self.execute("ALTER TABLE inventory ADD COLUMN customs TEXT")
+                logger.info("[v5.9.9] inventory.customs 컬럼 추가 완료")
+            except (sqlite3.OperationalError, OSError) as e:
+                if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                    logger.debug(f"[v5.9.9] inventory.customs 이미 존재: {e}")
+                else:
+                    raise
+            # inventory.location
+            try:
+                self.execute("ALTER TABLE inventory ADD COLUMN location TEXT")
+                logger.info("[v5.9.9] inventory.location 컬럼 추가 완료")
+            except (sqlite3.OperationalError, OSError) as e:
+                if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                    logger.debug(f"[v5.9.9] inventory.location 이미 존재: {e}")
+                else:
+                    raise
+            # stock_movement.movement_date
+            try:
+                self.execute("ALTER TABLE stock_movement ADD COLUMN movement_date TIMESTAMP")
+                logger.info("[v5.9.9] stock_movement.movement_date 컬럼 추가 완료")
+                try:
+                    self.execute("UPDATE stock_movement SET movement_date = created_at WHERE movement_date IS NULL")
+                    self.commit()
+                except (sqlite3.OperationalError, OSError) as _e:
+                    logger.debug(f"[v5.9.9] movement_date 백필 스킵: {_e}")
+            except (sqlite3.OperationalError, OSError) as e:
+                if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                    logger.debug(f"[v5.9.9] stock_movement.movement_date 이미 존재: {e}")
+                else:
+                    raise
+            # stock_movement.customer
+            try:
+                self.execute("ALTER TABLE stock_movement ADD COLUMN customer TEXT")
+                logger.info("[v5.9.9] stock_movement.customer 컬럼 추가 완료")
+            except (sqlite3.OperationalError, OSError) as e:
+                if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                    logger.debug(f"[v5.9.9] stock_movement.customer 이미 존재: {e}")
+                else:
+                    raise
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v5.9.9] missing columns 마이그레이션 실패: {e}")
+            self.rollback()
+
+    def _migrate_v591_tonbag_fk_columns(self) -> None:
+        """
+        v5.9.1: inventory_tonbag에 FK·입고일·톤백번호·비고 컬럼 추가 (입고 업로드 시 INSERT 실패 방지)
+        - inventory_id, sap_no, bl_no, inbound_date (필수)
+        - tonbag_no, remarks (v5.2.0 미실행 등 방어용)
+        """
+        columns_to_add = [
+            ("inventory_id", "INTEGER"),
+            ("sap_no", "TEXT"),
+            ("bl_no", "TEXT"),
+            ("inbound_date", "TEXT"),
+            ("tonbag_no", "TEXT"),
+            ("remarks", "TEXT DEFAULT ''"),
+        ]
+        try:
+            for col_name, col_type in columns_to_add:
+                try:
+                    self.execute(
+                        f"ALTER TABLE inventory_tonbag ADD COLUMN {col_name} {col_type}"
+                    )
+                    logger.info(f"[v5.9.1] inventory_tonbag.{col_name} 컬럼 추가 완료")
+                except (sqlite3.OperationalError, OSError) as e:
+                    if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                        logger.debug(f"[v5.9.1] inventory_tonbag.{col_name} 이미 존재: {e}")
+                    else:
+                        raise
+            self.commit()
+
+            # 백필: inventory_id
+            try:
+                self.execute("""
+                    UPDATE inventory_tonbag
+                    SET inventory_id = (
+                        SELECT i.id FROM inventory i WHERE i.lot_no = inventory_tonbag.lot_no
+                    )
+                    WHERE inventory_id IS NULL
+                """)
+                logger.info("[v5.9.1] inventory_id 백필 완료")
+            except (sqlite3.OperationalError, OSError) as e:
+                logger.debug(f"[v5.9.1] inventory_id 백필 스킵: {e}")
+
+            # 백필: sap_no
+            try:
+                self.execute("""
+                    UPDATE inventory_tonbag SET sap_no = (
+                        SELECT COALESCE(i.sap_no,'') FROM inventory i
+                        WHERE i.lot_no = inventory_tonbag.lot_no
+                    ) WHERE sap_no IS NULL OR sap_no = ''
+                """)
+                logger.info("[v5.9.1] sap_no 백필 완료")
+            except (sqlite3.OperationalError, OSError) as e:
+                logger.debug(f"[v5.9.1] sap_no 백필 스킵: {e}")
+
+            # 백필: bl_no
+            try:
+                self.execute("""
+                    UPDATE inventory_tonbag SET bl_no = (
+                        SELECT COALESCE(i.bl_no,'') FROM inventory i
+                        WHERE i.lot_no = inventory_tonbag.lot_no
+                    ) WHERE bl_no IS NULL OR bl_no = ''
+                """)
+                logger.info("[v5.9.1] bl_no 백필 완료")
+            except (sqlite3.OperationalError, OSError) as e:
+                logger.debug(f"[v5.9.1] bl_no 백필 스킵: {e}")
+
+            # 백필: inbound_date (패치에 없던 부분 추가)
+            try:
+                self.execute("""
+                    UPDATE inventory_tonbag SET inbound_date = (
+                        SELECT COALESCE(i.stock_date, i.arrival_date, i.ship_date, date('now'))
+                        FROM inventory i WHERE i.lot_no = inventory_tonbag.lot_no
+                    ) WHERE inbound_date IS NULL OR inbound_date = ''
+                """)
+                logger.info("[v5.9.1] inbound_date 백필 완료")
+            except (sqlite3.OperationalError, OSError) as e:
+                logger.debug(f"[v5.9.1] inbound_date 백필 스킵: {e}")
+
+            # 백필: tonbag_no (v5.2.0 미실행 시 — S00/001 형식)
+            try:
+                rows = self.fetchall(
+                    "SELECT id, sub_lt, is_sample FROM inventory_tonbag WHERE tonbag_no IS NULL"
+                )
+                if rows:
+                    for row in rows:
+                        raw_sub_lt = row.get('sub_lt')
+                        is_sample = int(row.get('is_sample') or 0)
+                        if is_sample == 1 or str(raw_sub_lt or '0').strip() in ('0', ''):
+                            tonbag_no = "S00"
+                        else:
+                            s = str(raw_sub_lt).strip()
+                            tonbag_no = s.zfill(3) if re.fullmatch(r"\d+", s) else "001"
+                        self.execute(
+                            "UPDATE inventory_tonbag SET tonbag_no = ? WHERE id = ?",
+                            (tonbag_no, row['id'])
+                        )
+                    logger.info(f"[v5.9.1] tonbag_no 백필 완료: {len(rows)}건")
+            except (sqlite3.OperationalError, OSError, ValueError) as e:
+                logger.debug(f"[v5.9.1] tonbag_no 백필 스킵: {e}")
+
+            self.commit()
+            logger.info("[v5.9.1] inventory_tonbag 백필 완료")
+
+            # 인덱스
+            try:
+                self.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_tonbag_inventory_id ON inventory_tonbag(inventory_id)"
+                )
+                self.commit()
+            except (sqlite3.OperationalError, OSError) as _e:
+                logger.debug(f"[v5.9.1] 인덱스 생성 스킵: {_e}")
+
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v5.9.1] inventory_tonbag FK 컬럼 마이그레이션 실패: {e}")
             self.rollback()
 
     def _migrate_v420_tonbag_uid(self) -> None:

@@ -311,25 +311,26 @@ class ExportMixin:
         try:
             inventory = self.get_inventory()
 
-            # 화면 INVENTORY_COLUMNS 18열과 동일한 순서/이름
-            # (row_num은 Excel에서 자동 번호 부여)
+            # 화면 inventory_tab.INVENTORY_COLUMNS와 동일한 순서/이름 (재고리스트·입고 템플릿과 통일)
             column_map = [
                 # (DB 키,           Excel 헤더,       너비, 숫자포맷)
                 ('lot_no',          'LOT NO',          16, None),
                 ('sap_no',          'SAP NO',          16, None),
                 ('bl_no',           'BL NO',           18, None),
-                ('container_no',    'CONTAINER',       17, None),
                 ('product',         'PRODUCT',         22, None),
-                ('mxbg_pallet',     'MXBG',            8,  None),
-                ('net_weight',      'NET(Kg)',          13, '#,##0'),
+                ('status',          'STATUS',          12, None),
+                ('current_weight',  'Balance(Kg)',     14, '#,##0'),
+                ('net_weight',      'NET(Kg)',         13, '#,##0'),
+                ('container_no',    'CONTAINER',       17, None),
+                ('mxbg_pallet',     'MXBG',            8, None),
+                ('avail_bags',      'Avail',           10, None),
                 ('salar_invoice_no','INVOICE NO',      14, None),
                 ('ship_date',       'SHIP DATE',       13, None),
                 ('arrival_date',    'ARRIVAL',         13, None),
+                ('con_return',      'CON RETURN',       13, None),
                 ('free_time',       'FREE TIME',       12, None),
-                ('warehouse',       'WH',              8,  None),
-                ('status',          'STATUS',          12, None),
+                ('warehouse',       'WH',              8, None),
                 ('customs',         'CUSTOMS',         12, None),
-                ('current_weight',  'Balance(Kg)',     14, '#,##0'),
                 ('initial_weight',  'Inbound(Kg)',     14, '#,##0'),
                 ('outbound_weight', 'Outbound(Kg)',    14, '#,##0'),
             ]
@@ -381,28 +382,30 @@ class ExportMixin:
                 pd.DataFrame().to_excel(output_path, index=False)
                 return output_path
 
-            # v5.6.3: MXBG 제거, NET/Balance/Inbound = 톤백 개별 무게(tonbag_weight)
+            # 화면 tonbag_tab._tonbag_columns와 동일한 순서 (톤백리스트·출고 템플릿과 통일)
+            # NET/Balance/Inbound = 톤백 개별 무게(tonbag_weight) 계산값
             column_map = [
                 # (DB/계산 키,       Excel 헤더,       너비, 숫자포맷)
                 ('lot_no',           'LOT NO',         16, None),
                 ('tonbag_no_print',  'TONBAG NO',      12, None),
-                ('tonbag_uid',       'UID',            20, None),
                 ('sap_no',           'SAP NO',         16, None),
                 ('bl_no',            'BL NO',          18, None),
-                ('container_no',     'CONTAINER',      17, None),
                 ('product',          'PRODUCT',        22, None),
+                ('tonbag_status',    'STATUS',         12, None),
+                ('balance_tonbag',   'Balance(Kg)',    14, '#,##0'),
+                ('tonbag_uid',       'UID',            20, None),
+                ('container_no',     'CONTAINER',      17, None),
                 ('location',         'LOCATION',       12, None),
                 ('net_weight_tonbag','NET(Kg)',        13, '#,##0'),
                 ('salar_invoice_no', 'INVOICE NO',     14, None),
                 ('ship_date',        'SHIP DATE',      13, None),
                 ('arrival_date',     'ARRIVAL',        13, None),
+                ('con_return',       'CON RETURN',     13, None),
                 ('free_time',        'FREE TIME',      12, None),
-                ('warehouse',        'WH',             8,  None),
-                ('tonbag_status',    'STATUS',         12, None),
+                ('warehouse',        'WH',             8, None),
                 ('customs',          'CUSTOMS',        12, None),
-                ('balance_tonbag',   'Balance(Kg)',    14, '#,##0'),
-                ('inbound_tonbag',   'Inbound(Kg)',   14, '#,##0'),
-                ('outbound_weight',  'Outbound(Kg)',  14, '#,##0'),
+                ('inbound_tonbag',   'Inbound(Kg)',    14, '#,##0'),
+                ('outbound_weight',  'Outbound(Kg)',   14, '#,##0'),
             ]
 
             # tonbag_no_print, tonbag_uid 계산

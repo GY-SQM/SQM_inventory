@@ -714,13 +714,25 @@ def apply_tooltip(widget, text: str, delay: int = 500):
         logger.debug(f"{type(e).__name__}: {e}")
 
 
+def apply_modal_window_options(dialog) -> None:
+    """
+    모달 창에 크기 조절 + 최소/최대 버튼 적용.
+    resizable(True,True) 및 toolwindow=False(Windows 표준 창 장식).
+    """
+    try:
+        dialog.resizable(True, True)
+        try:
+            dialog.attributes('-toolwindow', 0)
+        except (Exception, AttributeError):
+            pass
+    except (Exception, AttributeError):
+        pass
+
+
 def setup_dialog_defaults(dialog, parent, title: str, size_type: str = 'medium'):
     """
     다이얼로그 기본 설정 (크기, 위치, 동작)
-    
-    사용법:
-        dialog = tk.Toplevel(root)
-        setup_dialog_defaults(dialog, root, "설정", "medium")
+    - 크기 조절 가능, 최소/최대 버튼 표시
     """
     # 제목
     dialog.title(title)
@@ -728,6 +740,9 @@ def setup_dialog_defaults(dialog, parent, title: str, size_type: str = 'medium')
     # 크기
     geometry = DialogSize.get_geometry(parent, size_type)
     dialog.geometry(geometry)
+    
+    # 크기 조절 + 최소/최대 버튼
+    apply_modal_window_options(dialog)
     
     # 부모 연결
     dialog.transient(parent)

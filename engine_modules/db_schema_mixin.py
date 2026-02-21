@@ -85,6 +85,9 @@ class DatabaseSchemaMixin:
                 vessel TEXT,
                 free_time INTEGER DEFAULT 0,
                 con_return TEXT,
+                location TEXT,
+                customs TEXT,
+                inbound_date TEXT,
                 remarks TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -113,7 +116,11 @@ class DatabaseSchemaMixin:
         self.execute("""
             CREATE TABLE IF NOT EXISTS inventory_tonbag (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                inventory_id INTEGER,
                 lot_no TEXT NOT NULL,
+                sap_no TEXT,
+                bl_no TEXT,
+                inbound_date TEXT,
                 sub_lt INTEGER NOT NULL DEFAULT 0,
                 weight REAL DEFAULT 500.0,
                 is_sample INTEGER DEFAULT 0,
@@ -129,12 +136,16 @@ class DatabaseSchemaMixin:
                 source_sub_lt_raw TEXT,
                 source_sub_lt_hdr TEXT,
                 con_return TEXT,
+                tonbag_no TEXT,
+                remarks TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (lot_no) REFERENCES inventory(lot_no) ON DELETE CASCADE
+                FOREIGN KEY (lot_no) REFERENCES inventory(lot_no) ON DELETE CASCADE,
+                FOREIGN KEY (inventory_id) REFERENCES inventory(id)
             )
         """)
         self.execute("CREATE INDEX IF NOT EXISTS idx_tonbag_lot ON inventory_tonbag(lot_no)")
+        # idx_tonbag_inventory_id는 _migrate_v591_tonbag_fk_columns()에서 생성 (구 DB에 inventory_id 추가 후)
         self.execute("CREATE INDEX IF NOT EXISTS idx_tonbag_status ON inventory_tonbag(status)")
         self.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_tonbag_lot_sublt ON inventory_tonbag(lot_no, sub_lt)")
         logger.info("[스키마] inventory_tonbag 테이블 생성 완료")
@@ -185,6 +196,8 @@ class DatabaseSchemaMixin:
                 qty_kg REAL DEFAULT 0,
                 from_location TEXT,
                 to_location TEXT,
+                customer TEXT,
+                movement_date TIMESTAMP,
                 remarks TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (lot_no) REFERENCES inventory(lot_no)
@@ -261,6 +274,8 @@ class DatabaseSchemaMixin:
         self._migrate_v391_sample_tonbag()
         self._migrate_v396_search_indexes()
         self._migrate_v588_con_return()
+        self._migrate_v591_tonbag_fk_columns()
+        self._migrate_v599_missing_columns()
 
     def _verify_schema(self) -> Dict[str, Any]:
         """DB 스키마 자동 점검 — 필수 테이블/컬럼 확인"""

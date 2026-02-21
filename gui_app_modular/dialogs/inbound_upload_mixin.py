@@ -145,8 +145,9 @@ class InboundUploadMixin:
                     from ..utils.upload_error_dialog import show_upload_error_dialog
                     from ..utils.upload_error_template import UploadErrorTemplate
                     rows_for_msg = failed_rows if failed_rows else [{'row': '?', 'value': '업로드 실패', 'column': ''}]
+                    err_type = (rows_for_msg[0].get('type', 'missing_required') if rows_for_msg else 'missing_required')
                     error_msg = UploadErrorTemplate.format_multiple_errors(
-                        errors=[{'type': 'missing_required', 'rows': rows_for_msg}],
+                        errors=[{'type': err_type, 'rows': rows_for_msg}],
                         total_rows=len(self.preview_data)
                     )
                     show_upload_error_dialog(self.dialog, "입고 업로드 실패", error_msg)
@@ -195,8 +196,10 @@ class InboundUploadMixin:
             skipped_lots = []
             errors = []
             failed_rows = []
+            _last_idx = -1  # DB 예외 시 행 번호 표시용
 
             for idx, lot in enumerate(_lots):
+                _last_idx = idx
                 pct = 10 + int(80 * (idx + 1) / total)
                 lot_no = getattr(lot, 'lot_no', '') or ''
                 self._update_progress(pct, f"📦 LOT {idx+1}/{total}: {lot_no}")
@@ -305,8 +308,10 @@ class InboundUploadMixin:
                 except (TypeError, ValueError):
                     missing_display.append('MXBG')
                 if missing_display:
+                    display_row = idx + 2  # Excel/미리보기 1-based 행 번호
                     failed_rows.append({
-                        'row': idx + 2, 'value': '비어 있음',
+                        'row': display_row, 'row_num': display_row,
+                        'value': '비어 있음',
                         'column': ', '.join(missing_display),
                         'missing_columns': missing_display,
                     })
@@ -358,10 +363,18 @@ class InboundUploadMixin:
                     else:
                         err_msg = result.get('message', '') or ', '.join(result.get('errors', []))
                         errors.append(f"LOT {getattr(lot, 'lot_no', '')}: {err_msg}")
-                        failed_rows.append({'row': idx + 2, 'value': err_msg, 'column': 'LOT NO'})
+                        failed_rows.append({
+                            'row': idx + 2, 'row_num': idx + 2,
+                            'value': err_msg, 'column': 'LOT NO',
+                            'missing_columns': [],
+                        })
                 except (ValueError, TypeError, AttributeError) as e:
                     errors.append(f"LOT {getattr(lot, 'lot_no', '')}: {e}")
-                    failed_rows.append({'row': idx + 2, 'value': str(e), 'column': 'LOT NO'})
+                    failed_rows.append({
+                        'row': idx + 2, 'row_num': idx + 2,
+                        'value': str(e), 'column': 'LOT NO',
+                        'missing_columns': [],
+                    })
 
             if errors:
                 self._log_safe(f"⚠️ 일부 오류: {len(errors)}건")
@@ -373,6 +386,13 @@ class InboundUploadMixin:
             if created_lots:
                 self._log_safe(f"✅ 저장 완료: {len(created_lots)}건")
                 return True, []
+            elif skipped_lots and not errors:
+                # 모든 LOT가 중복 — "필수 컬럼 누락" 대신 중복 안내
+                self._log_safe(f"⏭ 모든 LOT 중복 ({len(skipped_lots)}건) — 신규 LOT 없음")
+                return False, [{
+                    'row': '?', 'row_num': '?', 'value': f'{len(skipped_lots)}건 모두 이미 DB에 존재',
+                    'column': '', 'missing_columns': [], 'type': 'all_duplicate_lot'
+                }]
             else:
                 self._log_safe(f"❌ 저장된 LOT 없음 (오류 {len(errors)}건, 건너뜀 {len(skipped_lots)}건)")
                 return False, failed_rows
@@ -380,7 +400,13 @@ class InboundUploadMixin:
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             logger.error(f"DB 저장 실패: {e}", exc_info=True)
             self._log_safe(f"❌ DB 저장 실패: {e}")
-            return False, []
+            msg = str(e)
+            err_type = 'db_schema' if 'no column named' in msg.lower() or 'no such column' in msg.lower() else 'db_error'
+            try:
+                row_num = _last_idx + 2 if _last_idx >= 0 else '?'
+            except NameError:
+                row_num = '?'
+            return False, [{'row': row_num, 'row_num': row_num, 'value': msg, 'column': '', 'missing_columns': [], 'type': err_type}]
 
     def _export_to_excel(self) -> None:
         """미리보기 데이터 Excel 내보내기"""

@@ -216,7 +216,7 @@ def generate_monthly_report(engine, year: int = None, month: int = None,
         movements = engine.db.fetchall("""
             SELECT movement_type, SUM(qty_kg) as total, COUNT(*) as cnt
             FROM stock_movement
-            WHERE strftime('%Y', movement_date) = ? AND strftime('%m', movement_date) = ?
+            WHERE strftime('%Y', created_at) = ? AND strftime('%m', created_at) = ?
             GROUP BY movement_type
         """, (str(year), f"{month:02d}"))
         
@@ -572,6 +572,78 @@ def generate_transaction_statement(engine, customer: str = '',
     doc.build(elements)
     logger.info(f"거래명세서 생성: {filepath}")
     return filepath
+
+
+def generate_lot_outbound_history_pdf(engine, lot_no: str, history: List[dict],
+                                      output_path: str = None) -> Optional[str]:
+    """
+    LOT 출고 이력 PDF 생성 (톤백·샘플 출고/예약 이력)
+    """
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    except ImportError:
+        return None
+
+    _register_korean_font()
+    fn = 'MalgunGothic' if _has_malgun() else 'Helvetica'
+
+    lot_info = engine.db.fetchone("SELECT product FROM inventory WHERE lot_no = ?", (lot_no,))
+    product = (lot_info.get('product', '-') or '-') if lot_info else '-'
+
+    if not output_path:
+        os.makedirs('output/reports', exist_ok=True)
+        output_path = os.path.join('output/reports', f"출고이력_{lot_no}_{datetime.now().strftime('%Y%m%d')}.pdf")
+
+    doc = SimpleDocTemplate(output_path, pagesize=A4,
+                            leftMargin=15*mm, rightMargin=15*mm,
+                            topMargin=18*mm, bottomMargin=15*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph(f"LOT 출고 이력 — {lot_no}",
+        ParagraphStyle('Title', parent=styles['Title'], fontName=fn, fontSize=14)))
+    elements.append(Paragraph(f"{product}  |  {len(history)}건",
+        ParagraphStyle('Sub', parent=styles['Normal'], fontName=fn, fontSize=10, textColor=colors.grey)))
+    elements.append(Spacer(1, 6*mm))
+
+    tb_data = [['No.', '톤백#', '중량(kg)', '구분', '상태', '출고처', '출고/예정일']]
+    status_map = {'PICKED': '출고', 'SOLD': 'Sold', 'SHIPPED': '선적', 'RESERVED': '예약'}
+    for idx, row in enumerate(history, 1):
+        is_sample = row.get('is_sample') or 0
+        tb_type = '샘플' if is_sample else '정규'
+        st = status_map.get(str(row.get('tonbag_status', '')).strip(), str(row.get('tonbag_status', '')))
+        tb_data.append([
+            str(idx), str(row.get('sub_lt', '')),
+            f"{float(row.get('weight', 0) or 0):,.0f}",
+            tb_type, st,
+            str(row.get('customer', ''))[:15],
+            str(row.get('out_date', ''))[:10]
+        ])
+
+    if not tb_data or len(tb_data) == 1:
+        tb_data.append(['', '이력 없음', '', '', '', '', ''])
+
+    t = Table(tb_data, colWidths=[30, 50, 70, 45, 50, 90, 75])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, -1), fn),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#bdc3c7')),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f6fa')]),
+    ]))
+    elements.append(t)
+    elements.append(Spacer(1, 8*mm))
+    elements.append(Paragraph(f"(주) 지와이로지스  {datetime.now().strftime('%Y')}년 {datetime.now().strftime('%m')}월 {datetime.now().strftime('%d')}일",
+        ParagraphStyle('Footer', parent=styles['Normal'], fontName=fn, fontSize=7, textColor=colors.grey)))
+    doc.build(elements)
+    logger.info(f"LOT 출고 이력 PDF: {output_path}")
+    return output_path
 
 
 # === 유틸 ===

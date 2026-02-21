@@ -13,12 +13,12 @@ import tkinter as tk
 from tkinter import ttk, filedialog, BOTH, YES, X, Y, LEFT, RIGHT, BOTTOM, END, VERTICAL, HORIZONTAL
 import logging
 import threading
-from datetime import datetime, date as _date_type
+from datetime import datetime, timedelta, date as _date_type
 
 # 비즈니스 기본값
 from core.constants import DEFAULT_WAREHOUSE
 
-from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog
+from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog, apply_modal_window_options
 from core.types import safe_float
 
 # v5.8.7: DatePicker 달력 UI — gui_bootstrap 통일 (ttkbootstrap.DateEntry, 없으면 텍스트 입력 폴백)
@@ -137,12 +137,15 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         """원스톱 입고 팝업 생성"""
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📥 입고 — SQM v3.9.4")
-        self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
         self.dialog.minsize(720, 520)
+        apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
-        center_dialog(self.dialog, self.parent)
-        self.dialog.resizable(True, True)
+        try:
+            self.dialog.state('zoomed')  # v5.9.9: 항상 최대화로 시작
+        except tk.TclError:
+            self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
+            center_dialog(self.dialog, self.parent)
         self.dialog.protocol("WM_DELETE_WINDOW", self._on_cancel)
         
         main = ttk.Frame(self.dialog, padding=6)
@@ -175,18 +178,20 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             'DO':           '📋 Delivery Order (인도지시서)\n\n• 인도 장소, Free Time 정보 추출\n• 선택 서류 — 없어도 입고 가능\n• PDF 파일 지원',
         }
         
+        _os_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
         for idx, (doc_type, doc_name, required) in enumerate(DOC_TYPES):
             cell = ttk.Frame(file_frame)
             cell.grid(row=0, column=idx, sticky='ew', padx=(0, 2))
             
+            _cell_fg = ThemeColors.get('text_primary', _os_dark)
             # 서류명
             lbl = ttk.Label(cell, text=short_names.get(doc_type, ''),
-                      font=('맑은 고딕', 14, 'bold'))
+                      font=('맑은 고딕', 14, 'bold'),
+                      foreground=_cell_fg)
             lbl.pack(side=LEFT, padx=(2, 2))
             self._attach_doc_tooltip(lbl, _tooltips.get(doc_type, ''))
             
             # 📂 폴더선택 버튼
-            _os_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
             btn_sel = tk.Button(cell, text="📂",
                                 command=lambda dt=doc_type: self._select_file(dt),
                                 font=('', 13), bg=ThemeColors.get('btn_neutral', _os_dark), fg=ThemeColors.get('badge_text', _os_dark),
@@ -200,8 +205,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             check_label.pack(side=LEFT, padx=(0, 2))
             self.check_labels[doc_type] = check_label
             
-            # 파일명 (숨김 — 체크되면 표시)
-            file_label = ttk.Label(cell, text="", foreground=ThemeColors.get('text_muted', _os_dark),
+            # 파일명 (동그라미 서류명과 같은 색)
+            file_label = ttk.Label(cell, text="", foreground=_cell_fg,
                                    font=('맑은 고딕', 12), anchor='w')
             file_label.pack(side=LEFT, fill=X, expand=True, padx=(0, 2))
             self.file_labels[doc_type] = file_label
@@ -253,38 +258,40 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._progress_inline_msg.pack(anchor='w')
         _ps = ttk.Style()
         _ps.configure('Inline.Horizontal.TProgressbar', troughcolor=ThemeColors.get('bg_secondary', _pop_dark), thickness=12)
-        self._progress_inline_bar = ttk.Progressbar(self._progress_inline_frame, maximum=100, mode='determinate', style='Inline.Horizontal.TProgressbar')
-        self._progress_inline_bar.pack(fill=X, pady=(4, 2))
+        self._progress_bar_container = ttk.Frame(self._progress_inline_frame)
+        self._progress_bar_container.pack(fill=X, pady=(4, 2))
+        self._progress_inline_bar = ttk.Progressbar(self._progress_bar_container, maximum=100, mode='determinate', style='Inline.Horizontal.TProgressbar')
+        self._progress_inline_bar.pack(fill=X)
+        self._progress_inline_busy = ttk.Label(self._progress_bar_container, text="진행 중 ●", font=('맑은 고딕', 10),
+                                               foreground=ThemeColors.get('statusbar_icon_warn', _pop_dark))
+        self._progress_inline_busy.place(relx=0, rely=0.5, anchor='w')
         _row2 = ttk.Frame(self._progress_inline_frame)
         _row2.pack(fill=X)
         self._progress_inline_pct_elapsed = ttk.Label(_row2, text="", font=('맑은 고딕', 10), foreground=ThemeColors.get('text_secondary', _pop_dark))
         self._progress_inline_pct_elapsed.pack(side=tk.RIGHT)
-        self._progress_inline_busy = ttk.Label(_row2, text="", font=('맑은 고딕', 11), foreground=ThemeColors.get('statusbar_icon_warn', _pop_dark))
-        self._progress_inline_busy.pack(side=tk.LEFT)
         
         # ═══════════════════════════════════════════════════════════
-        # 2. 미리보기 테이블 (v3.8.7: 폰트 20% 확대)
+        # 2. 미리보기 테이블 (v5.9.9: 폰트 20% 축소 — 14pt→11pt, 13pt→10pt)
         # ═══════════════════════════════════════════════════════════
         # v5.7.5: "업로드 2" 삭제 — "(확인 후 업로드)" 문구 제거
         tree_frame = ttk.LabelFrame(main, text="📊 미리보기 (스케일링·처리된 데이터)", padding=4)
         tree_frame.pack(fill=BOTH, expand=YES, pady=(0, 3))
         
-        # ★ v3.8.7: 미리보기 Treeview 폰트 20% 확대 (기본 9pt → 11pt)
         import tkinter.font as tkfont
-        preview_font = tkfont.Font(family='맑은 고딕', size=14)
-        heading_font = tkfont.Font(family='맑은 고딕', size=13, weight='bold')
-        row_height = preview_font.metrics('linespace') + 8
+        preview_font = tkfont.Font(family='맑은 고딕', size=11)
+        heading_font = tkfont.Font(family='맑은 고딕', size=10, weight='bold')
+        row_height = preview_font.metrics('linespace') + 6
         
         _tree_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
         _tree_fg = ThemeColors.get('text_primary', _tree_dark)
         style = ttk.Style()
         style.configure('Preview.Treeview',
-                        font=('맑은 고딕', 14),
+                        font=('맑은 고딕', 11),
                         rowheight=row_height,
                         foreground=_tree_fg,
                         fieldbackground=ThemeColors.get('bg_card', _tree_dark))
         style.configure('Preview.Treeview.Heading',
-                        font=('맑은 고딕', 13, 'bold'))
+                        font=('맑은 고딕', 10, 'bold'))
         
         columns = tuple(col[0] for col in PREVIEW_COLUMNS)
         self.tree = ttk.Treeview(
@@ -424,47 +431,48 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     # ═══════════════════════════════════════════════════════════
     
     def _start_parsing(self) -> None:
-        """v3.8.9: 파싱 시작 — 누락 서류 경고 후 진행"""
-        # 서류 누락 검사
-        missing_required = []
-        missing_optional = []
-        for doc_type, doc_name, required in DOC_TYPES:
-            if doc_type not in self.file_paths:
-                if required:
-                    missing_required.append(doc_name)
-                else:
-                    missing_optional.append(doc_name)
+        """v3.8.9: 파싱 시작 — 입고 서류 현황 안내 후 진행 확인"""
+        # 들어온 서류 / 빠진 서류 분류
+        received = []
+        missing = []
+        do_missing = False
+        short_names = {
+            'PACKING_LIST': 'Packing List',
+            'INVOICE': 'Invoice, FA',
+            'BL': 'Bill of Loading',
+            'DO': 'Delivery Order',
+        }
+        for doc_type, _doc_name, _required in DOC_TYPES:
+            name = short_names.get(doc_type, doc_type)
+            if doc_type in self.file_paths:
+                received.append(name)
+            else:
+                missing.append(name)
+                if doc_type == 'DO':
+                    do_missing = True
         
-        # 경고 메시지 구성
-        if missing_required:
-            warning_lines = ["⚠️ 다음 필수 서류가 선택되지 않았습니다:\n"]
-            for name in missing_required:
-                warning_lines.append(f"  • {name}")
-            warning_lines.append("\n선택하지 않은 서류의 정보는 누락됩니다.")
-            if missing_optional:
-                warning_lines.append(f"\n📋 선택 서류 미선택: {', '.join(missing_optional)}")
-            warning_lines.append("\n계속 진행하시겠습니까?")
-            proceed = msgbox.askyesno(
-                "서류 누락 확인",
-                "\n".join(warning_lines),
-                parent=self.dialog
-            )
-            if not proceed:
-                return
-        elif missing_optional:
-            # 선택 서류만 누락 — 정보 안내만
-            self._update_progress(0, f"ℹ️ {', '.join(missing_optional)} 미선택 — 해당 정보 생략")
+        # 메시지 구성: 들어온 서류 / 빠진 서류 / D/O 안내 / 진행할까요?
+        lines = []
+        if received:
+            lines.append(f"✅ 들어온 서류: {', '.join(received)}")
+        if missing:
+            lines.append(f"⚠️ 빠진 서류: {', '.join(missing)}")
+        if do_missing:
+            lines.append("\n📋 D/O가 빠진 경우에는 입항일 혹은 프리타임을 반드시 입력해야 합니다.")
+        lines.append("\n진행할까요?")
+        msg = "\n".join(lines)
         
-        # D/O 미선택 시 경고: 선적일·도착일·반납일 직접 입력 안내
-        if 'DO' not in self.file_paths:
-            do_ok = msgbox.askyesno(
-                "D/O 미첨부",
-                "D/O 서류가 업로드되지 않았습니다. 계속할까요?\n\n"
-                "이 경우 선적일, 도착일, 컨테이너 반납일을 사용자가 직접 입력해야 합니다.",
-                parent=self.dialog
-            )
-            if not do_ok:
-                return
+        from ..utils.custom_messagebox import CustomMessageBox
+        proceed = CustomMessageBox.askyesno(
+            self.dialog,
+            "입고 서류 확인",
+            msg
+        )
+        if not proceed:
+            return
+        
+        if missing:
+            self._update_progress(0, f"ℹ️ {', '.join(missing)} 미선택 — 해당 정보 생략")
         
         self.btn_parse.config(state='disabled')
         self._show_progress_inline()
@@ -492,6 +500,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self._progress_inline_pct_elapsed.config(text="0%  ·  경과: 0:00")
         if getattr(self, '_progress_inline_busy', None):
             self._progress_inline_busy.config(text="진행 중 ●")
+            self._progress_inline_busy.place(relx=0, rely=0.5, anchor='w')
         self._start_progress_elapsed_tick()
         self._start_progress_busy_animation()
 
@@ -587,10 +596,15 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._progress_popup_elapsed = None
 
     def _update_progress(self, pct: int, message: str):
-        """프로그레스 바 업데이트 (스레드 안전) — 팝업 + 인라인 동기화, 완료 시 인라인 복귀"""
+        """프로그레스 바 업데이트 (스레드 안전) — 팝업 + 인라인 동기화, 로그 탭에도 기록"""
         def _update():
             self.progress_var.set(pct)
             self.status_var.set(message)
+            if message.strip() and getattr(self, '_log', None):
+                try:
+                    self._log(message)
+                except (RuntimeError, ValueError):
+                    logger.info(message)
             # 팝업
             bar = getattr(self, '_progress_popup_bar', None)
             if bar and bar.winfo_exists():
@@ -605,6 +619,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             inline_busy = getattr(self, '_progress_inline_busy', None)
             if inline_bar and inline_bar.winfo_ismapped():
                 inline_bar['value'] = max(0, min(100, pct))
+            if inline_busy and inline_busy.winfo_ismapped():
+                relx = max(0, min(1.0, pct / 100.0))
+                if relx > 0.92:
+                    relx = 0.92
+                inline_busy.place(relx=relx, rely=0.5, anchor='w')
             if inline_msg and inline_msg.winfo_ismapped():
                 inline_msg.config(text=message)
             if pct >= 100 or (pct == 0 and message.strip().startswith("❌")):
@@ -754,9 +773,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                                     row['ship_date'] = user_dates['ship_date']
                                 if user_dates.get('arrival_date'):
                                     row['arrival_date'] = user_dates['arrival_date']
-                                if user_dates.get('free_time') and not (row.get('free_time') or '').strip():
-                                    row['free_time'] = user_dates['free_time']
-                            self._log_safe(f"  ✅ 수동 입력: arrival={user_dates.get('arrival_date')}, free_time={user_dates.get('free_time')}")
+                                # con_return은 입항일/반납일/Free time 중 하나 입력 시 항상 계산되어 반환됨 — 반드시 적용
+                                if 'con_return' in user_dates:
+                                    row['con_return'] = user_dates.get('con_return', '') or ''
+                                if user_dates.get('free_time') is not None:
+                                    row['free_time'] = str(user_dates.get('free_time', ''))
+                            self._log_safe(f"  ✅ 수동 입력: arrival={user_dates.get('arrival_date')}, con_return={user_dates.get('con_return')}, free_time={user_dates.get('free_time')}")
                     else:
                         self._log_safe("  ⚠️ 날짜 입력 취소 — arrival_date 없이 진행")
             
@@ -946,6 +968,14 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 days_val = getattr(ft_single, 'storage_free_days', None) or (ft_single.get('storage_free_days') if isinstance(ft_single, dict) else None)
                 if days_val is not None:
                     row['free_time'] = str(int(days_val))
+                    # FREE TIME 일수만 있으면 반납일(con_return) = arrival_date + 일수 로 계산해 CON RETURN에도 표시
+                    if not (row.get('con_return') or '').strip() and arr and str(arr) != 'None':
+                        try:
+                            arr_dt = datetime.strptime(str(arr)[:10], '%Y-%m-%d').date()
+                            con_dt = arr_dt + timedelta(days=int(days_val))
+                            row['con_return'] = con_dt.strftime('%Y-%m-%d')
+                        except (ValueError, TypeError):
+                            pass
     
     # ═══════════════════════════════════════════════════════════
     # ★★★ v5.8.7: 날짜 입력 팝업 (DatePicker 달력 UI)
@@ -953,19 +983,20 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     
     def _ask_missing_dates(self, prefilled_ship: str = '', do_result=None) -> dict:
         """
-        사용자에게 ship_date, arrival_date, free_time을 물어보는 DatePicker 팝업.
+        사용자에게 입항일·반납기한·Free time을 물어보는 DatePicker 팝업.
+        선적일(Ship Date)은 B/L에서 이미 추출되어 톤백 리스트에 있으므로 묻지 않음.
         
         호출 조건:
             1) D/O 자체가 없을 때
             2) D/O는 있는데 arrival_date 추출 실패 시
         
         UI:
-            - gui_bootstrap HAS_DATEENTRY(ttkbootstrap.DateEntry)가 있으면 달력 위젯 사용
-            - 없으면 텍스트 입력 폴백
-            - "D/O 추후 첨부" 버튼으로 건너뛰기 가능
+            - 입항일(필수), 컨테이너 반납기한(con_return), Free time(일수).
+            - 도착일·con_return·free time 중 하나만 입력해도 나머지 자동 계산. 반납일-입항일=Free time.
+            - gui_bootstrap HAS_DATEENTRY면 달력, 없으면 텍스트 입력. "D/O 추후 첨부" 가능.
         
         Returns:
-            dict: {'ship_date': str, 'arrival_date': str, 'free_time': str}
+            dict: {'ship_date': str, 'arrival_date': str, 'con_return': str, 'free_time': str}
             또는 {'deferred': True} (D/O 추후 첨부)
             또는 None (취소)
         """
@@ -984,7 +1015,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     msg_text = "D/O에서 날짜를 읽지 못했습니다.\n직접 입력하거나 나중에 D/O를 다시 첨부할 수 있습니다."
                 
                 win.geometry(DialogSize.get_geometry(self.dialog, 'medium'))
-                win.resizable(False, False)
+                apply_modal_window_options(win)
                 win.transient(self.dialog)
                 win.grab_set()
                 center_dialog(win, self.dialog)
@@ -997,9 +1028,16 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                          font=('맑은 고딕', 11, 'bold'),
                          wraplength=460).pack(anchor='w', pady=(0, 12))
                 
+                # ── 날짜/입력 필드 공통 참조: .get(), .set(val), .widget ──
+                class _FieldRef:
+                    def __init__(self, get_fn, widget, set_fn):
+                        self.get = get_fn
+                        self.widget = widget
+                        self.set = set_fn
+                
                 # ── 헬퍼: DateEntry( gui_bootstrap ) 또는 텍스트 입력 생성 ──
                 def _make_date_field(parent, label, hint, prefill='', required=False):
-                    """HAS_DATEENTRY면 ttkbootstrap 달력, 없으면 텍스트 입력. 반환값은 .get()으로 문자열 조회."""
+                    """HAS_DATEENTRY면 ttkbootstrap 달력, 없으면 텍스트 입력. _FieldRef 반환( .get/.set/.widget )"""
                     _cal_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
                     lf = ttk.LabelFrame(parent,
                         text=f"{'★ ' if required else ''}{label}{' — 필수' if required else ''}",
@@ -1021,38 +1059,117 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         de.pack(side=tk.LEFT, padx=(0, 8))
                         ttk.Label(lf, text=hint,
                                  font=('맑은 고딕', 9), foreground=ThemeColors.get('text_muted', _cal_dark)).pack(side=tk.LEFT)
-                        class _DateGetter:
-                            def get(self):
-                                return (de.entry.get() or '').strip() if de and de.winfo_exists() else ''
-                        return _DateGetter()
+                        def _get():
+                            return (de.entry.get() or '').strip() if de and de.winfo_exists() else ''
+                        def _set(v):
+                            if de and de.winfo_exists():
+                                try:
+                                    parts = str(v).strip().split('-')
+                                    if len(parts) == 3:
+                                        d = _date_type(int(parts[0]), int(parts[1]), int(parts[2]))
+                                        de.configure(startdate=d)
+                                except (ValueError, IndexError, TypeError):
+                                    de.entry.delete(0, tk.END)
+                                    de.entry.insert(0, str(v))
+                        return _FieldRef(_get, de, _set)
                     else:
                         entry = ttk.Entry(lf, textvariable=var,
                                          font=('맑은 고딕', 11), width=16)
                         entry.pack(side=tk.LEFT, padx=(0, 8))
                         ttk.Label(lf, text=hint,
                                  font=('맑은 고딕', 9), foreground=ThemeColors.get('text_muted', _cal_dark)).pack(side=tk.LEFT)
-                        return var
+                        return _FieldRef(lambda: (var.get() or '').strip(), entry, var.set)
                 
-                # ── 3개 날짜 필드 ──
-                ship_var = _make_date_field(frame,
-                    "선적일 (Ship Date)",
-                    "※ B/L에서 추출됨" if prefilled_ship else "YYYY-MM-DD",
-                    prefill=prefilled_ship)
+                # ── 선적일(ship_date) 미표시 — B/L에서 추출되므로 톤백 리스트에 이미 있음 ──
+                ship_var = None
                 
                 arrival_var = _make_date_field(frame,
                     "입항일 (Arrival Date)",
                     "YYYY-MM-DD (예: 2025-10-17)",
                     required=True)
                 
-                ft_var = _make_date_field(frame,
-                    "반납기한 (Free Time)",
-                    "반납일 YYYY-MM-DD 또는 일수(14)")
+                con_return_ref = _make_date_field(frame,
+                    "컨테이너 반납기한 (con_return)",
+                    "반납일 YYYY-MM-DD (비우면 Free time 일수로)")
+                
+                # Free time은 일수(숫자) 전용 — DateEntry 사용 시 '14' 입력이 깨지므로 항상 Entry
+                _ft_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
+                lf_ft = ttk.LabelFrame(frame, text="Free time (일수)", padding=8)
+                lf_ft.pack(fill=tk.X, pady=(0, 8))
+                ft_var = tk.StringVar(value='')
+                ft_entry = ttk.Entry(lf_ft, textvariable=ft_var, font=('맑은 고딕', 11), width=10)
+                ft_entry.pack(side=tk.LEFT, padx=(0, 8))
+                ttk.Label(lf_ft, text="반납일-입항일=Free time (둘 중 하나만 입력 시 나머지 자동 계산·자동 입력 시 상대 필드 비활성화)",
+                         font=('맑은 고딕', 9), foreground=ThemeColors.get('text_muted', _ft_dark)).pack(side=tk.LEFT)
+                ft_ref = _FieldRef(lambda: (ft_var.get() or '').strip(), ft_entry, ft_var.set)
                 
                 # 에러 표시
                 err_var = tk.StringVar()
                 _err_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
                 ttk.Label(frame, textvariable=err_var,
                          font=('맑은 고딕', 10), foreground=ThemeColors.get('danger', _err_dark)).pack(anchor='w', pady=(4, 0))
+                
+                # ── con_return ↔ free_time 상호 계산·비활성화 (둘 중 하나 입력 시 상대 필드 자동 계산 후 비활성화) ──
+                _updating_silently = {'v': False}
+                def _sync_from_con_return(*_):
+                    if _updating_silently['v']:
+                        return
+                    arr = (arrival_var.get() or '').strip()
+                    cr = (con_return_ref.get() or '').strip()
+                    if not arr or not cr or not _validate_date(arr) or not _validate_date(cr):
+                        return
+                    try:
+                        arr_d = _date_type(*[int(x) for x in arr.split('-')])
+                        cr_d = _date_type(*[int(x) for x in cr.split('-')])
+                        ft_days = max(0, (cr_d - arr_d).days)
+                        _updating_silently['v'] = True
+                        ft_ref.set(str(ft_days))
+                        ft_entry.config(state='disabled')
+                    except (ValueError, IndexError, TypeError):
+                        pass
+                    finally:
+                        _updating_silently['v'] = False
+                def _sync_from_ft(*_):
+                    if _updating_silently['v']:
+                        return
+                    arr = (arrival_var.get() or '').strip()
+                    ft_raw = (ft_ref.get() or '').strip()
+                    if not arr or not ft_raw or not _validate_date(arr):
+                        return
+                    if not ft_raw.isdigit() or int(ft_raw) < 0:
+                        return
+                    try:
+                        arr_d = _date_type(*[int(x) for x in arr.split('-')])
+                        cr_d = arr_d + timedelta(days=int(ft_raw))
+                        cr_str = cr_d.strftime('%Y-%m-%d')
+                        _updating_silently['v'] = True
+                        con_return_ref.set(cr_str)
+                        w = con_return_ref.widget
+                        if hasattr(w, 'entry'):
+                            w.entry.config(state='disabled')
+                        else:
+                            w.config(state='disabled')
+                    except (ValueError, IndexError, TypeError):
+                        pass
+                    finally:
+                        _updating_silently['v'] = False
+                def _enable_both():
+                    _updating_silently['v'] = True
+                    try:
+                        ft_entry.config(state='normal')
+                        w = con_return_ref.widget
+                        if hasattr(w, 'entry'):
+                            w.entry.config(state='normal')
+                        else:
+                            w.config(state='normal')
+                    finally:
+                        _updating_silently['v'] = False
+                # FocusOut 바인딩 (입력 완료 후 상대 필드 계산·비활성화)
+                if hasattr(con_return_ref.widget, 'entry'):
+                    con_return_ref.widget.entry.bind('<FocusOut>', _sync_from_con_return)
+                else:
+                    con_return_ref.widget.bind('<FocusOut>', _sync_from_con_return)
+                ft_entry.bind('<FocusOut>', _sync_from_ft)
                 
                 # ── 날짜 검증 함수 ──
                 def _validate_date(s):
@@ -1069,48 +1186,88 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             return False
                     return False
                 
-                # ── 확인 버튼 ──
+                # ── 확인 버튼 ── (반납일 또는 Free time 중 하나만 알면 나머지 자동 계산)
                 def _on_ok():
-                    arr = arrival_var.get().strip()
-                    
-                    if not arr:
-                        err_var.set("⚠️ 입항일은 필수입니다!")
-                        return
-                    if not _validate_date(arr):
-                        err_var.set("⚠️ 입항일 형식 오류 (YYYY-MM-DD)")
-                        return
-                    
-                    ship = ship_var.get().strip()
-                    if ship and not _validate_date(ship):
-                        err_var.set("⚠️ 선적일 형식 오류 (YYYY-MM-DD)")
-                        return
-                    
-                    ft_raw = ft_var.get().strip()
-                    free_time_str = ''
-                    if ft_raw:
-                        if ft_raw.isdigit():
-                            free_time_str = ft_raw
-                        elif _validate_date(ft_raw):
-                            try:
-                                ap = arr.split('-')
-                                fp = ft_raw.split('-')
-                                arr_d = _date_type(int(ap[0]), int(ap[1]), int(ap[2]))
-                                ft_d = _date_type(int(fp[0]), int(fp[1]), int(fp[2]))
-                                free_time_str = str(max(0, (ft_d - arr_d).days))
-                            except (ValueError, IndexError):
-                                free_time_str = ft_raw
-                        else:
-                            err_var.set("⚠️ 반납기한: YYYY-MM-DD 또는 일수")
+                    err_var.set('')
+                    try:
+                        arr = (arrival_var.get() or '').strip()
+                        if not arr:
+                            err_var.set("⚠️ 입항일은 필수입니다!")
                             return
-                    else:
-                        free_time_str = '14'
-                    
+                        if not _validate_date(arr):
+                            err_var.set("⚠️ 입항일 형식 오류 (YYYY-MM-DD)")
+                            return
+                        arr_d = _date_type(*[int(x) for x in arr.split('-')])
+                    except (ValueError, IndexError, TypeError) as e:
+                        err_var.set("⚠️ 입항일 파싱 오류 (YYYY-MM-DD)")
+                        logger.debug(f"[_ask_missing_dates] 입항일 파싱: {e}")
+                        return
+                    # arrival_date > ship_date (선적일이 있으면)
+                    if prefilled_ship and _validate_date(prefilled_ship.strip()):
+                        try:
+                            ship_d = _date_type(*[int(x) for x in prefilled_ship.strip().split('-')])
+                            if arr_d <= ship_d:
+                                err_var.set("⚠️ 입항일은 선적일보다 이후여야 합니다.")
+                                return
+                        except (ValueError, IndexError, TypeError):
+                            pass
+                    ship = ''
+                    if ship_var is not None:
+                        ship = (ship_var.get() or '').strip()
+                        if ship and not _validate_date(ship):
+                            err_var.set("⚠️ 선적일 형식 오류 (YYYY-MM-DD)")
+                            return
+                    con_return_str = (con_return_ref.get() or '').strip()
+                    ft_raw = (ft_var.get() or '').strip()
+                    free_time_str = ''
+                    try:
+                        if con_return_str:
+                            if not _validate_date(con_return_str):
+                                err_var.set("⚠️ 반납기한(con_return): YYYY-MM-DD 형식")
+                                return
+                            cr_d = _date_type(*[int(x) for x in con_return_str.split('-')])
+                            free_time_str = str(max(0, (cr_d - arr_d).days))
+                        elif ft_raw:
+                            if not ft_raw.isdigit() or int(ft_raw) < 0:
+                                err_var.set("⚠️ Free time: 0 이상 일수(숫자) 입력")
+                                return
+                            free_time_str = ft_raw
+                            con_return_d = arr_d + timedelta(days=int(ft_raw))
+                            con_return_str = con_return_d.strftime('%Y-%m-%d')
+                        else:
+                            free_time_str = '14'
+                            con_return_str = (arr_d + timedelta(days=14)).strftime('%Y-%m-%d')
+                    except (ValueError, IndexError, TypeError) as e:
+                        err_var.set("⚠️ 반납일/Free time 계산 오류 — 형식 확인")
+                        logger.debug(f"[_ask_missing_dates] 반납일·Free time: {e}")
+                        return
+                    # con_return > arrival_date (반납일은 입항일보다 이후여야 함)
+                    try:
+                        cr_d = _date_type(*[int(x) for x in con_return_str.split('-')])
+                        if cr_d <= arr_d:
+                            err_var.set("⚠️ 컨테이너 반납일은 입항일보다 이후여야 합니다.")
+                            return
+                    except (ValueError, IndexError, TypeError):
+                        pass
+                    # 사용자 확인 단계: Free time·반납일 표시 후 맞음/다시 입력 선택
+                    from ..utils.custom_messagebox import CustomMessageBox
+                    confirmed = CustomMessageBox._create_dialog(
+                        win, "입력 확인",
+                        f"Free time {free_time_str}일, 컨테이너 반납일은 {con_return_str} 입니다.\n\n맞습니까?",
+                        'question',
+                        [('맞음', True), ('다시 입력', False)],
+                        default_button=0
+                    )
+                    if not confirmed:
+                        return  # 다시 입력 — 날짜 팝업 유지, 사용자가 수정 후 재확인 가능
                     result_holder[0] = {
                         'ship_date': ship,
                         'arrival_date': arr,
+                        'con_return': con_return_str,
                         'free_time': free_time_str,
                     }
                     win.destroy()
+                    return
                 
                 # ── D/O 추후 첨부 버튼 ──
                 def _on_defer():
@@ -1128,6 +1285,9 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 
                 ttk.Button(btn_frame, text="✅ 확인",
                           command=_on_ok, width=10).pack(side=tk.LEFT, padx=(0, 8))
+                
+                ttk.Button(btn_frame, text="✏️ 수정",
+                          command=_enable_both, width=10).pack(side=tk.LEFT, padx=(0, 8))
                 
                 ttk.Button(btn_frame, text="📋 D/O 추후 첨부",
                           command=_on_defer, width=16).pack(side=tk.LEFT, padx=(0, 8))
@@ -1331,10 +1491,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             self._export_to_excel()
                     except (ImportError, ModuleNotFoundError):
                         pass
-                _deferred = getattr(self, '_do_deferred', False)
                 _msg = f"✅ {count}개 LOT 저장 완료"
-                if _deferred:
-                    _msg += "\n\n📋 D/O가 미첨부된 상태입니다.\n나중에 D/O를 받으면 [📋 D/O 후속 연결] 메뉴에서\narrival_date와 Free Time을 업데이트할 수 있습니다."
                 try:
                     from ..utils.custom_messagebox import CustomMessageBox
                     CustomMessageBox.showinfo(self.dialog, "업로드 완료", _msg)

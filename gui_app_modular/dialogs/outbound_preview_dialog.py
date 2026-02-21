@@ -29,7 +29,7 @@ class OutboundPreviewDialogMixin:
         """Show outbound preview before execution"""
         from ..utils.constants import tk, ttk, BOTH, X, Y, LEFT, RIGHT, END, VERTICAL
         from ..utils.ui_constants import (
-            DialogSize, Spacing, ColumnWidth, ThemeColors, FontScale, center_dialog
+            DialogSize, Spacing, ColumnWidth, ThemeColors, FontScale, center_dialog, apply_modal_window_options
         )
         
         # === UI 통일성: 폰트 스케일 ===
@@ -46,8 +46,8 @@ class OutboundPreviewDialogMixin:
         # === UI 통일성: 다이얼로그 크기 표준화 (large) ===
         dialog = tk.Toplevel(self.root)
         dialog.title("Outbound Preview")
-        
         dialog.geometry(DialogSize.get_geometry(self.root, 'large'))
+        apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
         center_dialog(dialog, self.root)

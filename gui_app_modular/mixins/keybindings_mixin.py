@@ -9,7 +9,7 @@ Keyboard shortcuts and hotkey handling
 """
 
 import logging
-from ..utils.ui_constants import CustomMessageBox, DialogSize, center_dialog
+from ..utils.ui_constants import CustomMessageBox, DialogSize, center_dialog, apply_modal_window_options
 from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,8 @@ class KeyBindingsMixin:
         # Window
         self.root.bind('<F11>', self._toggle_fullscreen)
         self.root.bind('<Escape>', self._on_escape)
+        self.root.bind('<Control-q>', self._on_force_quit)
+        self.root.bind('<Control-Q>', self._on_force_quit)
         
         # Quick actions
         self.root.bind('<Control-n>', self._on_new_inbound)
@@ -73,8 +75,10 @@ class KeyBindingsMixin:
     
     def _on_open_file(self, event=None) -> None:
         """Open file (Ctrl+O)"""
+        if hasattr(self, '_hide_empty_state_hint'):
+            self._hide_empty_state_hint()
         from ..utils.constants import filedialog
-        
+
         file_path = filedialog.askopenfilename(
             title="Open File",
             filetypes=[
@@ -161,6 +165,16 @@ class KeyBindingsMixin:
         self._is_fullscreen = not is_fullscreen
         self.root.attributes('-fullscreen', self._is_fullscreen)
     
+    def _on_force_quit(self, event=None) -> None:
+        """강제 종료 (Ctrl+Q)"""
+        try:
+            self.root.quit()
+            self.root.destroy()
+        except Exception as e:
+            logger.debug(f"Force quit: {e}")
+            import sys
+            sys.exit(0)
+
     def _on_escape(self, event=None) -> None:
         """Handle Escape key"""
         # Exit fullscreen if active
@@ -182,6 +196,8 @@ class KeyBindingsMixin:
     
     def _on_new_inbound(self, event=None) -> None:
         """New inbound (Ctrl+N)"""
+        if hasattr(self, '_hide_empty_state_hint'):
+            self._hide_empty_state_hint()
         if hasattr(self, '_on_pdf_inbound'):
             self._on_pdf_inbound()
     
@@ -276,7 +292,7 @@ v2.9.91 - SQM Inventory System
         from ..utils.constants import tk, ttk
         popup = tk.Toplevel(self.root)
         popup.title("테스트 DB 초기화")
-        popup.resizable(False, False)
+        apply_modal_window_options(popup)
         popup.transient(self.root)
         popup.grab_set()
         popup.geometry(DialogSize.get_geometry(self.root, 'small'))

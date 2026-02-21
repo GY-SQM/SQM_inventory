@@ -13,7 +13,7 @@ from tkinter import ttk
 from typing import Dict, List, Callable, Optional
 import logging
 
-from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog
+from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog, apply_modal_window_options
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +44,13 @@ class LocationUploadPreviewDialog:
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("📍 톤백 위치 업로드 미리보기")
         self.dialog.geometry(DialogSize.get_geometry(parent, 'large'))
+        apply_modal_window_options(self.dialog)
         self.dialog.transient(parent)
         self.dialog.grab_set()
         center_dialog(self.dialog, parent)
+        # Esc·창 닫기(X)로도 닫히도록 (모달이 자동으로 사라지지 않아 불편함 해소)
+        self.dialog.bind('<Escape>', lambda e: self._on_cancel_click())
+        self.dialog.protocol('WM_DELETE_WINDOW', self._on_cancel_click)
         
         self._create_ui()
     
@@ -73,8 +77,12 @@ class LocationUploadPreviewDialog:
         tk.Label(summary_frame, text=stats_text, font=('맑은 고딕', 12, 'bold'),
                  bg=_bg_sec, fg=_fg_pri).pack()
         if fail > 0:
-            tk.Label(summary_frame, text=f"⚠️ {fail}개 톤백의 UID를 찾을 수 없습니다",
-                     font=('맑은 고딕', 10), bg=_bg_sec, fg=_danger).pack()
+            first_reason = ""
+            if self.result.get('not_found'):
+                first_reason = (self.result['not_found'][0].get('reason') or "").strip()
+            msg = first_reason if first_reason else f"LOT·톤백번호로 재고 리스트 매칭 실패 {fail}건"
+            tk.Label(summary_frame, text=f"⚠️ {msg}",
+                     font=('맑은 고딕', 10), bg=_bg_sec, fg=_danger, wraplength=500).pack()
         
         tab_frame = ttk.Notebook(self.dialog)
         tab_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -169,9 +177,11 @@ class LocationUploadPreviewDialog:
             
             tree.insert('', 'end', values=values, tags=(tag,))
         
-        tree.tag_configure('new', background=ThemeColors.get('available', is_dark))
-        tree.tag_configure('changed', background=ThemeColors.get('reserved', is_dark))
-        tree.tag_configure('same', background=ThemeColors.get('bg_secondary', is_dark))
+        # 배경만 넣으면 테마에 따라 글자색이 배경과 비슷해져 안 보일 수 있음 → foreground 명시
+        _fg = ThemeColors.get('text_primary', is_dark)
+        tree.tag_configure('new', background=ThemeColors.get('available', is_dark), foreground=_fg)
+        tree.tag_configure('changed', background=ThemeColors.get('reserved', is_dark), foreground=_fg)
+        tree.tag_configure('same', background=ThemeColors.get('bg_secondary', is_dark), foreground=_fg)
         
         self.matched_tree = tree
     
@@ -218,7 +228,9 @@ class LocationUploadPreviewDialog:
             )
             tree.insert('', 'end', values=values, tags=('error',))
         
-        tree.tag_configure('error', background=ThemeColors.get('picked', is_dark), foreground=ThemeColors.get('danger', is_dark))
+        # 실패 행도 글자 가독성: 배경(picked)과 대비되는 text_primary
+        _err_fg = ThemeColors.get('text_primary', is_dark)
+        tree.tag_configure('error', background=ThemeColors.get('picked', is_dark), foreground=_err_fg)
         
         self.failed_tree = tree
     

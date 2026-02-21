@@ -11,7 +11,7 @@ LOT 더블클릭/우클릭 시:
 
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog, apply_tooltip
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog, apply_tooltip, apply_modal_window_options
 
 logger = logging.getLogger(__name__)
 
@@ -41,13 +41,13 @@ class LotDetailDialogMixin:
             ORDER BY is_sample DESC, sub_lt
         """, (lot_no,))
 
-        # ── 이력 조회 ──
+        # ── 이력 조회 (base 스키마: movement_type, qty_kg, remarks, created_at)
         movements = self.engine.db.fetchall("""
-            SELECT movement_type, movement_date, qty_kg,
-                   before_weight, after_weight, reference_no, remarks
+            SELECT movement_type, created_at AS movement_date, qty_kg,
+                   NULL AS before_weight, NULL AS after_weight, NULL AS reference_no, remarks
             FROM stock_movement
             WHERE lot_no = ?
-            ORDER BY movement_date DESC
+            ORDER BY created_at DESC
         """, (lot_no,))
 
         # ── 테마 (v5.8.7 Phase2: ThemeColors 단일 소스) ──
@@ -60,6 +60,7 @@ class LotDetailDialogMixin:
         popup = tk.Toplevel(self.root)
         popup.title(f"LOT 상세 추적 - {lot_no}")
         popup.geometry(DialogSize.get_geometry(self.root, 'large'))
+        apply_modal_window_options(popup)
         popup.transient(self.root)
         popup.grab_set()
         center_dialog(popup, self.root)

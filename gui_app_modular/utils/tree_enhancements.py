@@ -14,7 +14,7 @@ import calendar
 import logging
 from datetime import date, datetime
 from typing import List, Tuple, Callable, Optional
-from .ui_constants import ThemeColors
+from .ui_constants import ThemeColors, apply_modal_window_options
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def show_date_calendar(parent, initial_value: Optional[str], on_choose: Callable
     win.title("날짜 선택")
     win.transient(parent)
     win.grab_set()
-    win.resizable(False, False)
+    apply_modal_window_options(win)
 
     # 상단: 년월 + 이전/다음
     nav = ttk.Frame(win, padding=(8, 6))

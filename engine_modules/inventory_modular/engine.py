@@ -156,18 +156,19 @@ class SQMInventoryEngineV3(
     def __init__(self, db_path: str = None):
         """
         Initialize engine
-        
+
         Args:
             db_path: Database file path (SQLite) or connection string (PostgreSQL)
         """
+        self.db = None  # 초기화 실패 시 close/__del__에서 접근 방지
         # ★★★ v3.6.0: PostgreSQL 지원 ★★★
         try:
             from core.config import DB_TYPE
         except ImportError:
             DB_TYPE = 'sqlite'
-        
+
         self.db_type = DB_TYPE
-        
+
         if DB_TYPE.lower() == 'postgresql':
             # PostgreSQL 모드
             try:
@@ -338,7 +339,7 @@ class SQMInventoryEngineV3(
     
     def close(self) -> None:
         """Close engine"""
-        if self.db:
+        if getattr(self, 'db', None):
             self.db.close()
         if hasattr(self, 'engine') and self.engine:
             self.engine.dispose()
@@ -347,8 +348,9 @@ class SQMInventoryEngineV3(
     def __del__(self) -> None:
         """v3.7.0: GC 시 DB 연결 확실히 닫기"""
         try:
-            self.close()
-        except (ValueError, TypeError, KeyError) as _e:
+            if getattr(self, 'db', None) is not None:
+                self.close()
+        except (ValueError, TypeError, KeyError, AttributeError) as _e:
             logger.debug(f"[engine] 무시: {_e}")
 
 

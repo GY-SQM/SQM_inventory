@@ -11,7 +11,7 @@ Right-click context menus for treeviews
 import sqlite3
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog, apply_modal_window_options
 logger = logging.getLogger(__name__)
 
 
@@ -119,6 +119,7 @@ class ContextMenuMixin:
         dialog = tk.Toplevel(self.root)
         dialog.title(f"Edit LOT: {lot_no}")
         dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
+        apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
         center_dialog(dialog, self.root)
@@ -345,6 +346,7 @@ class ContextMenuMixin:
         dialog = tk.Toplevel(self.root)
         dialog.title("Change Status")
         dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
+        apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
         center_dialog(dialog, self.root)
@@ -445,6 +447,7 @@ class ContextMenuMixin:
         dialog = tk.Toplevel(self.root)
         dialog.title(f"📅 LOT 히스토리 — {lot_no}")
         dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
+        apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
         center_dialog(dialog, self.root)

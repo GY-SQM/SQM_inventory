@@ -214,9 +214,10 @@ class SQMInventoryApp:
         except (RuntimeError, ValueError) as _e:
             logger.debug(f"main_app: {_e}")
         
-        # Create tab frames (v3.8.8: 4개 탭 - 피봇/검색 탭 삭제, 검색은 팝업으로 통일)
+        # Create tab frames (v5.9.6: 5개 탭 - 출고 예정 추가)
         self.tab_dashboard = ttk.Frame(self.notebook)
         self.tab_inventory = ttk.Frame(self.notebook)
+        self.tab_outbound_scheduled = ttk.Frame(self.notebook)
         self.tab_tonbag = ttk.Frame(self.notebook)
         self.tab_log = ttk.Frame(self.notebook)
         
@@ -225,17 +226,19 @@ class SQMInventoryApp:
         self.tab_summary = self.tab_dashboard  # 통계는 대시보드에 통합
         self.tab_pivot = ttk.Frame(self.notebook)  # 호환성 (사용 안 함)
         
-        # Add tabs to notebook (v3.8.8: 4개 탭)
-        # notebook 순서: 0=재고리스트, 1=톤백리스트, 2=통계, 3=로그
+        # Add tabs to notebook (v5.9.6: 5개 탭)
+        # notebook 순서: 0=재고리스트, 1=출고예정, 2=톤백리스트, 3=통계, 4=로그
         self.notebook.add(self.tab_inventory, text="  📦 재고리스트  ")
+        self.notebook.add(self.tab_outbound_scheduled, text="  📋 출고예정  ")
         self.notebook.add(self.tab_tonbag, text="  🎒 톤백리스트  ")
         self.notebook.add(self.tab_dashboard, text="  📊 통계  ")
         self.notebook.add(self.tab_log, text="  📝 로그  ")
         
-        # Setup individual tabs (v3.8.8: 4개 탭 — 피봇 제거)
+        # Setup individual tabs (v5.9.6: 5개 탭 — 출고 예정 추가)
         for tab_name, setup_fn in [
             ('Dashboard', self._setup_dashboard_tab),
             ('Inventory', self._setup_inventory_tab),
+            ('OutboundScheduled', self._setup_outbound_scheduled_tab),
             ('Tonbag', self._setup_tonbag_tab),
             ('Log', self._setup_log_tab),
         ]:
@@ -262,8 +265,8 @@ class SQMInventoryApp:
         def _on_notebook_tab_changed(event):
             try:
                 idx = self.notebook.index(self.notebook.select())
-                # index → tab_key 역매핑 (v3.8.9: 4탭 순서)
-                idx_to_key = {0: 'inventory', 1: 'tonbag', 2: 'dashboard', 3: 'log'}
+                # index → tab_key 역매핑 (v5.9.6: 5탭 순서)
+                idx_to_key = {0: 'inventory', 1: 'outbound_scheduled', 2: 'tonbag', 3: 'dashboard', 4: 'log'}
                 key = idx_to_key.get(idx)
                 if key and hasattr(self, '_active_tab_key'):
                     self._active_tab_key = key
@@ -272,6 +275,8 @@ class SQMInventoryApp:
                 # v3.8.9: 탭 전환 시 자동 새로고침
                 if key == 'inventory' and hasattr(self, '_refresh_inventory'):
                     self._refresh_inventory()
+                elif key == 'outbound_scheduled' and hasattr(self, '_refresh_outbound_scheduled'):
+                    self._refresh_outbound_scheduled()
                 elif key == 'tonbag' and hasattr(self, '_refresh_tonbag'):
                     self._refresh_tonbag()
                 elif key == 'dashboard' and hasattr(self, '_refresh_summary'):
@@ -537,6 +542,7 @@ from .mixins import (
 from .tabs import (
     DashboardTabMixin,
     InventoryTabMixin,
+    OutboundScheduledTabMixin,
     TonbagTabMixin,
     LogTabMixin,
     SummaryTabMixin,
@@ -589,6 +595,7 @@ class SQMInventoryAppFull(
     DashboardTabMixin,
     DashboardDataMixin,
     InventoryTabMixin,
+    OutboundScheduledTabMixin,
     TonbagTabMixin,
     LogTabMixin,
     SummaryTabMixin,
