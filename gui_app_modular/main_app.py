@@ -214,34 +214,41 @@ class SQMInventoryApp:
         except (RuntimeError, ValueError) as _e:
             logger.debug(f"main_app: {_e}")
         
-        # Create tab frames (v5.9.6: 5개 + 총괄 화물 리스트)
+        # Create tab frames (v7.0 1단계: 4개 메인 + 대시보드 + 로그)
         self.tab_dashboard = ttk.Frame(self.notebook)
-        self.tab_cargo_overview = ttk.Frame(self.notebook)
+        self.tab_cargo_overview = ttk.Frame(self.notebook)  # 6단계까지 유지(참조용)
         self.tab_inventory = ttk.Frame(self.notebook)
-        self.tab_outbound_scheduled = ttk.Frame(self.notebook)
-        self.tab_tonbag = ttk.Frame(self.notebook)
+        self.tab_outbound_scheduled = ttk.Frame(self.notebook)  # 6단계까지 유지(참조용)
+        self.tab_tonbag = ttk.Frame(self.notebook)  # 6단계에서 제거 예정, 지금은 유지
         self.tab_log = ttk.Frame(self.notebook)
+        # v7.0 1단계: 4개 메인 탭용 신규 프레임
+        self.tab_allocation = ttk.Frame(self.notebook)
+        self.tab_picked = ttk.Frame(self.notebook)
+        self.tab_sold = ttk.Frame(self.notebook)
         
-        # 호환성을 위한 참조 유지
+        # 호환성: tab_inventory = AVAILABLE
+        self.tab_available = self.tab_inventory
         self.tab_search = self.tab_inventory  # 검색은 재고 탭에 통합
         self.tab_summary = self.tab_dashboard  # 통계는 대시보드에 통합
         self.tab_pivot = ttk.Frame(self.notebook)  # 호환성 (사용 안 함)
         
-        # v7.0 4단계 탭: AVAILABLE → ALLOCATION → PICKED → SOLD, 그 다음 대시보드·로그
-        self.notebook.add(self.tab_inventory, text="  📦 AVAILABLE  ")
-        self.notebook.add(self.tab_cargo_overview, text="  📋 ALLOCATION  ")
-        self.notebook.add(self.tab_outbound_scheduled, text="  🚛 PICKED  ")
-        self.notebook.add(self.tab_tonbag, text="  ✅ SOLD  ")
-        self.notebook.add(self.tab_dashboard, text="  📊 대시보드  ")
+        # v7.0: 4개 메인(한글) + 총괄 재고 리스트 + 통계 + 로그
+        self.notebook.add(self.tab_inventory, text="  📦 판매가능  ")
+        self.notebook.add(self.tab_allocation, text="  📋 판매배정  ")
+        self.notebook.add(self.tab_picked, text="  🚛 판매화물 결정  ")
+        self.notebook.add(self.tab_sold, text="  ✅ 출고  ")
+        self.notebook.add(self.tab_cargo_overview, text="  📋 총괄 재고 리스트  ")
+        self.notebook.add(self.tab_dashboard, text="  📊 통계  ")
         self.notebook.add(self.tab_log, text="  📝 로그  ")
         
-        # Setup individual tabs
+        # Setup individual tabs (4개 메인 + 총괄 + 대시보드 + 로그)
         for tab_name, setup_fn in [
+            ('Inventory', self._setup_inventory_tab),
+            ('Allocation', self._setup_allocation_tab),
+            ('Picked', self._setup_picked_tab),
+            ('Sold', self._setup_sold_tab),
             ('CargoOverview', self._setup_cargo_overview_tab),
             ('Dashboard', self._setup_dashboard_tab),
-            ('Inventory', self._setup_inventory_tab),
-            ('OutboundScheduled', self._setup_outbound_scheduled_tab),
-            ('Tonbag', self._setup_tonbag_tab),
             ('Log', self._setup_log_tab),
         ]:
             try:
@@ -267,22 +274,24 @@ class SQMInventoryApp:
         def _on_notebook_tab_changed(event):
             try:
                 idx = self.notebook.index(self.notebook.select())
-                # v7.0: 0=AVAILABLE(inventory), 1=ALLOCATION(cargo), 2=PICKED(outbound_scheduled), 3=SOLD(tonbag), 4=대시보드, 5=로그
-                idx_to_key = {0: 'inventory', 1: 'cargo_overview', 2: 'outbound_scheduled', 3: 'tonbag', 4: 'dashboard', 5: 'log'}
+                # 0=판매가능, 1=판매배정, 2=판매화물 결정, 3=출고, 4=총괄 재고 리스트, 5=통계, 6=로그
+                idx_to_key = {0: 'inventory', 1: 'allocation', 2: 'picked', 3: 'sold', 4: 'cargo_overview', 5: 'dashboard', 6: 'log'}
                 key = idx_to_key.get(idx)
                 if key and hasattr(self, '_active_tab_key'):
                     self._active_tab_key = key
                     self._highlight_active_tab()
                 
-                # v3.8.9: 탭 전환 시 자동 새로고침
-                if key == 'cargo_overview' and hasattr(self, '_refresh_cargo_overview'):
-                    self._refresh_cargo_overview()
-                elif key == 'inventory' and hasattr(self, '_refresh_inventory'):
+                # 탭 전환 시 자동 새로고침
+                if key == 'inventory' and hasattr(self, '_refresh_inventory'):
                     self._refresh_inventory()
-                elif key == 'outbound_scheduled' and hasattr(self, '_refresh_outbound_scheduled'):
-                    self._refresh_outbound_scheduled()
-                elif key == 'tonbag' and hasattr(self, '_refresh_tonbag'):
-                    self._refresh_tonbag()
+                elif key == 'allocation' and hasattr(self, '_refresh_allocation'):
+                    self._refresh_allocation()
+                elif key == 'picked' and hasattr(self, '_refresh_picked'):
+                    self._refresh_picked()
+                elif key == 'sold' and hasattr(self, '_refresh_sold'):
+                    self._refresh_sold()
+                elif key == 'cargo_overview' and hasattr(self, '_refresh_cargo_overview'):
+                    self._refresh_cargo_overview()
                 elif key == 'dashboard':
                     if hasattr(self, '_refresh_dashboard') and callable(self._refresh_dashboard):
                         self._refresh_dashboard()
@@ -496,6 +505,22 @@ class SQMInventoryApp:
         except (RuntimeError, ValueError) as _e:
             logger.debug(f"_toggle_tab_toolbars: {_e}")
     
+    # v7.0 1단계: 4개 메인 탭 빈 프레임 (2~5단계에서 mixin으로 채움)
+    def _setup_allocation_tab(self) -> None:
+        """ALLOCATION 탭 — 3단계에서 allocation_tab mixin으로 대체"""
+        from .utils.constants import ttk
+        ttk.Label(self.tab_allocation, text="📋 ALLOCATION (3단계에서 채움)").pack(pady=40)
+    
+    def _setup_picked_tab(self) -> None:
+        """PICKED 탭 — 4단계에서 picked_tab mixin으로 대체"""
+        from .utils.constants import ttk
+        ttk.Label(self.tab_picked, text="🚛 PICKED (4단계에서 채움)").pack(pady=40)
+    
+    def _setup_sold_tab(self) -> None:
+        """SOLD 탭 — 5단계에서 sold_tab mixin으로 대체"""
+        from .utils.constants import ttk
+        ttk.Label(self.tab_sold, text="✅ SOLD (5단계에서 채움)").pack(pady=40)
+    
     # =========================================================================
     # Placeholder methods - These are implemented by mixins
     # =========================================================================
@@ -548,10 +573,13 @@ from .mixins import (
 )
 
 from .tabs import (
+    AllocationTabMixin,
     CargoOverviewTabMixin,
     DashboardTabMixin,
     InventoryTabMixin,
     OutboundScheduledTabMixin,
+    PickedTabMixin,
+    SoldTabMixin,
     TonbagTabMixin,
     LogTabMixin,
     SummaryTabMixin,
@@ -602,10 +630,13 @@ class SQMInventoryAppFull(
     AdvancedFeaturesMixin,
     # Tabs
     CargoOverviewTabMixin,
+    AllocationTabMixin,
     DashboardTabMixin,
     DashboardDataMixin,
     InventoryTabMixin,
     OutboundScheduledTabMixin,
+    PickedTabMixin,
+    SoldTabMixin,
     TonbagTabMixin,
     LogTabMixin,
     SummaryTabMixin,

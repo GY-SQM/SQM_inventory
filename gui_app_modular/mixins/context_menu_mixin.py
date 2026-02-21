@@ -88,11 +88,13 @@ class ContextMenuMixin:
         values = self.tree_inventory.item(selection[0], 'values')
         if values:
             lot_no = values[0]
-            # Switch to tonbag tab with filter
+            # v7.0: AVAILABLE 탭으로 이동 후 톤백 보기 (기존 tonbag 탭 → 인덱스 변경)
             if hasattr(self, 'tonbag_search_var'):
                 self.tonbag_search_var.set(lot_no)
             if hasattr(self, 'notebook'):
-                self.notebook.select(2)  # Tonbag tab
+                self.notebook.select(0)  # AVAILABLE (inventory) 탭
+            if hasattr(self, '_inv_view_switch_var') and getattr(self, '_inv_view_switch_var', None):
+                self._inv_view_switch_var.set('tonbag')
     
     def _edit_lot(self) -> None:
         """Edit LOT from context menu"""

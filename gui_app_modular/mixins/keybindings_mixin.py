@@ -50,6 +50,7 @@ class KeyBindingsMixin:
         self.root.bind('<Control-4>', lambda e: self._goto_tab(3))
         self.root.bind('<Control-5>', lambda e: self._goto_tab(4))
         self.root.bind('<Control-6>', lambda e: self._goto_tab(5))
+        self.root.bind('<Control-7>', lambda e: self._goto_tab(6))
         
         # Window
         self.root.bind('<F11>', self._toggle_fullscreen)

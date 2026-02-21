@@ -1,0 +1,266 @@
+# -*- coding: utf-8 -*-
+"""
+v7.0 5단계: SOLD 탭 — sold_table(SOLD) 기반 LOT 리스트 + 전체 판매 보기 + 기간 필터 + Excel 내보내기
+"""
+import logging
+from datetime import datetime, timedelta
+import tkinter as tk
+from tkinter import ttk
+from ..utils.ui_constants import ThemeColors, Spacing, apply_tooltip
+from ..utils.constants import BOTH, YES, X, LEFT, VERTICAL
+
+logger = logging.getLogger(__name__)
+
+SOLD_LOT_COLUMNS = [
+    ('row_num', 'No.', 50, 'center'),
+    ('lot_no', 'LOT NO', 120, 'center'),
+    ('sales_order_no', '판매주문No', 120, 'center'),
+    ('customer', '고객사', 140, 'center'),
+    ('tonbag_count', '톤백수', 70, 'e'),
+    ('total_kg', '중량(kg)', 100, 'e'),
+    ('sold_date', '판매일', 100, 'center'),
+]
+
+SOLD_DETAIL_COLUMNS = [
+    ('row_num', 'No.', 50, 'center'),
+    ('lot_no', 'LOT NO', 120, 'center'),
+    ('tonbag_no', '톤백No', 80, 'center'),
+    ('sales_order_no', '판매주문No', 120, 'center'),
+    ('customer', '고객사', 140, 'center'),
+    ('sold_qty_kg', '중량(kg)', 100, 'e'),
+    ('sold_date', '판매일', 100, 'center'),
+]
+
+
+class SoldTabMixin:
+    """v7.0: SOLD 탭 — sold_table(SOLD) 조회 전용, 기간 필터, Excel 내보내기"""
+
+    def _setup_sold_tab(self) -> None:
+        """SOLD 탭 UI"""
+        from ..utils.tree_enhancements import apply_striped_rows
+
+        _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        frame = self.tab_sold
+
+        ttk.Label(frame, text="출고 LOT 리스트").pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+
+        # 기간 필터: 기본 최근 3개월
+        end_d = datetime.now()
+        start_d = end_d - timedelta(days=90)
+        self._sold_date_from_var = tk.StringVar(value=start_d.strftime('%Y-%m-%d'))
+        self._sold_date_to_var = tk.StringVar(value=end_d.strftime('%Y-%m-%d'))
+        filter_frame = ttk.Frame(frame)
+        filter_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+        ttk.Label(filter_frame, text="기간:").pack(side=LEFT, padx=(0, Spacing.XS))
+        ttk.Entry(filter_frame, textvariable=self._sold_date_from_var, width=12).pack(side=LEFT, padx=Spacing.XS)
+        ttk.Label(filter_frame, text="~").pack(side=LEFT, padx=Spacing.XS)
+        ttk.Entry(filter_frame, textvariable=self._sold_date_to_var, width=12).pack(side=LEFT, padx=Spacing.XS)
+        ttk.Button(filter_frame, text="적용", command=self._refresh_sold).pack(side=LEFT, padx=Spacing.SM)
+        ttk.Button(filter_frame, text="🔄 새로고침", command=self._refresh_sold).pack(side=LEFT, padx=Spacing.XS)
+        btn_show_all = ttk.Button(filter_frame, text="📋 전체 판매 보기", command=self._on_show_all_sold)
+        btn_show_all.pack(side=RIGHT, padx=Spacing.XS)
+        apply_tooltip(btn_show_all, "판매(SOLD) 톤백 전체. [← LOT 리스트로]로 복귀.")
+
+        self._sold_lot_container = ttk.Frame(frame)
+        self._sold_lot_container.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
+
+        tree_frame = ttk.Frame(self._sold_lot_container)
+        tree_frame.pack(fill=BOTH, expand=YES)
+        cols = [c[0] for c in SOLD_LOT_COLUMNS]
+        self.tree_sold = ttk.Treeview(
+            tree_frame, columns=cols, show='headings', height=20, selectmode='extended'
+        )
+        for col_id, label, width, anchor in SOLD_LOT_COLUMNS:
+            self.tree_sold.heading(col_id, text=label)
+            self.tree_sold.column(col_id, width=width, anchor=anchor, stretch=True)
+        scroll = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree_sold.yview)
+        self.tree_sold.configure(yscrollcommand=scroll.set)
+        self.tree_sold.pack(side=LEFT, fill=BOTH, expand=YES)
+        scroll.pack(side=tk.RIGHT, fill='y')
+        try:
+            apply_striped_rows(self.tree_sold, _is_dark)
+        except Exception as e:
+            logger.debug(f"apply_striped_rows: {e}")
+
+        self.tree_sold.bind('<Double-1>', self._on_sold_lot_double_click)
+
+        footer_frame = ttk.Frame(self._sold_lot_container)
+        footer_frame.pack(fill=X, pady=(Spacing.XS, 0))
+        self._sold_summary_label = ttk.Label(footer_frame, text="LOT 0개 / 톤백 0개 / 총 0 kg")
+        self._sold_summary_label.pack(side=LEFT)
+        ttk.Button(footer_frame, text="📥 Excel 내보내기", command=self._on_sold_export_excel).pack(side=RIGHT, padx=Spacing.XS)
+        apply_tooltip(footer_frame.winfo_children()[-1], "SOLD 데이터를 Excel로 내보내기 (정산/보고용)")
+
+        self._sold_detail_container = ttk.Frame(frame)
+        tb_bar = ttk.Frame(self._sold_detail_container)
+        tb_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+        ttk.Button(tb_bar, text="← LOT 리스트로", command=self._on_back_to_sold_lot_list).pack(side=LEFT, padx=Spacing.XS)
+        ttk.Button(tb_bar, text="🔄 새로고침", command=self._on_show_all_sold).pack(side=LEFT, padx=Spacing.XS)
+        detail_tree_frame = ttk.Frame(self._sold_detail_container)
+        detail_tree_frame.pack(fill=BOTH, expand=YES)
+        detail_cols = [c[0] for c in SOLD_DETAIL_COLUMNS]
+        self.tree_sold_detail = ttk.Treeview(
+            detail_tree_frame, columns=detail_cols, show='headings', height=22, selectmode='extended'
+        )
+        for col_id, label, width, anchor in SOLD_DETAIL_COLUMNS:
+            self.tree_sold_detail.heading(col_id, text=label)
+            self.tree_sold_detail.column(col_id, width=width, anchor=anchor, stretch=True)
+        scroll2 = ttk.Scrollbar(detail_tree_frame, orient=VERTICAL, command=self.tree_sold_detail.yview)
+        self.tree_sold_detail.configure(yscrollcommand=scroll2.set)
+        self.tree_sold_detail.pack(side=LEFT, fill=BOTH, expand=YES)
+        scroll2.pack(side=tk.RIGHT, fill='y')
+
+        self._refresh_sold()
+
+    def _get_sold_date_range(self):
+        """기간 필터 값 (시작일, 종료일) 반환"""
+        try:
+            from_str = self._sold_date_from_var.get().strip().replace('-', '')
+            to_str = self._sold_date_to_var.get().strip().replace('-', '')
+            return from_str, to_str
+        except Exception:
+            return '', ''
+
+    def _refresh_sold(self) -> None:
+        """SOLD LOT 리스트 — sold_table WHERE status='SOLD' + 기간 필터"""
+        if not getattr(self, 'tree_sold', None):
+            return
+        for item in self.tree_sold.get_children(''):
+            self.tree_sold.delete(item)
+        date_from, date_to = self._get_sold_date_range()
+        try:
+            sql = """
+                SELECT lot_no, customer, sales_order_no,
+                    COUNT(*) AS tonbag_count,
+                    SUM(COALESCE(sold_qty_kg, 0)) AS total_kg,
+                    MAX(sold_date) AS sold_date
+                FROM sold_table
+                WHERE status = 'SOLD'
+            """
+            params = []
+            if date_from:
+                sql += " AND (sold_date >= ? OR sold_date IS NULL)"
+                params.append(date_from)
+            if date_to:
+                sql += " AND (sold_date <= ? OR sold_date IS NULL)"
+                params.append(date_to + ' 23:59:59' if len(date_to) <= 10 else date_to)
+            sql += " GROUP BY lot_no, sales_order_no ORDER BY sold_date DESC, lot_no"
+            rows = (self.engine.db.fetchall(sql, tuple(params)) if params else self.engine.db.fetchall(sql)) \
+                if hasattr(self.engine, 'db') and self.engine.db else []
+            for idx, r in enumerate(rows or [], 1):
+                lot_no = str(r.get('lot_no', ''))
+                sales_order_no = str(r.get('sales_order_no', '') or '-')
+                customer = str(r.get('customer', '') or '-')
+                tonbag_count = int(r.get('tonbag_count') or 0)
+                total_kg = float(r.get('total_kg') or 0)
+                sold_date = str(r.get('sold_date') or '')[:10] if r.get('sold_date') else '-'
+                self.tree_sold.insert('', 'end', values=(
+                    str(idx), lot_no, sales_order_no, customer, str(tonbag_count), f"{total_kg:,.0f}", sold_date
+                ))
+            total_lots = len(rows or [])
+            total_tb = sum(int(r.get('tonbag_count') or 0) for r in (rows or []))
+            total_kg = sum(float(r.get('total_kg') or 0) for r in (rows or []))
+            if hasattr(self, '_sold_summary_label'):
+                self._sold_summary_label.config(
+                    text=f"LOT {total_lots}개 / 톤백 {total_tb}개 / 총 {total_kg:,.0f} kg"
+                )
+        except Exception as e:
+            logger.debug(f"_refresh_sold: {e}")
+
+    def _on_show_all_sold(self) -> None:
+        """전체 판매 보기"""
+        if not getattr(self, 'tree_sold_detail', None):
+            return
+        date_from, date_to = self._get_sold_date_range()
+        for item in self.tree_sold_detail.get_children(''):
+            self.tree_sold_detail.delete(item)
+        try:
+            sql = """
+                SELECT lot_no, sub_lt, sales_order_no, customer, sold_qty_kg, sold_date
+                FROM sold_table WHERE status = 'SOLD'
+            """
+            params = []
+            if date_from:
+                sql += " AND (sold_date >= ? OR sold_date IS NULL)"
+                params.append(date_from)
+            if date_to:
+                sql += " AND (sold_date <= ? OR sold_date IS NULL)"
+                params.append(date_to + ' 23:59:59' if len(date_to) <= 10 else date_to)
+            sql += " ORDER BY sold_date DESC, lot_no, sub_lt"
+            rows = (self.engine.db.fetchall(sql, tuple(params)) if params else self.engine.db.fetchall(sql)) \
+                if hasattr(self.engine, 'db') and self.engine.db else []
+            for idx, r in enumerate(rows or [], 1):
+                lot_no = str(r.get('lot_no', ''))
+                sub_lt = r.get('sub_lt', '')
+                tonbag_no = str(sub_lt) if sub_lt is not None else '-'
+                sales_order_no = str(r.get('sales_order_no', '') or '-')
+                customer = str(r.get('customer', '') or '-')
+                sold_kg = float(r.get('sold_qty_kg') or 0)
+                sold_date = str(r.get('sold_date') or '')[:10] if r.get('sold_date') else '-'
+                self.tree_sold_detail.insert('', 'end', values=(
+                    str(idx), lot_no, tonbag_no, sales_order_no, customer, f"{sold_kg:,.0f}", sold_date
+                ))
+            self._sold_lot_container.pack_forget()
+            self._sold_detail_container.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
+        except Exception as e:
+            logger.debug(f"_on_show_all_sold: {e}")
+
+    def _on_back_to_sold_lot_list(self) -> None:
+        """LOT 리스트로 복귀"""
+        self._sold_detail_container.pack_forget()
+        self._sold_lot_container.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
+        self._refresh_sold()
+
+    def _on_sold_lot_double_click(self, event) -> None:
+        """LOT 더블클릭 → 해당 LOT SOLD 톤백 팝업 (조회 전용)"""
+        sel = self.tree_sold.selection()
+        if not sel:
+            return
+        item = self.tree_sold.item(sel[0])
+        vals = item.get('values', [])
+        cols = [c[0] for c in SOLD_LOT_COLUMNS]
+        lot_no = ''
+        if 'lot_no' in cols and len(vals) > cols.index('lot_no'):
+            lot_no = str(vals[cols.index('lot_no')]).strip()
+        if lot_no and hasattr(self, '_show_lot_detail_popup'):
+            self._show_lot_detail_popup(lot_no, 'sold')
+
+    def _on_sold_export_excel(self) -> None:
+        """SOLD 데이터 Excel 내보내기 (정산/보고용)"""
+        try:
+            import pandas as pd
+            from tkinter import filedialog
+            date_from, date_to = self._get_sold_date_range()
+            sql = """
+                SELECT lot_no, sales_order_no, customer, sub_lt, sold_qty_kg, sold_date, created_at
+                FROM sold_table WHERE status = 'SOLD'
+            """
+            params = []
+            if date_from:
+                sql += " AND (sold_date >= ? OR sold_date IS NULL)"
+                params.append(date_from)
+            if date_to:
+                sql += " AND (sold_date <= ? OR sold_date IS NULL)"
+                params.append(date_to + ' 23:59:59' if len(date_to) <= 10 else date_to)
+            sql += " ORDER BY sold_date DESC, lot_no, sub_lt"
+            rows = self.engine.db.fetchall(sql, tuple(params)) if params else self.engine.db.fetchall(sql)
+            if not hasattr(self.engine, 'db') or not self.engine.db:
+                rows = []
+            if not rows:
+                if hasattr(self, '_log'):
+                    self._log("내보낼 SOLD 데이터가 없습니다.")
+                return
+            df = pd.DataFrame(rows)
+            path = filedialog.asksaveasfilename(
+                defaultextension='.xlsx',
+                filetypes=[('Excel', '*.xlsx'), ('All', '*.*')],
+                initialfile=f"SOLD_{date_from or 'all'}_{date_to or 'all'}.xlsx"
+            )
+            if path:
+                df.to_excel(path, index=False)
+                if hasattr(self, '_log'):
+                    self._log(f"✅ SOLD Excel 저장: {path}")
+        except ImportError:
+            logger.debug("pandas 없음: Excel 내보내기 스킵")
+        except Exception as e:
+            logger.debug(f"_on_sold_export_excel: {e}")

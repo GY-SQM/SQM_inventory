@@ -59,8 +59,14 @@ class InventoryTabMixin:
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         _inv_bg = ThemeColors.get('bg_secondary', _is_dark)
 
+        # v7.0: 판매가능 탭 제목
+        _title_frame = ttk.Frame(self.tab_inventory)
+        _title_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+        ttk.Label(_title_frame, text="판매가능 LOT 리스트", style='Subtitle.TLabel' if hasattr(ttk.Style(), 'configure') else None).pack(side=LEFT)
+
         # LOT 리스트 / 톤백 리스트 전환 (v7.0: 재고 리스트 → LOT 리스트 명칭)
         self._inv_view_switch_var = tk.StringVar(value='recovery')
+        self._inv_show_all_tonbags = False  # v7.0: [전체 톤백 펼치기] 시 True
         inv_switch_frame = ttk.Frame(self.tab_inventory)
         inv_switch_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
         ttk.Radiobutton(
@@ -132,7 +138,7 @@ class InventoryTabMixin:
             logger.debug(f"컬럼 토글바 생성 실패: {e}")
             self._inv_toggle_bar = None
         
-        # 재고 탭 Excel 내보내기 버튼 (재고리스트 = option 3)
+        # 재고 탭 Excel 내보내기 + v7.0 2단계: [전체 톤백 펼치기] 버튼
         try:
             from ..utils.ui_constants import apply_tooltip
             inv_btn_frame = ttk.Frame(self._inv_recovery_container)
@@ -143,6 +149,12 @@ class InventoryTabMixin:
             )
             btn_inv_export.pack(side=LEFT, padx=Spacing.XS)
             apply_tooltip(btn_inv_export, 'LOT 리스트를 Excel(루비리 양식) 파일로 내보내기')
+            btn_show_all_tb = ttk.Button(
+                inv_btn_frame, text="📋 전체 톤백 펼치기",
+                command=self._on_show_all_tonbags
+            )
+            btn_show_all_tb.pack(side=RIGHT, padx=Spacing.XS)
+            apply_tooltip(btn_show_all_tb, 'AVAILABLE 상태 톤백 전체를 한 번에 표시. [← LOT 리스트로]로 복귀.')
         except Exception as _e:
             logger.debug(f"재고 Excel 버튼 생성 실패: {_e}")
 
@@ -280,6 +292,7 @@ class InventoryTabMixin:
         self._inv_tonbag_container = ttk.Frame(self.tab_inventory)
         tb_bar = ttk.Frame(self._inv_tonbag_container)
         tb_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+        ttk.Button(tb_bar, text="← LOT 리스트로", command=self._on_back_to_lot_list).pack(side=LEFT, padx=Spacing.XS)
         ttk.Button(tb_bar, text="🔄 새로고침", command=self._refresh_inv_tonbag_view).pack(side=LEFT, padx=Spacing.XS)
         tb_tree_frame = ttk.Frame(self._inv_tonbag_container)
         tb_tree_frame.pack(fill=BOTH, expand=YES)
@@ -307,6 +320,7 @@ class InventoryTabMixin:
         """재고 보기 / 톤백 보기 전환"""
         mode = getattr(self, '_inv_view_switch_var', None) and self._inv_view_switch_var.get() or 'recovery'
         if mode == 'tonbag':
+            self._inv_show_all_tonbags = False
             self._inv_recovery_container.pack_forget()
             self._inv_tonbag_container.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
             self._refresh_inv_tonbag_view()
@@ -314,27 +328,60 @@ class InventoryTabMixin:
             self._inv_tonbag_container.pack_forget()
             self._inv_recovery_container.pack(fill=BOTH, expand=YES)
 
+    def _on_show_all_tonbags(self) -> None:
+        """v7.0 2단계: [전체 톤백 펼치기] — AVAILABLE 톤백 전체 표시, LOT 리스트 숨김"""
+        self._inv_show_all_tonbags = True
+        self._inv_recovery_container.pack_forget()
+        self._inv_tonbag_container.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
+        self._refresh_inv_tonbag_view()
+
+    def _on_back_to_lot_list(self) -> None:
+        """v7.0 2단계: [← LOT 리스트로] — 톤백 전체 뷰에서 LOT 리스트로 복귀"""
+        self._inv_show_all_tonbags = False
+        self._inv_tonbag_container.pack_forget()
+        self._inv_recovery_container.pack(fill=BOTH, expand=YES)
+        self._refresh_inventory()
+
     def _refresh_inv_tonbag_view(self) -> None:
-        """재고리스트 탭 내 톤백 보기 트리 새로고침"""
+        """재고리스트 탭 내 톤백 보기 트리 새로고침. v7.0: [전체 톤백 펼치기] 시 AVAILABLE 전부 조회."""
         if not hasattr(self, '_inv_tonbag_tree'):
             return
         for c in self._inv_tonbag_tree.get_children():
             self._inv_tonbag_tree.delete(c)
         try:
-            tonbags = self.engine.get_tonbags_with_inventory() if hasattr(self.engine, 'get_tonbags_with_inventory') else []
-            if not tonbags and hasattr(self.engine, 'get_tonbags'):
-                tonbags = self.engine.get_tonbags() or []
-            for idx, tb in enumerate(tonbags, 1):
-                lot_no = str(tb.get('lot_no', ''))
-                sub_lt = tb.get('sub_lt', '')
-                tonbag_no = tb.get('tonbag_no') or (f"{sub_lt:>3}" if sub_lt != '' else '-')
-                _s = tb.get('tonbag_status') or tb.get('status', 'AVAILABLE')
-                _disp = get_status_display(_s) or _s
-                st = ('✅ ' if _s == 'AVAILABLE' else ('🔒 ' if _s == 'RESERVED' else '')) + _disp
-                w = float(tb.get('weight', tb.get('current_weight', 0)) or 0)
-                uid = str(tb.get('tonbag_uid', ''))
-                loc = str(tb.get('location', ''))
-                self._inv_tonbag_tree.insert('', 'end', values=(idx, lot_no, tonbag_no, st, f"{w:,.0f}", uid, loc))
+            if getattr(self, '_inv_show_all_tonbags', False):
+                # v7.0 2단계: 전체 톤백 펼치기 — inventory_tonbag WHERE status='AVAILABLE'
+                rows = self.engine.db.fetchall(
+                    """SELECT lot_no, sub_lt, tonbag_no, weight, location, inbound_date, bl_no
+                       FROM inventory_tonbag WHERE status = 'AVAILABLE' AND COALESCE(is_sample, 0) = 0
+                       ORDER BY lot_no, sub_lt"""
+                ) if hasattr(self.engine, 'db') and self.engine.db else []
+                for idx, tb in enumerate(rows or [], 1):
+                    lot_no = str(tb.get('lot_no', ''))
+                    sub_lt = tb.get('sub_lt', '')
+                    tonbag_no = tb.get('tonbag_no') or (f"{sub_lt:>3}" if sub_lt != '' else '-')
+                    w = float(tb.get('weight', 0) or 0)
+                    loc = str(tb.get('location', '') or '')
+                    inbound = str(tb.get('inbound_date', '') or '')
+                    bl = str(tb.get('bl_no', '') or '')
+                    st = inbound or '-'
+                    uid = bl
+                    self._inv_tonbag_tree.insert('', 'end', values=(idx, lot_no, tonbag_no, st, f"{w:,.0f}", uid, loc))
+            else:
+                tonbags = self.engine.get_tonbags_with_inventory() if hasattr(self.engine, 'get_tonbags_with_inventory') else []
+                if not tonbags and hasattr(self.engine, 'get_tonbags'):
+                    tonbags = self.engine.get_tonbags() or []
+                for idx, tb in enumerate(tonbags, 1):
+                    lot_no = str(tb.get('lot_no', ''))
+                    sub_lt = tb.get('sub_lt', '')
+                    tonbag_no = tb.get('tonbag_no') or (f"{sub_lt:>3}" if sub_lt != '' else '-')
+                    _s = tb.get('tonbag_status') or tb.get('status', 'AVAILABLE')
+                    _disp = get_status_display(_s) or _s
+                    st = ('✅ ' if _s == 'AVAILABLE' else ('🔒 ' if _s == 'RESERVED' else '')) + _disp
+                    w = float(tb.get('weight', tb.get('current_weight', 0)) or 0)
+                    uid = str(tb.get('tonbag_uid', ''))
+                    loc = str(tb.get('location', ''))
+                    self._inv_tonbag_tree.insert('', 'end', values=(idx, lot_no, tonbag_no, st, f"{w:,.0f}", uid, loc))
             if hasattr(self, '_inv_tonbag_footer') and self._inv_tonbag_footer:
                 self._inv_tonbag_footer.update_totals()
         except Exception as e:
@@ -705,26 +752,8 @@ class InventoryTabMixin:
             self.tree_inventory.delete(item)
 
         search_text = self.search_var.get().strip().lower()
-        # STATUS: 전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고 5종 (DB: AVAILABLE, RESERVED, PICKED, SOLD)
-        status_filter_raw = '전체'
-        if hasattr(self, '_inv_filter_bar') and 'status' in getattr(self._inv_filter_bar, 'filter_vars', {}):
-            status_filter_raw = (self._inv_filter_bar.get_filters().get('status') or
-                                 self._inv_filter_bar.filter_vars['status'].get() or '전체')
-        if not isinstance(status_filter_raw, str):
-            status_filter_raw = str(status_filter_raw or '전체')
-        _raw = status_filter_raw.strip()
-        if not _raw or _raw.startswith('전체'):
-            status_filter_normalized = None
-        elif '판매가능' in _raw:
-            status_filter_normalized = 'AVAILABLE'
-        elif '판매배정' in _raw:
-            status_filter_normalized = 'RESERVED'
-        elif '판매화물 결정' in _raw:
-            status_filter_normalized = 'PICKED'
-        elif '출고' in _raw:
-            status_filter_normalized = 'SOLD'
-        else:
-            status_filter_normalized = _raw.upper() if _raw in ('AVAILABLE', 'RESERVED', 'PICKED', 'SOLD') else None
+        # v7.0 2단계: AVAILABLE 탭 전용 — status 필터 고정 (판매가능만 표시)
+        status_filter_normalized = 'AVAILABLE'
 
         # 콤보 검색 조건
         combo_filters = {}
@@ -938,52 +967,29 @@ class InventoryTabMixin:
             logger.debug(f"스타일 툴바 업데이트 실패: {e}")
 
     def _refresh_inv_stats(self) -> None:
-        """v3.8.7: 재고 탭 하단 통계 — v5.6.1: 1줄 요약 라벨로 갱신"""
+        """v3.8.7: 재고 탭 하단 통계. v7.0 2단계: AVAILABLE 탭 — 판매가능(LOT/톤백/무게)만 표시."""
         if not hasattr(self, '_inv_summary_label'):
             return
         try:
+            # v7.0: AVAILABLE만 집계 (LOT 수, 톤백 수, 총 무게)
             stats = self.engine.db.fetchone("""
-                SELECT 
-                    COUNT(*) AS total_lots,
-                    SUM(CASE WHEN status != 'DEPLETED' THEN 1 ELSE 0 END) AS avail_lots,
-                    SUM(CASE WHEN status = 'DEPLETED' THEN 1 ELSE 0 END) AS depleted_lots,
-                    COALESCE(SUM(initial_weight), 0) AS total_initial,
-                    COALESCE(SUM(current_weight), 0) AS total_current,
-                    COALESCE(SUM(picked_weight), 0) AS total_picked
-                FROM inventory
-            """)
+                SELECT COUNT(*) AS total_lots, COALESCE(SUM(current_weight), 0) AS total_current
+                FROM inventory WHERE status = 'AVAILABLE'
+            """) if hasattr(self.engine, 'db') and self.engine.db else None
             tb_stats = self.engine.db.fetchone("""
-                SELECT COUNT(*) AS total,
-                       SUM(CASE WHEN status='AVAILABLE' THEN 1 ELSE 0 END) AS avail
-                FROM inventory_tonbag
-                WHERE COALESCE(is_sample, 0) = 0
-            """)
-            total_lots = avail_lots = depleted = 0
-            initial_mt = current_mt = picked_mt = 0.0
-            tb_avail = tb_total = 0
+                SELECT COUNT(*) AS total, COALESCE(SUM(weight), 0) AS total_kg
+                FROM inventory_tonbag WHERE status = 'AVAILABLE' AND COALESCE(is_sample, 0) = 0
+            """) if hasattr(self.engine, 'db') and self.engine.db else None
+            total_lots = current_kg = 0
+            tb_total = tb_kg = 0
             if stats:
                 total_lots = stats.get('total_lots', 0) or 0
-                avail_lots = stats.get('avail_lots', 0) or 0
-                depleted = stats.get('depleted_lots', 0) or 0
-                initial_mt = (stats.get('total_initial', 0) or 0) / 1000
-                current_mt = (stats.get('total_current', 0) or 0) / 1000
-                picked_mt = (stats.get('total_picked', 0) or 0) / 1000
+                current_kg = (stats.get('total_current', 0) or 0) / 1000.0
             if tb_stats:
                 tb_total = tb_stats.get('total') or 0
-                tb_avail = tb_stats.get('avail') or 0
-            # None 방지 (DB 빈 상태 시 SUM/COUNT가 NULL 반환 가능)
-            total_lots = total_lots or 0
-            avail_lots = avail_lots or 0
-            depleted = depleted or 0
-            initial_mt = initial_mt or 0.0
-            current_mt = current_mt or 0.0
-            picked_mt = picked_mt or 0.0
-            pct = ( (initial_mt - current_mt) / initial_mt * 100 ) if initial_mt > 0 else 0
-            pct = max(0, min(100, pct or 0))
+                tb_kg = (tb_stats.get('total_kg') or 0) / 1000.0
             line = (
-                f"📦 LOT: {total_lots:,}  🎒 톤백: {tb_avail:,}/{tb_total:,}  "
-                f"📥 입고: {initial_mt:,.1f} MT  💰 잔량: {current_mt:,.1f} MT  "
-                f"📤 출고: {picked_mt:,.1f} MT  ✅ 판매가능: {avail_lots:,}  ❌ 소진: {depleted:,}  |  📊 출고율: {pct:.1f}%"
+                f"📦 판매가능 LOT: {total_lots:,}  🎒 톤백: {tb_total:,}  💰 총 중량: {current_kg:,.1f} MT (LOT) / {tb_kg:,.1f} MT (톤백)"
             )
             self._inv_summary_label.config(text=line)
         except (ValueError, TypeError, KeyError) as e:

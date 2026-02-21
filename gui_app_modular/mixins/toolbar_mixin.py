@@ -111,7 +111,8 @@ class ToolbarMixin:
         # v3.8.9: overflow 체크 비활성화 (탭은 항상 row2에 고정)
         # self.root.bind('<Configure>', self._check_toolbar_overflow)
         # v7.0: 4단계 탭 순서 — AVAILABLE(0), ALLOCATION(1), PICKED(2), SOLD(3), 대시보드(4), 로그(5)
-        self._tab_index_map = {'inventory': 0, 'cargo_overview': 1, 'outbound_scheduled': 2, 'tonbag': 3, 'dashboard': 4, 'log': 5}
+        # 4개 메인 + 총괄 재고 리스트 + 통계 + 로그
+        self._tab_index_map = {'inventory': 0, 'allocation': 1, 'picked': 2, 'sold': 3, 'cargo_overview': 4, 'dashboard': 5, 'log': 6}
         self._active_tab_key = 'inventory'
 
     # ═══════════════════════════════════════════════════════
@@ -496,16 +497,18 @@ class ToolbarMixin:
     def _build_tab_buttons(self) -> None:
         """v5.5.3 patch_01: 탭 버튼 — 밑줄+텍스트 스타일 (메뉴와 통일)"""
         f = self._toolbar_font
-        # v7.0: 4단계 메인 탭 (LOT 리스트 → 전체 톤백 펼치기 / 행 클릭 시 해당 LOT 톤백)
+        # 4개 메인(한글) + 총괄 재고 리스트 + 통계 + 로그
         tab_defs = [
-            ('inventory', '📦 AVAILABLE',
+            ('inventory', '📦 판매가능',
              'LOT 리스트(판매가능). 필터·검색 후 더블클릭 시 LOT 상세·톤백. [전체 톤백 펼치기]로 해당 상태 톤백 일괄 표시.'),
-            ('cargo_overview', '📋 ALLOCATION',
-             'LOT 리스트(판매배정). 상태별 화물. 헤더 클릭 오름·내림차순. [전체 톤백 펼치기]로 톤백 일괄 표시.'),
-            ('outbound_scheduled', '🚛 PICKED',
-             'LOT 리스트(판매화물 결정). 출고 예정·Balance=잔량-예약. LOT 더블클릭 시 출고 이력 팝업.'),
-            ('tonbag', '✅ SOLD',
-             'LOT/톤백 리스트(출고 완료). 톤백 단위 현황. 일괄 출고·라벨 출력 등.'),
+            ('allocation', '📋 판매배정',
+             'LOT 리스트(판매배정). [전체 배정 보기]로 톤백 일괄 표시.'),
+            ('picked', '🚛 판매화물 결정',
+             'LOT 리스트(판매화물 결정). [전체 피킹 보기].'),
+            ('sold', '✅ 출고',
+             'LOT/톤백 리스트(출고 완료). [전체 판매 보기].'),
+            ('cargo_overview', '📋 총괄 재고 리스트',
+             '상태별 화물 한눈에 (전체/판매가능/판매배정/판매화물 결정/출고).'),
             ('dashboard', '📊 대시보드',
              '4단계 현황, 알림, 최근 7일 차트 등.'),
             ('log', '📝 로그',
@@ -578,14 +581,22 @@ class ToolbarMixin:
                 logger.debug(f"toolbar_mixin: {_e}")
 
     def _highlight_active_tab(self) -> None:
-        """v5.5.3 patch_01: 밑줄+텍스트로 활성 탭 강조 (Phase3: FontScale.subtitle + Spacing)"""
+        """v5.5.3 / v7.0: 밑줄+텍스트 강조. 4개 메인 탭별 밑줄 색(파랑/주황/초록/회색)."""
         _sub_font = self._tb_font_scale.subtitle(bold=True)
         _sub_font_normal = self._tb_font_scale.subtitle(bold=False)
+        _dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        tab_colors = {
+            'inventory': ThemeColors.get('info', _dark),
+            'allocation': ThemeColors.get('warning', _dark),
+            'picked': ThemeColors.get('success', _dark),
+            'sold': ThemeColors.get('text_muted', _dark) or '#888888',
+            'cargo_overview': ThemeColors.get('info', _dark),
+        }
         for key, btn in self._tab_buttons.items():
             if key == self._active_tab_key:
                 btn.config(bg=self._tb_bg, fg=self._tb_fg_active,
                           relief='flat', font=_sub_font)
-                btn._underline.config(bg=self._tb_underline_color)
+                btn._underline.config(bg=tab_colors.get(key, self._tb_underline_color))
                 btn._underline.pack(fill='x', padx=Spacing.XS, pady=(Spacing.XS, 0))
             else:
                 btn.config(bg=self._tb_bg, fg=self._tb_fg_normal,
@@ -1160,7 +1171,7 @@ class ToolbarMixin:
 
     def _refresh_all_data(self) -> None:
         try:
-            for fn in ['_refresh_inventory', '_refresh_outbound_scheduled', '_refresh_tonbag', '_refresh_dashboard']:
+            for fn in ['_refresh_inventory', '_refresh_allocation', '_refresh_picked', '_refresh_sold', '_refresh_cargo_overview', '_refresh_dashboard']:
                 if hasattr(self, fn): getattr(self, fn)()
             self._log("🔄 전체 새로고침 완료")
         except (RuntimeError, OSError) as e:

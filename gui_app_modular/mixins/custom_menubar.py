@@ -87,7 +87,8 @@ class CustomMenuBar:
         return children[0] if children else None
     
     def _create_menus(self) -> None:
-        """v4.1.4: 메뉴 재구성 — 카테고리별 분할"""
+        """v4.1.4: 메뉴 재구성 — v6.0.2: 탑레벨 출고 먼저(Picking List 노출)"""
+        self._create_outbound_menu()
         self._create_file_menu()
         self._create_report_menu()
         self._create_tools_menu()
@@ -96,15 +97,42 @@ class CustomMenuBar:
         self._create_help_menu()
         self._create_product_menu()
 
+    def _create_outbound_menu(self) -> None:
+        """탑레벨 📤 출고 메뉴 — menu_registry 기반 (Picking List 등 반드시 포함, 예외 시에도 항목 표시)"""
+        outbound_menu = self._add_menu("📤 출고")
+        try:
+            from ..menu_registry import FILE_MENU_OUTBOUND_ITEMS
+        except Exception as e:
+            logger.debug("menu_registry 로드 실패, 출고 메뉴 기본 항목만 표시: %s", e)
+            FILE_MENU_OUTBOUND_ITEMS = []
+
+        for entry in FILE_MENU_OUTBOUND_ITEMS:
+            label, method_name = entry[0], entry[1]
+            optional = entry[2] if len(entry) > 2 else False
+            if optional and (not hasattr(self.app, method_name) or not callable(getattr(self.app, method_name))):
+                continue
+            callback = getattr(self.app, method_name, None)
+            if not callable(callback):
+                callback = lambda l=label: CustomMessageBox.showinfo(
+                    self.parent, "출고", f"'{l}' 기능을 불러오는 중입니다.\n앱을 재시작해 보세요."
+                )
+            try:
+                self._add_command(outbound_menu, label, callback)
+            except Exception as e:
+                logger.debug("출고 메뉴 항목 추가 스킵 %s: %s", label, e)
+        if hasattr(self.app, "_on_quick_outbound_paste") and callable(self.app._on_quick_outbound_paste):
+            self._add_separator(outbound_menu)
+            self._add_command(outbound_menu, "📤 빠른 출고 (붙여넣기)", self.app._on_quick_outbound_paste)
+
     def _create_file_menu(self) -> None:
-        """1. 📁 파일 메뉴 (입고/출고는 menu_registry 단일 정의 사용)"""
+        """1. 📁 파일 메뉴 (입고는 menu_registry, 출고는 탑레벨로 분리)"""
         from ..utils.constants import (
             HAS_GEMINI, HAS_DB_PROTECTION, HAS_FEATURES, HAS_FEATURES_V2
         )
-        from ..menu_registry import FILE_MENU_INBOUND_ITEMS, FILE_MENU_OUTBOUND_ITEMS
+        from ..menu_registry import FILE_MENU_INBOUND_ITEMS
         
         # =====================================================
-        # 1. 파일 메뉴 (v5.6.5: 입고 경로 단일화 / v6: menu_registry 단일 소스)
+        # 1. 파일 메뉴 (v6.0.2: 출고는 탑레벨 📤 출고 메뉴로 이동)
         # =====================================================
         file_menu = self._add_menu("📁 파일")
         
@@ -123,19 +151,6 @@ class CustomMenuBar:
             if callable(callback):
                 self._add_command(inbound_sub, label, callback)
         self._add_separator(inbound_sub)
-        
-        self._add_separator(file_menu)
-        
-        # 출고 — menu_registry 단일 소스 (Picking List 등 누락 방지)
-        outbound_sub = self._add_submenu(file_menu, "📤 출고")
-        for entry in FILE_MENU_OUTBOUND_ITEMS:
-            label, method_name = entry[0], entry[1]
-            optional = entry[2] if len(entry) > 2 else False
-            if optional and (not hasattr(self.app, method_name) or not callable(getattr(self.app, method_name))):
-                continue
-            callback = getattr(self.app, method_name, None)
-            if callable(callback):
-                self._add_command(outbound_sub, label, callback)
         
         self._add_separator(file_menu)
         
@@ -295,18 +310,17 @@ class CustomMenuBar:
             self._add_command(v2_menu, "📊 일일 리포트", self.app._generate_daily_report)
         
     def _create_view_menu(self) -> None:
-        """4. 👁️ 보기 메뉴"""
-        # =====================================================
-        # 4. 보기 메뉴 (v3.6.0: 5개 탭 - 피봇 분석 추가)
-        # =====================================================
+        """4. 👁️ 보기 메뉴 — 7탭: 판매가능/판매배정/판매화물 결정/출고/총괄 재고 리스트/통계/로그"""
         view_menu = self._add_menu("👁️ 보기")
         self._add_command(view_menu, "🔄 새로고침 (F5)", self.app._refresh_inventory)
         self._add_separator(view_menu)
-        self._add_command(view_menu, "🏠 홈", lambda: self.app.notebook.select(0))
-        self._add_command(view_menu, "📦 재고", lambda: self.app.notebook.select(1))
-        self._add_command(view_menu, "🎒 톤백", lambda: self.app.notebook.select(2))
-        self._add_command(view_menu, "📊 분석 (피봇)", lambda: self.app.notebook.select(3))
-        self._add_command(view_menu, "📝 로그", lambda: self.app.notebook.select(4))
+        self._add_command(view_menu, "📦 판매가능", lambda: self.app.notebook.select(0))
+        self._add_command(view_menu, "📋 판매배정", lambda: self.app.notebook.select(1))
+        self._add_command(view_menu, "🚛 판매화물 결정", lambda: self.app.notebook.select(2))
+        self._add_command(view_menu, "✅ 출고", lambda: self.app.notebook.select(3))
+        self._add_command(view_menu, "📋 총괄 재고 리스트", lambda: self.app.notebook.select(4))
+        self._add_command(view_menu, "📊 통계", lambda: self.app.notebook.select(5))
+        self._add_command(view_menu, "📝 로그", lambda: self.app.notebook.select(6))
         self._add_separator(view_menu)
         self._add_command(view_menu, "🎨 테마 선택", self.app._show_theme_selector)
         

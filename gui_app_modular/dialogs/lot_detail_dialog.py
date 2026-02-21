@@ -5,13 +5,13 @@ SQM v4.1.0 — LOT 상세 추적 다이얼로그 (품목별 상세)
 
 LOT 더블클릭/우클릭 시:
 1. LOT 기본 정보 (제품, 입고일, 잔량 등)
-2. 톤백 현황 (가용/출고/샘플 구분, 중량 합계)
+2. 톤백 현황 (판매가능/출고/샘플 구분, 중량 합계)
 3. 재고 이동 이력 (INBOUND/OUTBOUND/RETURN 타임라인)
 """
 
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog, apply_tooltip, apply_modal_window_options
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog, apply_tooltip, apply_modal_window_options, get_status_display
 
 logger = logging.getLogger(__name__)
 
@@ -19,27 +19,49 @@ logger = logging.getLogger(__name__)
 class LotDetailDialogMixin:
     """LOT 상세 다이얼로그 Mixin — SQMInventoryApp에 mix-in"""
 
-    def _show_lot_detail_popup(self, lot_no: str) -> None:
-        """v4.1.0: LOT 상세 추적 팝업 — 기본정보 + 톤백 + 이력"""
+    def _show_lot_detail_popup(self, lot_no: str, source_tab: str = None) -> None:
+        """v4.1.0 / v7.0: LOT 상세 추적 팝업. source_tab: inventory|allocation|picked|sold 에 따라 톤백 소스 변경."""
         from ..utils.constants import tk, ttk, VERTICAL, BOTH, LEFT, RIGHT, X, Y, END
         from ..utils.ui_constants import ThemeColors
 
-        # ── LOT 정보 조회 ──
+        # ── LOT 정보 조회 (inventory에 없어도 톤백만 보여줄 수 있음) ──
         lot_info = self.engine.db.fetchone(
             "SELECT * FROM inventory WHERE lot_no = ?", (lot_no,))
         if not lot_info:
-            CustomMessageBox.showwarning(self.root, "LOT 없음",
-                f"LOT {lot_no}를 찾을 수 없습니다.")
-            return
+            lot_info = {'lot_no': lot_no, 'product': '-', 'status': '-', 'initial_weight': 0, 'current_weight': 0,
+                        'sap_no': '', 'bl_no': '', 'container_no': '', 'ship_date': '', 'arrival_date': '', 'warehouse': ''}
 
-        # ── 톤백 조회 ──
-        tonbags = self.engine.db.fetchall("""
-            SELECT sub_lt, weight, status, location, picked_date,
-                   picked_to, outbound_date, is_sample, remarks
-            FROM inventory_tonbag
-            WHERE lot_no = ?
-            ORDER BY is_sample DESC, sub_lt
-        """, (lot_no,))
+        # ── 톤백 조회 (v7.0: source_tab에 따라 테이블 선택) ──
+        source = (source_tab or '').lower()
+        if source == 'allocation':
+            rows = self.engine.db.fetchall(
+                "SELECT sub_lt, qty_mt, customer, outbound_date, created_at FROM allocation_plan WHERE lot_no = ? AND status = 'RESERVED' ORDER BY sub_lt",
+                (lot_no,))
+            tonbags = [{'sub_lt': r.get('sub_lt'), 'weight': float(r.get('qty_mt') or 0) * 1000, 'status': 'RESERVED',
+                        'location': '', 'picked_date': (r.get('created_at') or '')[:10], 'picked_to': str(r.get('customer') or ''),
+                        'outbound_date': (r.get('outbound_date') or '')[:10], 'is_sample': 0, 'remarks': ''} for r in (rows or [])]
+        elif source == 'picked':
+            rows = self.engine.db.fetchall(
+                "SELECT sub_lt, qty_kg, customer, picking_date FROM picking_table WHERE lot_no = ? AND status = 'ACTIVE' ORDER BY sub_lt",
+                (lot_no,))
+            tonbags = [{'sub_lt': r.get('sub_lt'), 'weight': float(r.get('qty_kg') or 0), 'status': 'PICKED',
+                        'location': '', 'picked_date': (r.get('picking_date') or '')[:10], 'picked_to': str(r.get('customer') or ''),
+                        'outbound_date': '', 'is_sample': 0, 'remarks': ''} for r in (rows or [])]
+        elif source == 'sold':
+            rows = self.engine.db.fetchall(
+                "SELECT sub_lt, sold_qty_kg, customer, sold_date FROM sold_table WHERE lot_no = ? AND status = 'SOLD' ORDER BY sub_lt",
+                (lot_no,))
+            tonbags = [{'sub_lt': r.get('sub_lt'), 'weight': float(r.get('sold_qty_kg') or 0), 'status': 'SOLD',
+                        'location': '', 'picked_date': '', 'picked_to': str(r.get('customer') or ''),
+                        'outbound_date': (r.get('sold_date') or '')[:10], 'is_sample': 0, 'remarks': ''} for r in (rows or [])]
+        else:
+            tonbags = self.engine.db.fetchall("""
+                SELECT sub_lt, weight, status, location, picked_date,
+                       picked_to, outbound_date, is_sample, remarks
+                FROM inventory_tonbag
+                WHERE lot_no = ?
+                ORDER BY is_sample DESC, sub_lt
+            """, (lot_no,)) or []
 
         # ── 이력 조회 (base 스키마: movement_type, qty_kg, remarks, created_at)
         movements = self.engine.db.fetchall("""
@@ -93,7 +115,8 @@ class LotDetailDialogMixin:
 
         tk.Label(header, text=f"📦 {lot_no}", font=FONT_TITLE,
                  bg=header_bg, fg=fg).pack(side=LEFT)
-        tk.Label(header, text=f"  |  {product}  |  {s_icon} {status}",
+        status_disp = get_status_display(status) or status
+        tk.Label(header, text=f"  |  {product}  |  {s_icon} {status_disp}",
                  font=FONT_SUBTITLE, bg=header_bg, fg=fg).pack(side=LEFT, padx=10)
 
         # ── 정보 카드 행 (v5.6.9: 정렬/간격 통일) ──
@@ -194,8 +217,9 @@ class LotDetailDialogMixin:
                 tag = 'sample'
 
             tb_no_disp = '0' if (is_sample or sub_lt == 0) else sub_lt
+            st_disp = get_status_display(st) or st
             tb_tree.insert('', END, values=(
-                idx, tb_no_disp, f'{weight:,.1f}', st, tb_type, loc, p_to, p_date, o_date
+                idx, tb_no_disp, f'{weight:,.1f}', st_disp, tb_type, loc, p_to, p_date, o_date
             ), tags=(tag,))
 
         tb_tree.tag_configure('available', background=ThemeColors.get('available', is_dark), foreground=fg)
@@ -208,7 +232,7 @@ class LotDetailDialogMixin:
         tb_summary = tk.Frame(tab_tonbag, bg=card_bg, pady=5)
         tb_summary.pack(fill=X, side='bottom')
         tk.Label(tb_summary,
-            text=f"✅ 가용: {avail_cnt}개 ({avail_kg:,.0f}kg)  |  "
+            text=f"✅ 판매가능: {avail_cnt}개 ({avail_kg:,.0f}kg)  |  "
                  f"📤 출고: {picked_cnt}개 ({picked_kg:,.0f}kg)  |  "
                  f"🧪 샘플: {sample_cnt}개  |  총: {len(tonbags)}개",
             font=('맑은 고딕', 11), bg=card_bg, fg=fg).pack(padx=10)
@@ -274,7 +298,7 @@ class LotDetailDialogMixin:
             _btn_out = ttk.Button(btn_bar, text="📤 빠른 출고",
                                   command=lambda: self._quick_outbound_from_detail(popup, lot_no))
             _btn_out.pack(side=LEFT, padx=5)
-            apply_tooltip(_btn_out, "이 LOT의 가용 톤백으로 출고 화면을 엽니다. 수량·출고처 입력 후 출고를 완료할 수 있습니다.")
+            apply_tooltip(_btn_out, "이 LOT의 판매가능 톤백으로 출고 화면을 엽니다. 수량·출고처 입력 후 출고를 완료할 수 있습니다.")
         _btn_pdf = ttk.Button(btn_bar, text="📋 PDF 출력",
                               command=lambda: self._export_lot_detail_pdf(lot_no))
         _btn_pdf.pack(side=LEFT, padx=5)
