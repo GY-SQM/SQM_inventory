@@ -142,9 +142,13 @@ class TonbagTabMixin:
         _style.configure('Tb.Treeview.Heading',
                          font=_tb_head_font,
                          background=_tb_hd_bg, foreground=_tb_hd_fg)
+        # v6.1.1: 선택/비선택 행 foreground 명시 (테마 가시성)
         _style.map('Tb.Treeview',
-                   background=[('selected', ThemeColors.get('tree_select_fg'))],
-                   foreground=[('selected', ThemeColors.get('bg_card'))])
+                   background=[('selected', ThemeColors.get('tree_select_bg', _is_dark_tb))],
+                   foreground=[
+                       ('selected', ThemeColors.get('tree_select_fg', _is_dark_tb)),
+                       ('!selected', _tb_fg),
+                   ])
         
         col_ids = [c[0] for c in self._tonbag_columns]
         self.tree_sublot = ttk.Treeview(

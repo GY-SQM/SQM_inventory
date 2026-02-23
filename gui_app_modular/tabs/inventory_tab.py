@@ -203,13 +203,13 @@ class InventoryTabMixin:
                          background=_tv_head_bg,
                          foreground=_tv_head_fg)
         
-        # v4.0.0 Q7: 선택 행 하이라이트 강화
+        # v6.1.1: 선택/비선택 행 foreground 명시 (테마 가시성)
         _style.map('Inv.Treeview',
-                   background=[('selected', ThemeColors.get('info'))],
-                   foreground=[('selected', ThemeColors.get('bg_card'))])
-        _style.map('Inv.Treeview',
-                   background=[('selected', ThemeColors.get('tree_select_fg'))],
-                   foreground=[('selected', ThemeColors.get('bg_card'))])
+                   background=[('selected', ThemeColors.get('tree_select_bg', _is_dark_tv))],
+                   foreground=[
+                       ('selected', ThemeColors.get('tree_select_fg', _is_dark_tv)),
+                       ('!selected', _tv_fg),
+                   ])
         
         self.tree_inventory = ttk.Treeview(
             tree_frame, columns=all_col_ids, show="headings", height=20,

@@ -43,6 +43,26 @@ STATUS_FILTER_MAP = {
 }
 
 
+def _cargo_status_from_combo_value(raw: str):
+    """콤보 표시값(예: '판매배정 (3)')에서 DB 상태값(예: RESERVED) 추출. 전체면 None."""
+    if not (raw and raw.strip()):
+        return None
+    raw = raw.strip()
+    label = raw.split(" (")[0].strip() if " (" in raw else raw
+    return STATUS_FILTER_MAP.get(label)
+
+
+def _sync_cargo_combo_to_values(var, cur_val: str, new_values: list) -> None:
+    """콤보 values 갱신 후 선택 라벨 유지: 같은 라벨의 새 항목(새 개수)으로 var 설정."""
+    if not cur_val or not new_values:
+        return
+    label = cur_val.split(" (")[0].strip() if " (" in cur_val else cur_val
+    for v in new_values:
+        if v.strip().startswith(label + " ("):
+            var.set(v)
+            return
+
+
 class CargoOverviewTabMixin:
     """총괄 화물 리스트 탭 — 상태 필터로 해당 화물만 표시"""
 
@@ -55,10 +75,17 @@ class CargoOverviewTabMixin:
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         frame = self.tab_cargo_overview
 
-        # 상단: 상태 필터 (전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고)
+        # 상단: 기준 (총 입고 / 현재 재고) + 상태 필터
         filter_frame = ttk.Frame(frame)
         filter_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.SM))
-        ttk.Label(filter_frame, text="상태:", font=('맑은 고딕', 10, 'bold')).pack(side=LEFT, padx=(0, Spacing.XS))
+        ttk.Label(filter_frame, text="기준:", font=('맑은 고딕', 10, 'bold')).pack(side=LEFT, padx=(0, Spacing.XS))
+        self._cargo_scope_var = tk.StringVar(value="all")
+        ttk.Radiobutton(filter_frame, text="총 입고 기준", variable=self._cargo_scope_var, value="all",
+                        command=self._on_cargo_scope_change).pack(side=LEFT, padx=(0, Spacing.SM))
+        ttk.Radiobutton(filter_frame, text="현재 재고 기준", variable=self._cargo_scope_var, value="current",
+                        command=self._on_cargo_scope_change).pack(side=LEFT, padx=(0, Spacing.SM))
+        apply_tooltip(filter_frame.winfo_children()[-1], "현재 재고 기준: 전체=판매가능+판매배정+판매화물 결정(출고 제외)")
+        ttk.Label(filter_frame, text="  상태:", font=('맑은 고딕', 10, 'bold')).pack(side=LEFT, padx=(Spacing.SM, Spacing.XS))
         self._cargo_status_var = tk.StringVar(value="전체 (0)")
         self._cargo_status_combo = ttk.Combobox(
             filter_frame, textvariable=self._cargo_status_var,
@@ -67,7 +94,7 @@ class CargoOverviewTabMixin:
         )
         self._cargo_status_combo.pack(side=LEFT, padx=(0, Spacing.SM))
         self._cargo_status_combo.bind('<<ComboboxSelected>>', lambda e: self._refresh_cargo_overview())
-        apply_tooltip(self._cargo_status_combo, "전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고 중 선택하면 해당 상태의 화물만 표시됩니다.")
+        apply_tooltip(self._cargo_status_combo, "해당 상태의 화물만 표시. 현재 재고 기준에서는 출고 옵션 없음.")
 
         ttk.Button(filter_frame, text="🔄 새로고침", command=self._refresh_cargo_overview).pack(side=LEFT, padx=Spacing.SM)
         apply_tooltip(filter_frame.winfo_children()[-1], "목록 다시 불러오기")
@@ -87,7 +114,13 @@ class CargoOverviewTabMixin:
         _tv_head_fg = ThemeColors.get('text_primary', _is_dark)
         _style.configure('Cargo.Treeview', font=_font, rowheight=_row_h, background=_tv_bg, foreground=_tv_fg, fieldbackground=_tv_bg)
         _style.configure('Cargo.Treeview.Heading', font=_head_font, background=_tv_head_bg, foreground=_tv_head_fg)
-        _style.map('Cargo.Treeview', background=[('selected', ThemeColors.get('info'))], foreground=[('selected', ThemeColors.get('bg_card'))])
+        # v6.1.1: 선택/비선택 행 foreground 명시 (테마 가시성)
+        _style.map('Cargo.Treeview',
+                   background=[('selected', ThemeColors.get('tree_select_bg', _is_dark))],
+                   foreground=[
+                       ('selected', ThemeColors.get('tree_select_fg', _is_dark)),
+                       ('!selected', _tv_fg),
+                   ])
 
         self.tree_cargo_overview = ttk.Treeview(
             tree_frame, columns=all_col_ids, show="headings", height=22,
@@ -115,6 +148,9 @@ class CargoOverviewTabMixin:
             column_display_names={c[0]: c[1] for c in CARGO_OVERVIEW_COLUMNS}
         )
         self._cargo_footer.pack(fill=X)
+        self._cargo_header_filter = {}
+        self._cargo_detached = []
+        self.tree_cargo_overview.bind('<Button-3>', self._on_cargo_tree_right_click)
         self._refresh_cargo_overview()
 
     def _sort_cargo_treeview(self, col: str) -> None:
@@ -142,6 +178,44 @@ class CargoOverviewTabMixin:
         for c_id, c_label, _, _, _ in CARGO_OVERVIEW_COLUMNS:
             tree.heading(c_id, text=f"{c_label}{arrow}" if c_id == col else c_label)
 
+    def _on_cargo_tree_right_click(self, event) -> None:
+        """총괄 화물 트리 우클릭 → 컨텍스트 메뉴 (LOT 복사, 새로고침)"""
+        import tkinter as tk
+        item_id = self.tree_cargo_overview.identify_row(event.y)
+        if not item_id:
+            return
+        self.tree_cargo_overview.selection_set(item_id)
+        values = self.tree_cargo_overview.item(item_id, 'values')
+        if not values:
+            return
+        cols = [c[0] for c in CARGO_OVERVIEW_COLUMNS]
+        lot_no = ''
+        if 'lot_no' in cols and len(values) > cols.index('lot_no'):
+            lot_no = str(values[cols.index('lot_no')]).strip()
+        menu = tk.Menu(self.root, tearoff=0)
+        if lot_no:
+            menu.add_command(label=f"📋 LOT 복사: {lot_no}", command=lambda: self._copy_cargo_lot(lot_no))
+            menu.add_separator()
+            if hasattr(self, '_show_lot_detail_popup'):
+                menu.add_command(label="📊 LOT 상세", command=lambda: self._show_lot_detail_popup(lot_no))
+                menu.add_separator()
+        menu.add_command(label="🔄 새로고침", command=self._refresh_cargo_overview)
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+
+    def _copy_cargo_lot(self, text: str) -> None:
+        """클립보드에 LOT 번호 복사"""
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        if hasattr(self, '_log'):
+            self._log(f"📋 클립보드 복사: {text}")
+
+    def _on_cargo_scope_change(self) -> None:
+        """총 입고 기준 ↔ 현재 재고 기준 전환 시 상태 콤보 옵션 갱신 후 새로고침"""
+        self._refresh_cargo_overview()
+
     def _refresh_cargo_overview(self) -> None:
         """총괄 화물 리스트 새로고침 — 상태별 해당 화물만"""
         if not getattr(self, 'tree_cargo_overview', None):
@@ -149,19 +223,16 @@ class CargoOverviewTabMixin:
         for item in self.tree_cargo_overview.get_children(''):
             self.tree_cargo_overview.delete(item)
         raw = (self._cargo_status_var.get() or '').strip()
-        status_filter = None
-        for label, db_val in STATUS_FILTER_MAP.items():
-            if label in raw or (db_val and db_val in raw):
-                status_filter = db_val
-                break
+        status_filter = _cargo_status_from_combo_value(raw)
+        scope = getattr(self, '_cargo_scope_var', None) and self._cargo_scope_var.get() or 'all'
         try:
-            rows = self.engine.get_cargo_overview_lots(status_filter)
+            rows = self.engine.get_cargo_overview_lots(status_filter, scope=scope)
         except Exception as e:
             logger.debug(f"총괄 화물 조회: {e}")
             rows = []
-        # 상태별 개수로 콤보 values 갱신
+        # 상태별 개수로 콤보 values 갱신 (현재 재고 기준이면 출고 제외)
         try:
-            counts = self.engine.get_cargo_overview_counts()
+            counts = self.engine.get_cargo_overview_counts(scope=scope)
             cnt_total = counts.get('total', 0)
             cnt_avail = counts.get('AVAILABLE', 0)
             cnt_reserved = counts.get('RESERVED', 0)
@@ -169,14 +240,38 @@ class CargoOverviewTabMixin:
             cnt_sold = counts.get('SOLD', 0)
         except Exception:
             cnt_total = cnt_avail = cnt_reserved = cnt_picked = cnt_sold = 0
-        self._cargo_status_combo['values'] = [
-            f"전체 ({cnt_total})", f"판매가능 ({cnt_avail})", f"판매배정 ({cnt_reserved})",
-            f"판매화물 결정 ({cnt_picked})", f"출고 ({cnt_sold})",
-        ]
-        # 행 채우기 (재고 탭과 동일 포맷)
+        if scope == 'current':
+            new_values = [
+                f"전체 ({cnt_total})", f"판매가능 ({cnt_avail})", f"판매배정 ({cnt_reserved})",
+                f"판매화물 결정 ({cnt_picked})",
+            ]
+            self._cargo_status_combo['values'] = new_values
+            cur_val = (self._cargo_status_var.get() or '').strip()
+            if cur_val and '출고' in cur_val:
+                self._cargo_status_var.set(f"전체 ({cnt_total})")
+            else:
+                _sync_cargo_combo_to_values(self._cargo_status_var, cur_val, new_values)
+        else:
+            new_values = [
+                f"전체 ({cnt_total})", f"판매가능 ({cnt_avail})", f"판매배정 ({cnt_reserved})",
+                f"판매화물 결정 ({cnt_picked})", f"출고 ({cnt_sold})",
+            ]
+            self._cargo_status_combo['values'] = new_values
+            _sync_cargo_combo_to_values(self._cargo_status_var, (self._cargo_status_var.get() or '').strip(), new_values)
+        # Avail 컬럼: N+1 방지 — LOT별 AVAILABLE 톤백 수 일괄 조회
+        try:
+            avail_rows = self.engine.db.fetchall(
+                "SELECT lot_no, COUNT(*) as cnt FROM inventory_tonbag "
+                "WHERE status = 'AVAILABLE' AND COALESCE(is_sample,0) = 0 GROUP BY lot_no"
+            )
+            avail_map = {str(r.get('lot_no', '')): r.get('cnt', 0) for r in (avail_rows or [])}
+        except Exception as e:
+            logger.debug(f"Avail 일괄 조회: {e}")
+            avail_map = {}
+        # 행 채우기 (재고 탭과 동일 포맷). 태그는 필터 상태 기준
         for row_num, item in enumerate(rows, 1):
             lot_no = str(item.get('lot_no', ''))
-            status = item.get('status', 'AVAILABLE')
+            status = status_filter or item.get('status', 'AVAILABLE')
             vals = []
             for col_id, _, _, _, _ in CARGO_OVERVIEW_COLUMNS:
                 if col_id == 'row_num':
@@ -190,16 +285,14 @@ class CargoOverviewTabMixin:
                     except (ValueError, TypeError):
                         vals.append('0')
                 elif col_id == 'avail_bags':
-                    try:
-                        tb = self.engine.db.fetchone(
-                            "SELECT COUNT(*) as cnt FROM inventory_tonbag WHERE lot_no = ? AND status = 'AVAILABLE' AND COALESCE(is_sample,0) = 0",
-                            (lot_no,))
-                        cnt = tb.get('cnt', 0) if isinstance(tb, dict) else (tb[0] if tb else 0)
-                        vals.append(str(cnt))
-                    except (ValueError, TypeError, KeyError):
-                        vals.append('')
+                    vals.append(str(avail_map.get(lot_no, 0)))
                 elif col_id == 'status':
-                    vals.append(get_status_display(status) or status)
+                    # 총괄 리스트 상태(콤보)에 따라 리스트 안 STATUS 컬럼도 동일하게 표시
+                    if status_filter is not None:
+                        display_status = get_status_display(status_filter)
+                    else:
+                        display_status = get_status_display(status) or status
+                    vals.append(display_status)
                 elif col_id in ('net_weight', 'current_weight', 'initial_weight'):
                     v = item.get(col_id, 0)
                     try:

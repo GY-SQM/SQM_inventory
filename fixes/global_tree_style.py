@@ -21,6 +21,7 @@ import logging
     apply_global_tree_style()
 """
 
+import tkinter as tk  # v6.1.1: tk.TclError 사용
 from tkinter import ttk
 
 

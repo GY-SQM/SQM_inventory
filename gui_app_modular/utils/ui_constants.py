@@ -593,24 +593,32 @@ class ReadableStyle:
                 logger.warning("Style 객체 없음 - 가독성 스타일 건너뜀")
                 return
             
-            # ─── Treeview ───
+            # ─── Treeview ─── (v6.1.1: foreground/background 명시, !selected 추가)
             style.configure(
                 'Treeview',
                 rowheight=cls.ROW_HEIGHT,
                 font=(cls.FONT_FAMILY, cls.FONT_SIZE),
                 borderwidth=0,
                 relief='flat',
+                foreground=p['text_primary'],
+                background=p['bg_card'],
+                fieldbackground=p['bg_card'],
             )
             style.configure(
                 'Treeview.Heading',
                 font=(cls.FONT_FAMILY, cls.HEADING_SIZE, 'bold'),
                 padding=(8, 6),
                 relief='flat',
+                foreground=p['text_primary'],
+                background=p['bg_secondary'],
             )
             style.map(
                 'Treeview',
                 background=[('selected', p['tree_select_bg'])],
-                foreground=[('selected', p['tree_select_fg'])],
+                foreground=[
+                    ('selected', p['tree_select_fg']),
+                    ('!selected', p['text_primary']),
+                ],
             )
             
             # ─── Notebook 탭 ───

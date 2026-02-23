@@ -128,10 +128,12 @@ class ThemeMixin:
             except (ValueError, TypeError, AttributeError) as _e:
                 logger.debug(f"탭 리프레시 무시: {_e}")
             
+            # v6.1.1: 50ms 후 2차 적용 (간헐적 타이밍 이슈 보험)
             try:
                 self.root.update_idletasks()
+                self.root.after(50, self._update_theme_colors)
             except Exception as _e:
-                logger.debug(f"update_idletasks 무시: {_e}")
+                logger.debug(f"2차 적용 무시: {_e}")
             
             self._log(f"Theme changed: {theme_name}")
             
@@ -139,35 +141,56 @@ class ThemeMixin:
             CustomMessageBox.showerror(self.root, "Error", f"Theme change failed:\n{e}")
     
     def _update_theme_colors(self) -> None:
-        """테마 변경 시 색상 업데이트 (v5.6.9: Grid 스타일 foreground 갱신 — 다크에서 글씨 보이게)"""
+        """v6.1.1: 테마 변경 시 전체 위젯 자동 스캔 + 일괄 갱신 (실패 시 fallback)"""
+        try:
+            from ..utils.theme_refresh import refresh_all_widgets_for_theme
+            stats = refresh_all_widgets_for_theme(self)
+            logger.debug(f"[v6.1.1] _update_theme_colors: {stats}")
+        except (ImportError, Exception) as e:
+            logger.debug(f"theme_refresh 실패, fallback 사용: {e}")
+            self._update_theme_colors_fallback()
+
+    def _update_theme_colors_fallback(self) -> None:
+        """v6.1.1: theme_refresh 사용 불가 시 기존 방식으로 최소 갱신"""
         from ..utils.ui_constants import ThemeColors
-        
+        from tkinter import ttk as _ttk_mod
+
         is_dark = ThemeColors.is_dark_theme(self.current_theme)
-        
-        # 재고 트리뷰
+        p = ThemeColors.get_palette(is_dark)
+        fg = p['text_primary']
+        bg = p['bg_card']
+        bg_sec = p['bg_secondary']
+        try:
+            _st = _ttk_mod.Style()
+            for sn in ('Treeview', 'Inv.Treeview', 'Tb.Treeview', 'Cargo.Treeview'):
+                try:
+                    _st.configure(sn, foreground=fg, background=bg, fieldbackground=bg)
+                    _st.map(sn, foreground=[('selected', p['tree_select_fg']), ('!selected', fg)], background=[('selected', p['tree_select_bg'])])
+                    _st.configure(f"{sn}.Heading", foreground=fg, background=bg_sec)
+                except Exception:
+                    pass
+        except Exception as _e:
+            logger.debug(f"fallback 전역 스타일 갱신 무시: {_e}")
+
         if hasattr(self, 'tree_inventory'):
             ThemeColors.configure_tags(self.tree_inventory, is_dark)
             try:
                 from ..utils.table_styler import TableStyler
                 TableStyler.update_grid_style_for_theme(self.tree_inventory, is_dark)
-            except (ImportError, Exception) as e:
-                logger.debug(f"Suppressed: {e}")
-        
-        # 톤백 트리뷰
+            except (ImportError, Exception):
+                pass
         if hasattr(self, 'tree_sublot'):
             ThemeColors.configure_tags(self.tree_sublot, is_dark)
             try:
                 from ..utils.table_styler import TableStyler
                 TableStyler.update_grid_style_for_theme(self.tree_sublot, is_dark)
-            except (ImportError, Exception) as e:
-                logger.debug(f"Suppressed: {e}")
-
-        # v5.4.0: toolbar 색상도 테마 변경 즉시 동기화 (White 테마 검정/글씨 꼬임 방지)
+            except (ImportError, Exception):
+                pass
         try:
             if hasattr(self, '_refresh_toolbar_theme'):
                 self._refresh_toolbar_theme()
-        except (ValueError, TypeError, AttributeError) as _e:
-            logger.debug(f"Suppressed: {_e}")
+        except (ValueError, TypeError, AttributeError):
+            pass
     
     def _show_theme_selector(self) -> None:
         """Show theme selection dialog"""
