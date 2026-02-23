@@ -670,6 +670,175 @@ class OutboundMixin(InventoryBaseMixin):
 
         return result
 
+    def gate1_verify_picking(
+        self,
+        picking_result,
+        picking_no: str = '',
+    ) -> dict:
+        """
+        Gate-1: 피킹리스트 LOT ↔ allocation_plan RESERVED LOT 교차검증.
+        피킹 LOT 전체가 allocation_plan에 RESERVED로 존재해야 함.
+        """
+        result = {
+            'passed': False,
+            'picking_lots': set(),
+            'reserved_lots': set(),
+            'only_in_picking': set(),
+            'only_in_reserved': set(),
+            'matched_lots': set(),
+            'error_report': '',
+        }
+        try:
+            picking_lots = {getattr(item, 'lot_no', str(item.get('lot_no', ''))) for item in picking_result.tonbag}
+            result['picking_lots'] = picking_lots
+            if not picking_lots:
+                result['error_report'] = 'Gate-1 실패: 피킹 LOT 없음'
+                return result
+
+            placeholders = ','.join('?' * len(picking_lots))
+            rows = self.db.fetchall(
+                f"""SELECT DISTINCT lot_no FROM allocation_plan
+                    WHERE status = 'RESERVED' AND lot_no IN ({placeholders})""",
+                tuple(picking_lots)
+            )
+            reserved_in_db = {r['lot_no'] for r in rows}
+            all_reserved = self.db.fetchall(
+                "SELECT DISTINCT lot_no FROM allocation_plan WHERE status = 'RESERVED'"
+            )
+            all_reserved_lots = {r['lot_no'] for r in all_reserved}
+            result['reserved_lots'] = all_reserved_lots
+
+            only_in_picking = picking_lots - reserved_in_db
+            only_in_reserved = all_reserved_lots - picking_lots
+            matched = picking_lots & reserved_in_db
+            result['only_in_picking'] = only_in_picking
+            result['only_in_reserved'] = only_in_reserved
+            result['matched_lots'] = matched
+
+            lines = [
+                '=' * 55,
+                f'[Gate-1 교차검증] {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}',
+                f'피킹리스트: {picking_no}',
+                f'피킹 LOT: {len(picking_lots)}개 | RESERVED: {len(all_reserved_lots)}개 | 매칭: {len(matched)}개',
+                '',
+            ]
+            if only_in_picking:
+                lines.append(f'❌ 피킹에만 있고 RESERVED 없는 LOT ({len(only_in_picking)}개):')
+                for lot in sorted(only_in_picking)[:10]:
+                    lines.append(f'   - {lot}')
+                if len(only_in_picking) > 10:
+                    lines.append(f'   ... 외 {len(only_in_picking)-10}개')
+                lines.append('')
+            if only_in_reserved:
+                lines.append(f'⚠️ RESERVED에만 있고 피킹 없는 LOT ({len(only_in_reserved)}개):')
+                for lot in sorted(only_in_reserved)[:10]:
+                    lines.append(f'   - {lot}')
+                lines.append('')
+            if not only_in_picking:
+                lines.append('✅ Gate-1 통과 — 모든 피킹 LOT이 RESERVED 확인됨')
+                result['passed'] = True
+            else:
+                lines.append('🚫 Gate-1 실패 — 전체 출고 처리 중단됨')
+                lines.append('   allocation_plan 확인 후 재시도하세요')
+            lines.append('=' * 55)
+            result['error_report'] = '\n'.join(lines)
+            logger.info(f'[Gate-1] passed=%s, matched=%s, missing=%s',
+                        result['passed'], len(matched), len(only_in_picking))
+        except (sqlite3.Error, AttributeError) as e:
+            result['error_report'] = f'Gate-1 DB 오류: {e}'
+            logger.error(f'[Gate-1] 오류: {e}', exc_info=True)
+        return result
+
+    def execute_from_picking(
+        self,
+        picking_result,
+        picking_no: str = '',
+        sales_order: str = '',
+    ) -> dict:
+        """Gate-1 통과 후 피킹리스트 기반 RESERVED → PICKED 전환."""
+        result = {'success': False, 'executed': 0, 'gate1': {}, 'errors': []}
+        gate1 = self.gate1_verify_picking(picking_result, picking_no)
+        result['gate1'] = gate1
+        if not gate1['passed']:
+            result['errors'].append(gate1['error_report'])
+            logger.warning('[execute_from_picking] Gate-1 실패 → 중단')
+            return result
+
+        try:
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            meta = picking_result.meta
+            with self.db.transaction('IMMEDIATE'):
+                self.db.execute(
+                    """INSERT INTO picking_list_order
+                       (sales_order, customer_ref, picking_date, status,
+                        total_lots, total_weight, picking_no, delivery_terms,
+                        port_loading, port_discharge, containers,
+                        contact_person, contact_email,
+                        total_nw_kg, total_gw_kg, gate1_result,
+                        created_at, updated_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        sales_order or getattr(meta, 'sales_order', ''),
+                        getattr(meta, 'outbound_id', ''),
+                        getattr(meta, 'creation_date', ''),
+                        'EXECUTED',
+                        len(gate1['matched_lots']),
+                        picking_result.summary.get('total_mt', 0) * 1000,
+                        getattr(meta, 'picking_no', ''),
+                        getattr(meta, 'delivery_terms', ''),
+                        getattr(meta, 'port_loading', ''),
+                        getattr(meta, 'port_discharge', ''),
+                        getattr(meta, 'containers', '1'),
+                        getattr(meta, 'contact_person', ''),
+                        getattr(meta, 'contact_email', ''),
+                        getattr(meta, 'total_nw_kg', ''),
+                        getattr(meta, 'total_gw_kg', ''),
+                        'PASSED',
+                        now, now,
+                    )
+                )
+                row = self.db.fetchone('SELECT last_insert_rowid() AS id')
+                picking_order_id = row['id'] if row else None
+                executed = 0
+                for lot_no in gate1['matched_lots']:
+                    self.db.execute(
+                        """UPDATE allocation_plan SET status = 'EXECUTED', executed_at = ?
+                           WHERE lot_no = ? AND status = 'RESERVED'""",
+                        (now, lot_no)
+                    )
+                    tonbags = self.db.fetchall(
+                        """SELECT id, weight FROM inventory_tonbag
+                           WHERE lot_no = ? AND status = 'RESERVED'""",
+                        (lot_no,)
+                    )
+                    for tb in tonbags:
+                        self.db.execute(
+                            """UPDATE inventory_tonbag SET
+                                status = ?, picked_date = ?, updated_at = ?
+                               WHERE id = ?""",
+                            (STATUS_PICKED, now, now, tb['id'])
+                        )
+                        if picking_order_id is not None:
+                            try:
+                                self.db.execute(
+                                    """INSERT INTO picking_list_detail
+                                       (picking_order_id, lot_no, weight, picked_status, picked_at)
+                                       VALUES (?, ?, ?, 'PICKED', ?)""",
+                                    (picking_order_id, lot_no, tb.get('weight', 0), now)
+                                )
+                            except sqlite3.OperationalError:
+                                pass
+                    if hasattr(self, '_recalc_lot_status'):
+                        self._recalc_lot_status(lot_no)
+                    executed += 1
+                result['success'] = executed > 0
+                result['executed'] = executed
+                result['message'] = f'피킹 실행 완료: {executed}개 LOT → 판매화물 결정'
+        except (sqlite3.Error, ValueError) as e:
+            result['errors'].append(str(e))
+            logger.error(f'[execute_from_picking] 오류: {e}', exc_info=True)
+        return result
+
     def cancel_reservation(self, lot_no: str = None, plan_id: int = None) -> Dict:
         """
         RESERVED 예약 취소 → AVAILABLE 복원.

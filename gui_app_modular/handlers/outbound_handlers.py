@@ -197,14 +197,6 @@ class OutboundHandlersMixin:
                 CustomMessageBox.showwarning(self.root, "입력 필요", "Preview 후 톤백을 선택하거나 LOT를 입력하세요.")
                 return
             
-            # v5.9.92: 빠른 출고는 최대 8건(LOT) 제한
-            if len(allocation_items) > 8:
-                CustomMessageBox.showwarning(
-                    self.root, "제한 초과",
-                    "빠른 출고는 최대 8건(LOT)까지 가능합니다.\n현재 %d건 선택됨." % len(allocation_items)
-                )
-                return
-            
             # v5.0.9: 톤백/샘플 구분 카운트
             from ..dialogs.allocation_preview import _is_sample_item
             tonbag_items = [i for i in allocation_items if not _is_sample_item(i)]
@@ -212,14 +204,32 @@ class OutboundHandlersMixin:
             tonbag_qty = sum(i.get('qty_mt', 0) for i in tonbag_items)
             sample_qty = sum(i.get('qty_mt', 0) for i in sample_items)
             total_qty = tonbag_qty + sample_qty
+
+            # v6.1.0: 빠른 출고 8개 톤백 제한 (초과 시 일반 출고 전환 안내)
+            if len(tonbag_items) > 8:
+                go_normal = CustomMessageBox.askyesno(
+                    self.root, "수량 초과",
+                    f"빠른 출고는 최대 8개 톤백까지 가능합니다.\n"
+                    f"(선택: {len(tonbag_items)}개)\n\n"
+                    f"일반 출고(배정표)로 전환하시겠습니까?"
+                )
+                if go_normal and hasattr(self, '_on_allocation_dialog'):
+                    dialog.destroy()
+                    self._on_allocation_dialog()
+                return
+
+            # v6.1.0: source='QUICK' 마킹 (allocation_plan 추적용)
+            for _qi in allocation_items:
+                _qi['source'] = 'QUICK'
             
-            # Confirm (v5.0.9: 톤백/샘플 구분 표시)
+            # Confirm (v6.1.0: 판매화물 결정 용어 + PICKED 멈춤 안내)
             confirm_msg = (
-                f"출고를 진행할까요?\n\n"
+                f"판매화물 결정을 진행할까요?\n\n"
                 f"고객: {customer}\n"
                 f"📦 톤백: {len(tonbag_items)}개 ({tonbag_qty:.3f} MT)\n"
                 f"🧪 샘플: {len(sample_items)}개 ({sample_qty:.3f} MT)\n"
-                f"합계: {len(allocation_items)}건 ({total_qty:.3f} MT)"
+                f"합계: {len(allocation_items)}건 ({total_qty:.3f} MT)\n\n"
+                f"※ 현장 출고 후 [출고 확정]으로 최종 처리하세요."
             )
             if not CustomMessageBox.askyesno(self.root, "출고 확인", confirm_msg):
                 return
@@ -250,9 +260,10 @@ class OutboundHandlersMixin:
                 if result.get('success') or result.get('processed', 0) > 0:
                     processed = result.get('lots_processed', result.get('processed', 0))
                     picked = result.get('total_picked', 0)
-                    msg = (f"출고 완료!\n\n"
+                    msg = (f"판매화물 결정 완료!\n\n"
                            f"처리: {processed}건\n"
-                           f"총 출고: {picked:.3f} MT")
+                           f"총 중량: {picked:.3f} MT\n\n"
+                           f"현장 출고 확인 후 [출고 확정]을 실행하세요.")
                     
                     if result.get('warnings'):
                         msg += f"\n\n경고:\n" + "\n".join(result['warnings'][:5])
@@ -740,7 +751,7 @@ class OutboundHandlersMixin:
             )
 
     def _on_picking_list_upload(self) -> None:
-        """v6.0: Picking List PDF 업로드 — 파일 선택 → 파싱 → 결과 미리보기"""
+        """v6.0: Picking List PDF 업로드. v6.1.0: Gate-1 경로 우선 (document_parser_modular)."""
         from ..utils.constants import filedialog
 
         path = filedialog.askopenfilename(
@@ -750,6 +761,73 @@ class OutboundHandlersMixin:
         )
         if not path or not path.strip():
             return
+
+        # v6.1.0: Gate-1 경로 (피킹 파서 → 교차검증 → RESERVED→PICKED)
+        try:
+            from parsers.document_parser_modular.picking_mixin import PickingListParserMixin
+            parser = PickingListParserMixin()
+            picking_result = parser.parse_picking_list(path)
+            if not picking_result.success:
+                errs = '\n'.join(picking_result.errors[:5])
+                CustomMessageBox.showerror(
+                    self.root, '피킹리스트 파싱 실패',
+                    f'PDF 파싱 중 오류:\n\n{errs}'
+                )
+                return
+            summary = picking_result.summary
+            meta = picking_result.meta
+            if not CustomMessageBox.askyesno(
+                self.root, '피킹리스트 확인',
+                f'[피킹리스트 파싱 완료]\n\n'
+                f'피킹 No    : {getattr(meta, "picking_no", "")}\n'
+                f'Sales Order: {getattr(meta, "sales_order", "")}\n'
+                f'총 LOT     : {summary.get("total_lots", 0)}개\n'
+                f'총 중량    : {summary.get("total_mt", 0):.1f} MT\n\n'
+                f'Gate-1 교차검증을 진행하시겠습니까?'
+            ):
+                return
+            if not hasattr(self.engine, 'gate1_verify_picking'):
+                CustomMessageBox.showerror(
+                    self.root, '기능 없음',
+                    'gate1_verify_picking() 미구현'
+                )
+                return
+            gate1 = self.engine.gate1_verify_picking(
+                picking_result, getattr(meta, 'picking_no', '')
+            )
+            if not gate1['passed']:
+                CustomMessageBox.showerror(
+                    self.root, 'Gate-1 교차검증 실패',
+                    gate1['error_report'][:800]
+                )
+                self._save_gate1_report(gate1, getattr(meta, 'picking_no', ''))
+                return
+            matched = len(gate1['matched_lots'])
+            if not CustomMessageBox.askyesno(
+                self.root, '판매화물 결정 실행',
+                f'Gate-1 통과\n\n매칭된 LOT: {matched}개\n\n'
+                f'{matched}개 LOT을 [판매화물 결정] 상태로 전환합니다.\n계속하시겠습니까?'
+            ):
+                return
+            exec_result = self.engine.execute_from_picking(
+                picking_result,
+                picking_no=getattr(meta, 'picking_no', ''),
+                sales_order=getattr(meta, 'sales_order', ''),
+            )
+            if exec_result.get('success'):
+                CustomMessageBox.showinfo(
+                    self.root, '판매화물 결정 완료',
+                    f'처리: {exec_result.get("executed", 0)}개 LOT\n현장 출고 완료 후 [출고 확정]을 실행하세요.'
+                )
+                self._refresh_inventory()
+                if hasattr(self, '_refresh_tonbag'):
+                    self._refresh_tonbag()
+            else:
+                errs = '\n'.join(exec_result.get('errors', [])[:3])
+                CustomMessageBox.showerror(self.root, '실행 실패', errs)
+            return
+        except ImportError:
+            pass
 
         parse_picking_list_pdf = None
         try:
@@ -798,6 +876,21 @@ class OutboundHandlersMixin:
 
         from ..dialogs.picking_list_preview_dialog import PickingListPreviewDialog
         PickingListPreviewDialog(self.root, doc, path, on_apply_clicked=on_apply)
+
+    def _save_gate1_report(self, gate1: dict, picking_no: str) -> None:
+        """v6.1.0: Gate-1 실패 에러 리포트를 바탕화면에 텍스트 파일로 저장."""
+        import os
+        from datetime import datetime
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        fname = f'Gate1_실패_{picking_no}_{ts}.txt'
+        fpath = os.path.join(os.path.expanduser('~'), 'Desktop', fname)
+        try:
+            with open(fpath, 'w', encoding='utf-8') as f:
+                f.write(gate1.get('error_report', ''))
+            if hasattr(self, '_log'):
+                self._log(f'Gate-1 에러 리포트 저장: {fpath}')
+        except OSError:
+            logger.debug(f'Gate-1 리포트 저장 실패: {fpath}')
 
     def _on_barcode_scan_upload(self) -> None:
         """v6.0: 바코드 스캔 파일 업로드 (준비 중)"""

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '6.0.9'
+__version__ = '6.1.0'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '6.1.0': '🚀 v6.1.0: 출고 로직 개편 — 피킹리스트 파서(document_parser_modular)·Gate-1 교차검증·빠른 출고 8톤백 제한·QUICK 마킹·picking_list_order 메타 컬럼',
     '6.0.9': '🎨 v6.0.9: 4단계 탭 한글 라벨(판매가능/판매배정/판매화물 결정/출고) · 총괄 재고 리스트 탭·보기 메뉴 복원',
     '6.0.8': '🎨 v6.0.8: 4단계 탭 구조(AVAILABLE/ALLOCATION/PICKED/SOLD) · 재고리스트→LOT 리스트 명칭 통일',
     '6.0.7': '📋 v6.0.7: UI 메뉴 menu_registry 기반 정리(3단계) — 입고 단일 소스·툴바 입고 registry 적용',

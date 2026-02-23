@@ -39,6 +39,32 @@ class DatabaseMigrationMixin:
         self._migrate_v5992_allocation_source()
         self._migrate_v599_missing_columns()
         self._migrate_v600_picking_sold_tables()
+        self._migrate_v601_picking_list_meta()
+
+    def _migrate_v601_picking_list_meta(self) -> None:
+        """v6.1.0: picking_list_order 메타데이터 컬럼 추가 (Gate-1 연동)."""
+        add_cols = [
+            ('picking_list_order', 'picking_no', "TEXT DEFAULT ''"),
+            ('picking_list_order', 'delivery_terms', "TEXT DEFAULT ''"),
+            ('picking_list_order', 'port_loading', "TEXT DEFAULT ''"),
+            ('picking_list_order', 'port_discharge', "TEXT DEFAULT ''"),
+            ('picking_list_order', 'containers', "INTEGER DEFAULT 1"),
+            ('picking_list_order', 'contact_person', "TEXT DEFAULT ''"),
+            ('picking_list_order', 'contact_email', "TEXT DEFAULT ''"),
+            ('picking_list_order', 'total_nw_kg', "TEXT DEFAULT ''"),
+            ('picking_list_order', 'total_gw_kg', "TEXT DEFAULT ''"),
+            ('picking_list_order', 'gate1_result', "TEXT DEFAULT ''"),
+        ]
+        for table, col, col_type in add_cols:
+            try:
+                self.execute(f'ALTER TABLE {table} ADD COLUMN {col} {col_type}')
+                logger.info(f'[v6.1.0] {table}.{col} 추가')
+            except sqlite3.OperationalError as e:
+                logger.debug(f'[v6.1.0] {col} 이미 존재: {e}')
+        try:
+            self.commit()
+        except sqlite3.OperationalError:
+            pass
 
     def _migrate_v588_con_return(self) -> None:
         """
