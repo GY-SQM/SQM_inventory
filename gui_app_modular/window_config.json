@@ -1,8 +1,8 @@
 {
   "width": 1920,
   "height": 1009,
-  "x": -265,
-  "y": 133,
+  "x": 0,
+  "y": 32,
   "dialogs": {
     "allocation_dialog": "1511x900+2105+100",
     "allocation_status_win": "906x827+2293+133"
