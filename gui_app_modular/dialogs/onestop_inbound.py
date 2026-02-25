@@ -1509,7 +1509,10 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                                 _app._set_parsing_preview_data(None)
                             if hasattr(_app, 'notebook') and hasattr(_app, 'tab_inventory'):
                                 _root.after(200, lambda: _app.notebook.select(_app.tab_inventory))
-                            if hasattr(_app, '_refresh_inventory'):
+                            if hasattr(_app, '_deferred_refresh_main_tabs'):
+                                _app._deferred_refresh_main_tabs(delay_ms=500)
+                                logger.info("[onestop] 전체 탭 새로고침 예약 완료 (500ms)")
+                            elif hasattr(_app, '_refresh_inventory'):
                                 _root.after(500, _app._refresh_inventory)
                                 logger.info("[onestop] 재고 새로고침 예약 완료 (500ms)")
                     except (RuntimeError, ValueError) as e:

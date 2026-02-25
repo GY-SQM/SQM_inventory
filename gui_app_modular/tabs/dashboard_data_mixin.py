@@ -74,6 +74,50 @@ class DashboardDataMixin:
             return {'tonbag_kg': 0, 'tonbag_cnt': 0, 'sample_kg': 0,
                     'sample_cnt': 0, 'total_kg': 0, 'total_cnt': 0}
 
+    def _get_status_four_phase_stats(self) -> Dict:
+        """
+        v6.0: 4단계 현황 (AVAILABLE / RESERVED / PICKED / SOLD) — 대시보드 카드·TOTAL용.
+        inventory_tonbag 기준 건수·중량(MT) 집계.
+        """
+        try:
+            row = self.engine.db.fetchone("""
+                SELECT
+                    SUM(CASE WHEN status = 'AVAILABLE' THEN 1 ELSE 0 END) AS available_cnt,
+                    SUM(CASE WHEN status = 'RESERVED'  THEN 1 ELSE 0 END) AS reserved_cnt,
+                    SUM(CASE WHEN status = 'PICKED'    THEN 1 ELSE 0 END) AS picked_cnt,
+                    SUM(CASE WHEN status = 'SOLD'      THEN 1 ELSE 0 END) AS sold_cnt,
+                    COUNT(*) AS total_cnt,
+                    COALESCE(SUM(CASE WHEN status = 'AVAILABLE' THEN weight ELSE 0 END), 0) AS available_kg,
+                    COALESCE(SUM(CASE WHEN status = 'RESERVED'  THEN weight ELSE 0 END), 0) AS reserved_kg,
+                    COALESCE(SUM(CASE WHEN status = 'PICKED'    THEN weight ELSE 0 END), 0) AS picked_kg,
+                    COALESCE(SUM(CASE WHEN status = 'SOLD'      THEN weight ELSE 0 END), 0) AS sold_kg,
+                    COALESCE(SUM(weight), 0) AS total_kg
+                FROM inventory_tonbag
+            """)
+            if not row:
+                return {
+                    'available_cnt': 0, 'reserved_cnt': 0, 'picked_cnt': 0, 'sold_cnt': 0, 'total_cnt': 0,
+                    'available_kg': 0, 'reserved_kg': 0, 'picked_kg': 0, 'sold_kg': 0, 'total_kg': 0,
+                }
+            return {
+                'available_cnt': row['available_cnt'] or 0,
+                'reserved_cnt': row['reserved_cnt'] or 0,
+                'picked_cnt': row['picked_cnt'] or 0,
+                'sold_cnt': row['sold_cnt'] or 0,
+                'total_cnt': row['total_cnt'] or 0,
+                'available_kg': row['available_kg'] or 0,
+                'reserved_kg': row['reserved_kg'] or 0,
+                'picked_kg': row['picked_kg'] or 0,
+                'sold_kg': row['sold_kg'] or 0,
+                'total_kg': row['total_kg'] or 0,
+            }
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
+            logger.debug(f"4단계 통계 오류: {e}")
+            return {
+                'available_cnt': 0, 'reserved_cnt': 0, 'picked_cnt': 0, 'sold_cnt': 0, 'total_cnt': 0,
+                'available_kg': 0, 'reserved_kg': 0, 'picked_kg': 0, 'sold_kg': 0, 'total_kg': 0,
+            }
+
     def _get_product_tonbag_sample_breakdown(self) -> List[Dict]:
         """
         v4.1.8: 제품별 톤백/샘플 구분 통계

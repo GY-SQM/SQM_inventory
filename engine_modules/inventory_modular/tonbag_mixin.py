@@ -156,21 +156,38 @@ class TonbagMixin:
                              status: str, picked_to: str = None,
                              pick_ref: str = None) -> Dict:
         """
-        Update tonbag status
+        Update tonbag status (v6.0.7+: PICKED 전환은 AVAILABLE/RESERVED만 허용)
         
         Args:
             lot_no: LOT number
             sub_lt: Sub LOT number
-            status: New status (AVAILABLE, PICKED, SAMPLE)
+            status: New status (AVAILABLE, PICKED, SAMPLE 등)
             picked_to: Customer name (for PICKED status)
             pick_ref: Sale reference (for PICKED status)
             
         Returns:
-            Result dict
+            Result dict (success, error)
         """
         result = {'success': False, 'error': None}
         
         try:
+            # v6.0.7+ 상태 전이 화이트리스트: PICKED로의 전환은 AVAILABLE/RESERVED에서만 허용
+            new_status = (status or '').strip().upper()
+            if new_status == 'PICKED':
+                row = self.db.fetchone(
+                    "SELECT status FROM inventory_tonbag WHERE lot_no = ? AND sub_lt = ?",
+                    (lot_no, sub_lt)
+                )
+                if row:
+                    cur = (row.get('status') or '').strip().upper()
+                    if cur not in ('AVAILABLE', 'RESERVED'):
+                        result['error'] = f"상태 전이 불가: 현재 {cur} → PICKED (AVAILABLE/RESERVED만 허용)"
+                        logger.warning("update_tonbag_status 차단: %s-%s %s → PICKED", lot_no, sub_lt, cur)
+                        return result
+                else:
+                    result['error'] = f"톤백 없음: {lot_no}-{sub_lt}"
+                    return result
+            
             update_fields = ["status = ?"]
             params = [status]
             

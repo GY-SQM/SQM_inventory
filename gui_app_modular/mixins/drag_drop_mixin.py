@@ -229,7 +229,10 @@ class DragDropMixin:
         
         def do_outbound():
             dialog.destroy()
-            self._on_outbound_click(file_path)
+            if hasattr(self, '_on_allocation_input_unified'):
+                self._on_allocation_input_unified(initial_file=file_path)
+            else:
+                self._on_outbound_click(file_path)
         
         def do_status():
             dialog.destroy()
@@ -273,17 +276,30 @@ class DragDropMixin:
                 except (RuntimeError, ValueError) as e:
                     self._log(f"Error importing {f}: {e}")
             CustomMessageBox.showinfo(self.root, "Complete", f"Processed {len(files)} files")
-            self._refresh_inventory()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            else:
+                self._refresh_inventory()
         
         def do_batch_outbound():
             dialog.destroy()
             for f in files:
                 try:
-                    self._on_outbound_click(f)
+                    if hasattr(self, '_on_allocation_input_unified'):
+                        self._on_allocation_input_unified(initial_file=f)
+                    else:
+                        self._on_outbound_click(f)
                 except (RuntimeError, ValueError) as e:
                     self._log(f"Error processing {f}: {e}")
             CustomMessageBox.showinfo(self.root, "Complete", f"Processed {len(files)} files")
-            self._refresh_inventory()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            else:
+                self._refresh_inventory()
         
         ttk.Button(dialog, text="All as Inbound", command=do_batch_inbound, width=20).pack(pady=5)
         ttk.Button(dialog, text="All as Outbound", command=do_batch_outbound, width=20).pack(pady=5)
@@ -309,6 +325,11 @@ class DragDropMixin:
         """로케이션 Excel로 톤백 리스트(lot_no·톤백번호 동일 행) location 반영 후 톤백 리스트 새로고침."""
         from ..dialogs.tonbag_location_upload import run_location_upload_with_file
         def _after_upload():
-            if hasattr(self, '_refresh_tonbag') and callable(self._refresh_tonbag):
-                self._refresh_tonbag()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            else:
+                if hasattr(self, '_refresh_tonbag') and callable(self._refresh_tonbag):
+                    self._refresh_tonbag()
         run_location_upload_with_file(self.root, self.engine, file_path, callback=_after_upload)

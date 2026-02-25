@@ -38,6 +38,23 @@ def _get_path_with_sequence(original_path: str) -> str:
     return str(parent / f"{stem}_99{ext}")
 
 
+def get_unique_excel_path(desired_path: str) -> str:
+    """
+    같은 이름의 Excel 파일이 있으면 숫자를 붙인 새 경로 반환.
+    기존 파일은 덮어쓰지 않고, 새 파일은 file_1.xlsx, file_2.xlsx ... 로 저장.
+
+    Args:
+        desired_path: 사용자가 지정한 저장 경로 (예: C:/data/report.xlsx)
+
+    Returns:
+        존재하지 않으면 desired_path 그대로, 존재하면 stem_1.xlsx, stem_2.xlsx 중 비어 있는 첫 경로
+    """
+    p = Path(desired_path)
+    if not p.exists():
+        return desired_path
+    return _get_path_with_sequence(desired_path)
+
+
 def _try_copy_open_file(original_path: str, dest_path: str) -> bool:
     """열린 파일 복사 시도 (Excel이 읽기 공유 모드면 복사 가능)"""
     try:

@@ -83,6 +83,34 @@ except ImportError:
     AllocationParser = None
     AllocationData = None
 
+# =============================================================================
+# Picking List 파서 (LBM 스타일, picking_list_order/detail 매칭)
+# =============================================================================
+try:
+    from .picking_list_parser import (
+        BatchLine,
+        ItemBlock,
+        PickingDoc,
+        decode_net_weight_kg,
+        NET_WEIGHT_IMPLICIT_SAMPLE_KG,
+        parse_picking_text,
+        parse_picking_list_pdf,
+        to_sqm_picking_order_row,
+        to_sqm_picking_detail_rows,
+        build_pick_plan,
+    )
+except ImportError:
+    BatchLine = None
+    ItemBlock = None
+    PickingDoc = None
+    decode_net_weight_kg = None
+    NET_WEIGHT_IMPLICIT_SAMPLE_KG = None
+    parse_picking_text = None
+    parse_picking_list_pdf = None
+    to_sqm_picking_order_row = None
+    to_sqm_picking_detail_rows = None
+    build_pick_plan = None
+
 # Base Parser
 from .base import BaseParser
 
@@ -127,6 +155,17 @@ __all__ = [
     # 출고 할당
     "AllocationParser",
     "AllocationData",
+    # Picking List (LBM)
+    "BatchLine",
+    "ItemBlock",
+    "PickingDoc",
+    "parse_picking_text",
+    "parse_picking_list_pdf",
+    "to_sqm_picking_order_row",
+    "to_sqm_picking_detail_rows",
+    "build_pick_plan",
+    "decode_net_weight_kg",
+    "NET_WEIGHT_IMPLICIT_SAMPLE_KG",
     # 데이터 모델
     "ContainerInfo",
     "FreeTimeInfo",

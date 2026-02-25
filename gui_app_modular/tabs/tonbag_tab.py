@@ -11,6 +11,7 @@ v5.5.2 - 재고 리스트(Inventory) UI 기준 통일
 """
 
 import logging
+from datetime import datetime, timedelta
 
 from ..utils.ui_constants import CustomMessageBox, ThemeColors, Spacing, get_status_display
 logger = logging.getLogger(__name__)
@@ -278,7 +279,7 @@ class TonbagTabMixin:
             state='disabled'
         )
         self.btn_tonbag_cancel_outbound.pack(side=LEFT, padx=Spacing.XS)
-        apply_tooltip(self.btn_tonbag_cancel_outbound, '선택한 PICKED 톤백의 출고를 취소하고 재고 복구')
+        apply_tooltip(self.btn_tonbag_cancel_outbound, '선택한 판매화물 결정 톤백의 출고를 취소하고 재고 복구')
         
         ttk.Separator(btn_frame, orient='vertical').pack(side=LEFT, fill=Y, padx=Spacing.SM)
         
@@ -344,7 +345,11 @@ class TonbagTabMixin:
         """로케이션 테이블(엑셀/붙여넣기) → 톤백 리스트(lot_no·톤백번호 동일 행) location 반영 후 톤백 리스트 새로고침."""
         from ..dialogs.tonbag_location_upload import show_tonbag_location_upload_dialog
         def _after_upload():
-            if hasattr(self, '_refresh_tonbag') and callable(self._refresh_tonbag):
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            elif hasattr(self, '_refresh_tonbag') and callable(self._refresh_tonbag):
                 self._refresh_tonbag()
         show_tonbag_location_upload_dialog(self.root, self.engine, callback=_after_upload)
     
@@ -453,8 +458,13 @@ class TonbagTabMixin:
                     logger.debug(f"Suppressed: {_e}")
             
             dialog.destroy()
-            self._refresh_tonbag()
-            self._refresh_inventory()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            else:
+                self._refresh_tonbag()
+                self._refresh_inventory()
             CustomMessageBox.showinfo(
                 self.root, "완료", 
                 f"일괄 출고 완료\n\n성공: {success_count}/{len(tonbag_list)}개"
@@ -808,6 +818,18 @@ class TonbagTabMixin:
                     else:
                         _uid = f"{lot_no}-{_sub}"
                 # v5.8.8: _tonbag_columns 순서와 정확히 일치 (con_return 포함, 열 밀림 방지)
+                _cr = tb.get('con_return', '') or ''
+                if not _cr:
+                    _arr = tb.get('arrival_date', '')
+                    _ft = tb.get('free_time', '')
+                    if _arr and _ft and str(_ft).isdigit():
+                        try:
+                            _adt = datetime.strptime(str(_arr)[:10], '%Y-%m-%d')
+                            _rdt = _adt + timedelta(days=int(_ft))
+                            _cr = _rdt.strftime('%Y-%m-%d')
+                        except (ValueError, TypeError):
+                            pass
+
                 vals = (
                     str(row_num),                                    #  1. row_num (No.)
                     lot_no,                                          #  2. lot_no
@@ -824,7 +846,7 @@ class TonbagTabMixin:
                     tb.get('salar_invoice_no', '') or '',            # 13. salar_invoice_no
                     tb.get('ship_date', '') or '',                   # 14. ship_date
                     tb.get('arrival_date', '') or '',                # 15. arrival_date
-                    tb.get('con_return', '') or '',                  # 16. con_return (CON RETURN)
+                    _cr,                                            # 16. con_return (CON RETURN)
                     tb.get('free_time', '') or '',                  # 17. free_time
                     tb.get('warehouse', '') or '',                   # 18. warehouse
                     tb.get('customs', tb.get('customs_status', '')) or '',  # 19. customs
@@ -1002,8 +1024,13 @@ class TonbagTabMixin:
                 if result.get('success'):
                     CustomMessageBox.showinfo(self.root, "완료", f"출고 처리 완료\n\n{lot_no}/{sub_lt} → {destination}")
                     dialog.destroy()
-                    self._refresh_tonbag()
-                    self._refresh_inventory()
+                    if hasattr(self, '_deferred_refresh_main_tabs'):
+                        self._deferred_refresh_main_tabs(delay_ms=50)
+                    elif hasattr(self, '_refresh_main_tabs'):
+                        self._refresh_main_tabs()
+                    else:
+                        self._refresh_tonbag()
+                        self._refresh_inventory()
                 else:
                     CustomMessageBox.showerror(self.root, "오류", result.get('message', '출고 처리 실패'))
             except (RuntimeError, ValueError) as e:
@@ -1075,9 +1102,14 @@ class TonbagTabMixin:
                 self._log(f"✅ 출고 취소 완료: {result['cancelled']}건")
                 CustomMessageBox.showinfo(self.root, "완료", 
                     f"출고 취소 완료: {result['cancelled']}건\n재고가 복구되었습니다.")
-                self._refresh_tonbag()
-                if hasattr(self, '_refresh_inventory'):
-                    self._refresh_inventory()
+                if hasattr(self, '_deferred_refresh_main_tabs'):
+                    self._deferred_refresh_main_tabs(delay_ms=50)
+                elif hasattr(self, '_refresh_main_tabs'):
+                    self._refresh_main_tabs()
+                else:
+                    self._refresh_tonbag()
+                    if hasattr(self, '_refresh_inventory'):
+                        self._refresh_inventory()
             else:
                 errs = '\n'.join(result.get('errors', ['알 수 없는 오류']))
                 CustomMessageBox.showerror(self.root, "오류", f"출고 취소 실패:\n{errs}")

@@ -305,6 +305,9 @@ class InventoryValidator:
         2. 상태-재고 불일치
         3. 필수 필드 NULL 여부
         4. inventory↔tonbag 크로스 검증 (v3.8.4)
+           - inventory.current_weight vs sum(inventory_tonbag.weight) where status IN ('AVAILABLE','SAMPLE')
+           - 불일치 시: 톤백 일부가 RESERVED/PICKED/SOLD이거나, 톤백 행 누락·수정 불일치 가능
+        5. MXBG ↔ 톤백 수량 정합성
         """
         if not self.db:
             return ValidationResult.failure(["DB 연결 없음"])
@@ -344,33 +347,54 @@ class InventoryValidator:
             errors.append(f"필수 필드 누락: {null_fields['cnt']}건")
         
         # 4. v3.8.4: inventory↔tonbag 크로스 검증 (중량)
-        # v5.7.2: 샘플 포함 합산 — status IN ('AVAILABLE','SAMPLE') (대원칙 5001 = 500×10 + 1)
+        # 비교: inventory.current_weight vs 톤백 weight 합계.
+        # AVAILABLE, SAMPLE, RESERVED, PICKED 포함 (출고 확정 SOLD 전까지는 재고로 봄).
         try:
             cross_check = self.db.fetchall("""
                 SELECT 
                     i.lot_no,
                     i.current_weight AS inv_weight,
-                    COALESCE(t.tonbag_avail_weight, 0) AS tonbag_weight
+                    COALESCE(t.tonbag_total_weight, 0) AS tonbag_weight
                 FROM inventory i
                 LEFT JOIN (
-                    SELECT lot_no, SUM(weight) AS tonbag_avail_weight
+                    SELECT lot_no, SUM(weight) AS tonbag_total_weight
                     FROM inventory_tonbag
-                    WHERE status IN ('AVAILABLE','SAMPLE')
+                    WHERE status IN ('AVAILABLE','SAMPLE','RESERVED','PICKED')
                     GROUP BY lot_no
                 ) t ON i.lot_no = t.lot_no
                 WHERE i.current_weight > 0
-                  AND ABS(i.current_weight - COALESCE(t.tonbag_avail_weight, 0)) > 0.01
+                  AND ABS(i.current_weight - COALESCE(t.tonbag_total_weight, 0)) > 0.01
             """)
             if cross_check:
                 for row in cross_check[:5]:
                     lot = row['lot_no']
                     inv_w = row['inv_weight']
                     ton_w = row['tonbag_weight']
-                    warnings.append(
-                        f"크로스 불일치: {lot} (inventory={inv_w:.0f}kg, tonbag합계={ton_w:.0f}kg)"
-                    )
+                    diff = abs(inv_w - ton_w)
+                    # 오차 과대(톤백 합계 거의 없는데 재고는 큰 경우 등) → 데이터 오류 가능성
+                    if ton_w < 100 and inv_w > 1000:
+                        errors.append(
+                            f"심각한 크로스 불일치: {lot} (재고 Balance={inv_w:.0f}kg, 톤백테이블 합계={ton_w:.0f}kg). "
+                            "재고 화면은 정상이어도, 톤백 테이블(inventory_tonbag)의 weight 값이 1 등으로 잘못 저장된 경우입니다. "
+                            "500kg 톤백이면 weight=500 이어야 합니다. 톤백 탭 또는 DB에서 해당 LOT의 톤백 행을 확인하세요."
+                        )
+                    elif diff > 1000:
+                        errors.append(
+                            f"크로스 불일치(오차 과대): {lot} (inventory={inv_w:.0f}kg, tonbag합계={ton_w:.0f}kg). "
+                            "톤백 weight/행 또는 상태 확인 필요."
+                        )
+                    else:
+                        warnings.append(
+                            f"크로스 불일치: {lot} (inventory={inv_w:.0f}kg, tonbag합계={ton_w:.0f}kg). "
+                            "원인: inventory 현재중량과 톤백(AVAILABLE+SAMPLE+RESERVED+PICKED) 합계 불일치."
+                        )
                 if len(cross_check) > 5:
-                    warnings.append(f"... 외 {len(cross_check) - 5}건 추가 불일치")
+                    more = len(cross_check) - 5
+                    severe = sum(1 for r in cross_check[5:] if (r['tonbag_weight'] or 0) < 100 and (r['inv_weight'] or 0) > 1000)
+                    if severe > 0:
+                        errors.append(f"... 외 심각한 불일치 {severe}건 포함 총 {more}건 추가")
+                    else:
+                        warnings.append(f"... 외 {more}건 추가 불일치")
         except (ValueError, TypeError, AttributeError) as e:
             logger.debug(f"크로스 검증 스킵: {e}")
         

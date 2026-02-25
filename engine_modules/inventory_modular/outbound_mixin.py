@@ -21,6 +21,7 @@ from core.constants import (
     STATUS_PICKED,
     STATUS_SOLD,
 )
+from core.types import normalize_lot
 
 from .base import InventoryBaseMixin
 
@@ -192,6 +193,7 @@ class OutboundMixin(InventoryBaseMixin):
                 raise
         
         if stop_at_picked:
+            self._recalc_lot_status(lot_no)
             return {'lot_no': lot_no, 'weight_kg': weight_kg, 'tonbags_picked': picked_count}
         
         # ★ 2단계: inventory 업데이트
@@ -209,6 +211,7 @@ class OutboundMixin(InventoryBaseMixin):
             WHERE lot_no = ?""",
             (new_weight, weight_kg, new_status, customer, customer, now, lot_no)
         )
+        self._recalc_lot_status(lot_no)
         
         # ★ 3단계: stock_movement 이력
         self.db.execute(
@@ -333,6 +336,7 @@ class OutboundMixin(InventoryBaseMixin):
         
         try:
             with self.db.transaction("IMMEDIATE"):
+                touched_lots = set()
                 for item in items:
                     lot_no = str(item.get('lot_no') or '').strip()
                     sub_lt = item.get('sub_lt')
@@ -372,10 +376,11 @@ class OutboundMixin(InventoryBaseMixin):
                     """, (lot_no, weight, f"bulk_cancel customer={tonbag['picked_to'] or ''}", now))
                     
                     result['cancelled'] += 1
+                    if lot_no:
+                        touched_lots.add(lot_no)
                 
                 # 모든 관련 LOT status 재계산
-                lot_nos = set(item['lot_no'] for item in items)
-                for lot_no in lot_nos:
+                for lot_no in touched_lots:
                     self._recalc_lot_status(lot_no)
                 
                 result['success'] = True
@@ -395,17 +400,34 @@ class OutboundMixin(InventoryBaseMixin):
         )
         if not lot:
             return
-        
-        cw = lot['current_weight'] or 0
-        iw = lot['initial_weight'] or 0
-        
-        if cw <= 0:
-            new_status = STATUS_DEPLETED
-        elif cw >= iw:
-            new_status = STATUS_AVAILABLE
+        # 톤백 상태 우선(판매배정/판매화물 결정/출고 등) → 없으면 잔량 기반
+        try:
+            status_rows = self.db.fetchall(
+                "SELECT status, COUNT(*) AS cnt FROM inventory_tonbag WHERE lot_no = ? GROUP BY status",
+                (lot_no,)
+            )
+            status_set = {str(r.get('status', '')).strip().upper() for r in (status_rows or [])}
+        except (sqlite3.Error, ValueError, TypeError):
+            status_set = set()
+
+        if 'SOLD' in status_set:
+            new_status = STATUS_SOLD
+        elif 'SHIPPED' in status_set:
+            new_status = 'SHIPPED'
+        elif 'PICKED' in status_set:
+            new_status = STATUS_PICKED
+        elif 'RESERVED' in status_set:
+            new_status = STATUS_RESERVED
         else:
-            new_status = STATUS_AVAILABLE
-        
+            cw = lot['current_weight'] or 0
+            iw = lot['initial_weight'] or 0
+            if cw <= 0:
+                new_status = STATUS_DEPLETED
+            elif cw >= iw:
+                new_status = STATUS_AVAILABLE
+            else:
+                new_status = STATUS_AVAILABLE
+
         self.db.execute(
             "UPDATE inventory SET status = ? WHERE lot_no = ?",
             (new_status, lot_no)
@@ -427,7 +449,7 @@ class OutboundMixin(InventoryBaseMixin):
         Returns:
             {'success': bool, 'reserved': int, 'errors': [], 'plan_ids': []}
         """
-        result = {'success': False, 'reserved': 0, 'errors': [], 'plan_ids': []}
+        result = {'success': False, 'reserved': 0, 'errors': [], 'plan_ids': [], 'requested_rows': len(allocation_rows)}
 
         def _alloc_val(alloc, key, default=None):
             """AllocationRow(dataclass) 또는 dict 모두 지원"""
@@ -435,10 +457,28 @@ class OutboundMixin(InventoryBaseMixin):
                 return alloc.get(key, default)
             return getattr(alloc, key, default)
 
+        # 중복 Allocation 파일 감지 (basename 기준, UX 경고용)
+        if source_file and source_file != '(붙여넣기)':
+            try:
+                import os
+                fname = os.path.basename(source_file)
+                dup = self.db.fetchone(
+                    """SELECT COUNT(*) AS cnt FROM allocation_plan
+                       WHERE status = 'RESERVED' AND source_file LIKE ?""",
+                    (f"%{fname}",)
+                )
+                dup_cnt = dup.get('cnt', 0) if isinstance(dup, dict) else (dup[0] if dup else 0)
+                if dup_cnt > 0:
+                    result['duplicate_file'] = True
+                    result['duplicate_count'] = int(dup_cnt)
+                    result['duplicate_file_name'] = fname
+            except Exception as e:
+                logger.debug(f"중복 Allocation 파일 감지 실패: {e}")
+
         try:
             with self.db.transaction("IMMEDIATE"):
                 for alloc in allocation_rows:
-                    lot_no = str(_alloc_val(alloc, 'lot_no') or '').strip()
+                    lot_no = (normalize_lot(_alloc_val(alloc, 'lot_no')) or '').strip()
                     customer = str(_alloc_val(alloc, 'sold_to') or _alloc_val(alloc, 'customer') or '').strip()
                     sale_ref = str(_alloc_val(alloc, 'sale_ref') or '').strip()
                     qty_mt = float(_alloc_val(alloc, 'qty_mt') or 0)
@@ -454,13 +494,44 @@ class OutboundMixin(InventoryBaseMixin):
                     tonbags = self.db.fetchall(
                         """SELECT id, sub_lt, weight FROM inventory_tonbag
                            WHERE lot_no = ? AND status = ?
-                             AND COALESCE(is_sample, 0) = 0
                            ORDER BY sub_lt DESC""",
                         (lot_no, STATUS_AVAILABLE)
                     )
 
                     if not tonbags:
-                        result['errors'].append(f"가용 톤백 없음: {lot_no}")
+                        # 원인 구분: DB에 LOT 없음 vs 톤백이 이미 예약/출고됨
+                        exists = self.db.fetchone(
+                            "SELECT 1 FROM inventory_tonbag WHERE lot_no = ? LIMIT 1",
+                            (lot_no,)
+                        )
+                        if not exists:
+                            result['errors'].append(f"가용 톤백 없음: {lot_no} (LOT 미등록 → 입고 먼저 반영)")
+                        else:
+                            status_rows = self.db.fetchall(
+                                "SELECT status, COUNT(*) AS cnt FROM inventory_tonbag WHERE lot_no = ? GROUP BY status",
+                                (lot_no,)
+                            )
+                            status_summary = ", ".join(
+                                f"{r.get('status', 'UNKNOWN')}={r.get('cnt', 0)}" for r in (status_rows or [])
+                            ) or "상태 집계 없음"
+                            avail_row = self.db.fetchone(
+                                "SELECT COUNT(*) AS cnt FROM inventory_tonbag WHERE lot_no = ? AND status = ?",
+                                (lot_no, STATUS_AVAILABLE)
+                            )
+                            avail_sample_row = self.db.fetchone(
+                                "SELECT COUNT(*) AS cnt FROM inventory_tonbag "
+                                "WHERE lot_no = ? AND status = ? AND COALESCE(is_sample, 0) = 1",
+                                (lot_no, STATUS_AVAILABLE)
+                            )
+                            avail_cnt = (avail_row.get('cnt') if isinstance(avail_row, dict) else avail_row[0]) if avail_row else 0
+                            avail_sample_cnt = (avail_sample_row.get('cnt') if isinstance(avail_sample_row, dict) else avail_sample_row[0]) if avail_sample_row else 0
+                            if avail_cnt > 0:
+                                extra_reason = f"판매가능 톤백 {avail_cnt}개 (샘플 {avail_sample_cnt}개 포함)"
+                            else:
+                                extra_reason = "판매가능 톤백 0개"
+                            result['errors'].append(
+                                f"가용 톤백 없음: {lot_no} (중복 배정 | {extra_reason} | 상태: {status_summary} | 조치: [예약 취소] 후 재시도)"
+                            )
                         continue
 
                     pick_count = sublot_count if sublot_count > 0 else max(1, int(weight_kg / 500))
@@ -487,6 +558,8 @@ class OutboundMixin(InventoryBaseMixin):
                         reserved_in_lot += 1
 
                     result['reserved'] += reserved_in_lot
+                    if reserved_in_lot > 0:
+                        self._recalc_lot_status(lot_no)
                     logger.info(f"[reserve] {lot_no}: {reserved_in_lot}개 톤백 RESERVED → {customer}")
 
             result['success'] = result['reserved'] > 0
@@ -496,6 +569,16 @@ class OutboundMixin(InventoryBaseMixin):
         except (ValueError, TypeError, sqlite3.Error) as e:
             logger.error(f"Allocation 예약 오류 (전체 롤백): {e}", exc_info=True)
             result['errors'].append(str(e))
+
+        # 모든 LOT이 이미 예약 상태인 경우 안내 메시지 추가
+        if result['reserved'] == 0 and result['errors']:
+            all_dup = all("중복 배정" in err or "이미 예약/출고됨" in err for err in result['errors'])
+            if all_dup:
+                result['errors'].append(
+                    "⚠️ 모든 LOT이 이미 예약 상태입니다.\n"
+                    "• 다시 예약: [예약 취소] 후 재시도\n"
+                    "• 기존 예약 진행: [출고 실행]"
+                )
 
         return result
 
@@ -577,15 +660,15 @@ class OutboundMixin(InventoryBaseMixin):
                          f"customer={plan['customer']}, sale_ref={plan['sale_ref']}", now)
                     )
 
-                    # v6.0: PICKED 이력 기록 (picking_table) — sale_ref 컬럼 없음, remark에 저장 가능
+                    # v6.0: PICKED 이력 기록 (picking_table) — remark에 plan_id/sale_ref 추적
                     try:
                         self.db.execute(
                             """INSERT INTO picking_table
-                            (lot_no, tonbag_id, sub_lt, tonbag_uid, reservation_id, customer,
-                             picked_qty_kg, status, picking_date, created_by)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, 'system')""",
-                            (p_lot, tb_id, plan['sub_lt'], tonbag_uid, plan['id'],
-                             plan.get('customer') or '', tb_weight, now)
+                            (lot_no, tonbag_id, sub_lt, tonbag_uid, customer, qty_kg, status, picking_date, created_by, remark)
+                            VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?, 'system', ?)""",
+                            (p_lot, tb_id, plan['sub_lt'], tonbag_uid,
+                             plan.get('customer') or '', tb_weight, now,
+                             f"plan_id={plan['id']}, sale_ref={plan.get('sale_ref', '')}")
                         )
                     except sqlite3.OperationalError as e:
                         if "no such table" not in str(e).lower():
@@ -630,6 +713,7 @@ class OutboundMixin(InventoryBaseMixin):
 
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             with self.db.transaction("IMMEDIATE"):
+                touched_lots = set()
                 for tb in tonbags:
                     tb_id = tb['id']
                     self.db.execute(
@@ -651,8 +735,8 @@ class OutboundMixin(InventoryBaseMixin):
                     try:
                         self.db.execute(
                             """INSERT INTO sold_table
-                            (lot_no, tonbag_id, sub_lt, tonbag_uid, picking_id, sold_qty_kg, sold_date, created_by)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, 'system')""",
+                            (lot_no, tonbag_id, sub_lt, tonbag_uid, picking_id, sold_qty_kg, sold_date, status, created_by)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 'SOLD', 'system')""",
                             (tb['lot_no'], tb_id, tb.get('sub_lt', 0), uid_val, picking_id,
                              tb.get('weight') or 0, now)
                         )
@@ -660,6 +744,10 @@ class OutboundMixin(InventoryBaseMixin):
                         if "no such table" not in str(e).lower():
                             logger.debug(f"[sold_table] 기록 스킵: {e}")
                     result['confirmed'] += 1
+                    if tb.get('lot_no'):
+                        touched_lots.add(tb['lot_no'])
+                for lot in touched_lots:
+                    self._recalc_lot_status(lot)
 
             result['success'] = result['confirmed'] > 0
             result['message'] = f"출고 확정: {result['confirmed']}건 SOLD"
@@ -828,8 +916,7 @@ class OutboundMixin(InventoryBaseMixin):
                                 )
                             except sqlite3.OperationalError:
                                 pass
-                    if hasattr(self, '_recalc_lot_status'):
-                        self._recalc_lot_status(lot_no)
+                    self._recalc_lot_status(lot_no)
                     executed += 1
                 result['success'] = executed > 0
                 result['executed'] = executed
@@ -839,9 +926,15 @@ class OutboundMixin(InventoryBaseMixin):
             logger.error(f'[execute_from_picking] 오류: {e}', exc_info=True)
         return result
 
-    def cancel_reservation(self, lot_no: str = None, plan_id: int = None) -> Dict:
+    def cancel_reservation(
+        self,
+        lot_no: str = None,
+        plan_id: int = None,
+        plan_ids: list = None,
+    ) -> Dict:
         """
         RESERVED 예약 취소 → AVAILABLE 복원.
+        plan_ids: 여러 건 일괄 취소 시 [id, ...] 전달.
 
         Returns:
             {'success': bool, 'cancelled': int}
@@ -850,12 +943,19 @@ class OutboundMixin(InventoryBaseMixin):
 
         query = "SELECT id, lot_no, tonbag_id FROM allocation_plan WHERE status = 'RESERVED'"
         params = []
-        if lot_no:
-            query += " AND lot_no = ?"
-            params.append(lot_no)
-        if plan_id:
-            query += " AND id = ?"
-            params.append(plan_id)
+        if plan_ids:
+            if not isinstance(plan_ids, (list, tuple)) or not plan_ids:
+                result['message'] = "취소할 배정(plan_ids)이 비어 있습니다."
+                return result
+            query += " AND id IN (" + ",".join("?" * len(plan_ids)) + ")"
+            params.extend(plan_ids)
+        else:
+            if lot_no:
+                query += " AND lot_no = ?"
+                params.append(lot_no)
+            if plan_id is not None:
+                query += " AND id = ?"
+                params.append(plan_id)
 
         try:
             plans = self.db.fetchall(query, tuple(params))
@@ -865,6 +965,7 @@ class OutboundMixin(InventoryBaseMixin):
 
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             with self.db.transaction("IMMEDIATE"):
+                touched_lots = set()
                 for plan in plans:
                     self.db.execute(
                         """UPDATE inventory_tonbag SET
@@ -878,6 +979,10 @@ class OutboundMixin(InventoryBaseMixin):
                         (now, plan['id'])
                     )
                     result['cancelled'] += 1
+                    if plan.get('lot_no'):
+                        touched_lots.add(plan['lot_no'])
+                for lot_no in touched_lots:
+                    self._recalc_lot_status(lot_no)
 
             result['success'] = result['cancelled'] > 0
             result['message'] = f"예약 취소: {result['cancelled']}건"
@@ -886,4 +991,82 @@ class OutboundMixin(InventoryBaseMixin):
             logger.error(f"예약 취소 오류: {e}")
             result['errors'].append(str(e))
 
+        return result
+
+    def revert_picked_to_reserved(self, lot_no: str = None) -> Dict:
+        """
+        판매화물 결정 취소: PICKED → 판매 배정(RESERVED)으로 되돌림.
+        allocation_plan EXECUTED → RESERVED, inventory_tonbag PICKED → RESERVED.
+        """
+        result = {'success': False, 'reverted': 0, 'errors': []}
+        query = """SELECT id, lot_no, tonbag_id FROM allocation_plan WHERE status = 'EXECUTED'"""
+        params = [] if not lot_no else [lot_no]
+        if lot_no:
+            query += " AND lot_no = ?"
+        try:
+            rows = self.db.fetchall(query, tuple(params))
+            if not rows:
+                result['message'] = "되돌릴 판매화물 결정(EXECUTED) 건이 없습니다."
+                return result
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with self.db.transaction("IMMEDIATE"):
+                for r in rows:
+                    self.db.execute(
+                        """UPDATE allocation_plan SET status = 'RESERVED', executed_at = NULL WHERE id = ?""",
+                        (r['id'],)
+                    )
+                    self.db.execute(
+                        """UPDATE inventory_tonbag SET status = ?, picked_date = NULL, updated_at = ?
+                           WHERE id = ?""",
+                        (STATUS_RESERVED, now, r['tonbag_id'])
+                    )
+                    result['reverted'] += 1
+                    self._recalc_lot_status(r['lot_no'])
+            result['success'] = True
+            result['message'] = f"판매화물 결정 취소: {result['reverted']}건 → 판매 배정(RESERVED)"
+        except (sqlite3.Error, ValueError, TypeError) as e:
+            logger.error(f"revert_picked_to_reserved 오류: {e}")
+            result['errors'].append(str(e))
+        return result
+
+    def revert_sold_to_picked(self, lot_no: str = None) -> Dict:
+        """
+        출고 취소(→ 판매화물 결정): SOLD → PICKED로 되돌림.
+        inventory_tonbag SOLD → PICKED, sold_table 해당 톤백 행 삭제.
+        """
+        result = {'success': False, 'reverted': 0, 'errors': []}
+        query = """SELECT id, lot_no FROM inventory_tonbag WHERE status = ?"""
+        params = [STATUS_SOLD]
+        if lot_no:
+            query += " AND lot_no = ?"
+            params.append(lot_no)
+        try:
+            tonbags = self.db.fetchall(query, tuple(params))
+            if not tonbags:
+                result['message'] = "되돌릴 출고(SOLD) 톤백이 없습니다."
+                return result
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            with self.db.transaction("IMMEDIATE"):
+                touched_lots = set()
+                for tb in tonbags:
+                    tb_id = tb['id']
+                    self.db.execute(
+                        """UPDATE inventory_tonbag SET status = ?, outbound_date = NULL, updated_at = ?
+                           WHERE id = ?""",
+                        (STATUS_PICKED, now, tb_id)
+                    )
+                    try:
+                        self.db.execute("DELETE FROM sold_table WHERE tonbag_id = ?", (tb_id,))
+                    except sqlite3.OperationalError:
+                        pass
+                    result['reverted'] += 1
+                    if tb.get('lot_no'):
+                        touched_lots.add(tb['lot_no'])
+                for lot in touched_lots:
+                    self._recalc_lot_status(lot)
+            result['success'] = True
+            result['message'] = f"출고 취소: {result['reverted']}건 → 판매화물 결정(PICKED)"
+        except (sqlite3.Error, ValueError, TypeError) as e:
+            logger.error(f"revert_sold_to_picked 오류: {e}")
+            result['errors'].append(str(e))
         return result

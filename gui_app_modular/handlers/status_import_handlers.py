@@ -148,6 +148,7 @@ class StatusImportHandlersMixin:
                 updated = 0
                 not_found = 0
                 already_picked = 0
+                blocked_reversed = 0  # SOLD/DEPLETED/RETURNED → PICKED 역전 차단 건수
                 with self.engine.db.transaction():
                     for idx, row in df.iterrows():
                         lot_no = str(row.get(lot_col, ''))
@@ -166,8 +167,13 @@ class StatusImportHandlersMixin:
                         if not existing:
                             not_found += 1
                             continue
-                        if existing['status'] == 'PICKED':
+                        cur = (existing.get('status') or '').strip().upper()
+                        if cur == 'PICKED':
                             already_picked += 1
+                            continue
+                        # v6.0.7+ 상태 전이 보호: AVAILABLE/RESERVED만 PICKED로 전환 허용. SOLD/DEPLETED/RETURNED 역전 차단
+                        if cur in ('SOLD', 'DEPLETED', 'RETURNED', 'SHIPPED'):
+                            blocked_reversed += 1
                             continue
                         self.engine.db.execute("""
                             UPDATE inventory_tonbag SET
@@ -180,7 +186,7 @@ class StatusImportHandlersMixin:
                             WHERE lot_no = ? AND sub_lt = ?
                         """, (customer, sale_ref, outbound_date, outbound_date, lot_no, tonbag_no))
                         updated += 1
-                self._log(f"OK Outbound: {updated} processed, {not_found} not found, {already_picked} already picked")
+                self._log(f"OK Outbound: {updated} processed, {not_found} not found, {already_picked} already picked, {blocked_reversed} blocked(reversed)")
                 report_path = None
                 if updated > 0:
                     try:
@@ -189,16 +195,23 @@ class StatusImportHandlersMixin:
                     except (ValueError, TypeError, AttributeError) as e:
                         self._log(f"WARNING Report generation failed: {e}")
                 msg = (f"출고 결과 반영 완료\n\n• 반영: {updated}건\n• 재고 없음: {not_found}건\n• 이미 출고: {already_picked}건")
+                if blocked_reversed:
+                    msg += f"\n• 상태 보호(역전 차단): {blocked_reversed}건"
                 if report_path:
                     msg += f"\n\n보고서: {os.path.basename(report_path)}"
                     if CustomMessageBox.askyesno(self.root, "완료", msg + "\n\n보고서를 열까요?"):
                         self._open_file(report_path)
                 else:
                     CustomMessageBox.showinfo(self.root, "완료", msg)
-                if hasattr(self, '_refresh_inventory'):
-                    self._refresh_inventory()
-                if hasattr(self, '_refresh_tonbag'):
-                    self._refresh_tonbag()
+                if hasattr(self, '_deferred_refresh_main_tabs'):
+                    self._deferred_refresh_main_tabs(delay_ms=50)
+                elif hasattr(self, '_refresh_main_tabs'):
+                    self._refresh_main_tabs()
+                else:
+                    if hasattr(self, '_refresh_inventory'):
+                        self._refresh_inventory()
+                    if hasattr(self, '_refresh_tonbag'):
+                        self._refresh_tonbag()
                 self._set_status("Ready")
 
             def do_cancel():
@@ -356,8 +369,13 @@ class StatusImportHandlersMixin:
             self._log(f"OK Location: {updated} updated, {skipped} skipped, {len(not_found)} not found")
             CustomMessageBox.showinfo(self.root, "Location Update Complete", msg)
             
-            self._refresh_inventory()
-            self._refresh_tonbag()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            else:
+                self._refresh_inventory()
+                self._refresh_tonbag()
             
         except (RuntimeError, ValueError) as e:
             self._log(f"X Location import error: {e}")

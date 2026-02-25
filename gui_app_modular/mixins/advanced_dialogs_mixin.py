@@ -112,10 +112,15 @@ class AdvancedDialogsMixin:
                 "반품 입고 완료",
                 f"반품 입고 처리 완료\n\n반영: {r.get('returned', 0)}건",
             )
-            if hasattr(self, "_refresh_inventory"):
-                self._refresh_inventory()
-            if hasattr(self, "_refresh_tonbag"):
-                self._refresh_tonbag()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            else:
+                if hasattr(self, "_refresh_inventory"):
+                    self._refresh_inventory()
+                if hasattr(self, "_refresh_tonbag"):
+                    self._refresh_tonbag()
             if hasattr(self, "_refresh_dashboard"):
                 self._refresh_dashboard()
         except RuntimeError as e:
@@ -318,9 +323,14 @@ class AdvancedDialogsMixin:
                 CustomMessageBox.showinfo(dialog, "완료",
                     f"반품 처리 완료\n\nLOT: {lot_no}\n톤백: {sub_lt_val}\n사유: {reason}")
                 dialog.destroy()
-                self._refresh_inventory()
-                if hasattr(self, '_refresh_tonbag'):
-                    self._refresh_tonbag()
+                if hasattr(self, '_deferred_refresh_main_tabs'):
+                    self._deferred_refresh_main_tabs(delay_ms=50)
+                elif hasattr(self, '_refresh_main_tabs'):
+                    self._refresh_main_tabs()
+                else:
+                    self._refresh_inventory()
+                    if hasattr(self, '_refresh_tonbag'):
+                        self._refresh_tonbag()
                 if hasattr(self, '_refresh_dashboard'):
                     self._refresh_dashboard()
             else:
@@ -714,9 +724,14 @@ class AdvancedDialogsMixin:
                         f"성공: {result.get('returned', 0)}건\n"
                         f"스킵: {result.get('skipped', 0)}건")
                     dialog.destroy()
-                    self._refresh_inventory()
-                    if hasattr(self, '_refresh_tonbag'):
-                        self._refresh_tonbag()
+                    if hasattr(self, '_deferred_refresh_main_tabs'):
+                        self._deferred_refresh_main_tabs(delay_ms=50)
+                    elif hasattr(self, '_refresh_main_tabs'):
+                        self._refresh_main_tabs()
+                    else:
+                        self._refresh_inventory()
+                        if hasattr(self, '_refresh_tonbag'):
+                            self._refresh_tonbag()
                     if hasattr(self, '_refresh_dashboard'):
                         self._refresh_dashboard()
                 else:

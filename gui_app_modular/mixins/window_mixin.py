@@ -25,25 +25,24 @@ class WindowMixin:
     """
     
     def _load_window_config(self) -> None:
-        """Load saved window size/position"""
+        """직전 사용한 창 크기/위치 복원. 없으면 기본 크게(1400x900)."""
         from ..utils.constants import WINDOW_CONFIG_FILE
         
         try:
             config_file = Path(WINDOW_CONFIG_FILE) if WINDOW_CONFIG_FILE else None
-            
+            if not config_file:
+                config_file = Path(__file__).parent.parent.parent / "window_config.json"
+
             if config_file and config_file.exists():
                 with open(config_file, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                
-                width = max(config.get('width', 1200), 900)
-                height = max(config.get('height', 800), 600)
+                # 최소 크기 적용 (작게 저장된 값 방지)
+                width = max(config.get('width', 1400), 1000)
+                height = max(config.get('height', 900), 700)
                 x = config.get('x')
                 y = config.get('y')
-                
-                # Prevent off-screen
                 screen_width = self.root.winfo_screenwidth()
                 screen_height = self.root.winfo_screenheight()
-                
                 if x is not None and y is not None:
                     if 0 <= x < screen_width - 100 and 0 <= y < screen_height - 100:
                         self.root.geometry(f"{width}x{height}+{x}+{y}")
@@ -51,47 +50,33 @@ class WindowMixin:
                         self.root.geometry(f"{width}x{height}")
                 else:
                     self.root.geometry(f"{width}x{height}")
-                
                 logger.info(f"Window config loaded: {width}x{height}")
                 return
-                
-        except (RuntimeError, ValueError) as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Window config load failed: {e}")
-        
-        # Default
-        self.root.geometry("1200x800")
+        # 기본: 직전 크기가 없을 때 크게
+        self.root.geometry("1400x900")
     
     def _save_window_config(self) -> None:
-        """Save window size/position"""
+        """메인 창 크기/위치 저장. 기존 dialogs 등 다른 키는 유지."""
         from ..utils.constants import WINDOW_CONFIG_FILE
-        
         try:
+            from ..utils.ui_constants import load_all_geometry, save_geometry_config
             config_file = Path(WINDOW_CONFIG_FILE) if WINDOW_CONFIG_FILE else None
-            
             if not config_file:
                 config_file = Path(__file__).parent.parent.parent / "window_config.json"
-            
-            # Get current geometry
             geometry = self.root.geometry()
-            
-            # Parse geometry string (e.g., "1200x800+100+50")
             import re
             match = re.match(r'(\d+)x(\d+)\+(-?\d+)\+(-?\d+)', geometry)
-            
             if match:
-                config = {
-                    'width': int(match.group(1)),
-                    'height': int(match.group(2)),
-                    'x': int(match.group(3)),
-                    'y': int(match.group(4)),
-                }
-                
-                with open(config_file, 'w', encoding='utf-8') as f:
-                    json.dump(config, f, ensure_ascii=False, indent=2)
-                
-                logger.info(f"Window config saved: {config}")
-                
-        except (OSError, IOError, PermissionError) as e:
+                config = load_all_geometry()
+                config['width'] = int(match.group(1))
+                config['height'] = int(match.group(2))
+                config['x'] = int(match.group(3))
+                config['y'] = int(match.group(4))
+                save_geometry_config(config)
+                logger.info(f"Window config saved: {config.get('width')}x{config.get('height')}")
+        except (OSError, IOError, PermissionError, ImportError) as e:
             logger.warning(f"Window config save failed: {e}")
     
     def _setup_drag_drop(self) -> None:

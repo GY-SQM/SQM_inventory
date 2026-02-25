@@ -46,6 +46,27 @@
 - LOCATION 컬럼 너비 110px로 조정, 폴백 경로(get_tonbags + 재고 병합)에서도 `location` 값 설정 보장
 - **파일:** `gui_app_modular/tabs/tonbag_tab.py`
 
+### 7. v6.0 1단계 DB — PICKED/SOLD 이력 테이블 (설계 반영)
+
+- **reservation 이력:** 신규 `reservation_table` 미생성. 기존 **allocation_plan**을 RESERVED 단계 이력으로 유지.
+- **picking_table (신규):** RESERVED → PICKED 전환 시마다 1건 INSERT. `reservation_id` → allocation_plan.id, `tonbag_uid` 등 저장.
+- **sold_table (신규):** PICKED → SOLD 확정 시마다 1건 INSERT. `picking_id` → picking_table.id, `scan_file`/`scan_code`(바코드 스캔 시 사용 예정) 등 저장.
+- **출고 흐름 연동:** `execute_reserved()`에서 PICKED 처리 후 picking_table INSERT, `confirm_outbound()`에서 SOLD 처리 후 sold_table INSERT. 테이블 없으면 스킵(구 DB 호환).
+- **파일:** `engine_modules/db_migration_mixin.py`(_migrate_v600_picking_sold_tables), `engine_modules/inventory_modular/outbound_mixin.py`
+
+---
+
+## 이전 대비 바뀌는 점 (1단계 DB)
+
+| 구분 | 이전 | 이후 |
+|------|------|------|
+| **RESERVED 이력** | allocation_plan만 사용 | 동일 (reservation_table 미추가) |
+| **PICKED 이력** | 없음 (inventory_tonbag.status만 변경) | **picking_table**에 건별 기록 (lot_no, tonbag_id, reservation_id, customer, picked_qty_kg, picking_date 등) |
+| **SOLD 이력** | 없음 (status만 SOLD) | **sold_table**에 건별 기록 (tonbag_uid, picking_id, sold_qty_kg, sold_date, scan_file/scan_code 등) |
+| **출고 실행(출고 실행)** | tonbag PICKED + allocation_plan EXECUTED + stock_movement | 위 + **picking_table INSERT** (v6.0) |
+| **출고 확정(SOLD)** | tonbag SOLD만 | tonbag SOLD + **outbound_date 설정** + **sold_table INSERT** (v6.0) |
+| **DB 마이그레이션** | v5.9.9까지 | **v6.0** 실행 시 picking_table, sold_table 자동 생성 및 인덱스 생성 |
+
 ---
 
 ## 변경된/추가된 파일
@@ -62,7 +83,9 @@
 | `gui_app_modular/mixins/menu_mixin.py` | 입고 메뉴명 변경 |
 | `gui_app_modular/mixins/custom_menubar.py` | 입고 메뉴명 변경 |
 | `gui_app_modular/tabs/tonbag_tab.py` | LOCATION 컬럼 너비·폴백 setdefault |
-| `docs/RELEASE_NOTES_v600.md` | **신규** |
+| `engine_modules/db_migration_mixin.py` | v6.0 _migrate_v600_picking_sold_tables (picking_table, sold_table) |
+| `engine_modules/inventory_modular/outbound_mixin.py` | execute_reserved → picking_table INSERT, confirm_outbound → sold_table INSERT·outbound_date |
+| `docs/RELEASE_NOTES_v600.md` | **신규** · 1단계 DB 변경점 요약 추가 |
 
 ---
 

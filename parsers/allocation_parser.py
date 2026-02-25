@@ -5,15 +5,23 @@ SQM 재고관리 시스템 - Allocation (출고 리스트) Excel 파서
 Author: Ruby
 Version: 2.5.4
 
-출고 리스트 구조:
-- 1행: 타이틀 (예: "Allocation - PT LBM - September / CIF Semarang - 300MT of MIc9000")
-- 2행: 빈 행 (또는 합계)
-- 3행: 헤더 (Product, SAP NO, ETA BUSAN, Date in stock, QTY (MT), Lot No, WH, Customs, SOLD TO, GW, SALE REF)
+지원 양식 (import 엑셀 = 출고 Allocation Table 템플릿/업로드2와 동일 컬럼):
+- Product | SAP NO | ETA BUSAN | Date in stock | QTY (MT) | Lot No | WH | Customs | GW | SALE REF
+
+Allocation Table 행 구조:
+- 1행: 타이틀 (Allocation - 고객 - 기간 / 목적지 - 수량MT of 제품)
+- 2행: 무시 (합계 QTY 등, 파서에서 헤더로 사용하지 않음)
+- 3행: 헤더 열 (Product, SAP NO, ... Lot No, ...)
 - 4행~: 데이터
+
+출고 리스트 구조 (둘 다 지원):
+A) 화주 원본: 1행 합계(숫자만), 2행 헤더, 3행~ 데이터
+B) 템플릿: 1행 타이틀, 2행 무시, 3행 헤더, 4행~ 데이터
 """
 
 import logging
-from core.types import safe_float
+from core.types import safe_float, normalize_lot
+from utils.common import norm_sap_no, norm_sale_ref, norm_date_any
 logger = logging.getLogger(__name__)
 import re
 from datetime import datetime, date
@@ -153,11 +161,19 @@ class AllocationParser:
         header = AllocationHeader()
         header.filename = Path(filepath).name
 
-        # 1행 타이틀 읽기
+        # 1행 타이틀 읽기 (화주 양식: 1행이 합계 숫자만 있을 수 있음)
         if len(df) > 0:
             title_row = df.iloc[0].values
             title_parts = [str(v) for v in title_row if pd.notna(v) and str(v).strip()]
             header.title = ' '.join(title_parts)
+            # 화주 원본: 1행이 "300.0600" 같은 합계만 있는 경우 → total_qty로 사용
+            if title_parts and len(title_parts) == 1:
+                try:
+                    only_val = title_parts[0].replace(',', '')
+                    if re.match(r'^\d+(?:\.\d+)?$', only_val):
+                        header.total_qty = safe_float(only_val)
+                except (ValueError, TypeError):
+                    pass
 
         title = header.title.upper()
 
@@ -227,9 +243,15 @@ class AllocationParser:
                 break
 
         if header_row_idx is None:
-            # 기본값: 3행 (0-indexed: 2)
-            header_row_idx = 2
-            self.warnings.append(f"헤더 행을 자동 감지하지 못해 기본값(3행) 사용")
+            # 화주 원본: 1행 합계(숫자만), 2행 헤더인 경우 — 2행을 헤더로 사용
+            if len(df) >= 2:
+                row0_str = ' '.join(str(v).strip() for v in df.iloc[0].values if pd.notna(v))
+                if re.match(r'^[\d\s.,]+$', row0_str.replace(' ', '')):
+                    header_row_idx = 1
+                    self.warnings.append("헤더 행을 2행으로 추정 (1행이 합계만 있는 화주 양식)")
+            if header_row_idx is None:
+                header_row_idx = 2
+                self.warnings.append("헤더 행을 자동 감지하지 못해 기본값(3행) 사용")
 
         # 컬럼 헤더 추출
         headers = [str(v).strip() if pd.notna(v) else '' for v in df.iloc[header_row_idx].values]
@@ -253,20 +275,14 @@ class AllocationParser:
             if re.match(r'^(TOTAL|합계|SUBTOTAL|소계)', row_str):
                 continue
 
-            # LOT 번호를 문자열로 변환 (정수, 실수, 과학표기법 모두 처리)
-            if isinstance(lot_raw, float):
-                lot_no = str(int(lot_raw)) if lot_raw == int(lot_raw) else str(lot_raw).split('.')[0]
-            elif isinstance(lot_raw, int):
-                lot_no = str(lot_raw)
-            else:
-                s = str(lot_raw).strip()
-                if re.fullmatch(r'\d+\.?\d*[eE]\+?\d+', s):
-                    lot_no = str(int(float(s)))
-                else:
-                    lot_no = s.split('.')[0]
-
-            # LOT 번호 유효성 검사 (10자리 숫자)
-            if not lot_no or len(lot_no) != 10 or not lot_no.isdigit():
+            # LOT 번호 정규화 (1125110452.0 → "1125110452", 숫자/문자 혼용 통일)
+            lot_no = normalize_lot(lot_raw)
+            if not lot_no:
+                continue
+            if re.fullmatch(r'\d+\.?\d*[eE][+-]?\d+', lot_no):
+                lot_no = str(int(float(lot_no)))
+            # LOT 번호 유효성 검사 (8~11자리 숫자)
+            if len(lot_no) < 8 or len(lot_no) > 11 or not lot_no.isdigit():
                 continue
 
             row = AllocationRow()
@@ -277,20 +293,11 @@ class AllocationParser:
                 val = row_data[col_map['product']]
                 row.product = str(val) if pd.notna(val) else header.product
 
-            # SAP NO (v5.9.3: 과학표기법 방어)
+            # SAP NO 정규화 (digits_only 또는 trim)
             if 'sap_no' in col_map and col_map['sap_no'] < len(row_data):
                 val = row_data[col_map['sap_no']]
                 if pd.notna(val):
-                    if isinstance(val, float):
-                        row.sap_no = str(int(val))
-                    elif isinstance(val, int):
-                        row.sap_no = str(val)
-                    else:
-                        s = str(val).strip()
-                        if re.fullmatch(r'\d+\.?\d*[eE]\+?\d+', s):
-                            row.sap_no = str(int(float(s)))
-                        else:
-                            row.sap_no = s.split('.')[0]
+                    row.sap_no = norm_sap_no(val) or str(val).strip().split('.')[0]
 
             # ETA BUSAN (v2.5.4)
             if 'eta_busan' in col_map and col_map['eta_busan'] < len(row_data):
@@ -345,14 +352,11 @@ class AllocationParser:
                     except (ValueError, TypeError) as _e:
                         logger.debug(f"[allocation_parser] 무시: {_e}")
 
-            # SALE REF
+            # SALE REF 정규화 (upper + trim)
             if 'sale_ref' in col_map and col_map['sale_ref'] < len(row_data):
                 val = row_data[col_map['sale_ref']]
                 if pd.notna(val):
-                    if isinstance(val, (int, float)):
-                        row.sale_ref = str(int(val))
-                    else:
-                        row.sale_ref = str(val).strip()
+                    row.sale_ref = norm_sale_ref(val) or str(val).strip()
 
             # ★★★ v2.9.61: SUB LT (톤백 번호) ★★★
             if 'sub_lt' in col_map and col_map['sub_lt'] < len(row_data):
@@ -363,10 +367,17 @@ class AllocationParser:
                     except (ValueError, TypeError) as _e:
                         logger.debug(f'Suppressed (ValueError, TypeError): {_e}')
 
-            # ★★★ v2.9.61: OUTBOUND DATE (출고일) ★★★
+            # OUTBOUND DATE 정규화 (ISO YYYY-MM-DD)
             if 'outbound_date' in col_map and col_map['outbound_date'] < len(row_data):
                 val = row_data[col_map['outbound_date']]
-                row.outbound_date = self._parse_date(val)
+                iso_str = norm_date_any(val)
+                if iso_str:
+                    try:
+                        row.outbound_date = datetime.strptime(iso_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        row.outbound_date = self._parse_date(val)
+                else:
+                    row.outbound_date = self._parse_date(val)
 
             rows.append(row)
 

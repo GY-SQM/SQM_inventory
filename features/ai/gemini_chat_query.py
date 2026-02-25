@@ -150,6 +150,31 @@ QUERY_TEMPLATES = {
         ORDER BY 잔량율 ASC
         LIMIT {limit}
     """,
+    "예약_배정_현황": """
+        SELECT 
+            status as 상태,
+            COUNT(*) as 건수,
+            ROUND(SUM(COALESCE(qty_mt, 0)), 2) as 수량_MT
+        FROM allocation_plan
+        GROUP BY status
+        ORDER BY 
+            CASE status WHEN 'RESERVED' THEN 1 WHEN 'EXECUTED' THEN 2 WHEN 'CANCELLED' THEN 3 ELSE 4 END
+    """,
+    "예약_배정_목록": """
+        SELECT 
+            ap.lot_no as LOT_NO,
+            ap.sub_lt as Sub_LT,
+            ap.customer as 고객,
+            ap.sale_ref as SALE_REF,
+            ap.qty_mt as 수량_MT,
+            ap.outbound_date as 출고예정일,
+            ap.status as 상태,
+            ap.created_at as 예약일시
+        FROM allocation_plan ap
+        {where_clause}
+        ORDER BY ap.created_at DESC
+        LIMIT {limit}
+    """,
 }
 
 # 제품명 매핑 (한글 → DB값)
@@ -346,7 +371,13 @@ class GeminiChatQuery:
             intent["date_range"] = f"{month_match.group(1)}-{int(month_match.group(2)):02d}"
         
         # 쿼리 타입 결정
-        if "전체" in q and ("요약" in q or "현황" in q):
+        if "allocation" in q or "allocaton" in q or "예약" in q or "배정" in q or "allocation table" in q:
+            # "allocation table에서 몇 개 allocation됐니?" → 예약/배정 현황
+            if "목록" in q or "리스트" in q or "내역" in q:
+                intent["query_type"] = "예약_배정_목록"
+            else:
+                intent["query_type"] = "예약_배정_현황"
+        elif "전체" in q and ("요약" in q or "현황" in q):
             intent["query_type"] = "전체_재고_요약"
         elif "제품" in q and "별" in q:
             intent["query_type"] = "제품별_재고"
@@ -411,6 +442,16 @@ class GeminiChatQuery:
                 where_parts.append(f"arrival_date LIKE '{intent['date_range']}%'")
                 and_parts.append(f"i.arrival_date LIKE '{intent['date_range']}%'")
             
+            # 예약_배정: allocation_plan 테이블만 사용 → lot_no / created_at 조건만
+            if query_type in ("예약_배정_현황", "예약_배정_목록"):
+                ap_parts = []
+                if intent.get("lot_no"):
+                    ap_parts.append(f"ap.lot_no = '{intent['lot_no']}'")
+                if intent.get("date_range"):
+                    ap_parts.append(f"ap.created_at LIKE '{intent['date_range']}%'")
+                where_parts = ap_parts
+                and_parts = ap_parts
+            
             where_clause = ""
             and_clause = ""
             if where_parts:
@@ -454,7 +495,15 @@ class GeminiChatQuery:
             )
             
         except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            err_msg = str(e)
             logger.error(f"쿼리 실행 오류: {e}")
+            if "allocation_plan" in err_msg and query_type in ("예약_배정_현황", "예약_배정_목록"):
+                answer = (
+                    "Allocation(예약) 테이블이 DB에 없습니다. "
+                    "앱을 한 번 종료 후 다시 실행하면 테이블이 자동 생성됩니다."
+                )
+            else:
+                answer = f"조회 중 오류가 발생했습니다: {err_msg}"
             return QueryResult(
                 success=False,
                 query_type=query_type,
@@ -462,8 +511,8 @@ class GeminiChatQuery:
                 data=[],
                 columns=[],
                 row_count=0,
-                answer=f"조회 중 오류가 발생했습니다: {str(e)}",
-                error=str(e)
+                answer=answer,
+                error=err_msg
             )
     
     def _generate_answer(self, query_type: str, data: List[Dict], 
@@ -565,6 +614,23 @@ class GeminiChatQuery:
                     f"(잔량 {r.get('잔량율', 0):.1f}%) - {r.get('제품', '')}"
                 )
             return "\n".join(lines)
+        elif query_type == "예약_배정_현황":
+            total = sum(r.get("건수", 0) for r in data)
+            if total == 0:
+                return "📋 Allocation(예약/배정) 현황\n\n• 예약된 건수: 0건 (allocation_plan에 데이터 없음)"
+            lines = [f"📋 Allocation(예약/배정) 현황 — 총 {total}건\n"]
+            status_kr = {"RESERVED": "예약중", "EXECUTED": "출고실행됨", "CANCELLED": "취소됨"}
+            for r in data:
+                st = r.get("상태", "")
+                lines.append(
+                    f"• {status_kr.get(st, st)}: {r.get('건수', 0)}건 "
+                    f"({r.get('수량_MT', 0):,.1f} MT)"
+                )
+            return "\n".join(lines)
+        elif query_type == "예약_배정_목록":
+            if not data:
+                return "📋 예약/배정 목록: 0건"
+            return f"📋 예약/배정 목록: {len(data)}건\n\n(상세는 Excel/PDF 내보내기 가능)"
         
         else:
             return f"조회 결과: {len(data)}건"

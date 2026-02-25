@@ -12,7 +12,7 @@ import os
 import sqlite3
 import logging
 from ..utils.custom_messagebox import CustomMessageBox
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, Any
 
 logger = logging.getLogger(__name__)
@@ -211,6 +211,15 @@ class InboundUpdateMixin:
                         if free_time_days > 0:
                             updates.append("free_time = ?")
                             params.append(free_time_days)
+                            # v4.0.2: Free Time 일수 있으면 반납일(con_return)도 자동 계산해 저장
+                            if arrival_date:
+                                try:
+                                    arr_dt = datetime.strptime(str(arrival_date)[:10], '%Y-%m-%d')
+                                    ret_dt = arr_dt + timedelta(days=free_time_days)
+                                    updates.append("con_return = ?")
+                                    params.append(ret_dt.strftime('%Y-%m-%d'))
+                                except (ValueError, TypeError):
+                                    pass
                         if bl_no:
                             updates.append("bl_no = COALESCE(NULLIF(bl_no, ''), ?)")
                             params.append(bl_no)
@@ -335,8 +344,13 @@ class InboundUpdateMixin:
                 self._end_task(True, f"OK Excel inbound: {lots_count} LOTs")
                 self._log(f"OK Excel inbound: {lots_count} LOTs")
                 
-                self._refresh_inventory()
-                self._refresh_tonbag()
+                if hasattr(self, '_deferred_refresh_main_tabs'):
+                    self._deferred_refresh_main_tabs(delay_ms=50)
+                elif hasattr(self, '_refresh_main_tabs'):
+                    self._refresh_main_tabs()
+                else:
+                    self._refresh_inventory()
+                    self._refresh_tonbag()
                 
                 CustomMessageBox.showinfo(self.root, "Excel Inbound Complete",
                     f"Excel inbound complete!\n\n"

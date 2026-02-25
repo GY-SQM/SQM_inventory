@@ -316,10 +316,15 @@ class DOUpdateDialog:
 
             # 새로고침
             if self.app:
-                if hasattr(self.app, '_refresh_inventory'):
-                    self.app._refresh_inventory()
-                if hasattr(self.app, '_refresh_tonbag'):
-                    self.app._refresh_tonbag()
+                if hasattr(self.app, '_deferred_refresh_main_tabs'):
+                    self.app._deferred_refresh_main_tabs(delay_ms=50)
+                elif hasattr(self.app, '_refresh_main_tabs'):
+                    self.app._refresh_main_tabs()
+                else:
+                    if hasattr(self.app, '_refresh_inventory'):
+                        self.app._refresh_inventory()
+                    if hasattr(self.app, '_refresh_tonbag'):
+                        self.app._refresh_tonbag()
 
             self.dialog.destroy()
 

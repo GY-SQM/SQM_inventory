@@ -221,17 +221,19 @@ class MenuMixin:
             adv_menu.add_command(label="🧪 단위 테스트", command=self._open_test_runner)
         
         # =====================================================
-        # 보기 메뉴
+        # 보기 메뉴 — v6.0.9: 7탭 한글 (custom_menubar와 동일 인덱스)
         # =====================================================
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="보기", menu=view_menu)
         view_menu.add_command(label="🔄 새로고침 (F5)", command=self._refresh_inventory)
         view_menu.add_separator()
-        view_menu.add_command(label="🏠 홈", command=lambda: self.notebook.select(0))
-        view_menu.add_command(label="📦 재고", command=lambda: self.notebook.select(1))
-        view_menu.add_command(label="🎒 톤백", command=lambda: self.notebook.select(2))
-        view_menu.add_command(label="📊 분석 (피봇)", command=lambda: self.notebook.select(3))
-        view_menu.add_command(label="📝 로그", command=lambda: self.notebook.select(4))
+        view_menu.add_command(label="📦 판매가능", command=lambda: self.notebook.select(0))
+        view_menu.add_command(label="📋 판매배정", command=lambda: self.notebook.select(1))
+        view_menu.add_command(label="🚛 판매화물 결정", command=lambda: self.notebook.select(2))
+        view_menu.add_command(label="✅ 출고", command=lambda: self.notebook.select(3))
+        view_menu.add_command(label="📋 총괄 재고 리스트", command=lambda: self.notebook.select(4))
+        view_menu.add_command(label="📊 통계", command=lambda: self.notebook.select(5))
+        view_menu.add_command(label="📝 로그", command=lambda: self.notebook.select(6))
         view_menu.add_separator()
         view_menu.add_command(label="🎨 테마 선택", command=self._show_theme_selector)
         

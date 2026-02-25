@@ -272,9 +272,20 @@ class OutboundHandlersMixin:
                     self._log(f"✅ 빠른 출고: {processed}건, {picked:.3f} MT")
                     
                     dialog.destroy()
-                    self._refresh_inventory()
-                    if hasattr(self, '_refresh_tonbag'):
-                        self._refresh_tonbag()
+                    if hasattr(self, '_deferred_refresh_main_tabs'):
+                        self._deferred_refresh_main_tabs(delay_ms=50)
+                    elif hasattr(self, '_refresh_main_tabs'):
+                        self._refresh_main_tabs()
+                    else:
+                        self._refresh_inventory()
+                        if hasattr(self, '_refresh_tonbag'):
+                            self._refresh_tonbag()
+                        if hasattr(self, '_refresh_allocation'):
+                            self._refresh_allocation()
+                        if hasattr(self, '_refresh_picked'):
+                            self._refresh_picked()
+                        if hasattr(self, '_refresh_sold'):
+                            self._refresh_sold()
                 else:
                     errs = '\n'.join(result.get('errors', ['알 수 없는 오류']))
                     CustomMessageBox.showerror(self.root, "출고 실패", f"출고 처리 실패:\n{errs}")
@@ -455,12 +466,24 @@ class OutboundHandlersMixin:
                     f"처리: {processed}건\n오류: {result['errors'][0]}")
             
             # 화면 새로고침
-            if hasattr(self, '_refresh_inventory'):
-                self._refresh_inventory()
-            if hasattr(self, '_refresh_tonbag'):
-                self._refresh_tonbag()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            else:
+                if hasattr(self, '_refresh_inventory'):
+                    self._refresh_inventory()
+                if hasattr(self, '_refresh_tonbag'):
+                    self._refresh_tonbag()
             if hasattr(self, '_refresh_dashboard'):
                 self._refresh_dashboard()
+            if not hasattr(self, '_deferred_refresh_main_tabs') and not hasattr(self, '_refresh_main_tabs'):
+                if hasattr(self, '_refresh_allocation'):
+                    self._refresh_allocation()
+                if hasattr(self, '_refresh_picked'):
+                    self._refresh_picked()
+                if hasattr(self, '_refresh_sold'):
+                    self._refresh_sold()
             
             self._log(f"✅ 출고 완료: {processed}건")
             CustomMessageBox.showinfo(self.root, "출고 완료", 
@@ -819,9 +842,20 @@ class OutboundHandlersMixin:
                     self.root, '판매화물 결정 완료',
                     f'처리: {exec_result.get("executed", 0)}개 LOT\n현장 출고 완료 후 [출고 확정]을 실행하세요.'
                 )
-                self._refresh_inventory()
-                if hasattr(self, '_refresh_tonbag'):
-                    self._refresh_tonbag()
+                if hasattr(self, '_deferred_refresh_main_tabs'):
+                    self._deferred_refresh_main_tabs(delay_ms=50)
+                elif hasattr(self, '_refresh_main_tabs'):
+                    self._refresh_main_tabs()
+                else:
+                    self._refresh_inventory()
+                    if hasattr(self, '_refresh_tonbag'):
+                        self._refresh_tonbag()
+                    if hasattr(self, '_refresh_allocation'):
+                        self._refresh_allocation()
+                    if hasattr(self, '_refresh_picked'):
+                        self._refresh_picked()
+                    if hasattr(self, '_refresh_sold'):
+                        self._refresh_sold()
             else:
                 errs = '\n'.join(exec_result.get('errors', [])[:3])
                 CustomMessageBox.showerror(self.root, '실행 실패', errs)
@@ -891,6 +925,163 @@ class OutboundHandlersMixin:
                 self._log(f'Gate-1 에러 리포트 저장: {fpath}')
         except OSError:
             logger.debug(f'Gate-1 리포트 저장 실패: {fpath}')
+
+    def _on_revert_picked_to_reserved(self) -> None:
+        """판매화물 결정 취소: PICKED → 판매 배정. 일부(LOT 선택) 또는 전체."""
+        engine = getattr(self, 'engine', None)
+        if not engine or not hasattr(engine, 'revert_picked_to_reserved'):
+            CustomMessageBox.showwarning(
+                self.root, '기능 없음',
+                'revert_picked_to_reserved()를 사용할 수 없습니다.'
+            )
+            return
+        try:
+            rows = engine.db.fetchall(
+                "SELECT DISTINCT lot_no FROM allocation_plan WHERE status = 'EXECUTED' ORDER BY lot_no"
+            )
+        except Exception:
+            rows = []
+        lot_list = [str(r.get('lot_no', '')).strip() for r in (rows or []) if r.get('lot_no')]
+        if not lot_list:
+            CustomMessageBox.showinfo(
+                self.root, '대상 없음',
+                '되돌릴 판매화물 결정(PICKED) 건이 없습니다.'
+            )
+            return
+        self._show_revert_lot_dialog(
+            title='판매화물 결정 취소 (→ 판매 배정)',
+            lot_list=lot_list,
+            confirm_message='선택한 LOT을 판매 배정(RESERVED)으로 되돌립니다.',
+            revert_all_message='전체를 판매 배정으로 되돌립니다.',
+            revert_fn=lambda lot_nos: self._run_revert_picked_to_reserved(engine, lot_nos),
+        )
+
+    def _run_revert_picked_to_reserved(self, engine, lot_nos):
+        total = 0
+        for lot_no in lot_nos:
+            r = engine.revert_picked_to_reserved(lot_no=lot_no)
+            total += r.get('reverted', 0)
+        return total, f"{total}건 → 판매 배정(RESERVED)"
+
+    def _on_revert_sold_to_picked(self) -> None:
+        """출고 취소: SOLD → 판매화물 결정. 일부(LOT 선택) 또는 전체."""
+        engine = getattr(self, 'engine', None)
+        if not engine or not hasattr(engine, 'revert_sold_to_picked'):
+            CustomMessageBox.showwarning(
+                self.root, '기능 없음',
+                'revert_sold_to_picked()를 사용할 수 없습니다.'
+            )
+            return
+        try:
+            rows = engine.db.fetchall(
+                "SELECT DISTINCT lot_no FROM inventory_tonbag WHERE status = 'SOLD' ORDER BY lot_no"
+            )
+        except Exception:
+            rows = []
+        lot_list = [str(r.get('lot_no', '')).strip() for r in (rows or []) if r.get('lot_no')]
+        if not lot_list:
+            CustomMessageBox.showinfo(
+                self.root, '대상 없음',
+                '되돌릴 출고(SOLD) 건이 없습니다.'
+            )
+            return
+        self._show_revert_lot_dialog(
+            title='출고 취소 (→ 판매화물 결정)',
+            lot_list=lot_list,
+            confirm_message='선택한 LOT을 판매화물 결정(PICKED)으로 되돌립니다.',
+            revert_all_message='전체를 판매화물 결정으로 되돌립니다.',
+            revert_fn=lambda lot_nos: self._run_revert_sold_to_picked(engine, lot_nos),
+        )
+
+    def _run_revert_sold_to_picked(self, engine, lot_nos):
+        total = 0
+        for lot_no in lot_nos:
+            r = engine.revert_sold_to_picked(lot_no=lot_no)
+            total += r.get('reverted', 0)
+        return total, f"{total}건 → 판매화물 결정(PICKED)"
+
+    def _show_revert_lot_dialog(
+        self,
+        title,
+        lot_list,
+        confirm_message,
+        revert_all_message,
+        revert_fn,
+    ) -> None:
+        """LOT 목록 다중 선택 다이얼로그 — 일부/전체 취소 공통."""
+        import tkinter as tk
+        from tkinter import ttk
+
+        d = tk.Toplevel(self.root)
+        d.title(title)
+        d.transient(self.root)
+        d.grab_set()
+        f = ttk.Frame(d, padding=10)
+        f.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(f, text="취소할 LOT를 선택하세요 (일부 또는 [전체 선택] 후 선택 취소).").pack(anchor=tk.W)
+        lb_frame = ttk.Frame(f)
+        lb_frame.pack(fill=tk.BOTH, expand=True, pady=(4, 8))
+        scroll = ttk.Scrollbar(lb_frame)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        lb = tk.Listbox(lb_frame, selectmode=tk.EXTENDED, height=12, yscrollcommand=scroll.set, font=('Consolas', 10))
+        lb.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll.config(command=lb.yview)
+        for lot in lot_list:
+            lb.insert(tk.END, lot)
+
+        def select_all():
+            lb.selection_set(0, tk.END)
+
+        def do_revert():
+            sel = lb.curselection()
+            lot_nos = [lot_list[i] for i in sel] if sel else []
+            if not lot_nos:
+                CustomMessageBox.showwarning(
+                    d, '선택 필요',
+                    'LOT을 선택하거나 [전체 선택] 버튼으로 전부 선택한 뒤 [선택 취소]를 누르세요.'
+                )
+                return
+            if len(lot_nos) == len(lot_list):
+                msg = revert_all_message
+            else:
+                msg = f"선택한 {len(lot_nos)}개 LOT에 대해 취소합니다.\n{confirm_message}"
+            if not CustomMessageBox.askyesno(d, '확인', msg + '\n계속하시겠습니까?'):
+                return
+            total, result_msg = revert_fn(lot_nos)
+            d.destroy()
+            CustomMessageBox.showinfo(self.root, '취소 완료', result_msg)
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            else:
+                if hasattr(self, '_refresh_inventory'):
+                    self._refresh_inventory()
+                if hasattr(self, '_refresh_tonbag'):
+                    self._refresh_tonbag()
+                if hasattr(self, '_refresh_allocation'):
+                    self._refresh_allocation()
+                if hasattr(self, '_refresh_picked'):
+                    self._refresh_picked()
+                if hasattr(self, '_refresh_sold'):
+                    self._refresh_sold()
+
+        btn_f = ttk.Frame(f)
+        btn_f.pack(fill=tk.X, pady=(0, 4))
+        ttk.Button(btn_f, text="전체 선택", command=select_all).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_f, text="선택 취소", command=do_revert).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_f, text="닫기", command=d.destroy).pack(side=tk.LEFT, padx=2)
+        try:
+            from ..utils.ui_constants import setup_dialog_geometry_persistence
+            setup_dialog_geometry_persistence(d, "revert_lot_dialog", self.root, "large")
+        except Exception:
+            d.geometry("500x400")
+        d.update_idletasks()
+        try:
+            from ..utils.ui_constants import center_dialog
+            center_dialog(d, self.root)
+        except Exception:
+            pass
 
     def _on_barcode_scan_upload(self) -> None:
         """v6.0: 바코드 스캔 파일 업로드 (준비 중)"""

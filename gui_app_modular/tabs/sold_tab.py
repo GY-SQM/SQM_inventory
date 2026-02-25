@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import tkinter as tk
 from tkinter import ttk
 from ..utils.ui_constants import ThemeColors, Spacing, apply_tooltip
-from ..utils.constants import BOTH, YES, X, LEFT, VERTICAL
+from ..utils.constants import BOTH, YES, X, LEFT, VERTICAL, RIGHT
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +57,11 @@ class SoldTabMixin:
         ttk.Entry(filter_frame, textvariable=self._sold_date_to_var, width=12).pack(side=LEFT, padx=Spacing.XS)
         ttk.Button(filter_frame, text="적용", command=self._refresh_sold).pack(side=LEFT, padx=Spacing.SM)
         ttk.Button(filter_frame, text="🔄 새로고침", command=self._refresh_sold).pack(side=LEFT, padx=Spacing.XS)
+        btn_revert_sold = ttk.Button(filter_frame, text="↩️ 출고 취소 (→ 판매화물 결정)", command=lambda: self._safe_call('_on_revert_sold_to_picked'))
+        btn_revert_sold.pack(side=LEFT, padx=Spacing.XS)
+        apply_tooltip(btn_revert_sold, "출고 확정 상태를 판매화물 결정으로 되돌립니다.")
         btn_show_all = ttk.Button(filter_frame, text="📋 전체 판매 보기", command=self._on_show_all_sold)
-        btn_show_all.pack(side=RIGHT, padx=Spacing.XS)
+        btn_show_all.pack(side=tk.RIGHT, padx=Spacing.XS)
         apply_tooltip(btn_show_all, "판매(SOLD) 톤백 전체. [← LOT 리스트로]로 복귀.")
 
         self._sold_lot_container = ttk.Frame(frame)
@@ -87,8 +90,8 @@ class SoldTabMixin:
         footer_frame = ttk.Frame(self._sold_lot_container)
         footer_frame.pack(fill=X, pady=(Spacing.XS, 0))
         self._sold_summary_label = ttk.Label(footer_frame, text="LOT 0개 / 톤백 0개 / 총 0 kg")
-        self._sold_summary_label.pack(side=LEFT)
-        ttk.Button(footer_frame, text="📥 Excel 내보내기", command=self._on_sold_export_excel).pack(side=RIGHT, padx=Spacing.XS)
+        self._sold_summary_label.pack(side=tk.LEFT)
+        ttk.Button(footer_frame, text="📥 Excel 내보내기", command=self._on_sold_export_excel).pack(side=tk.RIGHT, padx=Spacing.XS)
         apply_tooltip(footer_frame.winfo_children()[-1], "SOLD 데이터를 Excel로 내보내기 (정산/보고용)")
 
         self._sold_detail_container = ttk.Frame(frame)
@@ -96,6 +99,8 @@ class SoldTabMixin:
         tb_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
         ttk.Button(tb_bar, text="← LOT 리스트로", command=self._on_back_to_sold_lot_list).pack(side=LEFT, padx=Spacing.XS)
         ttk.Button(tb_bar, text="🔄 새로고침", command=self._on_show_all_sold).pack(side=LEFT, padx=Spacing.XS)
+        btn_detail_revert_sold = ttk.Button(tb_bar, text="↩️ 출고 취소 (→ 판매화물 결정)", command=lambda: self._safe_call('_on_revert_sold_to_picked'))
+        btn_detail_revert_sold.pack(side=LEFT, padx=Spacing.XS)
         detail_tree_frame = ttk.Frame(self._sold_detail_container)
         detail_tree_frame.pack(fill=BOTH, expand=YES)
         detail_cols = [c[0] for c in SOLD_DETAIL_COLUMNS]
@@ -130,21 +135,22 @@ class SoldTabMixin:
         date_from, date_to = self._get_sold_date_range()
         try:
             sql = """
-                SELECT lot_no, customer, sales_order_no,
+                SELECT s.lot_no, s.customer, s.sales_order_no,
                     COUNT(*) AS tonbag_count,
-                    SUM(COALESCE(sold_qty_kg, 0)) AS total_kg,
-                    MAX(sold_date) AS sold_date
-                FROM sold_table
-                WHERE status = 'SOLD'
+                    SUM(COALESCE(s.sold_qty_kg, 0)) AS total_kg,
+                    MAX(s.sold_date) AS sold_date
+                FROM sold_table s
+                LEFT JOIN inventory_tonbag t ON s.tonbag_id = t.id
+                WHERE s.status = 'SOLD' AND COALESCE(t.is_sample, 0) = 0
             """
             params = []
             if date_from:
-                sql += " AND (sold_date >= ? OR sold_date IS NULL)"
+                sql += " AND (s.sold_date >= ? OR s.sold_date IS NULL)"
                 params.append(date_from)
             if date_to:
-                sql += " AND (sold_date <= ? OR sold_date IS NULL)"
+                sql += " AND (s.sold_date <= ? OR s.sold_date IS NULL)"
                 params.append(date_to + ' 23:59:59' if len(date_to) <= 10 else date_to)
-            sql += " GROUP BY lot_no, sales_order_no ORDER BY sold_date DESC, lot_no"
+            sql += " GROUP BY s.lot_no, s.sales_order_no ORDER BY s.sold_date DESC, s.lot_no"
             rows = (self.engine.db.fetchall(sql, tuple(params)) if params else self.engine.db.fetchall(sql)) \
                 if hasattr(self.engine, 'db') and self.engine.db else []
             for idx, r in enumerate(rows or [], 1):
@@ -176,17 +182,19 @@ class SoldTabMixin:
             self.tree_sold_detail.delete(item)
         try:
             sql = """
-                SELECT lot_no, sub_lt, sales_order_no, customer, sold_qty_kg, sold_date
-                FROM sold_table WHERE status = 'SOLD'
+                SELECT s.lot_no, s.sub_lt, s.sales_order_no, s.customer, s.sold_qty_kg, s.sold_date
+                FROM sold_table s
+                LEFT JOIN inventory_tonbag t ON s.tonbag_id = t.id
+                WHERE s.status = 'SOLD' AND COALESCE(t.is_sample, 0) = 0
             """
             params = []
             if date_from:
-                sql += " AND (sold_date >= ? OR sold_date IS NULL)"
+                sql += " AND (s.sold_date >= ? OR s.sold_date IS NULL)"
                 params.append(date_from)
             if date_to:
-                sql += " AND (sold_date <= ? OR sold_date IS NULL)"
+                sql += " AND (s.sold_date <= ? OR s.sold_date IS NULL)"
                 params.append(date_to + ' 23:59:59' if len(date_to) <= 10 else date_to)
-            sql += " ORDER BY sold_date DESC, lot_no, sub_lt"
+            sql += " ORDER BY s.sold_date DESC, s.lot_no, s.sub_lt"
             rows = (self.engine.db.fetchall(sql, tuple(params)) if params else self.engine.db.fetchall(sql)) \
                 if hasattr(self.engine, 'db') and self.engine.db else []
             for idx, r in enumerate(rows or [], 1):
@@ -232,17 +240,19 @@ class SoldTabMixin:
             from tkinter import filedialog
             date_from, date_to = self._get_sold_date_range()
             sql = """
-                SELECT lot_no, sales_order_no, customer, sub_lt, sold_qty_kg, sold_date, created_at
-                FROM sold_table WHERE status = 'SOLD'
+                SELECT s.lot_no, s.sales_order_no, s.customer, s.sub_lt, s.sold_qty_kg, s.sold_date, s.created_at
+                FROM sold_table s
+                LEFT JOIN inventory_tonbag t ON s.tonbag_id = t.id
+                WHERE s.status = 'SOLD' AND COALESCE(t.is_sample, 0) = 0
             """
             params = []
             if date_from:
-                sql += " AND (sold_date >= ? OR sold_date IS NULL)"
+                sql += " AND (s.sold_date >= ? OR s.sold_date IS NULL)"
                 params.append(date_from)
             if date_to:
-                sql += " AND (sold_date <= ? OR sold_date IS NULL)"
+                sql += " AND (s.sold_date <= ? OR s.sold_date IS NULL)"
                 params.append(date_to + ' 23:59:59' if len(date_to) <= 10 else date_to)
-            sql += " ORDER BY sold_date DESC, lot_no, sub_lt"
+            sql += " ORDER BY s.sold_date DESC, s.lot_no, s.sub_lt"
             rows = self.engine.db.fetchall(sql, tuple(params)) if params else self.engine.db.fetchall(sql)
             if not hasattr(self.engine, 'db') or not self.engine.db:
                 rows = []

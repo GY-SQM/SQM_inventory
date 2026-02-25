@@ -6,7 +6,7 @@ import logging
 import tkinter as tk
 from tkinter import ttk
 from ..utils.ui_constants import ThemeColors, Spacing, apply_tooltip
-from ..utils.constants import BOTH, YES, X, LEFT, VERTICAL
+from ..utils.constants import BOTH, YES, X, LEFT, VERTICAL, RIGHT
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +46,16 @@ class PickedTabMixin:
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
         ttk.Button(btn_frame, text="🔄 새로고침", command=self._refresh_picked).pack(side=LEFT, padx=Spacing.XS)
+        btn_revert_picked = ttk.Button(btn_frame, text="↩️ 판매화물 결정 취소 (→ 판매 배정)", command=lambda: self._safe_call('_on_revert_picked_to_reserved'))
+        btn_revert_picked.pack(side=LEFT, padx=Spacing.XS)
+        apply_tooltip(btn_revert_picked, "판매화물 결정 상태를 판매 배정으로 되돌립니다.")
         btn_show_all = ttk.Button(btn_frame, text="📋 전체 피킹 보기", command=self._on_show_all_picked)
-        btn_show_all.pack(side=RIGHT, padx=Spacing.XS)
+        btn_show_all.pack(side=tk.RIGHT, padx=Spacing.XS)
         apply_tooltip(btn_show_all, "피킹(ACTIVE) 톤백 전체. [← LOT 리스트로]로 복귀.")
+        
+        btn_picked_export = ttk.Button(btn_frame, text="📥 Excel 내보내기", command=self._on_picked_export_excel)
+        btn_picked_export.pack(side=tk.RIGHT, padx=Spacing.XS)
+        apply_tooltip(btn_picked_export, "현재 판매화물 결정 목록을 Excel로 내보내기")
 
         self._picked_lot_container = ttk.Frame(frame)
         self._picked_lot_container.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
@@ -81,6 +88,8 @@ class PickedTabMixin:
         tb_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
         ttk.Button(tb_bar, text="← LOT 리스트로", command=self._on_back_to_picked_lot_list).pack(side=LEFT, padx=Spacing.XS)
         ttk.Button(tb_bar, text="🔄 새로고침", command=self._on_show_all_picked).pack(side=LEFT, padx=Spacing.XS)
+        btn_detail_revert_picked = ttk.Button(tb_bar, text="↩️ 판매화물 결정 취소 (→ 판매 배정)", command=lambda: self._safe_call('_on_revert_picked_to_reserved'))
+        btn_detail_revert_picked.pack(side=LEFT, padx=Spacing.XS)
         detail_tree_frame = ttk.Frame(self._picked_detail_container)
         detail_tree_frame.pack(fill=BOTH, expand=YES)
         detail_cols = [c[0] for c in PICKED_DETAIL_COLUMNS]
@@ -97,6 +106,52 @@ class PickedTabMixin:
 
         self._refresh_picked()
 
+    def _on_picked_export_excel(self) -> None:
+        """판매화물 결정(Picked) 데이터 Excel 내보내기"""
+        try:
+            import pandas as pd
+            from tkinter import filedialog
+            from datetime import datetime
+            
+            sql = """
+                SELECT lot_no, sub_lt, picking_no, customer, qty_kg, picking_date, created_by
+                FROM picking_table
+                WHERE status = 'ACTIVE' AND COALESCE(is_sample, 0) = 0
+                ORDER BY lot_no, sub_lt
+            """
+            rows = self.engine.db.fetchall(sql) if hasattr(self.engine, 'db') and self.engine.db else []
+            
+            if not rows:
+                if hasattr(self, '_log'):
+                    self._log("내보낼 판매화물 결정 데이터가 없습니다.")
+                return
+
+            df = pd.DataFrame(rows)
+            col_map = {
+                'lot_no': 'LOT NO',
+                'sub_lt': 'Sub LOT',
+                'picking_no': 'Picking No',
+                'customer': '고객사',
+                'qty_kg': '중량(kg)',
+                'picking_date': '피킹일',
+                'created_by': '작업자'
+            }
+            df.rename(columns=col_map, inplace=True)
+            
+            path = filedialog.asksaveasfilename(
+                defaultextension='.xlsx',
+                filetypes=[('Excel', '*.xlsx'), ('All', '*.*')],
+                initialfile=f"PICKED_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            )
+            if path:
+                df.to_excel(path, index=False)
+                if hasattr(self, '_log'):
+                    self._log(f"✅ 판매화물 결정 Excel 저장: {path}")
+        except ImportError:
+            logger.debug("pandas 없음: Excel 내보내기 스킵")
+        except Exception as e:
+            logger.debug(f"_on_picked_export_excel: {e}")
+
     def _refresh_picked(self) -> None:
         """PICKED LOT 리스트 — picking_table WHERE status='ACTIVE' GROUP BY lot_no, picking_no"""
         if not getattr(self, 'tree_picked', None):
@@ -110,7 +165,7 @@ class PickedTabMixin:
                     SUM(COALESCE(qty_kg, 0)) AS total_kg,
                     MIN(picking_date) AS picking_date
                 FROM picking_table
-                WHERE status = 'ACTIVE'
+                WHERE status = 'ACTIVE' AND COALESCE(is_sample, 0) = 0
                 GROUP BY lot_no, picking_no
                 ORDER BY picking_date DESC, lot_no
             """) if hasattr(self.engine, 'db') and self.engine.db else []
@@ -144,7 +199,7 @@ class PickedTabMixin:
             rows = self.engine.db.fetchall("""
                 SELECT lot_no, sub_lt, picking_no, customer, qty_kg, picking_date
                 FROM picking_table
-                WHERE status = 'ACTIVE'
+                WHERE status = 'ACTIVE' AND COALESCE(is_sample, 0) = 0
                 ORDER BY picking_date DESC, lot_no, sub_lt
             """) if hasattr(self.engine, 'db') and self.engine.db else []
             for idx, r in enumerate(rows or [], 1):

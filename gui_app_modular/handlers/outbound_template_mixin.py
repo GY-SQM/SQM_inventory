@@ -61,16 +61,19 @@ class OutboundTemplateMixin:
             center = Alignment(horizontal='center', vertical='center')
             right_align = Alignment(horizontal='right', vertical='center')
 
-            # === Row 1: 타이틀 (화주 양식) ===
+            # === Row 1: 타이틀 (화주 양식). 1행=타이틀, 2행=무시, 3행=헤더 ===
             ws.merge_cells('A1:J1')
             ws['A1'] = "Allocation - PT LBM - September / CIF Semarang - 300MT of MIc9000"
             ws['A1'].font = title_font
+            ws['A1'].border = thin_border
             ws.row_dimensions[1].height = 30
 
-            # === Row 2: 합계 QTY (E열) ===
+            # === Row 2: 무시 (합계 QTY 등). 파서에서 헤더로 사용하지 않음 ===
             ws.row_dimensions[2].height = 20
             ws.cell(row=2, column=5, value=300.06)
             ws['E2'].number_format = '#,##0.0000'
+            for c in range(1, 11):
+                ws.cell(row=2, column=c).border = thin_border
 
             # === Row 3: 헤더 (화주 양식 — 10컬럼) ===
             headers = [
@@ -137,6 +140,8 @@ class OutboundTemplateMixin:
             for r, (a, b) in enumerate(guides, 1):
                 ws2.cell(row=r, column=1, value=a)
                 ws2.cell(row=r, column=2, value=b)
+                ws2.cell(row=r, column=1).border = thin_border
+                ws2.cell(row=r, column=2).border = thin_border
                 if r == 1:
                     ws2.cell(row=1, column=1).font = Font(bold=True, size=13)
                 elif r == 3:

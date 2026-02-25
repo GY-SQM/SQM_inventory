@@ -67,24 +67,23 @@ class DashboardTabMixin:
         self._setup_dash_alerts(ctx)
         self._setup_dash_activity(ctx)
     def _setup_dash_cards(self, ctx) -> None:
-        """섹션 1: 요약 카드"""
+        """섹션 1: 4단계 요약 카드 (v6.0: AVAILABLE / RESERVED / PICKED / SOLD) + TOTAL"""
         from ..utils.constants import X
-        ttk, _p, fonts = ctx['ttk'], ctx['_p'], ctx['fonts']
+        ttk, tk, _p, fonts = ctx['ttk'], ctx['tk'], ctx['_p'], ctx['fonts']
         Spacing = ctx['Spacing']
         main_container = ctx['main_container']
 
         cards_frame = ttk.Frame(main_container)
         cards_frame.pack(fill=X, pady=(0, Spacing.MD))
         
-        # 카드 스타일 설정
         self._dashboard_cards = {}
         
+        # v6.0: 4단계 카드 — 판매가능 / 판매배정 / 판매화물 결정 / 출고
         card_configs = [
-            ('total_weight', '📦 총 재고', '0 kg', _p.get('info', ThemeColors.get('statusbar_progress'))),
-            ('total_lots', '📋 총 LOT', '0개', _p.get('success', ThemeColors.get('statusbar_icon_ok'))),
-            ('today_inbound', '📥 금일 입고', '0 kg', _p.get('primary', '#9b59b6')),
-            ('today_outbound', '📤 금일 출고', '0 kg', _p.get('warning', '#e67e22')),
-            ('available_tonbags', '🎒 가용 톤백', '0개', _p.get('badge_db', '#1abc9c')),
+            ('status_available', '판매가능', '0개', _p.get('success', '#1abc9c')),
+            ('status_reserved', '판매배정', '0개', _p.get('primary', '#3498db')),
+            ('status_picked', '판매화물 결정', '0개', _p.get('warning', '#e67e22')),
+            ('status_sold', '출고', '0개', _p.get('danger', '#e74c3c')),
         ]
         
         for i, (key, title, default, color) in enumerate(card_configs):
@@ -92,6 +91,13 @@ class DashboardTabMixin:
             card.grid(row=0, column=i, padx=Spacing.XS, sticky='nsew')
             self._dashboard_cards[key] = card
             cards_frame.columnconfigure(i, weight=1)
+        
+        # TOTAL 바 (항상 일정)
+        total_frame = ttk.Frame(cards_frame)
+        total_frame.grid(row=1, column=0, columnspan=4, sticky='ew', pady=(Spacing.SM, 0))
+        cards_frame.columnconfigure(0, weight=1)
+        self._dashboard_total_label = ttk.Label(total_frame, text="TOTAL: 0개 / 0.0 MT", font=('맑은 고딕', 12, 'bold'))
+        self._dashboard_total_label.pack(anchor='w')
         
     def _setup_dash_gauge(self, ctx) -> None:
         """섹션 1-2: 창고 가동률 게이지"""
@@ -108,12 +114,12 @@ class DashboardTabMixin:
                 meter_frame = ttk.Frame(main_container)
                 meter_frame.pack(fill=X, pady=(0, Spacing.SM))
                 
-                # 가용률 미터 (v5.0.7: 콤팩트 - 90px)
+                # 판매가능률 미터 (v5.0.7: 콤팩트 - 90px)
                 self._meter_available = Meter(
                     meter_frame, bootstyle='success',
                     amountused=0, amounttotal=100,
                     metersize=90, meterthickness=6,
-                    subtext='가용률', textright='%',
+                    subtext='판매가능률', textright='%',
                     stripethickness=4
                 )
                 self._meter_available.pack(side=LEFT, padx=Spacing.MD)
@@ -273,7 +279,7 @@ class DashboardTabMixin:
         for col_id, text, width, anchor in col_defs:
             self.tree_dashboard_product.heading(col_id, text=text, anchor='center')
             self.tree_dashboard_product.column(col_id, width=width, anchor=anchor)
-        
+
         self.tree_dashboard_product.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
         
     def _setup_dash_alerts(self, ctx) -> None:
@@ -409,110 +415,43 @@ class DashboardTabMixin:
             logger.error(f"대시보드 새로고침 오류: {e}")
     
     def _refresh_dashboard_cards(self) -> None:
-        """v4.0.5 Phase3: 요약 카드 새로고침 — 톤백/샘플 구분"""
+        """v6.0: 4단계 카드 새로고침 (AVAILABLE / RESERVED / PICKED / SOLD) + TOTAL"""
         try:
             if not hasattr(self, '_dashboard_cards') or not self._dashboard_cards:
                 return
             
-            summary = self.engine.get_inventory_summary()
-            if not summary:
-                return
+            stats = self._get_status_four_phase_stats()
+            total_cnt = stats.get('total_cnt', 0) or 0
+            total_kg = stats.get('total_kg', 0) or 0
+            total_mt = total_kg / 1000.0
             
-            # 톤백/샘플 구분 통계
-            ts = self._get_tonbag_sample_breakdown()
+            def _set_card(key: str, cnt: int, kg: float) -> None:
+                card = self._dashboard_cards.get(key)
+                if not card:
+                    return
+                card.value_label.config(text=f"{cnt}개")
+                if hasattr(card, 'sub_label'):
+                    card.sub_label.config(text=f"{kg/1000:,.1f} MT")
             
-            # ── 총 재고 카드 ──
-            total_weight = summary.get('available_weight_kg', 0)
-            self._dashboard_cards['total_weight'].value_label.config(
-                text=f"{total_weight:,.0f} kg"
-            )
-            if hasattr(self._dashboard_cards['total_weight'], 'sub_label'):
-                self._dashboard_cards['total_weight'].sub_label.config(
-                    text=f"톤백 {ts['tonbag_kg']:,.0f}kg({ts['tonbag_cnt']}개) | "
-                         f"샘플 {ts['sample_kg']:,.0f}kg({ts['sample_cnt']}개)"
-                )
+            _set_card('status_available', stats.get('available_cnt', 0), stats.get('available_kg', 0))
+            _set_card('status_reserved', stats.get('reserved_cnt', 0), stats.get('reserved_kg', 0))
+            _set_card('status_picked', stats.get('picked_cnt', 0), stats.get('picked_kg', 0))
+            _set_card('status_sold', stats.get('sold_cnt', 0), stats.get('sold_kg', 0))
             
-            # ── 총 LOT 카드 ──
-            total_lots = summary.get('total_lots', 0)
-            available_lots = summary.get('available_lots', total_lots)
-            self._dashboard_cards['total_lots'].value_label.config(
-                text=f"{total_lots}개"
-            )
-            if hasattr(self._dashboard_cards['total_lots'], 'sub_label'):
-                pct = int(available_lots / max(total_lots, 1) * 100)
-                self._dashboard_cards['total_lots'].sub_label.config(
-                    text=f"가용 {available_lots}개 ({pct}%)"
-                )
+            if hasattr(self, '_dashboard_total_label'):
+                self._dashboard_total_label.config(text=f"TOTAL: {total_cnt}개 / {total_mt:,.1f} MT")
             
-            # ── 금일 입고/출고 카드 — 톤백/샘플 구분 ──
-            today = datetime.now().strftime('%Y-%m-%d')
-            today_ts = self._get_today_tonbag_sample_stats(today)
-            
-            # v4.1.9: 등록 기준 (created_at)
-            inb_created = today_ts.get('inbound_created', {})
-            created_kg = inb_created.get('tonbag_kg', 0) + inb_created.get('sample_kg', 0)
-            created_cnt = inb_created.get('tonbag_cnt', 0) + inb_created.get('sample_cnt', 0)
-            
-            # v4.1.9: 입항 기준 (arrival_date)
-            inb_arrival = today_ts.get('inbound_arrival', {})
-            arrival_kg = inb_arrival.get('tonbag_kg', 0) + inb_arrival.get('sample_kg', 0)
-            arrival_cnt = inb_arrival.get('tonbag_cnt', 0) + inb_arrival.get('sample_cnt', 0)
-            
-            # 메인 표시: 등록 기준
-            self._dashboard_cards['today_inbound'].value_label.config(
-                text=f"{created_kg:,.0f} kg"
-            )
-            
-            # 서브 레이블: 등록 + 입항 구분 표시
-            if hasattr(self._dashboard_cards['today_inbound'], 'sub_label'):
-                if created_kg > 0 or arrival_kg > 0:
-                    sub_text = f"등록: {created_kg:,.0f}kg ({created_cnt}개)"
-                    if arrival_kg != created_kg:  # 입항 수치가 다르면 함께 표시
-                        sub_text += f"\n입항: {arrival_kg:,.0f}kg ({arrival_cnt}개)"
-                    self._dashboard_cards['today_inbound'].sub_label.config(text=sub_text)
-                else:
-                    self._dashboard_cards['today_inbound'].sub_label.config(text="금일 입고 없음")
-            
-            outb = today_ts.get('outbound', {})
-            outbound_kg = outb.get('total_kg', 0)
-            self._dashboard_cards['today_outbound'].value_label.config(
-                text=f"{outbound_kg:,.0f} kg"
-            )
-            if hasattr(self._dashboard_cards['today_outbound'], 'sub_label'):
-                if outbound_kg > 0:
-                    self._dashboard_cards['today_outbound'].sub_label.config(
-                        text=f"{outbound_kg/1000:,.1f} MT ({outb.get('total_cnt',0)}건)"
-                    )
-                else:
-                    self._dashboard_cards['today_outbound'].sub_label.config(text="금일 출고 없음")
-            
-            # ── 가용 톤백 카드 ──
-            self._dashboard_cards['available_tonbags'].value_label.config(
-                text=f"{ts['total_cnt']}개"
-            )
-            if hasattr(self._dashboard_cards['available_tonbags'], 'sub_label'):
-                self._dashboard_cards['available_tonbags'].sub_label.config(
-                    text=f"톤백 {ts['tonbag_cnt']}개 | 샘플 {ts['sample_cnt']}개"
-                )
-            
-            # v3.6.5: Meter 게이지 업데이트
+            # Meter 게이지 (4단계 비율)
             if getattr(self, '_has_meters', False):
                 try:
-                    avail_pct = int((summary.get('available_lots', total_lots) / max(total_lots, 1)) * 100)
+                    avail_pct = int((stats.get('available_cnt', 0) / max(total_cnt, 1)) * 100)
                     self._meter_available.configure(amountused=min(avail_pct, 100))
-                    
-                    picked = summary.get('picked_lots', 0)
-                    out_pct = int((picked / max(total_lots, 1)) * 100)
+                    out_pct = int((stats.get('picked_cnt', 0) / max(total_cnt, 1)) * 100)
                     self._meter_outbound.configure(amountused=min(out_pct, 100))
-                    
-                    # v4.1.9: created_kg 사용
-                    today_total = created_kg + outbound_kg
-                    daily_avg = max(total_weight * 0.02, 1)
-                    today_pct = int((today_total / daily_avg) * 100)
-                    self._meter_today.configure(amountused=min(today_pct, 100))
+                    today_pct = min(50, int((stats.get('sold_cnt', 0) / max(total_cnt, 1)) * 100))
+                    self._meter_today.configure(amountused=today_pct)
                 except (ValueError, TypeError, KeyError) as me:
                     logger.debug(f"Meter 업데이트 무시: {me}")
-            
         except (ValueError, TypeError, KeyError) as e:
             logger.error(f"카드 새로고침 오류: {e}")
     

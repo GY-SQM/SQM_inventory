@@ -505,22 +505,6 @@ class SQMInventoryApp:
         except (RuntimeError, ValueError) as _e:
             logger.debug(f"_toggle_tab_toolbars: {_e}")
     
-    # v7.0 1단계: 4개 메인 탭 빈 프레임 (2~5단계에서 mixin으로 채움)
-    def _setup_allocation_tab(self) -> None:
-        """ALLOCATION 탭 — 3단계에서 allocation_tab mixin으로 대체"""
-        from .utils.constants import ttk
-        ttk.Label(self.tab_allocation, text="📋 ALLOCATION (3단계에서 채움)").pack(pady=40)
-    
-    def _setup_picked_tab(self) -> None:
-        """PICKED 탭 — 4단계에서 picked_tab mixin으로 대체"""
-        from .utils.constants import ttk
-        ttk.Label(self.tab_picked, text="🚛 PICKED (4단계에서 채움)").pack(pady=40)
-    
-    def _setup_sold_tab(self) -> None:
-        """SOLD 탭 — 5단계에서 sold_tab mixin으로 대체"""
-        from .utils.constants import ttk
-        ttk.Label(self.tab_sold, text="✅ SOLD (5단계에서 채움)").pack(pady=40)
-    
     # =========================================================================
     # Placeholder methods - These are implemented by mixins
     # =========================================================================

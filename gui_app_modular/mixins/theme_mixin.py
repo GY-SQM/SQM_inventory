@@ -121,10 +121,13 @@ class ThemeMixin:
             
             # 4) 재고·톤백 트리 리프레시로 화면에 새 색상 반영
             try:
-                if hasattr(self, '_refresh_inventory'):
-                    self._refresh_inventory()
-                if hasattr(self, '_refresh_tonbag'):
-                    self._refresh_tonbag()
+                if hasattr(self, '_deferred_refresh_main_tabs'):
+                    self._deferred_refresh_main_tabs(delay_ms=50)
+                else:
+                    if hasattr(self, '_refresh_inventory'):
+                        self._refresh_inventory()
+                    if hasattr(self, '_refresh_tonbag'):
+                        self._refresh_tonbag()
             except (ValueError, TypeError, AttributeError) as _e:
                 logger.debug(f"탭 리프레시 무시: {_e}")
             

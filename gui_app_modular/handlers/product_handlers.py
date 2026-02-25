@@ -33,7 +33,7 @@ class ProductManagementMixin:
         tree = ttk.Treeview(popup, columns=cols, show='headings', height=15)
         for cid, txt, w, anchor in [
             ('product', '제품명', 180, 'w'), ('lots', 'LOT수', 60, 'center'),
-            ('tonbags', '톤백(전체)', 80, 'center'), ('avail_tb', '톤백(가용)', 80, 'center'),
+            ('tonbags', '톤백(전체)', 80, 'center'), ('avail_tb', '톤백(판매가능)', 80, 'center'),
             ('total_kg', '입고량(kg)', 110, 'e'), ('avail_kg', '잔량(kg)', 110, 'e'),
             ('out_pct', '출고율', 70, 'center'),
         ]:
@@ -139,7 +139,7 @@ class ProductManagementMixin:
             ('lot_no', 'LOT NO', 100, 'w'), ('sap_no', 'SAP NO', 80, 'w'),
             ('product', '제품', 100, 'w'), ('status', '상태', 80, 'center'),
             ('init_kg', '입고(kg)', 85, 'e'), ('curr_kg', '잔량(kg)', 85, 'e'),
-            ('total_tb', '톤백수', 55, 'center'), ('avail_tb', '가용', 50, 'center'),
+            ('total_tb', '톤백수', 55, 'center'), ('avail_tb', '판매가능', 50, 'center'),
             ('sample_tb', '샘플', 50, 'center'), ('inbound_date', '입고일', 90, 'center'),
         ]:
             tree.heading(cid, text=txt)

@@ -52,6 +52,27 @@ def _cargo_status_from_combo_value(raw: str):
     return STATUS_FILTER_MAP.get(label)
 
 
+def _cargo_date_in_range(row: dict, date_from: str, date_to: str) -> bool:
+    """행의 ship_date 또는 arrival_date가 기간 [date_from, date_to] 안에 있으면 True."""
+    d_str = (row.get('arrival_date') or row.get('ship_date') or '').strip()[:10]
+    if not d_str:
+        return True
+    try:
+        from datetime import datetime
+        d = datetime.strptime(d_str, '%Y-%m-%d').date()
+        if date_from and date_from.strip():
+            f = datetime.strptime(date_from.strip()[:10], '%Y-%m-%d').date()
+            if d < f:
+                return False
+        if date_to and date_to.strip():
+            t = datetime.strptime(date_to.strip()[:10], '%Y-%m-%d').date()
+            if d > t:
+                return False
+        return True
+    except (ValueError, TypeError):
+        return True
+
+
 def _sync_cargo_combo_to_values(var, cur_val: str, new_values: list) -> None:
     """콤보 values 갱신 후 선택 라벨 유지: 같은 라벨의 새 항목(새 개수)으로 var 설정."""
     if not cur_val or not new_values:
@@ -95,6 +116,29 @@ class CargoOverviewTabMixin:
         self._cargo_status_combo.pack(side=LEFT, padx=(0, Spacing.SM))
         self._cargo_status_combo.bind('<<ComboboxSelected>>', lambda e: self._refresh_cargo_overview())
         apply_tooltip(self._cargo_status_combo, "해당 상태의 화물만 표시. 현재 재고 기준에서는 출고 옵션 없음.")
+
+        # 기간 필터 (날짜 범위로 테이블/합계 연동)
+        ttk.Label(filter_frame, text="  기간:", font=('맑은 고딕', 10, 'bold')).pack(side=LEFT, padx=(Spacing.SM, 4))
+        self._cargo_date_from_var = tk.StringVar()
+        self._cargo_date_to_var = tk.StringVar()
+        _e_from = ttk.Entry(filter_frame, textvariable=self._cargo_date_from_var, width=12)
+        _e_from.pack(side=LEFT, padx=2)
+        apply_tooltip(_e_from, "시작일 (YYYY-MM-DD). 비우면 제한 없음.")
+        from ..utils.tree_enhancements import show_date_calendar
+        ttk.Button(filter_frame, text="📅", width=2, command=lambda: show_date_calendar(
+            frame.winfo_toplevel(), self._cargo_date_from_var.get(),
+            lambda ymd: (self._cargo_date_from_var.set(ymd), self._refresh_cargo_overview())
+        )).pack(side=LEFT, padx=(0, 2))
+        ttk.Label(filter_frame, text=" ~ ").pack(side=LEFT)
+        _e_to = ttk.Entry(filter_frame, textvariable=self._cargo_date_to_var, width=12)
+        _e_to.pack(side=LEFT, padx=2)
+        apply_tooltip(_e_to, "종료일 (YYYY-MM-DD). 비우면 제한 없음.")
+        ttk.Button(filter_frame, text="📅", width=2, command=lambda: show_date_calendar(
+            frame.winfo_toplevel(), self._cargo_date_to_var.get(),
+            lambda ymd: (self._cargo_date_to_var.set(ymd), self._refresh_cargo_overview())
+        )).pack(side=LEFT, padx=(0, Spacing.SM))
+        _e_from.bind('<Return>', lambda e: self._refresh_cargo_overview())
+        _e_to.bind('<Return>', lambda e: self._refresh_cargo_overview())
 
         ttk.Button(filter_frame, text="🔄 새로고침", command=self._refresh_cargo_overview).pack(side=LEFT, padx=Spacing.SM)
         apply_tooltip(filter_frame.winfo_children()[-1], "목록 다시 불러오기")
@@ -199,6 +243,14 @@ class CargoOverviewTabMixin:
             if hasattr(self, '_show_lot_detail_popup'):
                 menu.add_command(label="📊 LOT 상세", command=lambda: self._show_lot_detail_popup(lot_no))
                 menu.add_separator()
+        
+        # v7.0: 공통 기능 추가 (선택 영역 복사/저장)
+        if hasattr(self, '_copy_selection_to_clipboard'):
+            menu.add_command(label="📋 선택 영역 복사 (Copy)", command=lambda: self._copy_selection_to_clipboard(self.tree_cargo_overview))
+        if hasattr(self, '_export_selection_to_excel'):
+            menu.add_command(label="📥 선택 영역 Excel 저장", command=lambda: self._export_selection_to_excel(self.tree_cargo_overview))
+        menu.add_separator()
+        
         menu.add_command(label="🔄 새로고침", command=self._refresh_cargo_overview)
         try:
             menu.tk_popup(event.x_root, event.y_root)
@@ -230,6 +282,11 @@ class CargoOverviewTabMixin:
         except Exception as e:
             logger.debug(f"총괄 화물 조회: {e}")
             rows = []
+        # 기간 필터 적용 (날짜에 따라 테이블/하단 합계 연동)
+        date_from = getattr(self, '_cargo_date_from_var', None) and self._cargo_date_from_var.get() or ''
+        date_to = getattr(self, '_cargo_date_to_var', None) and self._cargo_date_to_var.get() or ''
+        if date_from or date_to:
+            rows = [r for r in rows if _cargo_date_in_range(r, date_from, date_to)]
         # 상태별 개수로 콤보 values 갱신 (현재 재고 기준이면 출고 제외)
         try:
             counts = self.engine.get_cargo_overview_counts(scope=scope)

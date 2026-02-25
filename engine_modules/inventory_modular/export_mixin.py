@@ -19,8 +19,23 @@ v3.6.0: Docstring 보강
 
 """
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _unique_excel_path(desired_path: str) -> str:
+    """같은 이름 파일이 있으면 숫자 붙인 경로 반환 (기존 파일 덮어쓰지 않음)."""
+    p = Path(desired_path)
+    if not p.exists():
+        return desired_path
+    parent, stem, ext = p.parent, p.stem, p.suffix
+    for n in range(1, 100):
+        candidate = parent / f"{stem}_{n}{ext}"
+        if not candidate.exists():
+            logger.info(f"기존 파일 존재 → 저장: {candidate.name}")
+            return str(candidate)
+    return str(parent / f"{stem}_99{ext}")
 
 
 class ExportMixin:
@@ -28,8 +43,9 @@ class ExportMixin:
     
     def export_to_excel(self, output_path: str, option: int = 1) -> str:
         """
-        엑셀 내보내기
-        
+        엑셀 내보내기.
+        같은 이름의 파일이 있으면 파일명 끝에 _1, _2 ... 를 붙여 새 파일로 저장.
+
         Args:
             output_path: 출력 파일 경로
             option: 내보내기 옵션
@@ -39,10 +55,11 @@ class ExportMixin:
                 4: 톤백 목록
                 5: LOT-톤백 리포트
                 6: 전체 재고
-        
+
         Returns:
-            출력 파일 경로
+            실제 저장된 파일 경로
         """
+        output_path = _unique_excel_path(output_path)
         exporters = {
             1: self._export_basic_inventory,
             2: self._export_detailed_inventory,

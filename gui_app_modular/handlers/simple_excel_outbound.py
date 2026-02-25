@@ -298,8 +298,13 @@ class SimpleExcelOutboundMixin:
             CustomMessageBox.info(self.root, "출고 결과", msg)
 
             # 새로고침
-            if hasattr(self, '_refresh_inventory'):
-                self._refresh_inventory()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            else:
+                if hasattr(self, '_refresh_inventory'):
+                    self._refresh_inventory()
 
         ttk.Button(btn_frame, text="✅ 출고 실행", command=execute).pack(side='right', padx=5)
         ttk.Button(btn_frame, text="❌ 취소", command=dialog.destroy).pack(side='right', padx=5)

@@ -568,20 +568,20 @@ class CustomMenuBar:
         _sec = ThemeColors.get('text_secondary', _gd)
         _pri = ThemeColors.get('text_primary', _gd)
         statuses = [
-            ('✅ AVAILABLE', '판매가능', ThemeColors.get('badge_db', _gd), ThemeColors.get('available', _gd),
+            ('✅ 판매가능', '판매가능', ThemeColors.get('badge_db', _gd), ThemeColors.get('available', _gd),
              '출고 가능한 정상 재고. 입고 완료 후 기본 상태.'),
-            ('📤 PICKED', '판매화물 결정', ThemeColors.get('statusbar_icon_warn', _gd), ThemeColors.get('picked', _gd),
-             '출고 배정(Allocation) 완료. 아직 선적 전.'),
-            ('✔️ CONFIRMED', '출고 확정', ThemeColors.get('info', _gd), ThemeColors.get('tree_select_bg', _gd),
-             '출고 확정됨. PICKED → CONFIRMED 전환 후 선적 대기.'),
-            ('🚢 SHIPPED', '선적 완료', ThemeColors.get('info', _gd), ThemeColors.get('shipped', _gd),
+            ('📤 판매화물 결정', '판매화물 결정', ThemeColors.get('statusbar_icon_warn', _gd), ThemeColors.get('picked', _gd),
+             '판매 배정 완료. 아직 선적 전.'),
+            ('✔️ 출고 확정', '출고 확정', ThemeColors.get('info', _gd), ThemeColors.get('tree_select_bg', _gd),
+             '출고 확정됨. 판매화물 결정 → 출고 확정 전환 후 선적 대기.'),
+            ('🚢 선적 완료', '선적 완료', ThemeColors.get('info', _gd), ThemeColors.get('shipped', _gd),
              '실제 출하(선적) 완료. 창고에서 나간 상태.'),
-            ('❌ DEPLETED', '소진', ThemeColors.get('text_muted', _gd), ThemeColors.get('bg_secondary', _gd),
+            ('❌ 소진', '소진', ThemeColors.get('text_muted', _gd), ThemeColors.get('bg_secondary', _gd),
              '해당 LOT/톤백의 재고가 모두 소진됨. 0 kg.'),
-            ('🔒 RESERVED', '판매배정', ThemeColors.get('statusbar_icon_warn', _gd), ThemeColors.get('reserved', _gd),
+            ('🔒 판매배정', '판매배정', ThemeColors.get('statusbar_icon_warn', _gd), ThemeColors.get('reserved', _gd),
              '특정 고객/주문에 배정된 재고. 다른 출고에 사용 불가.'),
-            ('🧪 SAMPLE', '샘플', ThemeColors.get('success', _gd), ThemeColors.get('available', _gd),
-             '샘플 톤백(1kg). 정규 재고와 별도 관리. is_sample=1'),
+            ('🧪 샘플', '샘플', ThemeColors.get('success', _gd), ThemeColors.get('available', _gd),
+             '샘플 톤백(1kg). 정규 재고와 별도 관리.'),
         ]
         
         for i, (icon_label, ko_name, fg_color, bg_color, desc) in enumerate(statuses):

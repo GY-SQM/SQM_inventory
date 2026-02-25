@@ -16,6 +16,7 @@ from typing import Dict, List
 
 from .base import InventoryBaseMixin, PackingData
 import re  # v5.3.0
+from utils.common import normalize_lot, norm_tonbag_no_std, norm_bl_no, norm_sap_no, norm_container_no
 
 logger = logging.getLogger(__name__)
 
@@ -46,15 +47,10 @@ def _get_sub_lt_raw(tb: dict):
     return None, None
 
 def _normalize_tonbag_no_from_raw_v530(raw, fallback_seq: int, is_sample: bool):
-    """v5.3.0: Normalize tonbag_no as TEXT.
-    Sample -> 'S00' (sub_lt=0과 일치); Digits -> zfill(3); Non-digits -> internal seq (fallback_seq).
-    Raw value MUST be preserved in audit fields.
-    """
-    if is_sample:
-        return 'S00'
-    s = '' if raw is None else str(raw).strip()
-    if s and re.fullmatch(r'\d+', s):
-        return s.zfill(3)
+    """v5.3.0: Normalize tonbag_no as TEXT (좌측 0 패딩). norm_tonbag_no_std 사용."""
+    tonbag_std, sub_lt_int = norm_tonbag_no_std(raw, is_sample=is_sample)
+    if tonbag_std:
+        return tonbag_std
     return str(fallback_seq).zfill(3)
 class InboundMixin(InventoryBaseMixin):
     """입고 처리 Mixin (v3.6.6: SQMDatabase API 기반)"""
@@ -109,8 +105,11 @@ class InboundMixin(InventoryBaseMixin):
                 result['errors'].append(f"LOT 번호가 없습니다 (type={type(packing_data).__name__}, keys={list(packing.keys())[:5]})")
                 return result
             
-            lot_no = str(packing.get('lot_no') or '').strip()
-            
+            lot_no = normalize_lot(packing.get('lot_no')) or str(packing.get('lot_no') or '').strip()
+            if not lot_no:
+                result['errors'].append("LOT 번호가 비어 있습니다.")
+                return result
+
             # LOT NO 길이 검증
             if len(lot_no) > 30:
                 result['errors'].append(f"LOT 번호가 너무 깁니다: {len(lot_no)}자 (최대 30자)")
@@ -167,10 +166,12 @@ class InboundMixin(InventoryBaseMixin):
                         ]
                 
                 # v3.8.4: inventory_id 전달하여 FK 연결
+                sap_std = norm_sap_no(packing.get('sap_no')) or ''
+                bl_std = norm_bl_no(packing.get('bl_no')) or ''
                 tonbag_count = self._insert_tonbags(
-                    lot_no, 
-                    packing.get('sap_no', ''),
-                    packing.get('bl_no', ''),
+                    lot_no,
+                    sap_std,
+                    bl_std,
                     tonbags,
                     inventory_id=inventory_id
                 )
@@ -263,13 +264,16 @@ class InboundMixin(InventoryBaseMixin):
             packing.get('mxbg_pallet')
         )
         
+        lot_no_std = normalize_lot(packing.get('lot_no')) or str(packing.get('lot_no') or '').strip()
+        bl_std = norm_bl_no(packing.get('bl_no')) or str(packing.get('bl_no') or '').strip()
+        sap_std = norm_sap_no(packing.get('sap_no')) or str(packing.get('sap_no') or '').strip()
         lot_data = {
-            'lot_no': packing.get('lot_no'),
+            'lot_no': lot_no_std or packing.get('lot_no'),
             'product': packing.get('product', ''),
             'product_code': packing.get('product_code', ''),
-            'bl_no': packing.get('bl_no', ''),
-            'sap_no': packing.get('sap_no', ''),
-            'container_no': packing.get('container_no', ''),
+            'bl_no': bl_std or packing.get('bl_no', ''),
+            'sap_no': sap_std or packing.get('sap_no', ''),
+            'container_no': norm_container_no(packing.get('container_no')) or str(packing.get('container_no') or ''),
             'lot_sqm': packing.get('lot_sqm', ''),
             'net_weight': weight,
             'gross_weight': gross,
@@ -356,18 +360,21 @@ class InboundMixin(InventoryBaseMixin):
             raw_sub_lt, raw_key = _get_sub_lt_raw(tb)
             source_sub_lt_raw = None if raw_sub_lt in (None, '') else str(raw_sub_lt).strip()
             source_sub_lt_hdr = raw_key
-            sub_lt = raw_sub_lt if raw_sub_lt not in (None, '') else (count + 1)
-            # v5.2.0: tonbag_no TEXT (앞자리 0 보존) + alias(sub_lt/dmsub_lt/DM_SUB_LT)
-            tonbag_no = _normalize_tonbag_no_from_raw_v530(sub_lt, fallback_seq=(count+1), is_sample=False)
-            
+            # 정규화: 001/1 -> tonbag_no "001", sub_lt 1 (문자열 0 패딩 + DB는 정수)
+            tonbag_no, sub_lt_int = norm_tonbag_no_std(raw_sub_lt, is_sample=False)
+            if not tonbag_no or sub_lt_int == 0:
+                fallback = count + 1
+                tonbag_no = str(fallback).zfill(3)
+                sub_lt_int = fallback
+
             sql = """
                 INSERT INTO inventory_tonbag 
                 (inventory_id, lot_no, sap_no, bl_no, sub_lt, tonbag_no,
                  weight, status, is_sample, inbound_date, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, 'AVAILABLE', 0, ?, ?)
             """
-            self.db.execute(sql, (inventory_id, lot_no, sap_no, bl_no, 
-                                  sub_lt, tonbag_no, weight, today, now))
+            self.db.execute(sql, (inventory_id, lot_no, sap_no, bl_no,
+                                  sub_lt_int, tonbag_no, weight, today, now))
             count += 1
         
         # v5.5.3: 샘플 톤백 자동 생성 (sub_lt=0, tonbag_no="S00", 1kg, is_sample=1)

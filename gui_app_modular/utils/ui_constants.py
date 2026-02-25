@@ -12,7 +12,9 @@ UI 가시성 및 통일성을 위한 중앙 집중식 설정
     )
 """
 
+import json
 import logging
+import re
 from typing import Tuple, Dict, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
@@ -767,6 +769,95 @@ def apply_modal_window_options(dialog) -> None:
             pass
     except (Exception, AttributeError):
         pass
+
+
+# ═══════════════════════════════════════════════════════════════
+# 창 크기 저장/복원 (메인 + 하위/팝업 공통)
+# ═══════════════════════════════════════════════════════════════
+
+def _geometry_config_path():
+    """window_config.json 경로 (메인 창과 동일)."""
+    from pathlib import Path
+    try:
+        from .constants import WINDOW_CONFIG_FILE
+        if WINDOW_CONFIG_FILE:
+            return Path(WINDOW_CONFIG_FILE)
+    except (ImportError, AttributeError):
+        pass
+    return Path(__file__).resolve().parent.parent.parent / "window_config.json"
+
+
+def load_all_geometry() -> dict:
+    """저장된 창 설정 전체 로드. {'width','height','x','y', 'dialogs': {key: 'WxH+x+y'}}."""
+    path = _geometry_config_path()
+    try:
+        if path.exists():
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.debug(f"Geometry config load: {e}")
+    return {}
+
+
+def save_geometry_config(config: dict) -> None:
+    """창 설정 전체 저장. config에 dialogs 등 기존 키 유지."""
+    path = _geometry_config_path()
+    try:
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        logger.debug(f"Geometry config save: {e}")
+
+
+def load_dialog_geometry(key: str) -> Optional[str]:
+    """다이얼로그용 저장된 geometry 문자열. 없으면 None."""
+    data = load_all_geometry()
+    dialogs = data.get('dialogs') or {}
+    return dialogs.get(key)
+
+
+def save_dialog_geometry(key: str, geometry: str) -> None:
+    """다이얼로그 크기/위치 저장. 기존 메인 창 설정은 유지."""
+    config = load_all_geometry()
+    if 'dialogs' not in config or not isinstance(config['dialogs'], dict):
+        config['dialogs'] = {}
+    config['dialogs'][key] = geometry
+    save_geometry_config(config)
+
+
+def setup_dialog_geometry_persistence(
+    dialog,
+    key: str,
+    parent,
+    default_size_type: str = 'large',
+) -> None:
+    """
+    다이얼로그에 직전 사용 크기 복원 + 닫을 때 저장.
+    - key: 창 구분용 (예: 'allocation_dialog', 'picking_preview')
+    - default_size_type: 저장값 없을 때 사용할 크기 ('large' 권장)
+    """
+    apply_modal_window_options(dialog)
+    saved = load_dialog_geometry(key)
+    if saved and re.match(r'^\d+x\d+(\+-?\d+\+-?\d+)?$', saved.strip()):
+        try:
+            dialog.geometry(saved)
+        except Exception:
+            pass
+    if not saved or not dialog.winfo_geometry().strip():
+        w, h = DialogSize.calculate(parent, default_size_type)
+        dialog.geometry(f"{w}x{h}")
+        center_dialog(dialog, parent)
+    dialog.update_idletasks()
+
+    def _on_save_geometry(e=None):
+        try:
+            g = dialog.winfo_geometry()
+            if g and re.match(r'^\d+x\d+', g):
+                save_dialog_geometry(key, g)
+        except (RuntimeError, Exception):
+            pass
+
+    dialog.bind('<Destroy>', _on_save_geometry, add='+')
 
 
 def setup_dialog_defaults(dialog, parent, title: str, size_type: str = 'medium'):

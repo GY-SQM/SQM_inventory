@@ -35,6 +35,32 @@ class RefreshMixin:
     def _on_tonbag_filter_legacy(self, event=None) -> None:
         """[LEGACY] Tonbag status filter changed - TonbagTabMixin 사용"""
         self._refresh_tonbag()
+
+    def _refresh_main_tabs(self) -> None:
+        """상위 메뉴 작업 후 필수 탭 즉시 반영"""
+        for fn in [
+            '_refresh_inventory',
+            '_refresh_allocation',
+            '_refresh_picked',
+            '_refresh_sold',
+            '_refresh_tonbag',
+            '_refresh_outbound_scheduled',
+            '_refresh_dashboard',
+            '_refresh_cargo_overview',
+        ]:
+            if hasattr(self, fn):
+                try:
+                    getattr(self, fn)()
+                except (ValueError, TypeError, RuntimeError) as e:
+                    logger.debug(f"{fn} refresh skipped: {e}")
+
+    def _deferred_refresh_main_tabs(self, delay_ms: int = 50) -> None:
+        """UI 블로킹 방지용 지연 리프레시 (모달/탭 동기화용)"""
+        root = getattr(self, 'root', None)
+        if root and root.winfo_exists():
+            root.after(delay_ms, self._refresh_main_tabs)
+        else:
+            self._refresh_main_tabs()
     
     def _focus_search_legacy(self) -> None:
         """Focus on search entry (Ctrl+F)"""

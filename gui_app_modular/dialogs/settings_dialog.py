@@ -12,7 +12,10 @@ v3.6.0 - UI 통일성 적용
 import os
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors, Spacing, DialogSize, center_dialog, apply_tooltip, apply_modal_window_options
+from ..utils.ui_constants import (
+    CustomMessageBox, ThemeColors, Spacing, DialogSize, center_dialog, apply_tooltip,
+    apply_modal_window_options, setup_dialog_geometry_persistence,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -36,12 +39,10 @@ class SettingsDialogMixin:
         
         dialog = tk.Toplevel(self.root)
         dialog.title("🔐 API 키 보안 설정")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
-        apply_modal_window_options(dialog)
+        setup_dialog_geometry_persistence(dialog, "settings_dialog", self.root, "large")
         dialog.minsize(400, 350)
         dialog.transient(self.root)
         dialog.grab_set()
-        center_dialog(dialog, self.root)
         
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         _bg = ThemeColors.get('bg_card', _is_dark)
@@ -431,8 +432,11 @@ Open settings.ini now?
         if hasattr(self, '_container_suffix_var'):
             show_suffix = self._container_suffix_var.get()
             self._log(f"Container suffix display: {'ON' if show_suffix else 'OFF'}")
-            self._refresh_inventory()
-            self._refresh_tonbag()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            else:
+                self._refresh_inventory()
+                self._refresh_tonbag()
     
     def _format_container_no(self, container_no: str) -> str:
         """Format container number based on display setting"""

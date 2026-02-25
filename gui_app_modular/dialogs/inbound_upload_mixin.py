@@ -425,6 +425,11 @@ class InboundUploadMixin:
             )
             if not save_path:
                 return
+            try:
+                from ..utils.excel_file_helper import get_unique_excel_path
+                save_path = get_unique_excel_path(save_path)
+            except ImportError:
+                pass
 
             wb = openpyxl.Workbook()
             ws = wb.active

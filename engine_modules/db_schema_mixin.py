@@ -26,6 +26,19 @@ class DatabaseSchemaMixin:
         self._init_movement_tables()
         self._init_snapshot_tables()
         self._migrate_v243()
+        # v6.0: allocation_plan / picking_table / sold_table 은 반드시 생성 (v243 중간 실패 시에도)
+        self._ensure_allocation_and_picking_sold_tables()
+
+    def _ensure_allocation_and_picking_sold_tables(self) -> None:
+        """allocation_plan, picking_table, sold_table 존재 보장 (예약·출고 이력용)."""
+        try:
+            self._migrate_v593_allocation_plan()
+        except Exception as e:
+            logger.warning(f"[스키마] allocation_plan 생성 스킵/실패: {e}")
+        try:
+            self._migrate_v600_picking_sold_tables()
+        except Exception as e:
+            logger.warning(f"[스키마] picking_table/sold_table 생성 스킵/실패: {e}")
 
     def _init_shipment_table(self) -> None:
         """선적(Shipment) 테이블"""
@@ -275,7 +288,9 @@ class DatabaseSchemaMixin:
         self._migrate_v396_search_indexes()
         self._migrate_v588_con_return()
         self._migrate_v591_tonbag_fk_columns()
+        self._migrate_v593_allocation_plan()
         self._migrate_v599_missing_columns()
+        self._migrate_v600_picking_sold_tables()
 
     def _verify_schema(self) -> Dict[str, Any]:
         """DB 스키마 자동 점검 — 필수 테이블/컬럼 확인"""
@@ -283,7 +298,10 @@ class DatabaseSchemaMixin:
             'ok': True, 'missing_tables': [],
             'missing_columns': {}, 'warnings': []
         }
-        required_tables = ['shipment', 'inventory', 'inventory_tonbag', 'outbound', 'outbound_item']
+        required_tables = [
+            'shipment', 'inventory', 'inventory_tonbag', 'outbound', 'outbound_item',
+            'allocation_plan',  # v5.9.3 예약(RESERVED) 이력
+        ]
         required_columns = {
             'shipment': ['sap_no', 'bl_no', 'arrival_date', 'origin', 'destination'],
             'inventory': ['lot_no', 'sap_no', 'product', 'current_weight', 'status'],
@@ -296,6 +314,19 @@ class DatabaseSchemaMixin:
                 if table not in existing_table_names:
                     result['missing_tables'].append(table)
                     result['ok'] = False
+            # allocation_plan 누락 시 마이그레이션 재시도 (구 DB 호환)
+            if 'allocation_plan' in result['missing_tables']:
+                try:
+                    self._migrate_v593_allocation_plan()
+                    self._migrate_v600_picking_sold_tables()
+                    existing_tables = self.fetchall("SELECT name FROM sqlite_master WHERE type='table'")
+                    existing_table_names = {row['name'] for row in existing_tables}
+                    if 'allocation_plan' in existing_table_names:
+                        result['missing_tables'] = [t for t in result['missing_tables'] if t != 'allocation_plan']
+                        result['ok'] = not result['missing_tables'] and not result['missing_columns']
+                        logger.info("[스키마 점검] allocation_plan 생성 후 보정 완료")
+                except Exception as e:
+                    logger.debug(f"[스키마 점검] allocation_plan 보정 스킵: {e}")
             for table, columns in required_columns.items():
                 if table not in existing_table_names:
                     continue

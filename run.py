@@ -58,15 +58,27 @@ def main():
         ok = run_self_diagnostic()
         sys.exit(0 if ok else 1)
 
-    # MAC/GUID(PC Guard) 체크: 기본 비활성화. 필요 시 --mac-check 로만 검사 수행
-    if "--mac-check" in sys.argv:
+    # 원본 PC 등록 (허가된 PC에서 1회만 실행 → security/allowed_pcs.json 생성)
+    if "--register-pc" in sys.argv:
+        try:
+            from security.mac_guard import register_current_pc
+            ok, msg = register_current_pc()
+            print(f"[PC Guard] {msg}")
+            sys.exit(0 if ok else 1)
+        except ImportError as e:
+            print(f"[PC Guard] 등록 실패: {e}")
+            sys.exit(1)
+
+    # PC 잠금(라이선스): 허가된 PC 외 실행 차단. --no-license 또는 SQM_SKIP_LICENSE=1 이면 스킵
+    skip_license = "--no-license" in sys.argv or os.environ.get("SQM_SKIP_LICENSE", "").strip() in ("1", "true", "yes")
+    if not skip_license:
         try:
             from security.mac_guard import verify_pc
             if not verify_pc(show_gui_error=True):
-                print("[PC Guard] 이 PC에서는 실행이 차단되었습니다.")
+                print("[PC Guard] 이 PC는 인가되지 않았습니다. 프로그램을 종료합니다.")
                 sys.exit(99)
         except ImportError as _e:
-            logger.debug(f"[run] 무시: {_e}")
+            logger.debug(f"[run] PC Guard 미로드: {_e}")
 
     print("=" * 60)
     print(f"  {APP_NAME} v{__version__}")

@@ -73,10 +73,11 @@ class ExportHandlersMixin:
             self._log("Loading data...")
             self._log("Creating Excel...")
             
-            self.engine.export_to_excel(file_path, option=option)
+            # 같은 이름 파일 있으면 _1, _2 ... 붙여 저장 (엔진 내부 처리)
+            actual_path = self.engine.export_to_excel(file_path, option=option)
             
-            self._end_task(True, f"OK Export complete: {os.path.basename(file_path)}")
-            self._log(f"OK Export complete: {file_path}")
+            self._end_task(True, f"OK Export complete: {os.path.basename(actual_path)}")
+            self._log(f"OK Export complete: {actual_path}")
             
             # Option-specific message
             messages = {
@@ -88,7 +89,7 @@ class ExportHandlersMixin:
             msg = messages.get(option, "Export complete")
             
             if CustomMessageBox.askyesno(self.root, "Complete", f"{msg}\n\nOpen file?"):
-                self._open_file(file_path)
+                self._open_file(actual_path)
                 
         except (OSError, IOError, PermissionError) as e:
             self._end_task(False, f"Export failed: {str(e)[:50]}...")
@@ -141,6 +142,8 @@ class ExportHandlersMixin:
             if not file_path:
                 return
             
+            from ..utils.excel_file_helper import get_unique_excel_path
+            file_path = get_unique_excel_path(file_path)
             # Create DataFrame
             df = pd.DataFrame(tonbags)
             df.to_excel(file_path, index=False)

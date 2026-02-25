@@ -20,6 +20,14 @@ from .sales_order_engine import (
     SalesOrderEngine,
     apply_sales_order_to_db,
 )
+from .return_inbound_parser import (
+    ReturnInboundParser,
+    parse_return_inbound_excel,
+)
+from .return_inbound_engine import (
+    process_return_inbound,
+    apply_return_inbound_to_db,
+)
 
 __all__ = [
     "PickingListParser",
@@ -29,4 +37,8 @@ __all__ = [
     "SalesOrderParser",
     "SalesOrderEngine",
     "apply_sales_order_to_db",
+    "ReturnInboundParser",
+    "parse_return_inbound_excel",
+    "process_return_inbound",
+    "apply_return_inbound_to_db",
 ]

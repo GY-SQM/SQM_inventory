@@ -86,8 +86,11 @@ class BackupHandlersMixin:
                     "Application will reload data.")
                 
                 # Refresh UI
-                self._refresh_inventory()
-                self._refresh_tonbag()
+                if hasattr(self, '_deferred_refresh_main_tabs'):
+                    self._deferred_refresh_main_tabs(delay_ms=50)
+                else:
+                    self._refresh_inventory()
+                    self._refresh_tonbag()
             else:
                 error = result.get('error', 'Unknown error')
                 self._log(f"X Restore failed: {error}")
@@ -184,8 +187,11 @@ class BackupHandlersMixin:
                     result = self.engine.restore_backup(str(backup_path))
                     if result.get('success'):
                         CustomMessageBox.showinfo(self.root, "Complete", "Restore complete!")
-                        self._refresh_inventory()
-                        self._refresh_tonbag()
+                        if hasattr(self, '_deferred_refresh_main_tabs'):
+                            self._deferred_refresh_main_tabs(delay_ms=50)
+                        else:
+                            self._refresh_inventory()
+                            self._refresh_tonbag()
                     else:
                         CustomMessageBox.showerror(self.root, "Failed", f"Restore failed: {result.get('error')}")
                 except (RuntimeError, ValueError) as e:

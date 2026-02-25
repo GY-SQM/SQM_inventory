@@ -165,6 +165,36 @@ def save_allowed_pcs(pcs: List[Dict]) -> bool:
         return False
 
 
+def register_current_pc(replace: bool = True) -> Tuple[bool, str]:
+    """
+    현재 PC를 허용 목록에 등록 (원본 PC에서 1회 실행용).
+    실행파일을 이 PC 외에서는 작동하지 않게 하려면, 이 PC에서 한 번 실행한 뒤
+    생성된 security/allowed_pcs.json 을 배포 폴더에 포함하면 됩니다.
+
+    Args:
+        replace: True면 기존 목록을 현재 PC 1대로 교체, False면 현재 PC만 추가
+
+    Returns:
+        (성공 여부, 메시지)
+    """
+    current_mac = _normalize_mac(get_current_mac())
+    current_guid = get_machine_guid().strip()
+    pc_name = (platform.node() or '').strip() or '원본 PC'
+
+    if not current_mac and not current_guid:
+        return False, "MAC/GUID를 읽을 수 없어 등록할 수 없습니다."
+
+    entry = {
+        'name': pc_name,
+        'macs': [current_mac] if current_mac else [],
+        'machine_guid': current_guid,
+    }
+    pcs = [entry] if replace else load_allowed_pcs() + [entry]
+    if save_allowed_pcs(pcs):
+        return True, f"등록 완료: {pc_name} (이 PC만 실행 허용). security/allowed_pcs.json 생성됨."
+    return False, "저장 실패"
+
+
 # MAC 패턴 (물리적 주소): XX-XX-XX-XX-XX-XX 또는 XX:XX:...
 _MAC_PATTERN = re.compile(
     r'\b([0-9A-Fa-f]{2})[-:]([0-9A-Fa-f]{2})[-:]([0-9A-Fa-f]{2})[-:]([0-9A-Fa-f]{2})[-:]([0-9A-Fa-f]{2})[-:]([0-9A-Fa-f]{2})\b'
@@ -261,7 +291,11 @@ def load_report_into_allowed_pcs(report_path: Path, merge: bool = True) -> Tuple
 
 
 if __name__ == '__main__':
-    if len(sys.argv) >= 2:
+    if '--register' in sys.argv:
+        ok, msg = register_current_pc(replace=True)
+        print(f"[PC Guard] {msg}")
+        sys.exit(0 if ok else 1)
+    if len(sys.argv) >= 2 and not sys.argv[1].startswith('-'):
         # 인자로 JSON 경로가 주어지면 보고서 로드 → 허용 목록 반영
         path = Path(sys.argv[1])
         merge = '--replace' not in sys.argv

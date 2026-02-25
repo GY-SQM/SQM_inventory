@@ -92,14 +92,23 @@ class LogTabMixin:
             self.log_text.tag_configure('error', foreground='#dc3545')
             self.log_text.tag_configure('timestamp', foreground='#6c757d')
     
-    def _log(self, message: str, level: str = 'info') -> None:
+    def _log(self, message: str, level: str = 'info', where: str = None, what: str = None) -> None:
         """
-        Add message to activity log
+        Add message to activity log.
         
         Args:
             message: Log message
             level: 'info', 'success', 'warning', 'error'
+            where: 발생 위치(모듈/화면/단계). 경고·에러 시 표시 권장.
+            what: 무슨 작업 중이었는지. 경고·에러 시 표시 권장.
         """
+        if where or what:
+            prefix = []
+            if where:
+                prefix.append(where)
+            if what:
+                prefix.append(what + " 중")
+            message = " ".join(prefix) + ": " + message
         if not hasattr(self, 'log_text'):
             logger.debug(f"[{level.upper()}] {message}")
             return

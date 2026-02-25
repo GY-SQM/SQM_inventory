@@ -13,7 +13,7 @@ import logging
 
 from ..utils.ui_constants import (
     CustomMessageBox, ThemeColors, DialogSize, center_dialog, apply_modal_window_options,
-    STATUS_DISPLAY_TO_DB,
+    STATUS_DISPLAY_TO_DB, get_status_display,
 )
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,115 @@ class ContextMenuMixin:
         # Search treeview context menu
         if hasattr(self, 'tree_search'):
             self._setup_search_context_menu()
-    
+
+        # v7.0: Generic context menus for new tabs (Allocation, Picked, Sold)
+        for tree_attr in [
+            'tree_allocation', 'tree_allocation_detail',
+            'tree_picked', 'tree_picked_detail',
+            'tree_sold', 'tree_sold_detail',
+            # 'tree_inventory', # Specific menu exists
+            # 'tree_cargo_overview' # Specific menu exists in CargoOverviewTabMixin
+        ]:
+            tree = getattr(self, tree_attr, None)
+            if tree:
+                self._setup_generic_context_menu(tree)
+
+    def _setup_generic_context_menu(self, tree) -> None:
+        """Setup generic context menu (Copy/Export/Paste) for a treeview"""
+        from ..utils.constants import Menu
+        
+        menu = Menu(self.root, tearoff=0)
+        menu.add_command(label="📋 선택 영역 복사 (Copy)", command=lambda: self._copy_selection_to_clipboard(tree))
+        menu.add_command(label="📥 선택 영역 Excel 저장", command=lambda: self._export_selection_to_excel(tree))
+        menu.add_separator()
+        menu.add_command(label="📋 붙여넣기 (Paste)", command=lambda: self._paste_to_tree_placeholder(tree))
+        
+        def show_menu(event):
+            item = tree.identify_row(event.y)
+            if item:
+                # If item is not in selection, select it (unless Ctrl/Shift is held - hard to detect here, standard behavior is select)
+                # But for right click, usually we want to keep selection if the clicked item is IN selection.
+                if item not in tree.selection():
+                    tree.selection_set(item)
+            menu.post(event.x_root, event.y_root)
+            
+        tree.bind('<Button-3>', show_menu)
+
+    def _copy_selection_to_clipboard(self, tree) -> None:
+        """Copy selected rows to clipboard (Excel compatible TSV)"""
+        selection = tree.selection()
+        if not selection:
+            return
+            
+        # Get column headers
+        columns = tree['columns']
+        headers = [tree.heading(col, 'text') for col in columns]
+        
+        lines = []
+        # Add headers
+        lines.append('\t'.join(headers))
+        
+        # Add data
+        for item_id in selection:
+            values = tree.item(item_id, 'values')
+            lines.append('\t'.join(str(v) for v in values))
+            
+        text = '\n'.join(lines)
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self._log(f"📋 {len(selection)}행 클립보드 복사 완료")
+
+    def _export_selection_to_excel(self, tree) -> None:
+        """Export selected rows to Excel"""
+        from ..utils.constants import filedialog, pd, HAS_PANDAS
+        from datetime import datetime
+        
+        if not HAS_PANDAS:
+            CustomMessageBox.showwarning(self.root, "기능 제한", "pandas 모듈이 없어 Excel 저장이 불가능합니다.")
+            return
+
+        selection = tree.selection()
+        if not selection:
+            CustomMessageBox.showwarning(self.root, "선택 필요", "내보낼 행을 선택하세요.")
+            return
+            
+        # Get column headers and data
+        columns = tree['columns']
+        headers = [tree.heading(col, 'text') for col in columns]
+        
+        data = []
+        for item_id in selection:
+            values = tree.item(item_id, 'values')
+            row_dict = {h: v for h, v in zip(headers, values)}
+            data.append(row_dict)
+            
+        df = pd.DataFrame(data)
+        
+        filename = f"Export_Selection_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        path = filedialog.asksaveasfilename(
+            defaultextension='.xlsx',
+            filetypes=[('Excel', '*.xlsx'), ('All', '*.*')],
+            initialfile=filename
+        )
+        if path:
+            try:
+                df.to_excel(path, index=False)
+                self._log(f"✅ 선택 영역 Excel 저장: {path}")
+                CustomMessageBox.showinfo(self.root, "저장 완료", f"{len(data)}행 저장되었습니다.")
+            except Exception as e:
+                CustomMessageBox.showerror(self.root, "저장 실패", f"오류: {e}")
+
+    def _paste_to_tree_placeholder(self, tree) -> None:
+        """Paste placeholder"""
+        # If there is a global paste handler, try to use it
+        if hasattr(self, '_on_paste_table'):
+             # Ask user if they want to open Paste Dialog
+             if CustomMessageBox.askyesno(self.root, "데이터 붙여넣기", "데이터 붙여넣기 창을 여시겠습니까?"):
+                 self._on_paste_table()
+             return
+
+        CustomMessageBox.showinfo(self.root, "알림", "이 테이블은 직접 붙여넣기를 지원하지 않습니다.\n[데이터 붙여넣기] 메뉴를 이용하세요.")
+
     def _setup_inventory_context_menu(self) -> None:
         """Setup inventory treeview context menu"""
         from ..utils.constants import Menu
@@ -51,7 +159,8 @@ class ContextMenuMixin:
         self.inventory_menu.add_command(label="✏️ Edit LOT", command=self._edit_lot)
         self.inventory_menu.add_command(label="🗑️ Delete LOT", command=self._delete_lot)
         self.inventory_menu.add_separator()
-        self.inventory_menu.add_command(label="📥 Export Selected", command=self._export_selected_lots)
+        self.inventory_menu.add_command(label="📥 Export Selected (DB Full)", command=self._export_selected_lots)
+        self.inventory_menu.add_command(label="📥 선택 영역 Excel 저장 (보이는 대로)", command=lambda: self._export_selection_to_excel(self.tree_inventory))
         self.inventory_menu.add_command(label="📋 Copy to Clipboard", command=lambda: self._copy_treeview_selection(self.tree_inventory))
         
         self.tree_inventory.bind('<Button-3>', self._show_inventory_context_menu)
@@ -173,7 +282,10 @@ class ContextMenuMixin:
                 self._log(f"LOT updated: {lot_no}")
                 CustomMessageBox.showinfo(self.root, "Success", f"LOT {lot_no} updated")
                 dialog.destroy()
-                self._refresh_inventory()
+                if hasattr(self, '_deferred_refresh_main_tabs'):
+                    self._deferred_refresh_main_tabs(delay_ms=50)
+                else:
+                    self._refresh_inventory()
                 
             except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
                 CustomMessageBox.showerror(self.root, "Error", f"Update failed: {e}")
@@ -216,8 +328,11 @@ class ContextMenuMixin:
             
             self._log(f"LOT deleted: {lot_no}")
             CustomMessageBox.showinfo(self.root, "Success", f"LOT {lot_no} deleted")
-            self._refresh_inventory()
-            self._refresh_tonbag()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            else:
+                self._refresh_inventory()
+                self._refresh_tonbag()
             
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             CustomMessageBox.showerror(self.root, "Error", f"Delete failed: {e}")
@@ -525,18 +640,19 @@ class ContextMenuMixin:
         for tb in tonbags:
             if tb.get('picked_date'):
                 events.append(('📤', tb['picked_date'],
-                              f"톤백 #{tb.get('sub_lt', '?')} 출고 (PICKED)",
+                              f"톤백 #{tb.get('sub_lt', '?')} 판매화물 결정",
                               f"출고처: {tb.get('picked_to', '')} | {float(tb.get('weight', 0) or 0):,.1f}kg",
                               _orange))
             if tb.get('outbound_date'):
                 events.append(('✅', tb['outbound_date'],
-                              f"톤백 #{tb.get('sub_lt', '?')} 확정 (SHIPPED)",
+                              f"톤백 #{tb.get('sub_lt', '?')} 선적 완료",
                               "최종 출고 확정", _green))
         
         status = lot.get('status', 'AVAILABLE')
         status_colors = {'AVAILABLE': _green, 'PICKED': _orange,
                         'DEPLETED': _red, 'SHIPPED': _accent}
-        events.append(('📌', '현재', f'현재 상태: {status}',
+        status_display = get_status_display(status) or status
+        events.append(('📌', '현재', f'현재 상태: {status_display}',
                        f"잔량: {float(lot.get('current_weight', 0) or 0):,.0f}kg / {float(lot.get('initial_weight', 0) or 0):,.0f}kg",
                        status_colors.get(status, _fg)))
         

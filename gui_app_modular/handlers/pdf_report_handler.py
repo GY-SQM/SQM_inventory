@@ -199,7 +199,7 @@ class PDFReportMixin:
     </div>
     <div class="card" style="background:#9b59b6">
         <div class="value">{tb.get('available',0)}/{tb.get('total',0)}</div>
-        <div class="label">가용/전체 톤백</div>
+        <div class="label">판매가능/전체 톤백</div>
     </div>
 </div>
 

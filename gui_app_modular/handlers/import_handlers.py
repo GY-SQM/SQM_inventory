@@ -453,9 +453,14 @@ class ImportHandlersMixin:
                 f"📦 생성된 톤백: {added_tonbags:,}개\n"
                 f"⏭️ 스킵: {skipped:,}개")
         
-        # UI 새로고침
-        self._refresh_inventory()
-        self._refresh_tonbag()
+        # UI 새로고침 (상위 메뉴 → 하단 4개 탭 반영)
+        if hasattr(self, '_deferred_refresh_main_tabs'):
+            self._deferred_refresh_main_tabs(delay_ms=50)
+        elif hasattr(self, '_refresh_main_tabs'):
+            self._refresh_main_tabs()
+        else:
+            self._refresh_inventory()
+            self._refresh_tonbag()
     
     def _import_inbound_manual_template(self, file_path: str, df) -> None:
         """수동 입고 템플릿 → process_inbound 호출 (1 LOT = N톤백+1샘플)."""
@@ -541,10 +546,15 @@ class ImportHandlersMixin:
             else:
                 errors.append(f"행{rnum} {packing.get('lot_no')}: {result.get('message', '')}; {result.get('errors', [])}")
         
-        if hasattr(self, '_refresh_inventory'):
-            self._refresh_inventory()
-        if hasattr(self, '_refresh_tonbag'):
-            self._refresh_tonbag()
+        if hasattr(self, '_deferred_refresh_main_tabs'):
+            self._deferred_refresh_main_tabs(delay_ms=50)
+        elif hasattr(self, '_refresh_main_tabs'):
+            self._refresh_main_tabs()
+        else:
+            if hasattr(self, '_refresh_inventory'):
+                self._refresh_inventory()
+            if hasattr(self, '_refresh_tonbag'):
+                self._refresh_tonbag()
         
         result_msg = f"✅ 입고 완료: {added_lots}개 LOT, {added_tonbags}개 톤백 생성"
         if errors:
@@ -624,10 +634,15 @@ class ImportHandlersMixin:
         else:
             CustomMessageBox.showinfo(self.root, "✅ 입고 완료",
                 f"입고 처리가 완료되었습니다!\n\n📦 추가된 LOT: {added_lots:,}개\n📦 생성된 톤백: {added_tonbags:,}개\n⏭️ 스킵: {skipped:,}개")
-        if hasattr(self, '_refresh_inventory'):
-            self._refresh_inventory()
-        if hasattr(self, '_refresh_tonbag'):
-            self._refresh_tonbag()
+        if hasattr(self, '_deferred_refresh_main_tabs'):
+            self._deferred_refresh_main_tabs(delay_ms=50)
+        elif hasattr(self, '_refresh_main_tabs'):
+            self._refresh_main_tabs()
+        else:
+            if hasattr(self, '_refresh_inventory'):
+                self._refresh_inventory()
+            if hasattr(self, '_refresh_tonbag'):
+                self._refresh_tonbag()
 
     def _get_basic_column_mapping(self, columns) -> Dict[str, str]:
         """기본 컬럼 매핑 (Column Alias 없을 때)"""
@@ -755,10 +770,15 @@ class ImportHandlersMixin:
                     f"출고 완료: {processed}건\n\n오류:\n{error_msg}")
             else:
                 CustomMessageBox.showinfo(self.root, "✅ 출고 완료", f"출고 처리 완료: {processed}건")
-            if hasattr(self, '_refresh_inventory'):
-                self._refresh_inventory()
-            if hasattr(self, '_refresh_tonbag'):
-                self._refresh_tonbag()
+            if hasattr(self, '_deferred_refresh_main_tabs'):
+                self._deferred_refresh_main_tabs(delay_ms=50)
+            elif hasattr(self, '_refresh_main_tabs'):
+                self._refresh_main_tabs()
+            else:
+                if hasattr(self, '_refresh_inventory'):
+                    self._refresh_inventory()
+                if hasattr(self, '_refresh_tonbag'):
+                    self._refresh_tonbag()
         except (RuntimeError, ValueError) as e:
             logger.error(f"출고 Excel 처리 오류: {e}")
             CustomMessageBox.showerror(self.root, "오류", f"출고 처리 오류: {e}")

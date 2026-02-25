@@ -15,7 +15,9 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk
 from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options, get_status_display
+from ..utils.constants import BOTH, YES, X, Y, LEFT, RIGHT, VERTICAL
 import logging
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +156,7 @@ class InventoryTabMixin:
                 command=self._on_show_all_tonbags
             )
             btn_show_all_tb.pack(side=RIGHT, padx=Spacing.XS)
-            apply_tooltip(btn_show_all_tb, 'AVAILABLE 상태 톤백 전체를 한 번에 표시. [← LOT 리스트로]로 복귀.')
+            apply_tooltip(btn_show_all_tb, '판매가능 상태 톤백 전체를 한 번에 표시. [← LOT 리스트로]로 복귀.')
         except Exception as _e:
             logger.debug(f"재고 Excel 버튼 생성 실패: {_e}")
 
@@ -322,35 +324,40 @@ class InventoryTabMixin:
         if mode == 'tonbag':
             self._inv_show_all_tonbags = False
             self._inv_recovery_container.pack_forget()
-            self._inv_tonbag_container.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
+            self._inv_tonbag_container.pack(fill=tk.BOTH, expand=True, padx=Spacing.XS, pady=Spacing.XS)
             self._refresh_inv_tonbag_view()
         else:
             self._inv_tonbag_container.pack_forget()
-            self._inv_recovery_container.pack(fill=BOTH, expand=YES)
+            self._inv_recovery_container.pack(fill=tk.BOTH, expand=True)
 
     def _on_show_all_tonbags(self) -> None:
-        """v7.0 2단계: [전체 톤백 펼치기] — AVAILABLE 톤백 전체 표시, LOT 리스트 숨김"""
+        """v7.0 2단계: [전체 톤백 펼치기] — 판매가능 톤백 전체 표시, LOT 리스트 숨김"""
         self._inv_show_all_tonbags = True
         self._inv_recovery_container.pack_forget()
-        self._inv_tonbag_container.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
+        self._inv_tonbag_container.pack(fill=tk.BOTH, expand=True, padx=Spacing.XS, pady=Spacing.XS)
         self._refresh_inv_tonbag_view()
 
     def _on_back_to_lot_list(self) -> None:
         """v7.0 2단계: [← LOT 리스트로] — 톤백 전체 뷰에서 LOT 리스트로 복귀"""
         self._inv_show_all_tonbags = False
         self._inv_tonbag_container.pack_forget()
-        self._inv_recovery_container.pack(fill=BOTH, expand=YES)
-        self._refresh_inventory()
+        self._inv_recovery_container.pack(fill=tk.BOTH, expand=True)
+        if hasattr(self, '_deferred_refresh_main_tabs'):
+            self._deferred_refresh_main_tabs(delay_ms=50)
+        elif hasattr(self, '_refresh_main_tabs'):
+            self._refresh_main_tabs()
+        else:
+            self._refresh_inventory()
 
     def _refresh_inv_tonbag_view(self) -> None:
-        """재고리스트 탭 내 톤백 보기 트리 새로고침. v7.0: [전체 톤백 펼치기] 시 AVAILABLE 전부 조회."""
+        """재고리스트 탭 내 톤백 보기 트리 새로고침. v7.0: [전체 톤백 펼치기] 시 판매가능 전부 조회."""
         if not hasattr(self, '_inv_tonbag_tree'):
             return
         for c in self._inv_tonbag_tree.get_children():
             self._inv_tonbag_tree.delete(c)
         try:
             if getattr(self, '_inv_show_all_tonbags', False):
-                # v7.0 2단계: 전체 톤백 펼치기 — inventory_tonbag WHERE status='AVAILABLE'
+                # v7.0 2단계: 전체 톤백 펼치기 — inventory_tonbag WHERE status='AVAILABLE' (샘플 제외)
                 rows = self.engine.db.fetchall(
                     """SELECT lot_no, sub_lt, tonbag_no, weight, location, inbound_date, bl_no
                        FROM inventory_tonbag WHERE status = 'AVAILABLE' AND COALESCE(is_sample, 0) = 0
@@ -376,6 +383,11 @@ class InventoryTabMixin:
                     sub_lt = tb.get('sub_lt', '')
                     tonbag_no = tb.get('tonbag_no') or (f"{sub_lt:>3}" if sub_lt != '' else '-')
                     _s = tb.get('tonbag_status') or tb.get('status', 'AVAILABLE')
+                    # 판매가능 탭의 톤백 리스트는 AVAILABLE만 표시 (샘플 제외)
+                    if _s != 'AVAILABLE':
+                        continue
+                    if tb.get('is_sample', 0):
+                        continue
                     _disp = get_status_display(_s) or _s
                     st = ('✅ ' if _s == 'AVAILABLE' else ('🔒 ' if _s == 'RESERVED' else '')) + _disp
                     w = float(tb.get('weight', tb.get('current_weight', 0)) or 0)
@@ -752,8 +764,8 @@ class InventoryTabMixin:
             self.tree_inventory.delete(item)
 
         search_text = self.search_var.get().strip().lower()
-        # v7.0 2단계: AVAILABLE 탭 전용 — status 필터 고정 (판매가능만 표시)
-        status_filter_normalized = 'AVAILABLE'
+        # v7.0 2단계: 판매가능 탭 전용 — status 필터 고정 (판매가능만 표시)
+        status_filter_normalized = 'AVAILABLE'  # DB 값
 
         # 콤보 검색 조건
         combo_filters = {}
@@ -841,11 +853,11 @@ class InventoryTabMixin:
                         vals.append(str(item.get('customs_status', '') or ''))
                         continue
                     elif col_id == 'avail_bags':
-                        # v5.6.0/v5.6.9: Avail = 현재 판매가능 톤백 수 실시간 (출고↓ 반품↑)
+                        # v5.6.0/v5.6.9: Avail = 현재 판매가능 톤백 수 실시간 (샘플 제외)
                         try:
                             tb_row = self.engine.db.fetchone(
                                 "SELECT COUNT(*) as cnt FROM inventory_tonbag "
-                                "WHERE lot_no = ? AND status = 'AVAILABLE' AND COALESCE(is_sample,0) = 0",
+                                "WHERE lot_no = ? AND status = 'AVAILABLE' AND COALESCE(is_sample, 0) = 0",
                                 (lot_no,))
                             avail_cnt = tb_row['cnt'] if tb_row and isinstance(tb_row, dict) else (tb_row[0] if tb_row else 0)
                             vals.append(str(avail_cnt))
@@ -870,6 +882,20 @@ class InventoryTabMixin:
                             v = f"{int(float(v)):,}" if v else ''
                         except (ValueError, TypeError):
                             v = str(v)
+                    elif col_id == 'con_return':
+                        # CON RETURN은 날짜(YYYY-MM-DD) 형식이므로 앞 10자리만
+                        v = str(v)[:10] if v and str(v) not in ('None', 'nan') else ''
+                        if not v:
+                            # DB에 없으면 arrival_date + free_time으로 계산
+                            arr = str(item.get('arrival_date', ''))[:10]
+                            ft = str(item.get('free_time', ''))
+                            if arr and ft and ft.isdigit():
+                                try:
+                                    arr_dt = datetime.strptime(arr, '%Y-%m-%d')
+                                    ret_dt = arr_dt + timedelta(days=int(ft))
+                                    v = ret_dt.strftime('%Y-%m-%d')
+                                except (ValueError, TypeError):
+                                    pass
                     # U2: 화물 상태 표시 (전체/판매가능/판매배정/판매화물 결정/출고)
                     elif col_id == 'status':
                         v = get_status_display(str(v)) or str(v)
@@ -967,11 +993,11 @@ class InventoryTabMixin:
             logger.debug(f"스타일 툴바 업데이트 실패: {e}")
 
     def _refresh_inv_stats(self) -> None:
-        """v3.8.7: 재고 탭 하단 통계. v7.0 2단계: AVAILABLE 탭 — 판매가능(LOT/톤백/무게)만 표시."""
+        """v3.8.7: 재고 탭 하단 통계. v7.0 2단계: 판매가능 탭 — 판매가능(LOT/톤백/무게)만 표시."""
         if not hasattr(self, '_inv_summary_label'):
             return
         try:
-            # v7.0: AVAILABLE만 집계 (LOT 수, 톤백 수, 총 무게)
+            # v7.0: 판매가능만 집계 (LOT 수, 톤백 수, 총 무게)
             stats = self.engine.db.fetchone("""
                 SELECT COUNT(*) AS total_lots, COALESCE(SUM(current_weight), 0) AS total_current
                 FROM inventory WHERE status = 'AVAILABLE'
@@ -1001,7 +1027,12 @@ class InventoryTabMixin:
     
     def _on_inv_filter_apply(self) -> None:
         """v4.0.6: 재고 필터 적용 시 새로고침"""
-        self._refresh_inventory()
+        if hasattr(self, '_deferred_refresh_main_tabs'):
+            self._deferred_refresh_main_tabs(delay_ms=50)
+        elif hasattr(self, '_refresh_main_tabs'):
+            self._refresh_main_tabs()
+        else:
+            self._refresh_inventory()
     
     def _update_inv_filter_values(self, inventory) -> None:
         """v4.0.6: 필터 드롭다운에 실제 데이터 값 채우기. STATUS는 전체/판매가능/판매배정/판매화물 결정/출고 5종 + 개수."""

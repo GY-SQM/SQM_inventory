@@ -58,7 +58,7 @@ class OutboundScheduledTabMixin:
         from ..utils.split_panel import MasterDetailSplitPanel
         self._ob_split_panel = MasterDetailSplitPanel(
             self.tab_outbound_scheduled,
-            detail_title="📋 Allocation 이력 (선택 LOT)",
+            detail_title="📋 판매 배정 이력 (선택 LOT)",
             master_weight=3,
             detail_weight=1
         )
@@ -69,7 +69,7 @@ class OutboundScheduledTabMixin:
         self._ob_footer_frame.pack(fill=X, padx=Spacing.XS, pady=(Spacing.XS, 0))
         self._ob_footer_label = ttk.Label(
             self._ob_footer_frame,
-            text="LOT 0건 | Balance(Kg) 합계: 0 | 예약(Kg) 합계: 0 | 예약(개) 합계: 0  (출고 예정 = 재고리스트 − Allocation)"
+            text="LOT 0건 | Balance(Kg) 합계: 0 | 예약(Kg) 합계: 0 | 예약(개) 합계: 0  (출고 예정 = 재고리스트 − 판매 배정)"
         )
         self._ob_footer_label.pack(anchor="w")
 
@@ -145,7 +145,7 @@ class OutboundScheduledTabMixin:
             return
         for c in self._ob_alloc_detail_tree.get_children():
             self._ob_alloc_detail_tree.delete(c)
-        self._ob_split_panel.set_detail_title(f"📋 Allocation 이력 — {lot_no}")
+        self._ob_split_panel.set_detail_title(f"📋 판매 배정 이력 — {lot_no}")
         try:
             history = self.engine.get_lot_outbound_history(lot_no)
             for idx, row in enumerate(history or [], 1):
@@ -198,7 +198,7 @@ class OutboundScheduledTabMixin:
         header.pack(fill=X)
         tk.Label(header, text=f"전체 LOT 톤백 예정/이력 — {len(rows)}건",
                  font=('맑은 고딕', 12, 'bold'), bg=bg, fg=fg).pack(anchor='w')
-        tk.Label(header, text="RESERVED·PICKED·SOLD·SHIPPED 상태 톤백 (LOT별 정렬)",
+        tk.Label(header, text="판매배정·판매화물 결정·출고·선적 상태 톤백 (LOT별 정렬)",
                  font=('맑은 고딕', 9), bg=bg, fg=ThemeColors.get('text_secondary', is_dark)).pack(anchor='w')
         cols = ('lot_no', 'sub_lt', 'weight', 'type', 'status', 'customer', 'out_date')
         tree = ttk.Treeview(popup, columns=cols, show='headings', height=20)
@@ -272,14 +272,14 @@ class OutboundScheduledTabMixin:
                 self._ob_footer_label.config(
                     text=f"LOT {len(data)}건 | Balance(Kg) 합계: {total_balance_kg:,.0f} | "
                          f"예약(Kg) 합계: {total_alloc_kg:,.0f} | 예약(개) 합계: {total_alloc_count}  "
-                         f"(출고 예정 = 재고리스트 − Allocation)"
+                         f"(출고 예정 = 재고리스트 − 판매 배정)"
                 )
         except Exception as e:
             logger.error(f"출고 예정 새로고침 오류: {e}")
             if hasattr(self, '_log'):
                 self._log(f"⚠️ 출고 예정 조회 오류: {e}")
             if hasattr(self, '_ob_footer_label'):
-                self._ob_footer_label.config(text="LOT 0건 | 조회 오류  (출고 예정 = 재고리스트 − Allocation)")
+                self._ob_footer_label.config(text="LOT 0건 | 조회 오류  (출고 예정 = 재고리스트 − 판매 배정)")
 
     def _sort_outbound_scheduled_tree(self, col: str) -> None:
         """출고 예정 트리 헤더 클릭 시 오름차순/내림차순 정렬"""

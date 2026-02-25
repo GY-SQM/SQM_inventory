@@ -13,7 +13,7 @@ v5.5.3 patch_03: tk→ttk 전환으로 테마 자동 대응
 import calendar
 import logging
 from datetime import date, datetime
-from typing import List, Tuple, Callable, Optional
+from typing import List, Tuple, Callable, Optional, Dict
 from .ui_constants import ThemeColors, apply_modal_window_options
 
 logger = logging.getLogger(__name__)
@@ -286,8 +286,9 @@ class HeaderFilterBar:
             'bl_no': 'B/L 번호로 필터.',
             'container_no': '컨테이너 번호로 필터.',
             'product': '제품명으로 필터.',
-            'status': '전체 / Available(판매 가능) / Sold(출고 완료) 중 선택. 옆 숫자는 해당 개수.',
-            'tonbag_status': '전체 / Available / Sold 중 선택. 옆 숫자는 해당 톤백 개수.',
+            'status': '전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고 중 선택. 옆 숫자는 해당 개수.',
+            'tonbag_status': '전체 / 판매가능 / 판매배정 / 판매화물 결정 / 출고 중 선택. 옆 숫자는 해당 톤백 개수.',
+            'avail_bags': 'Avail = 현재 판매가능 톤백 개수. 출고 시 감소, 반품 시 증가.',
         }
         return _tips.get(col_id, f"{label} 값으로 목록을 제한합니다.")
 
@@ -365,3 +366,94 @@ class FooterTotalBar:
                 lbl.config(text=f"{val:,.0f}")
             else:
                 lbl.config(text=str(val))
+
+
+def _safe_float(val) -> float:
+    """문자열에서 숫자만 추출해 float으로. 콤마·공백 제거."""
+    if val is None:
+        return 0.0
+    s = str(val).strip().replace(",", "").replace(" ", "")
+    if not s:
+        return 0.0
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+class TreeviewTotalFooter:
+    """
+    Treeview 하단 총합 바 — 합계 가능한 숫자 컬럼만 하단에 표시.
+    문자열 등 합계 불가 컬럼은 제외.
+
+    Usage:
+        footer = TreeviewTotalFooter(parent, tree, summable_column_ids=['current_weight','net_weight',...])
+        footer.pack(fill='x')
+        # 데이터 로드 후
+        footer.update_totals()
+    """
+
+    def __init__(self, parent, tree, summable_column_ids: List[str],
+                 column_display_names: Optional[dict] = None,
+                 column_formats: Optional[Dict[str, str]] = None):
+        """
+        Args:
+            parent: 부모 위젯 (tree와 형제로 pack될 frame)
+            tree: ttk.Treeview
+            summable_column_ids: 합계할 컬럼 id 목록 (tree의 columns와 동일한 id)
+            column_display_names: {col_id: "표시명"} — 없으면 tree.heading(col_id) 사용
+            column_formats: {col_id: "포맷"} — 합계 표시 포맷 (예: {'qty_mt': ',.3f'}). 없으면 ',.0f'
+        """
+        from tkinter import ttk
+
+        self.tree = tree
+        self.summable_column_ids = [c for c in summable_column_ids if c]
+        self.column_display_names = column_display_names or {}
+        self.column_formats = column_formats or {}
+        self.frame = ttk.Frame(parent, padding=(6, 4))
+        self._label_var = None
+        lbl = ttk.Label(
+            self.frame,
+            text="",
+            font=("맑은 고딕", 10, "bold"),
+        )
+        lbl.pack(anchor="w")
+        self._label_var = lbl
+
+    def pack(self, **kwargs):
+        self.frame.pack(**kwargs)
+
+    def update_totals(self) -> None:
+        """Tree 내용을 읽어 건수 + 합계 가능 컬럼 합산 후 하단 라벨 갱신. 필터 적용된 행만 반영."""
+        if not self._label_var:
+            return
+        children = self.tree.get_children("")
+        count = len(children)
+        parts = [f"건수: {count}"]
+        if not self.summable_column_ids:
+            self._label_var.config(text="  |  ".join(parts))
+            return
+        cols = list(self.tree["columns"])
+        if not cols:
+            self._label_var.config(text="  |  ".join(parts))
+            return
+        col_index = {c: i for i, c in enumerate(cols)}
+        sums = {c: 0.0 for c in self.summable_column_ids if c in col_index}
+        for item_id in children:
+            try:
+                vals = self.tree.item(item_id, "values")
+                if not vals:
+                    continue
+                for c in sums:
+                    idx = col_index[c]
+                    if idx < len(vals):
+                        sums[c] += _safe_float(vals[idx])
+            except (TypeError, IndexError, Exception):
+                continue
+        for c in self.summable_column_ids:
+            if c not in sums:
+                continue
+            name = self.column_display_names.get(c) or (self.tree.heading(c, "text") if c in cols else c)
+            fmt = self.column_formats.get(c, ",.0f")
+            parts.append(f"{name}: {sums[c]:{fmt}}")
+        self._label_var.config(text="  |  ".join(parts))

@@ -15,6 +15,7 @@ from ..utils.ui_constants import (
     DialogSize,
     center_dialog,
     apply_modal_window_options,
+    setup_dialog_geometry_persistence,
 )
 
 
@@ -51,11 +52,9 @@ class PickingListPreviewDialog:
 
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("📋 Picking List 파싱 결과")
-        self.dialog.geometry(DialogSize.get_geometry(parent, "large"))
-        apply_modal_window_options(self.dialog)
+        setup_dialog_geometry_persistence(self.dialog, "picking_preview", parent, "large")
         self.dialog.transient(parent)
         self.dialog.grab_set()
-        center_dialog(self.dialog, parent)
 
         self._build_ui()
 
@@ -165,6 +164,19 @@ class PickingListPreviewDialog:
         tree.configure(yscrollcommand=scroll.set)
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # ─── 테이블 하단 합계 (건수, 무게) ───
+        n_items = len(items)
+        if is_dict_format:
+            total_kg = sum(float(it.get("qty_kg", 0) or 0) for it in items)
+            footer_text = f"건수: {n_items}  |  총 중량(Kg): {total_kg:,.0f}"
+        else:
+            total_qty = sum(float(getattr(it, "total_qty", 0) or 0) for it in items)
+            unit = (getattr(items[0], "total_unit", "") or "MT") if items else "MT"
+            footer_text = f"건수: {n_items}  |  총량: {total_qty:,.2f} {unit}"
+        footer_frame = ttk.Frame(main)
+        footer_frame.pack(fill=tk.X, pady=(0, Spacing.SMALL))
+        ttk.Label(footer_frame, text=footer_text, font=("맑은 고딕", 10, "bold")).pack(anchor=tk.W)
 
         # ─── 버튼 ───
         btn_frame = ttk.Frame(main)

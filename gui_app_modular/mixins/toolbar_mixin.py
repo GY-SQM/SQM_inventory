@@ -73,11 +73,16 @@ class ToolbarMixin:
         self._row1 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=Spacing.XS)
         self._row1.pack(fill='x')
         
+        # Row1: 오른쪽 액션(새로고침/버전 배지)
+        self._right_actions = tk.Frame(self._row1, bg=self._tb_bg)
+        self._right_actions.pack(side='right', padx=Spacing.MD)
+        self._build_refresh_button(self._right_actions)
+
         # v4.0.0: 오른쪽 버전 배지 (Phase3: FontScale body/heading)
         try:
             from version import __version__, APP_NAME
-            ver_frame = tk.Frame(self._row1, bg=self._tb_bg)
-            ver_frame.pack(side='right', padx=Spacing.MD)
+            ver_frame = tk.Frame(self._right_actions, bg=self._tb_bg)
+            ver_frame.pack(side='left', padx=(Spacing.SM, 0))
             _vf = self._tb_font_scale
             tk.Label(ver_frame, text=f"📦 {APP_NAME}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_progress'),
                      font=_vf.body(bold=True)).pack(side='left')
@@ -278,6 +283,25 @@ class ToolbarMixin:
 
         self._search_btn.pack(side='right', padx=(Spacing.SM, Spacing.SM))
 
+    def _build_refresh_button(self, parent) -> None:
+        """메인 화면 새로고침 버튼 (F5)"""
+        try:
+            btn = tk.Label(
+                parent, text='🔄 새로고침',
+                font=self._tb_font_scale.body(bold=True),
+                bg=self._tb_bg, fg=self._tb_fg_normal,
+                anchor='center', justify='center',
+                padx=Spacing.SM, pady=Spacing.XS, cursor='hand2'
+            )
+            btn.pack(side='left')
+            btn.bind('<Button-1>', lambda e: self._refresh_all_data())
+            btn.bind('<Enter>', lambda e: btn.config(fg=self._tb_fg_hover))
+            btn.bind('<Leave>', lambda e: btn.config(fg=self._tb_fg_normal))
+            self._refresh_btn = btn
+            self._attach_tooltip(btn, "전체 탭 새로고침 (F5)")
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
+            logger.debug(f"refresh button: {_e}")
+
     def _create_search_btn_style(self, font_family: str) -> str:
         """검색 버튼 전용 스타일 (폰트 크기 조정)"""
         import ttkbootstrap as ttk_bs
@@ -350,6 +374,11 @@ class ToolbarMixin:
             label="  📤 빠른 출고 (붙여넣기)",
             command=lambda: self._safe_call('_on_quick_outbound_paste'),
             font=_font,
+        )
+        m.add_separator()
+        m.add_command(
+            label="  📋 판매 배정 탭으로 이동 (취소 버튼은 탭에서 사용)",
+            command=lambda: self.notebook.select(1) if getattr(self, 'notebook', None) else None,
         )
         return m
 
@@ -765,10 +794,13 @@ class ToolbarMixin:
         """컨테이너 -1, -2 서픽스 표시 토글 — 재고/톤백 테이블의 CONTAINER 열 표시를 갱신합니다."""
         show = self._container_suffix_var.get()
         self._log(f"📦 컨테이너 구분: {'ON' if show else 'OFF'}")
-        if hasattr(self, '_refresh_inventory'):
-            self._refresh_inventory()
-        if hasattr(self, '_refresh_tonbag'):
-            self._refresh_tonbag()
+        if hasattr(self, '_deferred_refresh_main_tabs'):
+            self._deferred_refresh_main_tabs(delay_ms=50)
+        else:
+            if hasattr(self, '_refresh_inventory'):
+                self._refresh_inventory()
+            if hasattr(self, '_refresh_tonbag'):
+                self._refresh_tonbag()
 
     def _format_container_no(self, container_no: str) -> str:
         """컨테이너 번호 표시: _container_suffix_var가 꺼져 있으면 끝의 -1, -2 접미사를 제거합니다."""
