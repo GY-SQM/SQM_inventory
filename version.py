@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '6.1.1'
+__version__ = '6.1.8'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '6.1.8': '🚀 v6.1.8: Clean Build & Full Feature Integration — FastOut(대량출고), Barcode Scan(현장검증), API Server, Integrity Center, Return Mgmt(반품고도화)',
     '6.1.1': '🎨 v6.1.1: 테마 가시성 개선 — ReadableStyle fg/bg 명시·!selected·전체 위젯 스캔(theme_refresh)·50ms 2차 적용·fallback',
     '6.1.0': '🚀 v6.1.0: 출고 로직 개편 — 피킹리스트 파서(document_parser_modular)·Gate-1 교차검증·빠른 출고 8톤백 제한·QUICK 마킹·picking_list_order 메타 컬럼',
     '6.0.9': '🎨 v6.0.9: 4단계 탭 한글 라벨(판매가능/판매배정/판매화물 결정/출고) · 총괄 재고 리스트 탭·보기 메뉴 복원',
