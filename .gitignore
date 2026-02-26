@@ -18,6 +18,7 @@ py.typed
 *.swp
 *.swo
 *~
+.cursor/
 
 # Environment
 .env
@@ -31,17 +32,26 @@ data/db/*.db-journal
 data/db/*.db-wal
 data/db/*.db-shm
 data/db/backups/
+*.db
+!data/db/sqm_inventory.db
 
-# Backup (런타임 생성)
+# Backup (런타임 생성 및 아카이브)
 backup/
+BACKUP/
+LEGACY/
+OLD/
+WORK/
+archive/
 
 # Logs
 logs/*.log
 logs/*.log.*
+*.log
 
 # Output (런타임 생성)
 output/
 temp/
+tmp/
 
 # OS
 .DS_Store
@@ -59,3 +69,14 @@ window_config.json
 theme_preference.json
 query_history.json
 gui_config.json
+
+# Large Archives & Other Versions (Clean Build 유지)
+*.zip
+*.7z
+*.rar
+SQM_v701_FULL-1/
+SQM_v611/
+generated_allocation/
+terminals/
+agent-transcripts/
+clean_export.py
