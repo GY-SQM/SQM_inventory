@@ -115,25 +115,6 @@ except ImportError:
 from .base import BaseParser
 
 # =============================================================================
-# 문서 감지기 (v2.5.4)
-# =============================================================================
-try:
-    from .document_detector import (
-        DocumentDetector,
-        DocumentType,
-        DetectionResult,
-        detect_document_type,
-        detect_with_report,
-    )
-except ImportError:
-    DocumentDetector = None
-    DocumentType = None
-    DetectionResult = None
-    detect_document_type = None
-    detect_with_report = None
-
-
-# =============================================================================
 # Export
 # =============================================================================
 __all__ = [

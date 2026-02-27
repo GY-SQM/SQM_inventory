@@ -15,7 +15,7 @@
         "60:7D:09:A0:E4:30",
         "88:AE:DD:AA:EE:CF"
       ],
-      "machine_guid": ""
+      "machine_guid": "62a420c7-625c-455c-ae40-00ac09882116"
     }
   ],
   "_comment": "MAC: ipconfig /all → 물리적 주소, GUID: 레지스트리 MachineGuid"

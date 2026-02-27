@@ -1290,7 +1290,8 @@ class OutboundMixin(InventoryBaseMixin):
                             VALUES (?,?,?,?,?,?,'ACTIVE',?,'system',?)""",
                             (lot_no, tb['id'], tb['sub_lt'], tb.get('tonbag_uid') or '', customer, tb_w, now,
                              f"QUICK: {reason}, op={operator}"))
-                    except Exception: pass
+                    except Exception as e:
+                        logger.debug(f"picking_table INSERT skipped in quick outbound: {e}")
                     total_weight += tb_w
                     result['picked_count'] += 1
 

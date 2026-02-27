@@ -75,7 +75,8 @@ def generate_barcode_labels(tonbags: list, output_dir: str = 'output/labels',
                 qr_img.save(qr_path)
                 qr_sz = 25*mm
                 c.drawImage(qr_path, page_w-margin-qr_sz, y-qr_sz, width=qr_sz, height=qr_sz)
-            except Exception: pass
+            except Exception as e:
+                logger.debug(f"QR code generation skipped: {e}")
 
         c.setFont("Helvetica", 7)
         c.drawString(margin, margin, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -86,6 +87,7 @@ def generate_barcode_labels(tonbags: list, output_dir: str = 'output/labels',
     try:
         import shutil
         shutil.rmtree(temp_dir, ignore_errors=True)
-    except Exception: pass
+    except Exception as e:
+        logger.debug(f"Temporary barcode directory cleanup skipped: {e}")
     logger.info(f"바코드 라벨 PDF: {pdf_path} ({len(tonbags)}건)")
     return pdf_path

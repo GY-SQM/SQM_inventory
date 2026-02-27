@@ -131,10 +131,12 @@ class BarcodeScanEngine:
                         self.db.execute(
                             "INSERT INTO sold_table (lot_no, tonbag_id, sub_lt, tonbag_uid, sold_qty_kg, sold_date, status, created_by) VALUES (?,?,?,?,?,?,'SOLD','barcode_scan')",
                             (row['lot_no'], row['id'], row['sub_lt'], row.get('tonbag_uid') or '', row.get('weight') or 0, now))
-                    except Exception: pass
+                    except Exception as e:
+                        logger.debug(f"sold_table insert skipped in barcode scan: {e}")
                     try:
                         self.db.execute("UPDATE picking_table SET status='SOLD', sold_date=? WHERE tonbag_id=? AND status='ACTIVE'", (now, row['id']))
-                    except Exception: pass
+                    except Exception as e:
+                        logger.debug(f"picking_table status update skipped in barcode scan: {e}")
                     self.db.execute(
                         "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) VALUES (?,'SOLD',?,?,?)",
                         (row['lot_no'], row.get('weight') or 0, f"barcode_scan uid={code}", now))
