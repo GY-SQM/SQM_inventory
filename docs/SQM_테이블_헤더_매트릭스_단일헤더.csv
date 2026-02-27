@@ -1,0 +1,14 @@
+테이블,folio,origin,total_net_weight,total_gross_weight,port_of_loading,port_of_discharge,lot_sqm,initial_weight,current_weight,picked_weight,tonbag_count,stock_date,salar_invoice_no,warehouse,sold_to,free_time,is_sample,location_updated_at,picked_to,picked_date,pick_ref,tonbag_uid,total_qty_mt,inventory_id,movement_type,from_location,to_location,return_date,original_customer,original_sale_ref,reason,remark,weight_kg,snapshot_date,total_tonbags,total_weight_kg,available_weight_kg,picked_weight_kg,product_summary,sales_order,customer_ref,picking_date,total_weight,picking_order_id,picked_status,picked_at,tonbag_no,tonbag_id,qty_mt,source_file,executed_at,cancelled_at
+shipment,O,O,O,O,O,O,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+inventory,,,,,,,O,O,O,O,O,O,O,O,O,O,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+inventory_detail,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+inventory_tonbag,,,,,,,,,,,,,,,,,,O,O,O,O,O,O,O,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+outbound,,,,,,,,,,,,,,,,,,,,,,,,,,,,O,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+outbound_item,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,O,,,,,,,,,,,,,,,,,,,,,,,,,,,
+stock_movement,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,O,O,O,,,,,,,,,,,,,,,,,,,,,,,,
+return_history,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,O,O,O,O,O,,,,,,,,,,,,,,,,,,,,
+inventory_snapshot,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,O,O,O,O,O,O,,,,,,,,,,,,,,,,
+picking_list_order,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,O,O,O,O,O,,,,,,,,,,,,
+picking_list_detail,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,O,O,O,,,,,,,,
+tonbag_mapping_history,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,O,,,,,,,,
+allocation_plan,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,O,O,O,O,O,O

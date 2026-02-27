@@ -1,0 +1,25 @@
+변수명,의미,타입,사용처
+STATUS_AVAILABLE,입고 완료 출고 가능,str,inventory.status / inventory_tonbag.status / 출고 로직
+STATUS_RESERVED,Allocation 예약(출고 대기),str,inventory_tonbag.status / allocation_plan
+STATUS_PICKED,출고 실행(피킹 완료),str,inventory_tonbag.status
+STATUS_SOLD,출고 확정,str,inventory_tonbag.status
+STATUS_DEPLETED,전량 출고 완료,str,inventory.status
+STATUS_RETURNED,반품,str,inventory_tonbag.status
+OUTBOUND_PENDING,출고 대기,str,outbound.status
+OUTBOUND_CONFIRMED,출고 확정,str,outbound.status
+OUTBOUND_CANCELLED,출고 취소,str,outbound.status
+MOVEMENT_INBOUND,입고 이동,str,stock_movement.movement_type
+MOVEMENT_OUTBOUND,출고 이동,str,stock_movement.movement_type
+MOVEMENT_RETURN,반품 이동,str,stock_movement.movement_type
+MOVEMENT_ADJUSTMENT,조정,str,stock_movement.movement_type
+DEFAULT_WAREHOUSE,기본 창고명,str,inventory.warehouse 기본값
+WAREHOUSE_CODE,창고 코드(GY),str,표시/필터
+SAMPLE_WEIGHT_KG,샘플 1개 무게(1kg),float,출고/반품 계산
+TONBAG_WEIGHT_500,500kg 톤백,int,무게 계산
+TONBAG_WEIGHT_1000,1000kg 톤백,int,무게 계산
+DEFAULT_TONBAG_COUNT,기본 톤백 수(10),int,입고 기본값
+PRODUCT_LITHIUM,제품명(리튬),str,inventory.product 기본값
+PRODUCT_NICKEL,제품명(니켈),str,제품 코드
+BL_PREFIXES,BL 접두사(선사 코드),tuple,BL 유효성
+DATE_FORMAT,날짜 형식,str,%Y-%m-%d
+DATETIME_FORMAT,일시 형식,str,%Y-%m-%d %H:%M:%S

@@ -1,0 +1,117 @@
+
+SQM v7.0.0 UI 개편 작업서
+
+3단계 : ALLOCATION 탭 완성
+
+v7.0.0-step3
+
+단계
+수정 파일 수
+예상 작업 시간
+위험도
+3/6 단계
+2개
+4~5시간
+낮음
+
+
+1. 3단계 목표
+allocation_plan 테이블 기반의 ALLOCATION 탭을 신규 파일로 작성합니다. Allocation 시트 업로드 후 배정된 LOT 리스트와 전체 배정 톤백 보기 기능을 구현합니다.
+
+2. 대상 파일
+파일명
+유형
+현재 크기
+작업량
+allocation_tab.py
+신규
+0줄 → 약 400줄
+전체 신규 작성
+main_app.py
+수정
+837줄
+10줄 추가
+
+3. 상세 작업 목록
+번호
+작업 항목
+상세 내용
+수정 위치
+작업량
+3-1
+allocation_tab.py 파일 생성
+AllocationTabMixin 클래스 작성
+inventory_tab.py 구조 참고하여 동일 레이아웃
+_setup_allocation_tab() 함수 작성
+신규 파일
+50줄 신규
+3-2
+ALLOCATION LOT 리스트 쿼리
+SELECT lot_no, customer,
+  SUM(qty_mt) as total_mt,
+  COUNT(*) as tonbag_count,
+  MAX(outbound_date) as plan_date
+FROM allocation_plan
+WHERE status='RESERVED'
+GROUP BY lot_no ORDER BY lot_no
+컬럼: LOT번호 / 고객사 / 배정수량(MT) / 톤백수 / 출고예정일
+신규 함수
+40줄 신규
+3-3
+[전체 배정 보기] 버튼 및 동작
+allocation_plan 전체 행 표시
+컬럼: LOT번호 / 톤백No / 고객사 / 배정수량 / 배정일
+[← LOT 리스트로] 복귀 버튼
+신규 함수
+60줄 신규
+3-4
+LOT 행 더블클릭 팝업 연결
+lot_detail_dialog.py 재활용
+해당 LOT의 RESERVED 상태 톤백 팝업 표시
+신규
+20줄 신규
+3-5
+하단 통계바
+총 배정 LOT 수 / 총 배정 톤백 수 / 총 배정 중량(MT)
+신규
+30줄 신규
+3-6
+_refresh_allocation() + main_app 연결
+탭 전환 시 자동 새로고침 함수 작성
+main_app.py에 import / 상속 / 호출 추가
+main_app.py L5~245
+10줄 수정
+
+4. 작업량 합계
+총 수정/추가 줄수
+예상 작업 시간
+위험도
+allocation_tab.py 약 400줄 신규 + main_app.py 10줄 수정
+4~5시간
+낮음 — 완전 신규 파일. 기존 코드에 영향 없음
+
+5. 완료 기준 (테스트 항목)
+• ALLOCATION 탭 LOT 리스트 정상 표시
+• [전체 배정 보기] 클릭 시 전체 배정 톤백 나열
+• Allocation 시트 업로드 후 탭 데이터 갱신 확인
+• LOT 더블클릭 팝업 정상 표시
+• 하단 통계 정확
+
+6. 예상 결과 화면
+【 3단계 완료 후 화면 — ALLOCATION 탭 】
+
+┌────────────────────────────────────────────────────────┐
+│ [🔍 검색] [고객사 필터▼]          [📋 전체 배정 보기]│
+├────────────────────────────────────────────────────────┤
+│ ALLOCATION LOT 리스트                                  │
+│ LOT번호   고객사     배정MT   톤백수  출고예정일        │
+│ LOT-001   GY Corp    20MT     20개    2026-02-01 ←더블클릭│
+│ LOT-003   SQM Asia   10MT     10개    2026-02-05        │
+├────────────────────────────────────────────────────────┤
+│ LOT 5개 / 톤백 80개 / 총 160MT                        │
+└────────────────────────────────────────────────────────┘
+
+7. 루비 의견
+• allocation_tab.py는 완전 신규 파일이라 기존 코드에 영향이 전혀 없습니다.
+• 2단계 inventory_tab.py 코드를 참고하여 쿼리와 컬럼명만 바꾸면 빠르게 완성됩니다.
+• 고객사별 필터가 실무에서 가장 많이 쓰일 기능입니다. 초기부터 넣는 것을 추천합니다.
