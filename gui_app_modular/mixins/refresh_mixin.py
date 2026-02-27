@@ -62,6 +62,56 @@ class RefreshMixin:
             root.after(delay_ms, self._refresh_main_tabs)
         else:
             self._refresh_main_tabs()
+
+    def refresh_bus(self, reason: str = "") -> None:
+        """표준 새로고침 버스: 주요 탭 갱신을 단일 진입점으로 통합."""
+        try:
+            self._refresh_main_tabs()
+            if reason:
+                logger.debug(f"[refresh_bus] ok: {reason}")
+        except Exception as e:
+            logger.error(f"[refresh_bus] failed: {reason} / {e}", exc_info=True)
+
+    def refresh_bus_deferred(self, reason: str = "", delay_ms: int = 50) -> None:
+        """표준 지연 새로고침 버스."""
+        root = getattr(self, 'root', None)
+        if root and root.winfo_exists():
+            root.after(delay_ms, lambda: self.refresh_bus(reason=reason))
+        else:
+            self.refresh_bus(reason=reason)
+
+    def do_action_tx(
+        self,
+        action_name: str,
+        fn,
+        *,
+        parent=None,
+        refresh_mode: str = "deferred",
+        refresh_on_success: bool = True,
+        show_error: bool = True,
+    ):
+        """
+        액션 실행 표준 래퍼:
+        - 예외 처리 및 에러 표시 표준화
+        - 성공 시 refresh_bus(즉시/지연)로 동기화
+        """
+        try:
+            result = fn()
+            success = True
+            if isinstance(result, dict):
+                success = bool(result.get("success", True))
+            if success and refresh_on_success:
+                if refresh_mode == "immediate":
+                    self.refresh_bus(reason=action_name)
+                else:
+                    self.refresh_bus_deferred(reason=action_name, delay_ms=50)
+            return result
+        except Exception as e:
+            logger.error(f"[do_action_tx] {action_name} failed: {e}", exc_info=True)
+            if show_error:
+                target = parent if parent is not None else getattr(self, "root", None)
+                CustomMessageBox.showerror(target, "작업 실패", f"{action_name}\n\n{e}")
+            return {"success": False, "errors": [str(e)]}
     
     def _focus_search_legacy(self) -> None:
         """Focus on search entry (Ctrl+F)"""

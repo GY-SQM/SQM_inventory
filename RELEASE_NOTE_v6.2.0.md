@@ -17,3 +17,14 @@
 - `python run.py --check` 통과 (에러 없음)
 - 앱 실행/대시보드 진입 정상 확인
 
+## 후속 안정화 패치 (menu consistency)
+- 메뉴 단일 소스 정리 강화 (`menu_registry` 중심)
+  - `FILE_MENU_INBOUND_RETURN_SUB_ITEMS` 추가 적용
+  - `FILE_MENU_EXPORT_ITEMS`, `FILE_MENU_BACKUP_ITEMS` 추가
+- 메뉴 빌더 일괄 정렬
+  - `toolbar_mixin.py`
+  - `custom_menubar.py`
+  - `menu_mixin.py`
+- 출고/업로드 메뉴에서 구분선(`None`) 처리 누락 보완
+- 반품(재입고) 소량/다량 서브메뉴를 공통 registry 기반으로 통일
+

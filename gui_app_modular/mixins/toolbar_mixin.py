@@ -318,8 +318,11 @@ class ToolbarMixin:
         """v6.0.6 3단계: 입고 드롭다운 — menu_registry 기반 (custom_menubar·네이티브 메뉴와 동일 항목)"""
         m = self._create_menu()
         try:
-            from ..menu_registry import FILE_MENU_INBOUND_ITEMS
+            from ..menu_registry import FILE_MENU_INBOUND_ITEMS, FILE_MENU_INBOUND_RETURN_SUB_ITEMS
             for entry in FILE_MENU_INBOUND_ITEMS:
+                if entry is None:
+                    m.add_separator()
+                    continue
                 label, method_name = entry[0], entry[1]
                 optional = entry[2] if len(entry) > 2 else False
                 if optional and not callable(getattr(self, method_name, None)):
@@ -329,8 +332,8 @@ class ToolbarMixin:
                     return_sub = self._create_menu()
                     _show_return = getattr(self, "_show_return_dialog", None)
                     if callable(_show_return):
-                        return_sub.add_command(label="  📝 소량 반품 (1~2건)", command=lambda: _show_return(0))
-                        return_sub.add_command(label="  📂 다량 반품 (Excel)", command=lambda: _show_return(1))
+                        for sub_label, mode in FILE_MENU_INBOUND_RETURN_SUB_ITEMS:
+                            return_sub.add_command(label=f"  {sub_label}", command=lambda md=mode: _show_return(md))
                     m.add_cascade(label=f"  {label}", menu=return_sub)
                 else:
                     m.add_command(label=f"  {label}", command=lambda mn=method_name: self._safe_call(mn))
@@ -356,6 +359,9 @@ class ToolbarMixin:
         try:
             from ..menu_registry import FILE_MENU_OUTBOUND_ITEMS
             for entry in FILE_MENU_OUTBOUND_ITEMS:
+                if entry is None:
+                    items.append(None)
+                    continue
                 label, method_name = entry[0], entry[1]
                 optional = entry[2] if len(entry) > 2 else False
                 if optional and not callable(getattr(self, method_name, None)):
@@ -367,19 +373,6 @@ class ToolbarMixin:
                 ('📋 Allocation 입력 (파일 / 붙여넣기)', lambda: self._safe_call('_on_allocation_input_unified')),
                 ('📋 Picking List 업로드 (PDF)', lambda: self._safe_call('_on_picking_list_upload')),
             ])
-        # 빠른 출고 — 구분선 아래 고정 (패치 호환)
-        m.add_separator()
-        _font = getattr(self, '_dropdown_font', ('맑은 고딕', 11))
-        m.add_command(
-            label="  📤 빠른 출고 (붙여넣기)",
-            command=lambda: self._safe_call('_on_quick_outbound_paste'),
-            font=_font,
-        )
-        m.add_separator()
-        m.add_command(
-            label="  📋 판매 배정 탭으로 이동 (취소 버튼은 탭에서 사용)",
-            command=lambda: self.notebook.select(1) if getattr(self, 'notebook', None) else None,
-        )
         return m
 
     def _build_report_menu(self) -> 'tk.Menu':
@@ -407,17 +400,15 @@ class ToolbarMixin:
 
     def _build_file_menu(self) -> 'tk.Menu':
         m = self._create_menu()
+        from ..menu_registry import FILE_MENU_EXPORT_ITEMS, FILE_MENU_BACKUP_ITEMS
         exp = self._create_menu(m)
-        exp.add_command(label="  📋 통관요청 양식", command=lambda: self._on_export_click(option=1))
-        exp.add_command(label="  📊 루비리 양식", command=lambda: self._on_export_click(option=2))
-        exp.add_command(label="  🎒 톤백 현황", command=lambda: self._on_export_click(option=4))
-        exp.add_command(label="  ⭐ 통합 현황", command=lambda: self._on_export_click(option=6))
+        for label, option in FILE_MENU_EXPORT_ITEMS:
+            exp.add_command(label=f"  {label}", command=lambda op=option: self._on_export_click(option=op))
         m.add_cascade(label="  💾 내보내기", menu=exp)
         m.add_separator()
         bak = self._create_menu(m)
-        bak.add_command(label="  💾 백업 생성", command=lambda: self._on_backup('create'))
-        bak.add_command(label="  🔄 복원", command=lambda: self._on_backup('restore'))
-        bak.add_command(label="  📋 백업 목록", command=lambda: self._on_backup('list'))
+        for label, method_name in FILE_MENU_BACKUP_ITEMS:
+            bak.add_command(label=f"  {label}", command=lambda mn=method_name: self._safe_call(mn))
         bak.add_command(label="  ⏰ 자동 백업 설정", command=lambda: self._safe_call('_show_auto_backup_settings'))
         m.add_cascade(label="  🔐 백업", menu=bak)
         m.add_separator()

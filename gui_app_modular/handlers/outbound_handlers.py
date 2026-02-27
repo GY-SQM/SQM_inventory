@@ -272,7 +272,9 @@ class OutboundHandlersMixin:
                     self._log(f"✅ 빠른 출고: {processed}건, {picked:.3f} MT")
                     
                     dialog.destroy()
-                    if hasattr(self, '_deferred_refresh_main_tabs'):
+                    if hasattr(self, 'refresh_bus_deferred'):
+                        self.refresh_bus_deferred(reason="SIMPLE_OUTBOUND_EXECUTE", delay_ms=50)
+                    elif hasattr(self, '_deferred_refresh_main_tabs'):
                         self._deferred_refresh_main_tabs(delay_ms=50)
                     elif hasattr(self, '_refresh_main_tabs'):
                         self._refresh_main_tabs()
@@ -338,6 +340,21 @@ class OutboundHandlersMixin:
         
         # Key bindings
         dialog.bind('<Escape>', lambda e: dialog.destroy())
+
+    def _on_go_allocation_tab(self) -> None:
+        """판매 배정 탭으로 이동 (메뉴 공통 진입점)."""
+        notebook = getattr(self, 'notebook', None)
+        if not notebook:
+            return
+        target_tab = getattr(self, 'tab_allocation', None)
+        if target_tab is not None:
+            notebook.select(target_tab)
+            return
+        # 레거시 폴백
+        try:
+            notebook.select(1)
+        except Exception:
+            pass
     
     def _on_outbound_click(self) -> None:
         """v4.0.5 Phase2: 파일 선택 → 미리보기 팝업 → 사용자 확인 → DB 반영"""
@@ -456,7 +473,15 @@ class OutboundHandlersMixin:
                 CustomMessageBox.showwarning(self.root, "출고", "출고할 항목이 없습니다.")
                 return
             
-            result = self.engine.process_outbound(items, source='EXCEL', stop_at_picked=False)
+            if hasattr(self, 'do_action_tx'):
+                result = self.do_action_tx(
+                    "EXECUTE_OUTBOUND_EXCEL",
+                    lambda: self.engine.process_outbound(items, source='EXCEL', stop_at_picked=False),
+                    parent=self.root,
+                    refresh_mode="deferred",
+                )
+            else:
+                result = self.engine.process_outbound(items, source='EXCEL', stop_at_picked=False)
             processed = result.get('lots_processed', result.get('processed', 0))
             
             if not result.get('success') and result.get('errors'):
@@ -465,25 +490,28 @@ class OutboundHandlersMixin:
                     self.root, "출고 완료",
                     f"처리: {processed}건\n오류: {result['errors'][0]}")
             
-            # 화면 새로고침
-            if hasattr(self, '_deferred_refresh_main_tabs'):
-                self._deferred_refresh_main_tabs(delay_ms=50)
-            elif hasattr(self, '_refresh_main_tabs'):
-                self._refresh_main_tabs()
-            else:
-                if hasattr(self, '_refresh_inventory'):
-                    self._refresh_inventory()
-                if hasattr(self, '_refresh_tonbag'):
-                    self._refresh_tonbag()
-            if hasattr(self, '_refresh_dashboard'):
-                self._refresh_dashboard()
-            if not hasattr(self, '_deferred_refresh_main_tabs') and not hasattr(self, '_refresh_main_tabs'):
-                if hasattr(self, '_refresh_allocation'):
-                    self._refresh_allocation()
-                if hasattr(self, '_refresh_picked'):
-                    self._refresh_picked()
-                if hasattr(self, '_refresh_sold'):
-                    self._refresh_sold()
+            # 화면 새로고침 (do_action_tx가 있는 경우 이미 처리됨)
+            if not hasattr(self, 'do_action_tx'):
+                if hasattr(self, 'refresh_bus_deferred'):
+                    self.refresh_bus_deferred(reason="EXECUTE_OUTBOUND_EXCEL", delay_ms=50)
+                elif hasattr(self, '_deferred_refresh_main_tabs'):
+                    self._deferred_refresh_main_tabs(delay_ms=50)
+                elif hasattr(self, '_refresh_main_tabs'):
+                    self._refresh_main_tabs()
+                else:
+                    if hasattr(self, '_refresh_inventory'):
+                        self._refresh_inventory()
+                    if hasattr(self, '_refresh_tonbag'):
+                        self._refresh_tonbag()
+                if hasattr(self, '_refresh_dashboard'):
+                    self._refresh_dashboard()
+                if not hasattr(self, '_deferred_refresh_main_tabs') and not hasattr(self, '_refresh_main_tabs'):
+                    if hasattr(self, '_refresh_allocation'):
+                        self._refresh_allocation()
+                    if hasattr(self, '_refresh_picked'):
+                        self._refresh_picked()
+                    if hasattr(self, '_refresh_sold'):
+                        self._refresh_sold()
             
             self._log(f"✅ 출고 완료: {processed}건")
             CustomMessageBox.showinfo(self.root, "출고 완료", 
@@ -879,7 +907,9 @@ class OutboundHandlersMixin:
                     self.root, '판매화물 결정 완료',
                     f'처리: {exec_result.get("executed", 0)}개 LOT\n현장 출고 완료 후 [출고 확정]을 실행하세요.'
                 )
-                if hasattr(self, '_deferred_refresh_main_tabs'):
+                if hasattr(self, 'refresh_bus_deferred'):
+                    self.refresh_bus_deferred(reason="EXECUTE_FROM_PICKING", delay_ms=50)
+                elif hasattr(self, '_deferred_refresh_main_tabs'):
                     self._deferred_refresh_main_tabs(delay_ms=50)
                 elif hasattr(self, '_refresh_main_tabs'):
                     self._refresh_main_tabs()
@@ -1113,7 +1143,9 @@ class OutboundHandlersMixin:
             total, result_msg = revert_fn(lot_nos)
             d.destroy()
             CustomMessageBox.showinfo(self.root, '취소 완료', result_msg)
-            if hasattr(self, '_deferred_refresh_main_tabs'):
+            if hasattr(self, 'refresh_bus_deferred'):
+                self.refresh_bus_deferred(reason="REVERT_LOT_DIALOG_ACTION", delay_ms=50)
+            elif hasattr(self, '_deferred_refresh_main_tabs'):
                 self._deferred_refresh_main_tabs(delay_ms=50)
             elif hasattr(self, '_refresh_main_tabs'):
                 self._refresh_main_tabs()

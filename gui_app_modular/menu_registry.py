@@ -27,10 +27,40 @@ FILE_MENU_INBOUND_ITEMS = [
     ("📋 정합성 검증 리포트", "_on_integrity_report", True),  # v7.0.1
 ]
 
+# 입고 > 반품(재입고) 서브메뉴 항목 (toolbar/custom menubar 공용)
+# 각 항목: (라벨, mode)
+# - mode=0: 소량 반품(1~2건)
+# - mode=1: 다량 반품(Excel)
+FILE_MENU_INBOUND_RETURN_SUB_ITEMS = [
+    ("📝 소량 반품 (1~2건)", 0),
+    ("📂 다량 반품 (Excel)", 1),
+]
+
 # 출고 서브메뉴에 들어갈 항목 (순서 유지)
 FILE_MENU_OUTBOUND_ITEMS = [
     ("📋 Allocation 입력 (파일/붙여넣기)", "_on_allocation_input_unified"),
     ("📋 Picking List 업로드 (PDF)", "_on_picking_list_upload"),
     ("📊 바코드 스캔 업로드 (CSV/Excel)", "_on_barcode_scan_upload"),
     ("📊 Sales Order 업로드 (Excel)", "_on_sales_order_upload", True),  # optional
+    None,  # 구분선
+    ("📤 빠른 출고 (붙여넣기)", "_on_quick_outbound_paste"),
+    None,  # 구분선
+    ("📋 판매 배정 탭으로 이동 (취소 버튼은 탭에서 사용)", "_on_go_allocation_tab"),
+]
+
+# 파일 > 내보내기 공통 항목 (toolbar/custom/native 공용)
+# 각 항목: (라벨, export_option)
+FILE_MENU_EXPORT_ITEMS = [
+    ("📋 통관요청 양식", 1),
+    ("📊 루비리 양식", 2),
+    ("🎒 톤백 현황", 4),
+    ("⭐ 통합 현황", 6),
+]
+
+# 파일 > 백업 공통 항목 (toolbar/custom/native 공용)
+# 각 항목: (라벨, app 메서드명)
+FILE_MENU_BACKUP_ITEMS = [
+    ("💾 백업 생성", "_on_backup_click"),
+    ("🔄 복원", "_on_restore_click"),
+    ("📋 백업 목록", "_show_backup_list"),
 ]

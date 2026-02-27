@@ -358,9 +358,17 @@ class AllocationDialog:
             return
 
         try:
-            result = self.engine.reserve_from_allocation(
-                self.parsed_rows, source_file=self.source_file
-            )
+            if hasattr(self.app, 'do_action_tx'):
+                result = self.app.do_action_tx(
+                    "RESERVE_FROM_ALLOCATION",
+                    lambda: self.engine.reserve_from_allocation(self.parsed_rows, source_file=self.source_file),
+                    parent=self.dialog,
+                    refresh_mode="deferred",
+                )
+            else:
+                result = self.engine.reserve_from_allocation(
+                    self.parsed_rows, source_file=self.source_file
+                )
             if result.get('success'):
                 reserved = result.get('reserved', 0)
                 requested_rows = result.get('requested_rows', len(self.parsed_rows))
@@ -374,7 +382,8 @@ class AllocationDialog:
                 CustomMessageBox.showinfo(self.dialog, "예약 완료", msg)
                 self.btn_cancel_res.config(state='normal')
                 self.btn_execute.config(state='normal')
-                self._deferred_refresh_after_action()
+                if not hasattr(self.app, 'do_action_tx'):
+                    self._deferred_refresh_after_action()
             else:
                 errors = result.get('errors', [])
                 CustomMessageBox.showerror(
@@ -525,14 +534,23 @@ class AllocationDialog:
         if not ok:
             return
         try:
-            result = self.engine.execute_reserved()
+            if hasattr(self.app, 'do_action_tx'):
+                result = self.app.do_action_tx(
+                    "EXECUTE_RESERVED",
+                    self.engine.execute_reserved,
+                    parent=self.dialog,
+                    refresh_mode="deferred",
+                )
+            else:
+                result = self.engine.execute_reserved()
             if result.get('success'):
                 CustomMessageBox.showinfo(
                     self.dialog, "출고 실행 완료",
                     f"✅ {result.get('executed', 0)}개 톤백 PICKED 전환 완료"
                 )
                 self.btn_confirm.config(state='normal')
-                self._deferred_refresh_after_action()
+                if not hasattr(self.app, 'do_action_tx'):
+                    self._deferred_refresh_after_action()
             else:
                 CustomMessageBox.showerror(
                     self.dialog, "출고 실행 실패",
@@ -551,13 +569,22 @@ class AllocationDialog:
         if not ok:
             return
         try:
-            result = self.engine.confirm_outbound()
+            if hasattr(self.app, 'do_action_tx'):
+                result = self.app.do_action_tx(
+                    "CONFIRM_OUTBOUND",
+                    self.engine.confirm_outbound,
+                    parent=self.dialog,
+                    refresh_mode="deferred",
+                )
+            else:
+                result = self.engine.confirm_outbound()
             if result.get('success'):
                 CustomMessageBox.showinfo(
                     self.dialog, "출고 확정 완료",
                     f"✅ {result.get('confirmed', 0)}개 톤백 SOLD 확정"
                 )
-                self._deferred_refresh_after_action()
+                if not hasattr(self.app, 'do_action_tx'):
+                    self._deferred_refresh_after_action()
             else:
                 CustomMessageBox.showerror(
                     self.dialog, "확정 실패",
@@ -576,13 +603,22 @@ class AllocationDialog:
         if not ok:
             return
         try:
-            result = self.engine.cancel_reservation()
+            if hasattr(self.app, 'do_action_tx'):
+                result = self.app.do_action_tx(
+                    "CANCEL_RESERVATION",
+                    self.engine.cancel_reservation,
+                    parent=self.dialog,
+                    refresh_mode="deferred",
+                )
+            else:
+                result = self.engine.cancel_reservation()
             if result.get('success'):
                 CustomMessageBox.showinfo(
                     self.dialog, "예약 취소 완료",
                     f"✅ {result.get('cancelled', 0)}개 톤백 예약 취소됨"
                 )
-                self._deferred_refresh_after_action()
+                if not hasattr(self.app, 'do_action_tx'):
+                    self._deferred_refresh_after_action()
             else:
                 CustomMessageBox.showerror(
                     self.dialog, "취소 실패",
@@ -623,7 +659,10 @@ class AllocationDialog:
                 self.dialog, "초기화 완료",
                 f"예약 초기화 완료: {total}건 (RESERVED → AVAILABLE)"
             )
-            self._deferred_refresh_after_action()
+            if hasattr(self.app, 'refresh_bus_deferred'):
+                self.app.refresh_bus_deferred(reason="RESET_RESERVATION_FOR_LOTS", delay_ms=50)
+            else:
+                self._deferred_refresh_after_action()
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"LOT 예약 초기화 오류: {e}", exc_info=True)
             CustomMessageBox.showerror(self.dialog, "오류", str(e))
@@ -692,7 +731,9 @@ class AllocationDialog:
             self.dialog.grab_release()
         except (tk.TclError, RuntimeError):
             pass
-        if hasattr(self.app, '_deferred_refresh_main_tabs'):
+        if hasattr(self.app, 'refresh_bus_deferred'):
+            self.app.refresh_bus_deferred(reason="ALLOCATION_DIALOG_ACTION", delay_ms=50)
+        elif hasattr(self.app, '_deferred_refresh_main_tabs'):
             self.app._deferred_refresh_main_tabs(delay_ms=50)
         else:
             root = getattr(self.app, 'root', None)
@@ -704,7 +745,9 @@ class AllocationDialog:
     def _refresh_after_action(self):
         """예약/출고/취소 후 앱 전체 탭 새로고침 (판매 배정/판매화물 결정/출고 탭 포함)"""
         try:
-            if hasattr(self.app, '_refresh_main_tabs'):
+            if hasattr(self.app, 'refresh_bus'):
+                self.app.refresh_bus(reason="ALLOCATION_DIALOG_ACTION_IMMEDIATE")
+            elif hasattr(self.app, '_refresh_main_tabs'):
                 self.app._refresh_main_tabs()
             else:
                 if hasattr(self.app, '_refresh_inventory'):

@@ -64,7 +64,13 @@ class MenuMixin:
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="파일", menu=file_menu)
         
-        from ..menu_registry import FILE_MENU_INBOUND_ITEMS, FILE_MENU_OUTBOUND_ITEMS
+        from ..menu_registry import (
+            FILE_MENU_INBOUND_ITEMS,
+            FILE_MENU_INBOUND_RETURN_SUB_ITEMS,
+            FILE_MENU_OUTBOUND_ITEMS,
+            FILE_MENU_EXPORT_ITEMS,
+            FILE_MENU_BACKUP_ITEMS,
+        )
         
         file_menu.add_command(
             label="📥 PDF 입고  (Ctrl+I)",
@@ -75,6 +81,9 @@ class MenuMixin:
         outbound_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="📤 출고", menu=outbound_menu)
         for entry in FILE_MENU_OUTBOUND_ITEMS:
+            if entry is None:
+                outbound_menu.add_separator()
+                continue
             label, method_name = entry[0], entry[1]
             optional = entry[2] if len(entry) > 2 else False
             if optional and (not hasattr(self, method_name) or not callable(getattr(self, method_name))):
@@ -82,8 +91,6 @@ class MenuMixin:
             cmd = getattr(self, method_name, None)
             if callable(cmd):
                 outbound_menu.add_command(label=label, command=cmd)
-        if hasattr(self, '_on_quick_outbound_paste') and callable(self._on_quick_outbound_paste):
-            outbound_menu.add_command(label="📤 빠른 출고 (붙여넣기)", command=self._on_quick_outbound_paste)
         
         file_menu.add_separator()
         
@@ -98,6 +105,9 @@ class MenuMixin:
         upload_menu = tk.Menu(file_menu, tearoff=0, font=_font)
         file_menu.add_cascade(label="📥 업로드 메뉴", menu=upload_menu)
         for entry in FILE_MENU_INBOUND_ITEMS:
+            if entry is None:
+                upload_menu.add_separator()
+                continue
             if entry[1] == "_show_return_dialog":
                 continue
             label, method_name = entry[0], entry[1]
@@ -106,6 +116,9 @@ class MenuMixin:
                 upload_menu.add_command(label="  " + label, command=cmd, font=_font)
         upload_menu.add_separator()
         for entry in FILE_MENU_OUTBOUND_ITEMS:
+            if entry is None:
+                upload_menu.add_separator()
+                continue
             label, method_name = entry[0], entry[1]
             optional = entry[2] if len(entry) > 2 else False
             if optional and (not hasattr(self, method_name) or not callable(getattr(self, method_name))):
@@ -116,29 +129,30 @@ class MenuMixin:
         upload_menu.add_separator()
         _return_cmd = getattr(self, "_show_return_dialog", None)
         if callable(_return_cmd):
-            upload_menu.add_command(label="  🔄  반품 (재입고)", command=_return_cmd, font=_font)
+            return_sub = tk.Menu(upload_menu, tearoff=0, font=_font)
+            upload_menu.add_cascade(label="  🔄 반품 (재입고)", menu=return_sub, font=_font)
+            for sub_label, mode in FILE_MENU_INBOUND_RETURN_SUB_ITEMS:
+                return_sub.add_command(label="  " + sub_label, command=lambda md=mode: _return_cmd(md), font=_font)
         else:
             upload_menu.add_command(
-                label="  🔄  반품 (재입고)",
+                label="  🔄 반품 (재입고)",
                 command=lambda: CustomMessageBox.showinfo(self.root, "반품", "반품 기능 필요"),
                 font=_font
             )
         
         export_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="💾 내보내기  (Ctrl+E)", menu=export_menu)
-        export_menu.add_command(label="📋 통관요청 양식", command=lambda: self._on_export_click(1))
-        export_menu.add_command(label="📊 루비리 양식", command=lambda: self._on_export_click(3))
-        export_menu.add_command(label="📦 톤백 현황", command=lambda: self._on_export_click(4))
-        export_menu.add_separator()
-        export_menu.add_command(label="📑 통합 현황 ★추천", command=lambda: self._on_export_click(6))
+        for label, option in FILE_MENU_EXPORT_ITEMS:
+            export_menu.add_command(label=label, command=lambda op=option: self._on_export_click(op))
         
         file_menu.add_separator()
         
         backup_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="🔐 백업  (Ctrl+B)", menu=backup_menu)
-        backup_menu.add_command(label="💾 백업 생성", command=self._on_backup_click)
-        backup_menu.add_command(label="🔄 복원", command=self._on_restore_click)
-        backup_menu.add_command(label="📋 백업 목록", command=self._show_backup_list)
+        for label, method_name in FILE_MENU_BACKUP_ITEMS:
+            cmd = getattr(self, method_name, None)
+            if callable(cmd):
+                backup_menu.add_command(label=label, command=cmd)
         
         file_menu.add_separator()
         file_menu.add_command(label="종료", command=self.root.quit)

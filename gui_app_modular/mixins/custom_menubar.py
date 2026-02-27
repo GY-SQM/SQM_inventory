@@ -107,6 +107,9 @@ class CustomMenuBar:
             FILE_MENU_OUTBOUND_ITEMS = []
 
         for entry in FILE_MENU_OUTBOUND_ITEMS:
+            if entry is None:
+                self._add_separator(outbound_menu)
+                continue
             label, method_name = entry[0], entry[1]
             optional = entry[2] if len(entry) > 2 else False
             if optional and (not hasattr(self.app, method_name) or not callable(getattr(self.app, method_name))):
@@ -120,16 +123,18 @@ class CustomMenuBar:
                 self._add_command(outbound_menu, label, callback)
             except Exception as e:
                 logger.debug("출고 메뉴 항목 추가 스킵 %s: %s", label, e)
-        if hasattr(self.app, "_on_quick_outbound_paste") and callable(self.app._on_quick_outbound_paste):
-            self._add_separator(outbound_menu)
-            self._add_command(outbound_menu, "📤 빠른 출고 (붙여넣기)", self.app._on_quick_outbound_paste)
 
     def _create_file_menu(self) -> None:
         """1. 📁 파일 메뉴 (입고는 menu_registry, 출고는 탑레벨로 분리)"""
         from ..utils.constants import (
             HAS_GEMINI, HAS_DB_PROTECTION, HAS_FEATURES, HAS_FEATURES_V2
         )
-        from ..menu_registry import FILE_MENU_INBOUND_ITEMS
+        from ..menu_registry import (
+            FILE_MENU_INBOUND_ITEMS,
+            FILE_MENU_INBOUND_RETURN_SUB_ITEMS,
+            FILE_MENU_EXPORT_ITEMS,
+            FILE_MENU_BACKUP_ITEMS,
+        )
         
         # =====================================================
         # 1. 파일 메뉴 (v6.0.2: 출고는 탑레벨 📤 출고 메뉴로 이동)
@@ -139,13 +144,20 @@ class CustomMenuBar:
         # 입고 — menu_registry 기반
         inbound_sub = self._add_submenu(file_menu, "📥 입고 (Ctrl+I)")
         for entry in FILE_MENU_INBOUND_ITEMS:
-            label, method_name = entry[0], entry[1]
-            if method_name == "_show_return_dialog":
+            if entry is None:
                 self._add_separator(inbound_sub)
+                continue
+            label, method_name = entry[0], entry[1]
             optional = entry[2] if len(entry) > 2 else False
             callback = getattr(self.app, method_name, None)
-            if method_name == "_show_return_dialog" and not callable(callback):
-                callback = getattr(self, "_show_return_safe", None)
+            if method_name == "_show_return_dialog":
+                return_sub = self._add_submenu(inbound_sub, label)
+                if callable(callback):
+                    for sub_label, mode in FILE_MENU_INBOUND_RETURN_SUB_ITEMS:
+                        self._add_command(return_sub, sub_label, lambda md=mode, fn=callback: fn(md))
+                else:
+                    self._add_command(return_sub, "📝 소량 반품 (1~2건)", self._show_return_safe)
+                continue
             if optional and not callable(callback):
                 continue
             if callable(callback):
@@ -156,19 +168,17 @@ class CustomMenuBar:
         
         # 내보내기
         export_sub = self._add_submenu(file_menu, "💾 내보내기 (Ctrl+E)")
-        self._add_command(export_sub, "📋 통관요청 양식", lambda: self.app._on_export_click(1))
-        self._add_command(export_sub, "📊 루비리 양식", lambda: self.app._on_export_click(3))
-        self._add_command(export_sub, "📦 톤백 현황", lambda: self.app._on_export_click(4))
-        self._add_separator(export_sub)
-        self._add_command(export_sub, "📑 통합 현황 ★", lambda: self.app._on_export_click(6))
+        for label, option in FILE_MENU_EXPORT_ITEMS:
+            self._add_command(export_sub, label, lambda op=option: self.app._on_export_click(op))
         
         self._add_separator(file_menu)
         
         # 백업 (v3.8.4: 자동 백업 추가)
         backup_sub = self._add_submenu(file_menu, "🔐 백업 (Ctrl+B)")
-        self._add_command(backup_sub, "💾 백업 생성", self.app._on_backup_click)
-        self._add_command(backup_sub, "🔄 복원", self.app._on_restore_click)
-        self._add_command(backup_sub, "📋 백업 목록", self.app._show_backup_list)
+        for label, method_name in FILE_MENU_BACKUP_ITEMS:
+            callback = getattr(self.app, method_name, None)
+            if callable(callback):
+                self._add_command(backup_sub, label, callback)
         self._add_separator(backup_sub)
         self._add_command(backup_sub, "⏰ 자동 백업 설정", self.app._show_auto_backup_settings)
         
