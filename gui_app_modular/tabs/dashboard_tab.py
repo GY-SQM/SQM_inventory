@@ -336,7 +336,8 @@ class DashboardTabMixin:
         """구역별 톤백 수량/중량 위젯"""
         from ..utils.constants import tk, ttk
         
-        frame = ttk.LabelFrame(ctx['main_container'], text="📍 구역별 재고 현황", padding=5)
+        # tkinter LabelFrame 경로에서는 padding 옵션 미지원일 수 있어 pack padding으로 대체
+        frame = ttk.LabelFrame(ctx['main_container'], text="📍 구역별 재고 현황")
         frame.pack(fill='x', padx=5, pady=5)
         
         # 트리뷰 (구역, 톤백 수, 중량)
