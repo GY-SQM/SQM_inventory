@@ -105,6 +105,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self.check_labels = {}
         self.tree = None
         self.btn_parse = None
+        self.btn_reparse = None
         self.btn_upload = None
         self.btn_excel = None
         self.btn_undo = None
@@ -174,11 +175,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         file_frame = ttk.Frame(main)
         file_frame.pack(fill=X, pady=(0, 4))
         
-        # 6열 그리드: [①PL][②INV][③BL][④DO] [파싱][힌트]
+        # 7열 그리드: [①PL][②INV][③BL][④DO] [파싱][다시파싱][힌트]
         for i in range(4):
             file_frame.columnconfigure(i, weight=1, uniform='doc')
         file_frame.columnconfigure(4, weight=0)  # 파싱 버튼
-        file_frame.columnconfigure(5, weight=0)  # 힌트
+        file_frame.columnconfigure(5, weight=0)  # 다시 파싱 버튼
+        file_frame.columnconfigure(6, weight=0)  # 힌트
         
         short_names = {
             'PACKING_LIST': '① Packing List',
@@ -244,12 +246,23 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self.btn_parse.grid(row=0, column=4, padx=(6, 2))
         self._attach_doc_tooltip(self.btn_parse,
             "선택한 서류를 분석합니다\n\n• Packing List → LOT, 수량, 중량 추출\n• Invoice, FA → SAP번호, 금액 추출\n• Bill of Loading → BL번호, 선박, 일정 추출\n• Delivery Order → 인도장소, Free Time 추출")
+
+        self.btn_reparse = ttk.Button(
+            file_frame, text="↻ 다시 파싱",
+            command=self._reparse_with_current_files,
+            state='disabled', width=10
+        )
+        self.btn_reparse.grid(row=0, column=5, padx=(0, 2))
+        self._attach_doc_tooltip(
+            self.btn_reparse,
+            "이미 선택한 동일 파일로 재파싱합니다.\n파일을 다시 선택하지 않아도 됩니다."
+        )
         
         self.parse_hint = ttk.Label(
             file_frame, text="",
             foreground='white', font=('맑은 고딕', 12)
         )
-        self.parse_hint.grid(row=0, column=5, padx=(2, 4), sticky='w')
+        self.parse_hint.grid(row=0, column=6, padx=(2, 4), sticky='w')
         self._update_parse_hint()
         
         # v5.7.5: 프로그레스 (팝업 + 인라인)
@@ -319,6 +332,9 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self.tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _tree_dark), foreground=_tree_fg)
         self.tree.tag_configure('even', background=ThemeColors.get('bg_card', _tree_dark), foreground=_tree_fg)
         self.tree.tag_configure('edited', background=ThemeColors.get('warning', _tree_dark), foreground=_tree_fg)
+        self.tree.tag_configure('xc_critical', background='#FFCDD2', foreground='#B71C1C')
+        self.tree.tag_configure('xc_warning', background='#FFE0B2', foreground='#E65100')
+        self.tree.tag_configure('xc_info', background='#FFF3CD', foreground='#795548')
         
         for col_id, header, width, anchor in PREVIEW_COLUMNS:
             self.tree.heading(col_id, text=header, command=lambda c=col_id: self._toggle_preview_sort(c))
@@ -449,13 +465,40 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             )
             if self.btn_parse:
                 self.btn_parse.config(state='disabled')
+            if self.btn_reparse:
+                self.btn_reparse.config(state='disabled')
         else:
             if self.btn_parse:
                 self.btn_parse.config(state='normal')
+            if self.btn_reparse:
+                self.btn_reparse.config(state='normal')
             self.parse_hint.config(
                 text=f"총 4개 중 {n}개 업로드되었습니다.",
                 foreground=ThemeColors.get('text_primary', _hint_dark)
             )
+
+    def _reparse_with_current_files(self) -> None:
+        """파일 재선택 없이 현재 file_paths로 재파싱."""
+        if 'PACKING_LIST' not in self.file_paths:
+            from ..utils.custom_messagebox import CustomMessageBox
+            CustomMessageBox.showwarning(self.dialog, "재파싱 불가", "Packing List 파일이 필요합니다.")
+            return
+        try:
+            from ..utils.custom_messagebox import CustomMessageBox
+            ok = CustomMessageBox.askyesno(
+                self.dialog,
+                "재파싱 확인",
+                "기존 미리보기 결과를 덮어쓰고 재파싱합니다.\n\n계속하시겠습니까?"
+            )
+        except (ImportError, ModuleNotFoundError):
+            from tkinter import messagebox as msgbox
+            ok = msgbox.askyesno(
+                "재파싱 확인",
+                "기존 미리보기 결과를 덮어쓰고 재파싱합니다.\n\n계속하시겠습니까?"
+            )
+        if not ok:
+            return
+        self._start_parsing()
     
     def _select_file(self, doc_type: str):
         """서류별 파일 선택"""
@@ -540,6 +583,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self._update_progress(0, f"ℹ️ {', '.join(missing)} 미선택 — 해당 정보 생략")
         
         self.btn_parse.config(state='disabled')
+        if self.btn_reparse:
+            self.btn_reparse.config(state='disabled')
         self._show_progress_inline()
         
         thread = threading.Thread(
@@ -705,6 +750,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         """백그라운드 파싱"""
         try:
             from parsers.document_parser_v2 import DocumentParserV2
+            self._cross_check_result = None
             
             gemini_key = os.environ.get('GEMINI_API_KEY', '')
             if not gemini_key:
@@ -855,6 +901,35 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 _warnings.append("⚠️ Invoice: SAP번호 추출 실패 — 수동 입력 필요")
             if not bl_result or not getattr(bl_result, 'bl_no', None):
                 _warnings.append("⚠️ B/L: BL번호 추출 실패 — 수동 입력 필요")
+
+            # v6.2.1: 4종 서류 크로스 체크 엔진 (읽기 전용 검증)
+            try:
+                from parsers.cross_check_engine import cross_check_documents
+                xc = cross_check_documents(
+                    invoice=inv_result,
+                    packing_list=pl_result,
+                    bl=bl_result,
+                    do=do_result,
+                )
+                self._cross_check_result = xc
+
+                if not xc.is_clean:
+                    self._log_safe(f"\n{'='*40}")
+                    self._log_safe(f"🔍 {xc.summary}")
+                    for item in xc.items:
+                        self._log_safe(f"  {item}")
+                    self._log_safe(f"{'='*40}")
+                    for item in xc.items:
+                        _warnings.append(str(item))
+                    if xc.has_critical:
+                        _warnings.insert(
+                            0,
+                            f"🚫 심각한 불일치 {xc.critical_count}건 — 서류 확인 후 재파싱 권장",
+                        )
+                else:
+                    self._log_safe("✅ 4종 서류 크로스 체크 통과 — 불일치 없음")
+            except (ImportError, Exception) as e:
+                logger.debug(f"[CrossCheck] 원스톱 크로스 체크 스킵: {e}")
             
             if _warnings:
                 _warn_msg = "\n".join(_warnings)
@@ -1957,12 +2032,66 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self.tree.delete(item)
         if not self.preview_data:
             return
+        xc = getattr(self, '_cross_check_result', None)
+        xc_lot_levels = {}
+        xc_global_level = None
+        xc_active = bool(xc) and not bool(getattr(xc, 'is_clean', True))
+        if xc_active:
+            # 크로스체크가 있을 때만 LOT 레벨을 리프레시 1회당 1번 계산해 재사용한다.
+            if hasattr(xc, 'get_lot_levels'):
+                try:
+                    xc_lot_levels = xc.get_lot_levels() or {}
+                except Exception as _e:
+                    logger.debug(f"onestop_inbound: {_e}")
+                    xc_lot_levels = {}
+            xc_global_level = getattr(xc, 'global_level', None)
+
         self._view_indices = self._build_view_indices()
         for pos, src_idx in enumerate(self._view_indices):
             row = self.preview_data[src_idx]
             row['no'] = str(src_idx + 1)
             values = self._row_display_values(row)
-            tag = 'edited' if src_idx in self._edited_rows else ('even' if pos % 2 == 0 else 'odd')
+            base_tag = 'even' if pos % 2 == 0 else 'odd'
+            if src_idx in self._edited_rows:
+                tag = 'edited'
+            elif xc_active:
+                lot_no = (row.get('lot_no') or '').strip()
+                lot_level = xc_lot_levels.get(lot_no) if lot_no else None
+                effective = None
+                if lot_level is not None and xc_global_level is not None:
+                    try:
+                        effective = max(lot_level, xc_global_level)
+                    except Exception as _e:
+                        logger.debug(f"onestop_inbound: {_e}")
+                        effective = lot_level
+                elif lot_level is not None:
+                    effective = lot_level
+                elif xc_global_level is not None:
+                    effective = xc_global_level
+
+                try:
+                    level_num = int(effective) if effective is not None else 0
+                except (TypeError, ValueError) as _e:
+                    logger.debug(f"onestop_inbound: {_e}")
+                    level_num = 0
+
+                if level_num >= 3:
+                    tag = 'xc_critical'
+                elif level_num == 2:
+                    tag = 'xc_warning'
+                elif level_num == 1:
+                    tag = 'xc_info'
+                elif hasattr(xc, 'get_row_tag') and lot_no:
+                    # 구버전 객체 호환: 계산 실패 시 기존 API로 최종 시도
+                    try:
+                        tag = xc.get_row_tag(lot_no) or base_tag
+                    except Exception as _e:
+                        logger.debug(f"onestop_inbound: {_e}")
+                        tag = base_tag
+                else:
+                    tag = base_tag
+            else:
+                tag = base_tag
             self.tree.insert('', END, iid=str(src_idx), values=values, tags=(tag,))
 
     def _display_preview(self) -> None:
@@ -2049,6 +2178,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         def _close():
             if self.dialog and self.dialog.winfo_exists():
                 _app = self.app if self.app else None
+                _ask_more_inbound = False
                 # v5.8.9: 파싱 결과 팝업에서 DB 업로드 선택 시, 완료 후 엑셀 내보내기 여부 질의
                 if getattr(self, '_ask_excel_after_upload', False):
                     self._ask_excel_after_upload = False
@@ -2059,12 +2189,36 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             self._export_to_excel()
                     except (ImportError, ModuleNotFoundError):
                         pass
-                _msg = f"✅ {count}개 LOT 저장 완료"
+                _msg = self._build_upload_summary_message(count)
                 try:
                     from ..utils.custom_messagebox import CustomMessageBox
-                    CustomMessageBox.showinfo(self.dialog, "업로드 완료", _msg)
+                    # 1) 업데이트 요약 확인
+                    CustomMessageBox.showinfo(self.dialog, "업데이트 완료 요약", _msg)
                 except (ImportError, ModuleNotFoundError):
                     CustomMessageBox.info(None, "완료", _msg)
+
+                # 2) 사용자 확인 후 화면 데이터 정리 (업로드1/업로드2)
+                self._reset_after_upload_success()
+
+                # 3) 추가 입고 여부 확인
+                try:
+                    from ..utils.custom_messagebox import CustomMessageBox
+                    _ask_more_inbound = CustomMessageBox.askyesno(
+                        self.dialog,
+                        "추가 입고 선택 (예=추가 입고 / 아니오=종료)",
+                        "추가로 입고 작업을 하시겠습니까?\n\n"
+                        "예: 추가 입고 화면을 다시 엽니다.\n"
+                        "아니오: 이번 입고 프로세스를 종료합니다."
+                    )
+                except (ImportError, ModuleNotFoundError):
+                    from tkinter import messagebox as msgbox
+                    _ask_more_inbound = msgbox.askyesno(
+                        "추가 입고 선택 (예=추가 입고 / 아니오=종료)",
+                        "추가로 입고 작업을 하시겠습니까?\n\n"
+                        "예: 추가 입고 화면을 다시 엽니다.\n"
+                        "아니오: 이번 입고 프로세스를 종료합니다."
+                    )
+
                 self.dialog.destroy()
                 
                 # v3.8.9: 업로드 후 재고리스트 탭 이동 + 자동 새로고침
@@ -2073,8 +2227,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     try:
                         _root = getattr(_app, 'root', None)
                         if _root:
-                            if hasattr(_app, '_set_parsing_preview_data'):
-                                _app._set_parsing_preview_data(None)
                             if hasattr(_app, 'notebook') and hasattr(_app, 'tab_inventory'):
                                 _root.after(200, lambda: _app.notebook.select(_app.tab_inventory))
                             if hasattr(_app, '_deferred_refresh_main_tabs'):
@@ -2083,11 +2235,57 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             elif hasattr(_app, '_refresh_inventory'):
                                 _root.after(500, _app._refresh_inventory)
                                 logger.info("[onestop] 재고 새로고침 예약 완료 (500ms)")
+                            if _ask_more_inbound and hasattr(_app, '_on_onestop_inbound'):
+                                _root.after(700, _app._on_onestop_inbound)
+                                logger.info("[onestop] 추가 입고 요청으로 원스톱 입고 재오픈")
+                            elif not _ask_more_inbound:
+                                logger.info("[onestop] 추가 입고 없음 — 입고 프로세스 종료")
                     except (RuntimeError, ValueError) as e:
                         logger.debug(f"재고 새로고침 호출 실패: {e}")
         
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(100, _close)
+
+    def _build_upload_summary_message(self, count: int) -> str:
+        """업로드 완료 요약 문자열 생성."""
+        rows = list(getattr(self, 'preview_data', []) or [])
+        edited_cnt = len(getattr(self, '_edited_rows', set()) or set())
+        sap_set = {str(r.get('sap_no', '') or '').strip() for r in rows if str(r.get('sap_no', '') or '').strip()}
+        bl_set = {str(r.get('bl_no', '') or '').strip() for r in rows if str(r.get('bl_no', '') or '').strip()}
+        cont_set = {str(r.get('container_no', '') or '').strip() for r in rows if str(r.get('container_no', '') or '').strip()}
+        total_net = 0.0
+        for r in rows:
+            try:
+                total_net += safe_float(r.get('net_weight', 0) or 0)
+            except (ValueError, TypeError) as _e:
+                logger.debug(f"onestop_inbound: {_e}")
+        return (
+            f"✅ {count}개 LOT 저장 완료\n\n"
+            f"- 수정된 행: {edited_cnt}건\n"
+            f"- SAP NO: {len(sap_set)}종\n"
+            f"- BL NO: {len(bl_set)}종\n"
+            f"- 컨테이너: {len(cont_set)}개\n"
+            f"- 총 NET: {total_net:,.0f} kg"
+        )
+
+    def _reset_after_upload_success(self) -> None:
+        """업로드 성공 후 로컬/메인 미리보기 데이터 정리."""
+        try:
+            self.preview_data = []
+            self.parsed_results = {}
+            self._original_preview_data = []
+            self._cross_check_result = None
+            self._edited_rows = set()
+            self._undo_stack = []
+            self._redo_stack = []
+            self._view_indices = []
+            if hasattr(self, '_update_summary'):
+                self._update_summary()
+            if hasattr(self, '_update_undo_redo_buttons'):
+                self._update_undo_redo_buttons()
+        except (RuntimeError, ValueError, TypeError, AttributeError) as e:
+            logger.debug(f"업로드 후 로컬 미리보기 정리 실패: {e}")
+        self._clear_preview_from_main()
     
     def _enable_buttons(self) -> None:
         def _u():
@@ -2103,8 +2301,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     
     def _enable_parse_btn(self):
         def _u():
-            if self.btn_parse:
-                self.btn_parse.config(state='normal')
+            if self.dialog and self.dialog.winfo_exists():
+                self._update_parse_hint()
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(0, _u)
     

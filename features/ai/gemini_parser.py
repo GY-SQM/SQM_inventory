@@ -121,8 +121,8 @@ def parse_euro_weight(value) -> float:
         elif '.' in s:
             parts = s.split('.')
             if len(parts) == 2:
-                # 소수점 뒤가 3자리이고, 정수부가 1~2자리면 천단위 구분자
-                if len(parts[1]) == 3 and len(parts[0]) <= 2:
+                # 소수점 뒤가 3자리이고, 정수부가 1~3자리면 유럽식 천단위 구분자로 간주
+                if len(parts[1]) == 3 and len(parts[0]) <= 3:
                     # 유럽식 천단위: 5.001 → 5001
                     s = s.replace('.', '')
                 # 그 외는 소수점으로 처리

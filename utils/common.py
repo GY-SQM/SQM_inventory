@@ -124,6 +124,13 @@ def norm_digits_only(x: Any) -> Optional[str]:
     s = norm_str(x)
     if not s:
         return None
+    # Excel float 문자열 보정: 2200033057.0 / MAEU258468669.00 -> 접미 .0 제거
+    s_compact = s.replace(',', '')
+    m = re.fullmatch(r'([A-Za-z]*\d+)\.0+', s_compact)
+    if m:
+        s = m.group(1)
+    else:
+        s = s_compact
     d = re.sub(r'\D+', '', s)
     return d if d else None
 

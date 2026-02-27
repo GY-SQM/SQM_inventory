@@ -115,6 +115,24 @@ except ImportError:
 from .base import BaseParser
 
 # =============================================================================
+# 크로스 체크 엔진 (v6.2.1 NEW)
+# =============================================================================
+try:
+    from .cross_check_engine import (
+        CrossCheckEngine,
+        CrossCheckResult,
+        CheckItem,
+        CheckLevel,
+        cross_check_documents,
+    )
+except ImportError:
+    CrossCheckEngine = None
+    CrossCheckResult = None
+    CheckItem = None
+    CheckLevel = None
+    cross_check_documents = None
+
+# =============================================================================
 # Export
 # =============================================================================
 __all__ = [
@@ -175,4 +193,10 @@ __all__ = [
     "BaseModel",
     "AuditMixin",
     "BaseParser",
+    # 크로스 체크 (v6.2.1)
+    "CrossCheckEngine",
+    "CrossCheckResult",
+    "CheckItem",
+    "CheckLevel",
+    "cross_check_documents",
 ]

@@ -151,8 +151,26 @@ class DocumentParserV3(
             logger.info(f"D/O 파싱: {do_path}")
             result.do = self.parse_do(do_path)
         
-        # 문서 간 교차 검증
+        # 문서 간 교차 검증 (기존 빈 값 보완)
         result = self._validate_shipment_documents(result)
+
+        # v6.2.1: 크로스 체크 엔진으로 정밀 검증
+        try:
+            from ..cross_check_engine import cross_check_documents
+            cross_result = cross_check_documents(
+                invoice=result.invoice,
+                packing_list=result.packing_list,
+                bl=result.bl,
+                do=result.do
+            )
+            result.cross_check_result = cross_result
+            if not cross_result.is_clean:
+                logger.warning(f"[CrossCheck] {cross_result.summary}")
+                for item in cross_result.items:
+                    if item.level.value >= 2:
+                        result.validation_errors.append(str(item))
+        except (ImportError, Exception) as e:
+            logger.debug(f"[CrossCheck] 크로스 체크 스킵: {e}")
         
         return result
 

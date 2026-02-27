@@ -94,6 +94,30 @@ class InboundUploadMixin:
             return
 
         preflight_errors = self._preflight_validate_preview_data()
+        
+        # v6.2.1: 크로스 체크 CRITICAL 항목 차단(사용자 최종 확인 포함)
+        xc = getattr(self, '_cross_check_result', None)
+        if xc and xc.has_critical:
+            critical_msgs = [str(i) for i in xc.items if i.level.value >= 3]
+            try:
+                from ..utils.custom_messagebox import CustomMessageBox
+                proceed = CustomMessageBox.askyesno(
+                    self.dialog, "🚫 크로스 체크 심각 불일치",
+                    f"4종 서류 교차 검증에서 심각한 불일치 {xc.critical_count}건이 발견되었습니다.\n\n"
+                    + "\n".join(critical_msgs[:8])
+                    + ("\n... 외 추가 항목" if len(critical_msgs) > 8 else "")
+                    + "\n\n⚠️ 서류를 재확인하시기 바랍니다.\n그래도 업로드를 진행하시겠습니까?"
+                )
+                if not proceed:
+                    return
+            except (ImportError, ModuleNotFoundError):
+                from tkinter import messagebox as msgbox
+                proceed = msgbox.askyesno(
+                    "크로스 체크 경고",
+                    f"심각한 불일치 {xc.critical_count}건. 진행하시겠습니까?"
+                )
+                if not proceed:
+                    return
         if preflight_errors:
             try:
                 from ..utils.custom_messagebox import CustomMessageBox

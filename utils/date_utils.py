@@ -103,6 +103,19 @@ def normalize_date(date_str: Any) -> Optional[date]:
             except ValueError as e:
                 logger.debug(f"Suppressed: {e}")
 
+    # 4b) DD-Mon-YYYY (하이픈 + 영문월)
+    # 예: 29-Jan-2026, 15-FEB-2025, 03-DECEMBER-2025
+    m = re.match(r'^(\d{1,2})-([A-Za-z]+)-(\d{4})$', s)
+    if m:
+        d = int(m.group(1))
+        mon = m.group(2).upper()
+        y = int(m.group(3))
+        if mon in _MONTH_MAP:
+            try:
+                return date(y, _MONTH_MAP[mon], d)
+            except ValueError as e:
+                logger.debug(f"Suppressed: {e}")
+
     # 5) 영문월: "SEP 15, 2025" / "15 SEP 2025" / "September 15, 2025"
     s_upper = s.upper().replace(',', '')
     # "MON DD YYYY" 또는 "MONTH DD YYYY"
