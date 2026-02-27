@@ -222,10 +222,12 @@ class AllocationPreviewDialog:
         
         # 스크롤바
         v_scroll = ttk.Scrollbar(detail_frame, orient='vertical', command=tree.yview)
-        tree.configure(yscrollcommand=v_scroll.set)
+        h_scroll = ttk.Scrollbar(detail_frame, orient='horizontal', command=tree.xview)
+        tree.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
         
         tree.pack(side='left', fill='both', expand=True)
         v_scroll.pack(side='right', fill='y')
+        h_scroll.pack(side='bottom', fill='x')
         
         # ═══════════════════════════════════════════════════════
         # 3. 확인/취소 버튼 (콤팩트 한 줄)

@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '6.2.0'
+__version__ = '6.2.1'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '6.2.1': '🔒 v6.2.1: 안전성 강화 — D/O 후속연결 매칭·diff·검증·백업, 테스트 DB 초기화 경로 단일화/WAL정리/원클릭 롤백, 원스톱 미리보기 정렬·필터·원본초기화·업로드순서 옵션',
     '6.2.0': '🚀 v6.2.0: 안정화 2단계 — parser 중복 정리, silent exception 로깅화, PC Guard GUID 반영, 대시보드 LabelFrame padding 호환 수정',
     '6.1.9': '🔧 v6.1.9: 안정화 패치 — PC Guard 다중 PC 허용 기본화, 런타임 NameError 핫픽스, 기준선 문서화(Phase1)',
     '6.1.8': '🚀 v6.1.8: Clean Build & Full Feature Integration — FastOut(대량출고), Barcode Scan(현장검증), API Server, Integrity Center, Return Mgmt(반품고도화)',

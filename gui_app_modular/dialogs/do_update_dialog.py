@@ -18,11 +18,12 @@ import sqlite3
 import logging
 import threading
 from datetime import datetime as _dt
-from typing import Optional
+from typing import Optional, List, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
 from core.constants import DEFAULT_WAREHOUSE
+from core.types import norm_bl_no, norm_container_no
 
 
 class DOUpdateDialog:
@@ -37,6 +38,9 @@ class DOUpdateDialog:
         self.file_path = None
         self.do_data = None
         self.matched_lots = []
+        self._diff_rows = []
+        self._match_method = ""
+        self._last_backup_path = ""
 
         self.dialog = None
         self.tree = None
@@ -101,7 +105,12 @@ class DOUpdateDialog:
                              ('status', '상태', 80), ('arrival_before', '기존 입항일', 100)]:
             self.tree.heading(col, text=hdr)
             self.tree.column(col, width=w, anchor='center')
-        self.tree.pack(fill=BOTH, expand=True)
+        sb_y = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree.yview)
+        sb_x = ttk.Scrollbar(tree_frame, orient='horizontal', command=self.tree.xview)
+        self.tree.configure(yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
+        self.tree.pack(side=LEFT, fill=BOTH, expand=True)
+        sb_y.pack(side=RIGHT, fill=Y)
+        sb_x.pack(side=tk.BOTTOM, fill=tk.X)
 
         # ── 하단: 버튼 ──
         btn_frame = ttk.Frame(self.dialog, padding=10)
@@ -216,8 +225,10 @@ class DOUpdateDialog:
         self._parsed_ft_days = ft_days
         self._parsed_warehouse = warehouse
 
-        # BL No.로 LOT 매칭
+        # BL No. + (필요 시) Container 보조 매칭
         self.matched_lots = []
+        self._diff_rows = []
+        self._match_method = ""
         self.tree.delete(*self.tree.get_children())
 
         if not bl_no:
@@ -225,30 +236,12 @@ class DOUpdateDialog:
             return
 
         try:
-            rows = self.engine.db.fetchall(
-                "SELECT lot_no, bl_no, product, net_weight, status, arrival_date "
-                "FROM inventory WHERE bl_no LIKE ?",
-                (f"%{bl_no}%",))
-
-            if not rows:
-                # BL prefix 제거 후 재시도
-                bl_clean = bl_no
-                for prefix in ['MAEU', 'MSCU', 'HLCU', 'CMDU', 'EGLV', 'COSU', 'OOLU', 'YMLU']:
-                    if bl_no.upper().startswith(prefix):
-                        bl_clean = bl_no[len(prefix):]
-                        break
-                if bl_clean != bl_no:
-                    rows = self.engine.db.fetchall(
-                        "SELECT lot_no, bl_no, product, net_weight, status, arrival_date "
-                        "FROM inventory WHERE bl_no LIKE ?",
-                        (f"%{bl_clean}%",))
-
+            rows, method = self._match_lots_for_do(bl_no, do)
+            self._match_method = method
             if rows:
-                for row in rows:
-                    r = dict(row) if hasattr(row, 'keys') else {
-                        'lot_no': row[0], 'bl_no': row[1], 'product': row[2],
-                        'net_weight': row[3], 'status': row[4], 'arrival_date': row[5]}
-                    self.matched_lots.append(r)
+                self.matched_lots = rows
+                self._diff_rows = self._build_diff_rows(rows)
+                for r in rows:
                     self.tree.insert('', 'end', values=(
                         r.get('lot_no', ''),
                         r.get('bl_no', ''),
@@ -257,11 +250,13 @@ class DOUpdateDialog:
                         r.get('status', ''),
                         r.get('arrival_date', '') or '없음',
                     ))
+                will_update = len([d for d in self._diff_rows if d.get('changed_fields')])
+                skipped = len(self._diff_rows) - will_update
                 self.status_label.configure(
-                    text=f"✅ {len(rows)}개 LOT 매칭됨 — '적용' 클릭 시 UPDATE")
+                    text=f"✅ {len(rows)}개 매칭 ({method}) | 업데이트 예정 {will_update} | 스킵 {skipped}")
                 self.btn_apply.configure(state='normal')
             else:
-                self.status_label.configure(text=f"⚠️ BL '{bl_no}'에 매칭되는 LOT 없음")
+                self.status_label.configure(text=f"⚠️ BL '{bl_no}' 매칭 LOT 없음 (정규화 exact + BL+Container 보조)")
 
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             logger.error(f"LOT 매칭 오류: {e}")
@@ -274,29 +269,62 @@ class DOUpdateDialog:
         if not self.matched_lots:
             return
 
-        count = len(self.matched_lots)
-        if not CustomMessageBox.askyesno(self.dialog, "D/O 적용 확인",
-                f"{count}개 LOT에 다음 정보를 업데이트합니다:\n\n"
-                f"  입항일: {self._parsed_arrival}\n"
-                f"  Free Time: {self._parsed_ft_days}일\n"
-                f"  Free Time 만료: {self._parsed_ft_date}\n\n"
-                f"진행하시겠습니까?"):
+        if not self._diff_rows:
+            self._diff_rows = self._build_diff_rows(self.matched_lots)
+
+        update_targets = [d for d in self._diff_rows if d.get('changed_fields')]
+        skipped_same = len(self._diff_rows) - len(update_targets)
+        if not update_targets:
+            CustomMessageBox.showinfo(self.dialog, "D/O 적용", "변경할 값이 없습니다. (모든 LOT가 기존값과 동일)")
             return
 
+        preview_lines = []
+        for d in update_targets[:20]:
+            field_changes = ", ".join(
+                f"{f}: {d['old'].get(f, '') or '—'} -> {d['new'].get(f, '') or '—'}"
+                for f in d.get('changed_fields', [])
+            )
+            preview_lines.append(f"- {d.get('lot_no', '')}: {field_changes}")
+        if len(update_targets) > 20:
+            preview_lines.append(f"... 외 {len(update_targets) - 20}건")
+
+        count = len(self.matched_lots)
+        confirm_text = (
+            f"{count}개 매칭 LOT 중 {len(update_targets)}개를 업데이트합니다.\n"
+            f"(기존값 동일로 스킵: {skipped_same}건)\n"
+            f"매칭 방식: {self._match_method or 'unknown'}\n\n"
+            f"[변경 Diff 미리보기]\n" + "\n".join(preview_lines) + "\n\n"
+            f"진행 전 DB 백업 스냅샷을 자동 생성합니다.\n"
+            f"진행하시겠습니까?"
+        )
+        if not CustomMessageBox.askyesno(self.dialog, "D/O 적용 확인 (Diff 검토)", confirm_text):
+            return
+
+        # 업데이트 전 스냅샷 백업(실패 시 중단)
+        backup_path = None
+        if hasattr(self.engine, 'db') and hasattr(self.engine.db, 'create_backup'):
+            backup_path = self.engine.db.create_backup("before_do_followup_update")
+        if not backup_path:
+            CustomMessageBox.showerror(
+                self.dialog, "백업 실패",
+                "업데이트 전 백업 스냅샷 생성에 실패했습니다.\n안전을 위해 적용을 중단합니다."
+            )
+            return
+        self._last_backup_path = str(backup_path)
+
         updated = 0
+        verify_mismatch = []
         try:
             with self.engine.db.transaction():
-                for lot in self.matched_lots:
-                    lot_no = lot.get('lot_no', '')
+                for d in update_targets:
+                    lot_no = d.get('lot_no', '')
                     updates = []
                     params = []
-
-                    if self._parsed_arrival:
-                        updates.append("arrival_date = ?")
-                        params.append(self._parsed_arrival)
-                    if self._parsed_ft_days > 0:
-                        updates.append("free_time = ?")
-                        params.append(self._parsed_ft_days)
+                    new_data = d.get('new', {})
+                    for col in ('arrival_date', 'free_time', 'free_time_date', 'con_return', 'warehouse'):
+                        if col in d.get('changed_fields', []):
+                            updates.append(f"{col} = ?")
+                            params.append(new_data.get(col, ''))
 
                     if updates:
                         updates.append("updated_at = ?")
@@ -305,14 +333,46 @@ class DOUpdateDialog:
                         params.append(lot_no)
                         self.engine.db.execute(sql, tuple(params))
                         updated += 1
-                        self._log(f"  ✅ LOT {lot_no} ← 입항일={self._parsed_arrival}, FT={self._parsed_ft_days}일")
+                        self._log(
+                            f"  ✅ LOT {lot_no} 업데이트: {', '.join(d.get('changed_fields', []))}"
+                        )
 
-            self._log(f"📋 D/O 후속 연결 완료: {updated}/{count}개 LOT 업데이트")
+            # 사후 검증 리포트(업데이트 건수/스킵/불일치)
+            for d in update_targets:
+                lot_no = d.get('lot_no', '')
+                rec = self.engine.db.fetchone(
+                    "SELECT arrival_date, free_time, free_time_date, con_return, warehouse "
+                    "FROM inventory WHERE lot_no = ?",
+                    (lot_no,),
+                ) or {}
+                for col in d.get('changed_fields', []):
+                    expected = str(d.get('new', {}).get(col, '') or '')
+                    actual = str((rec.get(col, '') if hasattr(rec, 'get') else '') or '')
+                    if actual != expected:
+                        verify_mismatch.append({
+                            'lot_no': lot_no, 'column': col, 'expected': expected, 'actual': actual,
+                        })
+
+            mismatch_cnt = len(verify_mismatch)
+            self._log(
+                f"📋 D/O 후속 연결 완료: 매칭 {count}건 / 업데이트 {updated}건 / "
+                f"스킵 {skipped_same}건 / 불일치 {mismatch_cnt}건"
+            )
+            self._log(f"🧷 사전 백업 스냅샷: {self._last_backup_path}")
+            if mismatch_cnt:
+                for mm in verify_mismatch[:10]:
+                    self._log(
+                        f"  ⚠️ 검증 불일치 LOT={mm['lot_no']} {mm['column']} "
+                        f"(예상={mm['expected']} / 실제={mm['actual']})"
+                    )
 
             CustomMessageBox.showinfo(self.dialog, "D/O 적용 완료",
-                f"✅ {updated}개 LOT 업데이트 완료\n\n"
-                f"입항일: {self._parsed_arrival}\n"
-                f"Free Time: {self._parsed_ft_days}일")
+                f"✅ 적용 완료\n\n"
+                f"- 매칭: {count}건\n"
+                f"- 업데이트: {updated}건\n"
+                f"- 스킵(동일값): {skipped_same}건\n"
+                f"- 검증 불일치: {mismatch_cnt}건\n\n"
+                f"백업: {os.path.basename(self._last_backup_path) if self._last_backup_path else '-'}")
 
             # 새로고침
             if self.app:
@@ -332,3 +392,111 @@ class DOUpdateDialog:
             logger.error(f"D/O 적용 오류: {e}", exc_info=True)
             self._log(f"❌ D/O 적용 실패 (롤백됨): {e}")
             CustomMessageBox.showerror(self.dialog, "오류", f"D/O 적용 실패:\n{e}")
+
+    def _to_row_dict(self, row) -> Dict:
+        if hasattr(row, 'keys'):
+            return dict(row)
+        return {
+            'lot_no': row[0], 'bl_no': row[1], 'product': row[2],
+            'net_weight': row[3], 'status': row[4], 'arrival_date': row[5],
+            'free_time': row[6], 'free_time_date': row[7], 'con_return': row[8],
+            'warehouse': row[9], 'container_no': row[10],
+        }
+
+    def _extract_do_container_set(self, do) -> set:
+        containers = set()
+        for c in (getattr(do, 'containers', []) or []):
+            cno = getattr(c, 'container_no', '') if hasattr(c, 'container_no') else (c.get('container_no', '') if isinstance(c, dict) else '')
+            std = norm_container_no(cno)
+            if std:
+                containers.add(std)
+        return containers
+
+    def _match_lots_for_do(self, bl_no: str, do) -> Tuple[List[Dict], str]:
+        all_rows = self.engine.db.fetchall(
+            "SELECT lot_no, bl_no, product, net_weight, status, arrival_date, "
+            "free_time, free_time_date, con_return, warehouse, container_no "
+            "FROM inventory WHERE COALESCE(lot_no,'') <> '' ORDER BY lot_no"
+        ) or []
+        row_dicts = [self._to_row_dict(r) for r in all_rows]
+
+        bl_raw = str(bl_no or '').strip()
+        bl_std = norm_bl_no(bl_raw) or ''
+        container_set = self._extract_do_container_set(do)
+
+        raw_exact = [
+            r for r in row_dicts
+            if str(r.get('bl_no', '') or '').strip().upper() == bl_raw.upper()
+        ]
+        if raw_exact:
+            selected = raw_exact
+            method = "raw_exact_bl"
+        else:
+            norm_exact = [
+                r for r in row_dicts
+                if (norm_bl_no(r.get('bl_no', '')) or '') == bl_std and bl_std
+            ]
+            selected = norm_exact
+            method = "normalized_exact_bl"
+
+        # 보조 매칭: 후보가 많거나 0건일 때 BL+Container로 보정
+        if container_set:
+            narrowed = [
+                r for r in selected
+                if (norm_container_no(r.get('container_no', '')) or '') in container_set
+            ]
+            if narrowed:
+                selected = narrowed
+                method = f"{method}+container"
+            elif not selected and bl_std:
+                aux = [
+                    r for r in row_dicts
+                    if (norm_bl_no(r.get('bl_no', '')) or '') == bl_std
+                    and (norm_container_no(r.get('container_no', '')) or '') in container_set
+                ]
+                if aux:
+                    selected = aux
+                    method = "normalized_bl+container_aux"
+
+        # lot_no 중복 제거
+        uniq = {}
+        for r in selected:
+            lot_no = str(r.get('lot_no', '') or '').strip()
+            if lot_no and lot_no not in uniq:
+                uniq[lot_no] = r
+        return list(uniq.values()), method
+
+    def _build_diff_rows(self, rows: List[Dict]) -> List[Dict]:
+        new_arrival = str(self._parsed_arrival or '').strip()[:10]
+        new_ft_days = int(self._parsed_ft_days or 0) if int(self._parsed_ft_days or 0) > 0 else None
+        new_ft_date = str(self._parsed_ft_date or '').strip()[:10]
+        new_warehouse = str(self._parsed_warehouse or '').strip()
+
+        out = []
+        for r in rows:
+            old_data = {
+                'arrival_date': str(r.get('arrival_date', '') or '')[:10],
+                'free_time': str(r.get('free_time', '') or ''),
+                'free_time_date': str(r.get('free_time_date', '') or '')[:10],
+                'con_return': str(r.get('con_return', '') or '')[:10],
+                'warehouse': str(r.get('warehouse', '') or ''),
+            }
+            new_data = dict(old_data)
+            if new_arrival:
+                new_data['arrival_date'] = new_arrival
+            if new_ft_days is not None:
+                new_data['free_time'] = str(new_ft_days)
+            if new_ft_date:
+                new_data['free_time_date'] = new_ft_date
+                new_data['con_return'] = new_ft_date
+            if new_warehouse:
+                new_data['warehouse'] = new_warehouse
+
+            changed_fields = [k for k in old_data.keys() if str(old_data.get(k, '') or '') != str(new_data.get(k, '') or '')]
+            out.append({
+                'lot_no': str(r.get('lot_no', '') or ''),
+                'old': old_data,
+                'new': new_data,
+                'changed_fields': changed_fields,
+            })
+        return out

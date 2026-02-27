@@ -319,18 +319,27 @@ v2.9.91 - SQM Inventory System
         """테스트 DB 초기화 — SQLite만 지원. 연결 종료 후 파일 삭제·재생성."""
         import os
         import shutil
+        import sqlite3
         from datetime import datetime
         if not getattr(self, 'engine', None):
             self._log("⚠️ 엔진이 없습니다.")
             return
-        db_path = getattr(self.engine, 'db_path', None)
-        if not db_path or db_path == ':memory:':
+        db_path_engine = getattr(self.engine, 'db_path', None)
+        db_path_app = getattr(self, 'db_path', None)
+        if not db_path_engine or db_path_engine == ':memory:':
             self._log("⚠️ 메모리 DB 또는 경로 없음 — 초기화 불가")
             return
         if getattr(self.engine, 'db_type', 'sqlite') != 'sqlite':
             self._log("⚠️ 테스트 DB 초기화는 SQLite에서만 지원합니다.")
             return
-        path = os.path.abspath(db_path)
+        path = os.path.abspath(db_path_engine)
+        if db_path_app:
+            path_app = os.path.abspath(db_path_app)
+            if path_app != path:
+                # 경로 불일치 시 실제 사용 중인 엔진 경로를 단일 소스로 강제
+                self._log(f"⚠️ DB 경로 불일치 감지 — engine={path}, app={path_app}. engine 경로로 통일합니다.")
+        self.db_path = path
+
         if not os.path.isfile(path):
             self._log("⚠️ DB 파일이 없습니다.")
             return
@@ -339,6 +348,7 @@ v2.9.91 - SQM Inventory System
                 self.engine.db.close()
         except Exception as e:
             logger.debug(f"DB close: {e}")
+
         backup_dir = os.path.join(os.path.dirname(path), 'backups')
         os.makedirs(backup_dir, exist_ok=True)
         stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -348,14 +358,59 @@ v2.9.91 - SQM Inventory System
             self._log(f"백업: {backup_path}")
         except OSError as e:
             logger.warning(f"백업 실패: {e}")
-        try:
-            os.remove(path)
-        except OSError as e:
-            self._log(f"❌ DB 파일 삭제 실패: {e}")
-            CustomMessageBox.showerror(self.root, "테스트 DB 초기화", f"파일이 사용 중이거나 권한이 없습니다.\n{e}")
+
+        # SQLite 잔존 파일까지 함께 삭제 (WAL/SHM/JOURNAL/CHECKSUM)
+        cleanup_targets = [
+            path,
+            f"{path}-wal",
+            f"{path}-shm",
+            f"{path}-journal",
+            f"{path}.checksum",
+        ]
+        remove_errors = []
+        for target in cleanup_targets:
+            if not os.path.exists(target):
+                continue
+            try:
+                os.remove(target)
+                self._log(f"🧹 삭제: {target}")
+            except OSError as e:
+                remove_errors.append((target, str(e)))
+        if remove_errors:
+            first_target, first_err = remove_errors[0]
+            self._log(f"❌ DB 파일 삭제 실패: {first_target} / {first_err}")
+            CustomMessageBox.showerror(
+                self.root,
+                "테스트 DB 초기화",
+                f"파일이 사용 중이거나 권한이 없습니다.\n{first_target}\n{first_err}"
+            )
             return
+
         try:
             self._init_engine()
+            # 재생성 검증: 무결성 + 핵심 테이블 건수 0 확인
+            if not getattr(self, 'engine', None) or not getattr(self.engine, 'db', None):
+                raise RuntimeError("엔진 재초기화 후 DB 연결이 없습니다.")
+            new_path = os.path.abspath(getattr(self.engine, 'db_path', ''))
+            if new_path != path:
+                raise RuntimeError(f"재초기화 DB 경로 불일치: expected={path}, actual={new_path}")
+
+            integ = self.engine.db.fetchone("PRAGMA integrity_check") or {}
+            integ_ok = str(integ.get('integrity_check', '') or '').lower() == 'ok'
+            if not integ_ok:
+                raise RuntimeError(f"PRAGMA integrity_check 실패: {integ}")
+
+            inv_cnt = self.engine.db.fetchone("SELECT COUNT(*) AS cnt FROM inventory") or {}
+            ton_cnt = self.engine.db.fetchone("SELECT COUNT(*) AS cnt FROM inventory_tonbag") or {}
+            out_cnt = self.engine.db.fetchone("SELECT COUNT(*) AS cnt FROM outbound") or {}
+            inv_n = int(inv_cnt.get('cnt', 0) or 0)
+            ton_n = int(ton_cnt.get('cnt', 0) or 0)
+            out_n = int(out_cnt.get('cnt', 0) or 0)
+            if inv_n != 0 or ton_n != 0 or out_n != 0:
+                raise RuntimeError(
+                    f"초기화 검증 실패: inventory={inv_n}, tonbag={ton_n}, outbound={out_n}"
+                )
+
             self._log("✅ 테스트 DB 초기화 완료.")
             self._refresh_inventory()
             self._refresh_tonbag()
@@ -364,7 +419,78 @@ v2.9.91 - SQM Inventory System
                     self._refresh_dashboard()
                 except Exception as _e:
                     logger.debug(f"Dashboard refresh: {_e}")
-            CustomMessageBox.showinfo(self.root, "테스트 DB 초기화", "데이터베이스가 초기화되었습니다.\n재고·톤백 화면이 갱신됩니다.")
-        except Exception as e:
+            CustomMessageBox.showinfo(
+                self.root,
+                "테스트 DB 초기화",
+                "데이터베이스가 초기화되었습니다.\n"
+                "검증 완료: integrity_check=ok, inventory/tonbag/outbound=0건\n"
+                "재고·톤백 화면이 갱신됩니다."
+            )
+        except (sqlite3.Error, OSError, RuntimeError, ValueError, TypeError) as e:
             logger.error(f"테스트 DB 초기화 오류: {e}", exc_info=True)
-            CustomMessageBox.showerror(self.root, "테스트 DB 초기화", f"엔진 재생성 실패:\n{e}")
+            msg = f"엔진 재생성 실패:\n{e}"
+            # 원클릭 롤백: 초기화 직전 백업 자동 복원
+            if backup_path and os.path.isfile(backup_path):
+                if CustomMessageBox.askyesno(
+                    self.root,
+                    "테스트 DB 초기화 실패",
+                    f"{msg}\n\n초기화 전 백업으로 자동 복원하시겠습니까?\n{backup_path}"
+                ):
+                    try:
+                        # 복원 전 현재 연결 정리
+                        if getattr(self, 'engine', None) and hasattr(self.engine, 'db') and hasattr(self.engine.db, 'close'):
+                            try:
+                                self.engine.db.close()
+                            except Exception as _e:
+                                logger.debug(f"롤백 전 DB close 실패(무시): {_e}")
+
+                        # 찌꺼기 파일 정리 후 백업 복원
+                        rollback_targets = [
+                            path,
+                            f"{path}-wal",
+                            f"{path}-shm",
+                            f"{path}-journal",
+                            f"{path}.checksum",
+                        ]
+                        for target in rollback_targets:
+                            try:
+                                if os.path.exists(target):
+                                    os.remove(target)
+                            except OSError as _e:
+                                logger.debug(f"롤백 전 파일 정리 실패(무시): {target} / {_e}")
+
+                        shutil.copy2(backup_path, path)
+                        self.db_path = path
+                        self._init_engine()
+
+                        # 복원 검증
+                        integ = self.engine.db.fetchone("PRAGMA integrity_check") or {}
+                        integ_ok = str(integ.get('integrity_check', '') or '').lower() == 'ok'
+                        if not integ_ok:
+                            raise RuntimeError(f"롤백 후 integrity_check 실패: {integ}")
+
+                        self._refresh_inventory()
+                        self._refresh_tonbag()
+                        if hasattr(self, '_refresh_dashboard') and callable(self._refresh_dashboard):
+                            try:
+                                self._refresh_dashboard()
+                            except Exception as _e:
+                                logger.debug(f"Dashboard refresh(rollback): {_e}")
+
+                        self._log(f"♻️ 롤백 복원 완료: {backup_path}")
+                        CustomMessageBox.showinfo(
+                            self.root,
+                            "롤백 복원 완료",
+                            "초기화 실패로 인해 백업에서 자동 복원했습니다.\n"
+                            "재고·톤백 화면을 갱신했습니다."
+                        )
+                        return
+                    except (sqlite3.Error, OSError, RuntimeError, ValueError, TypeError) as re:
+                        logger.error(f"롤백 복원 실패: {re}", exc_info=True)
+                        CustomMessageBox.showerror(
+                            self.root,
+                            "롤백 복원 실패",
+                            f"자동 복원에 실패했습니다.\n수동 복원이 필요합니다.\n\n백업 파일:\n{backup_path}\n\n오류:\n{re}"
+                        )
+                        return
+            CustomMessageBox.showerror(self.root, "테스트 DB 초기화", msg)

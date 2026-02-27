@@ -21,6 +21,30 @@ class OutboundHandlersMixin:
     
     Mixed into SQMInventoryApp class
     """
+
+    def _refresh_after_outbound_action(self, reason: str) -> None:
+        """출고 계열 액션 이후 표준 새로고침 진입점."""
+        if hasattr(self, 'refresh_bus_deferred'):
+            self.refresh_bus_deferred(reason=reason, delay_ms=50)
+            return
+        if hasattr(self, '_deferred_refresh_main_tabs'):
+            self._deferred_refresh_main_tabs(delay_ms=50)
+            return
+        if hasattr(self, '_refresh_main_tabs'):
+            self._refresh_main_tabs()
+            return
+        if hasattr(self, '_refresh_inventory'):
+            self._refresh_inventory()
+        if hasattr(self, '_refresh_tonbag'):
+            self._refresh_tonbag()
+        if hasattr(self, '_refresh_allocation'):
+            self._refresh_allocation()
+        if hasattr(self, '_refresh_picked'):
+            self._refresh_picked()
+        if hasattr(self, '_refresh_sold'):
+            self._refresh_sold()
+        if hasattr(self, '_refresh_dashboard'):
+            self._refresh_dashboard()
     
     def _on_simple_outbound(self) -> None:
         """Simple outbound dialog - enter LOT and quantity (v4.0.3: UI 분리)"""
@@ -272,22 +296,7 @@ class OutboundHandlersMixin:
                     self._log(f"✅ 빠른 출고: {processed}건, {picked:.3f} MT")
                     
                     dialog.destroy()
-                    if hasattr(self, 'refresh_bus_deferred'):
-                        self.refresh_bus_deferred(reason="SIMPLE_OUTBOUND_EXECUTE", delay_ms=50)
-                    elif hasattr(self, '_deferred_refresh_main_tabs'):
-                        self._deferred_refresh_main_tabs(delay_ms=50)
-                    elif hasattr(self, '_refresh_main_tabs'):
-                        self._refresh_main_tabs()
-                    else:
-                        self._refresh_inventory()
-                        if hasattr(self, '_refresh_tonbag'):
-                            self._refresh_tonbag()
-                        if hasattr(self, '_refresh_allocation'):
-                            self._refresh_allocation()
-                        if hasattr(self, '_refresh_picked'):
-                            self._refresh_picked()
-                        if hasattr(self, '_refresh_sold'):
-                            self._refresh_sold()
+                    self._refresh_after_outbound_action("SIMPLE_OUTBOUND_EXECUTE")
                 else:
                     errs = '\n'.join(result.get('errors', ['알 수 없는 오류']))
                     CustomMessageBox.showerror(self.root, "출고 실패", f"출고 처리 실패:\n{errs}")
@@ -492,26 +501,7 @@ class OutboundHandlersMixin:
             
             # 화면 새로고침 (do_action_tx가 있는 경우 이미 처리됨)
             if not hasattr(self, 'do_action_tx'):
-                if hasattr(self, 'refresh_bus_deferred'):
-                    self.refresh_bus_deferred(reason="EXECUTE_OUTBOUND_EXCEL", delay_ms=50)
-                elif hasattr(self, '_deferred_refresh_main_tabs'):
-                    self._deferred_refresh_main_tabs(delay_ms=50)
-                elif hasattr(self, '_refresh_main_tabs'):
-                    self._refresh_main_tabs()
-                else:
-                    if hasattr(self, '_refresh_inventory'):
-                        self._refresh_inventory()
-                    if hasattr(self, '_refresh_tonbag'):
-                        self._refresh_tonbag()
-                if hasattr(self, '_refresh_dashboard'):
-                    self._refresh_dashboard()
-                if not hasattr(self, '_deferred_refresh_main_tabs') and not hasattr(self, '_refresh_main_tabs'):
-                    if hasattr(self, '_refresh_allocation'):
-                        self._refresh_allocation()
-                    if hasattr(self, '_refresh_picked'):
-                        self._refresh_picked()
-                    if hasattr(self, '_refresh_sold'):
-                        self._refresh_sold()
+                self._refresh_after_outbound_action("EXECUTE_OUTBOUND_EXCEL")
             
             self._log(f"✅ 출고 완료: {processed}건")
             CustomMessageBox.showinfo(self.root, "출고 완료", 
@@ -897,32 +887,30 @@ class OutboundHandlersMixin:
             if not _proceed_flag[0]:
                 return
 
-            exec_result = self.engine.execute_from_picking(
-                picking_result,
-                picking_no=getattr(meta, 'picking_no', ''),
-                sales_order=getattr(meta, 'sales_order', ''),
-            )
+            if hasattr(self, 'do_action_tx'):
+                exec_result = self.do_action_tx(
+                    "EXECUTE_FROM_PICKING",
+                    lambda: self.engine.execute_from_picking(
+                        picking_result,
+                        picking_no=getattr(meta, 'picking_no', ''),
+                        sales_order=getattr(meta, 'sales_order', ''),
+                    ),
+                    parent=self.root,
+                    refresh_mode="deferred",
+                )
+            else:
+                exec_result = self.engine.execute_from_picking(
+                    picking_result,
+                    picking_no=getattr(meta, 'picking_no', ''),
+                    sales_order=getattr(meta, 'sales_order', ''),
+                )
             if exec_result.get('success'):
                 CustomMessageBox.showinfo(
                     self.root, '판매화물 결정 완료',
                     f'처리: {exec_result.get("executed", 0)}개 LOT\n현장 출고 완료 후 [출고 확정]을 실행하세요.'
                 )
-                if hasattr(self, 'refresh_bus_deferred'):
-                    self.refresh_bus_deferred(reason="EXECUTE_FROM_PICKING", delay_ms=50)
-                elif hasattr(self, '_deferred_refresh_main_tabs'):
-                    self._deferred_refresh_main_tabs(delay_ms=50)
-                elif hasattr(self, '_refresh_main_tabs'):
-                    self._refresh_main_tabs()
-                else:
-                    self._refresh_inventory()
-                    if hasattr(self, '_refresh_tonbag'):
-                        self._refresh_tonbag()
-                    if hasattr(self, '_refresh_allocation'):
-                        self._refresh_allocation()
-                    if hasattr(self, '_refresh_picked'):
-                        self._refresh_picked()
-                    if hasattr(self, '_refresh_sold'):
-                        self._refresh_sold()
+                if not hasattr(self, 'do_action_tx'):
+                    self._refresh_after_outbound_action("EXECUTE_FROM_PICKING")
             else:
                 errs = '\n'.join(exec_result.get('errors', [])[:3])
                 CustomMessageBox.showerror(self.root, '실행 실패', errs)
@@ -1143,23 +1131,7 @@ class OutboundHandlersMixin:
             total, result_msg = revert_fn(lot_nos)
             d.destroy()
             CustomMessageBox.showinfo(self.root, '취소 완료', result_msg)
-            if hasattr(self, 'refresh_bus_deferred'):
-                self.refresh_bus_deferred(reason="REVERT_LOT_DIALOG_ACTION", delay_ms=50)
-            elif hasattr(self, '_deferred_refresh_main_tabs'):
-                self._deferred_refresh_main_tabs(delay_ms=50)
-            elif hasattr(self, '_refresh_main_tabs'):
-                self._refresh_main_tabs()
-            else:
-                if hasattr(self, '_refresh_inventory'):
-                    self._refresh_inventory()
-                if hasattr(self, '_refresh_tonbag'):
-                    self._refresh_tonbag()
-                if hasattr(self, '_refresh_allocation'):
-                    self._refresh_allocation()
-                if hasattr(self, '_refresh_picked'):
-                    self._refresh_picked()
-                if hasattr(self, '_refresh_sold'):
-                    self._refresh_sold()
+            self._refresh_after_outbound_action("REVERT_LOT_DIALOG_ACTION")
 
         btn_f = ttk.Frame(f)
         btn_f.pack(fill=tk.X, pady=(0, 4))
@@ -1226,16 +1198,35 @@ class OutboundHandlersMixin:
             if not mb.askyesno("UID 대조 통과", f"{verify['message']}\n\nPICKED → SOLD 전환하시겠습니까?", parent=self.root):
                 return
 
-            sold_result = scanner.process_barcode_scan_to_sold(file_path)
-            msg = f"출고 완료: {sold_result['sold']}건 SOLD 전환\n"
-            if sold_result['not_found']:
-                msg += f"\n⚠️ 미매칭: {len(sold_result['not_found'])}건\n"
-            if sold_result['remaining_picked'] > 0:
-                msg += f"\n⚠️ 잔여 PICKED: {sold_result['remaining_picked']}건\n"
+            if hasattr(self, 'do_action_tx'):
+                sold_result = self.do_action_tx(
+                    "BARCODE_SCAN_TO_SOLD",
+                    lambda: scanner.process_barcode_scan_to_sold(file_path),
+                    parent=self.root,
+                    refresh_mode="deferred",
+                )
+            else:
+                sold_result = scanner.process_barcode_scan_to_sold(file_path)
+
+            if not isinstance(sold_result, dict):
+                mb.showerror("오류", "바코드 스캔 결과 형식이 올바르지 않습니다.", parent=self.root)
+                return
+            if sold_result.get('success') is False and sold_result.get('sold', 0) <= 0:
+                err = (sold_result.get('errors') or ['처리 실패'])[0]
+                mb.showerror("오류", f"바코드 스캔 처리 실패:\n{err}", parent=self.root)
+                return
+
+            msg = f"출고 완료: {sold_result.get('sold', 0)}건 SOLD 전환\n"
+            if sold_result.get('not_found'):
+                msg += f"\n⚠️ 미매칭: {len(sold_result.get('not_found', []))}건\n"
+            if sold_result.get('remaining_picked', 0) > 0:
+                msg += f"\n⚠️ 잔여 PICKED: {sold_result.get('remaining_picked', 0)}건\n"
             mb.showinfo("바코드 스캔 출고 완료", msg, parent=self.root)
 
-            if hasattr(self, '_refresh_inventory'): self._refresh_inventory()
-            if hasattr(self, '_refresh_tonbag_list'): self._refresh_tonbag_list()
+            if not hasattr(self, 'do_action_tx'):
+                self._refresh_after_outbound_action("BARCODE_SCAN_TO_SOLD")
+            if hasattr(self, '_refresh_tonbag_list'):
+                self._refresh_tonbag_list()
 
         except Exception as e:
             import logging

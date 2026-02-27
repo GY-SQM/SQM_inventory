@@ -66,12 +66,12 @@ def show_tonbag_location_upload_dialog(
     # 1) 선택 다이얼로그 — Excel/데이터 입력 원칙 통일 (데이터 붙여넣기 / 파일 업로드)
     from ..utils.ui_constants import (
         UPLOAD_CHOICE_HEADER, UPLOAD_CHOICE_PASTE, UPLOAD_CHOICE_UPLOAD,
-        UPLOAD_CHOICE_BTN_PASTE, UPLOAD_CHOICE_BTN_UPLOAD,
+        UPLOAD_CHOICE_BTN_PASTE, UPLOAD_CHOICE_BTN_UPLOAD, apply_modal_window_options,
     )
     choice_win = tk.Toplevel(parent)
     choice_win.title("📍 톤백 위치 매핑")
     choice_win.transient(parent)
-    choice_win.resizable(False, False)
+    apply_modal_window_options(choice_win)
     frm = ttk.Frame(choice_win, padding=20)
     frm.pack(fill=tk.BOTH, expand=True)
     ttk.Label(frm, text=UPLOAD_CHOICE_HEADER, font=("맑은 고딕", 10)).pack(pady=(0, 12))

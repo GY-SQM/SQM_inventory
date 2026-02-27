@@ -14,12 +14,14 @@ from tkinter import ttk, filedialog, BOTH, YES, X, Y, LEFT, RIGHT, BOTTOM, END, 
 import logging
 import threading
 from datetime import datetime, timedelta, date as _date_type
+from copy import deepcopy
 
 # 비즈니스 기본값
 from core.constants import DEFAULT_WAREHOUSE
 
 from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog, apply_modal_window_options
 from core.types import safe_float
+from ..utils.tree_enhancements import HeaderFilterBar
 
 # v5.8.7: DatePicker 달력 UI — gui_bootstrap 통일 (ttkbootstrap.DateEntry, 없으면 텍스트 입력 폴백)
 from ..utils.gui_bootstrap import DateEntry, HAS_DATEENTRY
@@ -105,6 +107,21 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self.btn_parse = None
         self.btn_upload = None
         self.btn_excel = None
+        self.btn_undo = None
+        self.btn_redo = None
+        self.btn_reset_original = None
+        self.filter_bar = None
+        self._var_upload_by_view_order = None
+        self._editing_item = None
+        self._preview_anchor = (0, 0)  # (row_idx, col_idx)
+        self._edited_rows = set()
+        self._undo_stack = []
+        self._redo_stack = []
+        self._max_history = 50
+        self._sort_col = None
+        self._sort_desc = False
+        self._view_indices = []
+        self._original_preview_data = []
     
     def show(self, initial_files: dict = None) -> None:
         """팝업 표시. initial_files: { 'DO': 경로 } 등 드래그앤드롭/캡처 이미지 사전 지정."""
@@ -296,14 +313,15 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         columns = tuple(col[0] for col in PREVIEW_COLUMNS)
         self.tree = ttk.Treeview(
             tree_frame, columns=columns, show="headings",
-            height=18, selectmode='browse',
+            height=18, selectmode='extended',
             style='Preview.Treeview'
         )
         self.tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _tree_dark), foreground=_tree_fg)
         self.tree.tag_configure('even', background=ThemeColors.get('bg_card', _tree_dark), foreground=_tree_fg)
+        self.tree.tag_configure('edited', background=ThemeColors.get('warning', _tree_dark), foreground=_tree_fg)
         
         for col_id, header, width, anchor in PREVIEW_COLUMNS:
-            self.tree.heading(col_id, text=header)
+            self.tree.heading(col_id, text=header, command=lambda c=col_id: self._toggle_preview_sort(c))
             self.tree.column(col_id, width=width, anchor=anchor, minwidth=35)
         
         scrollbar_y = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree.yview)
@@ -313,6 +331,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         scrollbar_x.pack(side=BOTTOM, fill=X)
         self.tree.pack(side=LEFT, fill=BOTH, expand=YES)
         scrollbar_y.pack(side=RIGHT, fill=Y)
+        self._setup_preview_edit_bindings()
         
         # v5.8.9: 컨테이너 번호 접미사(-숫자) 표시 옵션
         self._var_show_container_suffix = tk.BooleanVar(value=False)
@@ -322,6 +341,21 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             command=self._on_toggle_container_suffix
         )
         chk_container.pack(anchor='w', padx=4, pady=(2, 0))
+
+        # 컬럼 필터 바(콤보 목록 검색)
+        self.filter_bar = HeaderFilterBar(
+            main, self.tree,
+            filter_columns=[
+                ('sap_no', 'SAP', 120),
+                ('bl_no', 'BL', 120),
+                ('container_no', 'CONTAINER', 120),
+                ('product', 'PRODUCT', 140),
+                ('status', 'STATUS', 90),
+            ],
+            on_filter=self._on_change_preview_filter,
+            is_dark=_tree_dark
+        )
+        self.filter_bar.pack(fill=X, pady=(2, 2))
         
         # ═══════════════════════════════════════════════════════════
         # 4. 하단 한 줄 — 업로드5: 폰트 통일(15), 업로드6: 합계 가운데 배치
@@ -343,6 +377,37 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             padx=15, pady=6, cursor='hand2', bd=0
         )
         self.btn_excel.pack(side=LEFT, padx=(0, 5))
+
+        self.btn_undo = tk.Button(
+            btn_frame, text="↶ 되돌리기",
+            command=self._undo_preview_edit, state='disabled',
+            font=(_font, 11, 'bold'), bg=ThemeColors.get('btn_neutral', _tree_dark), fg=_btn_fg,
+            padx=10, pady=6, cursor='hand2', bd=0
+        )
+        self.btn_undo.pack(side=LEFT, padx=(5, 0))
+        self.btn_redo = tk.Button(
+            btn_frame, text="↷ 다시실행",
+            command=self._redo_preview_edit, state='disabled',
+            font=(_font, 11, 'bold'), bg=ThemeColors.get('btn_neutral', _tree_dark), fg=_btn_fg,
+            padx=10, pady=6, cursor='hand2', bd=0
+        )
+        self.btn_redo.pack(side=LEFT, padx=(5, 0))
+
+        self.btn_reset_original = tk.Button(
+            btn_frame, text="⟲ 원본 초기화",
+            command=self._reset_preview_to_original, state='disabled',
+            font=(_font, 11, 'bold'), bg=ThemeColors.get('btn_neutral', _tree_dark), fg=_btn_fg,
+            padx=10, pady=6, cursor='hand2', bd=0
+        )
+        self.btn_reset_original.pack(side=LEFT, padx=(5, 0))
+
+        self._var_upload_by_view_order = tk.BooleanVar(value=False)
+        chk_upload_order = ttk.Checkbutton(
+            btn_frame,
+            text="DB 업로드 시 현재 정렬/필터 순서 적용",
+            variable=self._var_upload_by_view_order
+        )
+        chk_upload_order.pack(side=LEFT, padx=(8, 0))
         
         self.btn_upload = tk.Button(
             btn_frame, text="📤 DB 업로드",
@@ -804,6 +869,15 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             # 병합 직후 메인 화면 재고 리스트에 실시간 반영
             if self.dialog and self.dialog.winfo_exists() and self.preview_data:
                 self.dialog.after(0, lambda: self._push_preview_to_main())
+
+            # 파싱 직후 원본 스냅샷(원본 초기화 기준점)
+            self._capture_original_preview_state()
+            self._sort_col = None
+            self._sort_desc = False
+            self._update_sort_headings()
+            self._update_filter_values_from_preview()
+            if self.btn_reset_original and self.btn_reset_original.winfo_exists():
+                self.btn_reset_original.config(state='normal' if self._original_preview_data else 'disabled')
             
             # 표시
             self._update_progress(95, "📋 미리보기 준비...")
@@ -842,6 +916,10 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     def _merge_results(self, invoice, pl, bl, do) -> list:
         """4종 파싱 결과를 18열 미리보기 데이터로 병합"""
         self.preview_data = []
+        self._edited_rows = set()
+        self._undo_stack = []
+        self._redo_stack = []
+        self._update_undo_redo_buttons()
         
         if not pl or not getattr(pl, 'lots', None):
             if invoice and getattr(invoice, 'lot_numbers', None):
@@ -857,9 +935,56 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     self._fill_do(row, do)
                     row['status'] = 'AVAILABLE'
                     self.preview_data.append(row)
+            elif do and getattr(self.engine, 'db', None):
+                # D/O만 있는 경우: DB에서 기존 LOT(B/L 기준) 자동 조회해 미리보기 구성
+                try:
+                    do_bl_raw = str(getattr(do, 'bl_no', '') or '').strip()
+                    do_bl_fmt = self._format_bl(do_bl_raw)
+                    candidates = [x for x in {do_bl_raw, do_bl_fmt} if x]
+                    db_rows = []
+                    for c in candidates:
+                        rows = self.engine.db.fetchall(
+                            "SELECT * FROM inventory WHERE bl_no = ? ORDER BY lot_no",
+                            (c,)
+                        ) or []
+                        if rows:
+                            db_rows = rows
+                            break
+                    for idx, rec in enumerate(db_rows, 1):
+                        row = self._empty_row(idx)
+                        row['sap_no'] = str(rec.get('sap_no', '') or '')
+                        row['bl_no'] = str(rec.get('bl_no', '') or do_bl_fmt or do_bl_raw or '')
+                        row['container_no'] = str(rec.get('container_no', '') or '')
+                        row['product'] = str(rec.get('product', '') or 'LITHIUM CARBONATE')
+                        row['product_code'] = str(rec.get('product_code', '') or '')
+                        row['lot_no'] = str(rec.get('lot_no', '') or '')
+                        row['lot_sqm'] = str(rec.get('lot_sqm', '') or '')
+                        row['mxbg_pallet'] = str(rec.get('mxbg_pallet', '') or '10')
+                        _nw = rec.get('net_weight', '')
+                        _gw = rec.get('gross_weight', '')
+                        row['net_weight'] = f"{float(_nw):,.1f}" if str(_nw) not in ('', 'None', 'none') else ''
+                        row['gross_weight'] = f"{float(_gw):,.3f}" if str(_gw) not in ('', 'None', 'none') else ''
+                        row['salar_invoice_no'] = str(rec.get('salar_invoice_no', '') or '')
+                        row['ship_date'] = str(rec.get('ship_date', '') or '')[:10]
+                        row['arrival_date'] = str(rec.get('arrival_date', '') or '')[:10]
+                        row['con_return'] = str(rec.get('con_return', '') or '')[:10]
+                        row['free_time'] = str(rec.get('free_time', '') or '')
+                        row['warehouse'] = str(rec.get('warehouse', '') or DEFAULT_WAREHOUSE)
+                        row['status'] = str(rec.get('status', '') or 'AVAILABLE')
+                        self._fill_do(row, do)
+                        self.preview_data.append(row)
+                    if self.preview_data:
+                        self._log_safe(f"📎 D/O 기반 DB 자동매칭: {len(self.preview_data)}건 (B/L 기준)")
+                except Exception as e:
+                    logger.debug(f"D/O 단독 DB 자동매칭 실패: {e}")
             return
         
-        for idx, lot in enumerate(getattr(pl, 'lots', []) or [], 1):
+        _lots = list(getattr(pl, 'lots', []) or [])
+        _lots_sorted = sorted(
+            enumerate(_lots, 1),
+            key=lambda p: self._lot_order_key(p[1], p[0])
+        )
+        for idx, (_src, lot) in enumerate(_lots_sorted, 1):
             row = self._empty_row(idx)
             row['sap_no'] = getattr(pl, 'sap_no', '') or (getattr(invoice, 'sap_no', '') if invoice else '') or ''
             row['container_no'] = getattr(lot, 'container_no', '') or ''
@@ -952,14 +1077,21 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         con_return_str = str(ftd)[:10]
                         break
                 if not con_return_str:
-                    print(f"[원스톱 미리보기] D/O free_time_info 있으나 반납일 없음 — CON RETURN/FREE TIME 빈칸. 항목 수: {len(ft_infos)}")
+                    logger.debug(
+                        "[원스톱 미리보기] D/O free_time_info 있으나 반납일 없음 — CON RETURN/FREE TIME 빈칸. 항목 수: %s",
+                        len(ft_infos),
+                    )
                 if con_return_str:
                     con_return_dt = datetime.strptime(con_return_str, '%Y-%m-%d').date()
                     arr_dt = datetime.strptime(str(arr)[:10], '%Y-%m-%d').date()
                     days = (con_return_dt - arr_dt).days
                     row['free_time'] = str(max(0, days))
                     row['con_return'] = str(con_return_str)[:10]
-                    print(f"[원스톱 미리보기] D/O 반납일 적용: con_return={row['con_return']}, free_time(일수)={row['free_time']}")
+                    logger.debug(
+                        "[원스톱 미리보기] D/O 반납일 적용: con_return=%s, free_time(일수)=%s",
+                        row['con_return'],
+                        row['free_time'],
+                    )
             except (ValueError, TypeError) as e:
                 logging.getLogger(__name__).debug(f"free_time 계산 실패: {e}")
         # 업로드4: free_time 일수만 있는 경우 (DO.free_time.storage_free_days)
@@ -1069,6 +1201,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                                     if len(parts) == 3:
                                         d = _date_type(int(parts[0]), int(parts[1]), int(parts[2]))
                                         de.configure(startdate=d)
+                                        de.entry.delete(0, tk.END)
+                                        de.entry.insert(0, d.strftime('%Y-%m-%d'))
+                                    else:
+                                        de.entry.delete(0, tk.END)
+                                        de.entry.insert(0, str(v))
                                 except (ValueError, IndexError, TypeError):
                                     de.entry.delete(0, tk.END)
                                     de.entry.insert(0, str(v))
@@ -1222,19 +1359,21 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     ft_raw = (ft_var.get() or '').strip()
                     free_time_str = ''
                     try:
-                        if con_return_str:
-                            if not _validate_date(con_return_str):
-                                err_var.set("⚠️ 반납기한(con_return): YYYY-MM-DD 형식")
-                                return
-                            cr_d = _date_type(*[int(x) for x in con_return_str.split('-')])
-                            free_time_str = str(max(0, (cr_d - arr_d).days))
-                        elif ft_raw:
+                        # free_time을 입력했으면 이를 우선 기준으로 con_return을 계산
+                        # (DateEntry 표시값 지연 반영/잠금 상태에서도 일관된 결과 보장)
+                        if ft_raw:
                             if not ft_raw.isdigit() or int(ft_raw) < 0:
                                 err_var.set("⚠️ Free time: 0 이상 일수(숫자) 입력")
                                 return
                             free_time_str = ft_raw
                             con_return_d = arr_d + timedelta(days=int(ft_raw))
                             con_return_str = con_return_d.strftime('%Y-%m-%d')
+                        elif con_return_str:
+                            if not _validate_date(con_return_str):
+                                err_var.set("⚠️ 반납기한(con_return): YYYY-MM-DD 형식")
+                                return
+                            cr_d = _date_type(*[int(x) for x in con_return_str.split('-')])
+                            free_time_str = str(max(0, (cr_d - arr_d).days))
                         else:
                             free_time_str = '14'
                             con_return_str = (arr_d + timedelta(days=14)).strftime('%Y-%m-%d')
@@ -1242,11 +1381,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         err_var.set("⚠️ 반납일/Free time 계산 오류 — 형식 확인")
                         logger.debug(f"[_ask_missing_dates] 반납일·Free time: {e}")
                         return
-                    # con_return > arrival_date (반납일은 입항일보다 이후여야 함)
+                    # con_return >= arrival_date (당일 반납 포함 허용)
                     try:
                         cr_d = _date_type(*[int(x) for x in con_return_str.split('-')])
-                        if cr_d <= arr_d:
-                            err_var.set("⚠️ 컨테이너 반납일은 입항일보다 이후여야 합니다.")
+                        if cr_d < arr_d:
+                            err_var.set("⚠️ 컨테이너 반납일은 입항일과 같거나 이후여야 합니다.")
                             return
                     except (ValueError, IndexError, TypeError):
                         pass
@@ -1365,6 +1504,450 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             else:
                 out.append(row.get(key, ''))
         return tuple(out)
+
+    def _lot_order_key(self, lot, fallback_idx: int) -> tuple:
+        """Packing List 원본 순서를 우선 유지(list_no 기준)."""
+        raw = getattr(lot, 'list_no', None)
+        if raw is None and isinstance(lot, dict):
+            raw = lot.get('list_no')
+        try:
+            return (0, int(str(raw).strip()))
+        except (ValueError, TypeError):
+            return (1, int(fallback_idx))
+
+    def _capture_original_preview_state(self) -> None:
+        """파싱 직후 원본 데이터 스냅샷 저장."""
+        self._original_preview_data = deepcopy(self.preview_data or [])
+
+    def _reset_preview_to_original(self) -> None:
+        """원본 초기화: 파싱 직후 상태로 복원."""
+        if not self._original_preview_data:
+            return
+        from ..utils.custom_messagebox import CustomMessageBox
+        if not CustomMessageBox.askyesno(self.dialog, "원본 초기화", "현재 편집/정렬/필터 상태를 버리고\n파싱 직후 원본으로 되돌릴까요?"):
+            return
+        self.preview_data = deepcopy(self._original_preview_data)
+        self._edited_rows = set()
+        self._undo_stack = []
+        self._redo_stack = []
+        self._sort_col = None
+        self._sort_desc = False
+        self._update_sort_headings()
+        try:
+            if self.filter_bar:
+                self.filter_bar._reset_filters()
+        except Exception as e:
+            logger.debug(f"원본 초기화 필터 리셋 실패(무시): {e}")
+        self._update_filter_values_from_preview()
+        self._update_undo_redo_buttons()
+        self._refresh_preview_tree_only()
+        self._update_summary()
+        self._push_preview_to_main()
+
+    def _update_sort_headings(self) -> None:
+        if not getattr(self, 'tree', None):
+            return
+        for col_id, header, _w, _a in PREVIEW_COLUMNS:
+            suffix = ""
+            if col_id == self._sort_col:
+                suffix = " ▼" if self._sort_desc else " ▲"
+            self.tree.heading(col_id, text=f"{header}{suffix}", command=lambda c=col_id: self._toggle_preview_sort(c))
+
+    def _toggle_preview_sort(self, col_id: str) -> None:
+        if self._sort_col == col_id:
+            self._sort_desc = not self._sort_desc
+        else:
+            self._sort_col = col_id
+            self._sort_desc = False
+        self._update_sort_headings()
+        self._refresh_preview_tree_only()
+
+    def _on_change_preview_filter(self) -> None:
+        self._refresh_preview_tree_only()
+
+    def _update_filter_values_from_preview(self) -> None:
+        if not self.filter_bar:
+            return
+        for col_id in ('sap_no', 'bl_no', 'container_no', 'product', 'status'):
+            vals = [str((r.get(col_id, '') if isinstance(r, dict) else '') or '').strip() for r in (self.preview_data or [])]
+            self.filter_bar.update_filter_values(col_id, [v for v in vals if v])
+
+    def _item_to_source_index(self, item_id: str) -> int:
+        try:
+            return int(str(item_id))
+        except (TypeError, ValueError):
+            try:
+                return self.tree.index(item_id)
+            except Exception:
+                return -1
+
+    def _matches_preview_filters(self, row: dict) -> bool:
+        if not self.filter_bar:
+            return True
+        filters = self.filter_bar.get_filters()
+        if not filters:
+            return True
+        for col_id, expected in filters.items():
+            if str(row.get(col_id, '') or '').strip() != str(expected).strip():
+                return False
+        return True
+
+    def _preview_sort_key(self, row: dict):
+        col = self._sort_col
+        if not col:
+            return 0
+        val = row.get(col, '')
+        s = str(val or '').strip()
+        if col in {'mxbg_pallet', 'free_time', 'net_weight', 'gross_weight'}:
+            try:
+                return float(s.replace(',', '')) if s else -1.0
+            except ValueError:
+                return -1.0
+        if col in {'ship_date', 'arrival_date', 'con_return'}:
+            return s[:10]
+        return s.upper()
+
+    def _build_view_indices(self) -> list:
+        indices = [i for i, r in enumerate(self.preview_data or []) if self._matches_preview_filters(r)]
+        if self._sort_col:
+            indices = sorted(
+                indices,
+                key=lambda i: self._preview_sort_key(self.preview_data[i]),
+                reverse=self._sort_desc
+            )
+        return indices
+
+    def _get_upload_rows_for_db(self) -> list:
+        """DB 업로드 대상 행 순서 결정.
+
+        - 기본: 원본(preview_data) 순서
+        - 옵션 체크 시: 현재 화면의 정렬/필터(view) 순서
+        """
+        rows = list(getattr(self, 'preview_data', []) or [])
+        use_view_order = bool(self._var_upload_by_view_order and self._var_upload_by_view_order.get())
+        if not use_view_order:
+            self._log_safe("📌 DB 업로드 순서: 원본 순서(preview_data)")
+            return rows
+        indices = self._build_view_indices()
+        ordered = [deepcopy(rows[i]) for i in indices if 0 <= i < len(rows)]
+        self._log_safe(f"📌 DB 업로드 순서: 화면 정렬/필터 순서 적용 ({len(ordered)}건)")
+        return ordered
+
+    def _setup_preview_edit_bindings(self) -> None:
+        """업로드1 미리보기: 엑셀형 셀 편집/복사/붙여넣기 바인딩."""
+        if not getattr(self, 'tree', None):
+            return
+        self.tree.bind('<Double-1>', self._on_preview_cell_edit, add='+')
+        self.tree.bind('<Button-1>', self._capture_preview_anchor, add='+')
+        self.tree.bind('<Control-c>', self._copy_preview_selection, add='+')
+        self.tree.bind('<Control-C>', self._copy_preview_selection, add='+')
+        self.tree.bind('<Control-v>', self._paste_preview_from_clipboard, add='+')
+        self.tree.bind('<Control-V>', self._paste_preview_from_clipboard, add='+')
+        self.tree.bind('<Control-x>', self._cut_preview_selection, add='+')
+        self.tree.bind('<Control-X>', self._cut_preview_selection, add='+')
+        self.tree.bind('<Delete>', self._clear_preview_selection, add='+')
+        self.tree.bind('<Control-z>', self._undo_preview_edit, add='+')
+        self.tree.bind('<Control-Z>', self._undo_preview_edit, add='+')
+        self.tree.bind('<Control-y>', self._redo_preview_edit, add='+')
+        self.tree.bind('<Control-Y>', self._redo_preview_edit, add='+')
+        if getattr(self, 'dialog', None):
+            self.dialog.bind('<Control-z>', self._undo_preview_edit, add='+')
+            self.dialog.bind('<Control-Z>', self._undo_preview_edit, add='+')
+            self.dialog.bind('<Control-y>', self._redo_preview_edit, add='+')
+            self.dialog.bind('<Control-Y>', self._redo_preview_edit, add='+')
+            self.dialog.bind('<Control-x>', self._cut_preview_selection, add='+')
+            self.dialog.bind('<Control-X>', self._cut_preview_selection, add='+')
+            self.dialog.bind('<Delete>', self._clear_preview_selection, add='+')
+
+    def _snapshot_preview_state(self) -> dict:
+        return {
+            'preview_data': deepcopy(self.preview_data),
+            'edited_rows': set(self._edited_rows),
+        }
+
+    def _push_undo_snapshot(self) -> None:
+        self._undo_stack.append(self._snapshot_preview_state())
+        if len(self._undo_stack) > self._max_history:
+            self._undo_stack.pop(0)
+        self._redo_stack.clear()
+        self._update_undo_redo_buttons()
+
+    def _restore_preview_state(self, state: dict) -> None:
+        self.preview_data = deepcopy(state.get('preview_data', []))
+        self._edited_rows = set(state.get('edited_rows', set()))
+        self._refresh_preview_tree_only()
+        self._update_summary()
+        self._push_preview_to_main()
+        self._update_undo_redo_buttons()
+
+    def _update_undo_redo_buttons(self) -> None:
+        try:
+            if self.btn_undo and self.btn_undo.winfo_exists():
+                self.btn_undo.config(state='normal' if self._undo_stack else 'disabled')
+            if self.btn_redo and self.btn_redo.winfo_exists():
+                self.btn_redo.config(state='normal' if self._redo_stack else 'disabled')
+        except (RuntimeError, tk.TclError):
+            pass
+
+    def _undo_preview_edit(self, event=None):
+        self._finish_preview_editing(save=True)
+        if not self._undo_stack:
+            return "break"
+        self._redo_stack.append(self._snapshot_preview_state())
+        state = self._undo_stack.pop()
+        self._restore_preview_state(state)
+        self._log_safe("↶ 되돌리기 적용")
+        return "break"
+
+    def _redo_preview_edit(self, event=None):
+        self._finish_preview_editing(save=True)
+        if not self._redo_stack:
+            return "break"
+        self._undo_stack.append(self._snapshot_preview_state())
+        state = self._redo_stack.pop()
+        self._restore_preview_state(state)
+        self._log_safe("↷ 다시실행 적용")
+        return "break"
+
+    def _preview_col_names(self) -> list:
+        return [c[0] for c in PREVIEW_COLUMNS]
+
+    def _editable_preview_columns(self) -> set:
+        # No/Status는 시스템 관리 컬럼으로 편집 제외
+        return set(self._preview_col_names()) - {'no', 'status'}
+
+    def _capture_preview_anchor(self, event=None) -> None:
+        if not getattr(self, 'tree', None):
+            return
+        row_id = self.tree.identify_row(event.y)
+        col_id = self.tree.identify_column(event.x)
+        if not row_id or not col_id:
+            return
+        try:
+            row_idx = self.tree.index(row_id)  # view index (필터/정렬 반영)
+            col_idx = max(0, int(col_id.replace('#', '')) - 1)
+            self._preview_anchor = (row_idx, col_idx)
+        except (ValueError, TypeError, tk.TclError):
+            pass
+
+    def _on_preview_cell_edit(self, event=None) -> None:
+        """셀 더블클릭 인라인 편집."""
+        if not getattr(self, 'tree', None):
+            return
+        region = self.tree.identify_region(event.x, event.y)
+        if region != 'cell':
+            return
+        col_id = self.tree.identify_column(event.x)
+        row_id = self.tree.identify_row(event.y)
+        if not col_id or not row_id:
+            return
+        cols = self._preview_col_names()
+        try:
+            col_idx = int(col_id.replace('#', '')) - 1
+        except ValueError:
+            return
+        if col_idx < 0 or col_idx >= len(cols):
+            return
+        col_name = cols[col_idx]
+        if col_name not in self._editable_preview_columns():
+            return
+        self._capture_preview_anchor(event)
+        self._finish_preview_editing(save=True)
+        bbox = self.tree.bbox(row_id, col_id)
+        if not bbox:
+            return
+        x, y, w, h = bbox
+        current_val = str(self.tree.set(row_id, col_name))
+        entry = tk.Entry(self.tree, font=('맑은 고딕', 10))
+        entry.insert(0, current_val.replace(',', ''))
+        entry.select_range(0, 'end')
+        entry.place(x=x, y=y, width=w, height=h)
+        entry.focus_set()
+        self._editing_item = (row_id, col_name, entry)
+        entry.bind('<Return>', lambda e: self._finish_preview_editing(save=True))
+        entry.bind('<Escape>', lambda e: self._finish_preview_editing(save=False))
+        entry.bind('<FocusOut>', lambda e: self._finish_preview_editing(save=True))
+
+    def _coerce_preview_value(self, col_name: str, value: str) -> str:
+        v = (value or '').strip()
+        if col_name in {'mxbg_pallet', 'free_time'}:
+            if not v:
+                return ''
+            try:
+                return str(max(0, int(float(v.replace(',', '')))))
+            except ValueError:
+                return ''
+        if col_name in {'net_weight', 'gross_weight'}:
+            if not v:
+                return ''
+            try:
+                return f"{float(v.replace(',', '')):,.1f}"
+            except ValueError:
+                return ''
+        if col_name in {'ship_date', 'arrival_date', 'con_return'}:
+            if not v:
+                return ''
+            s = v[:10]
+            if len(s) == 10 and s.count('-') == 2 and s.replace('-', '').isdigit():
+                return s
+            return ''
+        return v
+
+    def _update_preview_cell(self, row_idx: int, col_name: str, new_value: str) -> None:
+        if row_idx < 0 or row_idx >= len(self.preview_data):
+            return
+        if col_name not in self._editable_preview_columns():
+            return
+        coerced = self._coerce_preview_value(col_name, new_value)
+        self.preview_data[row_idx][col_name] = coerced
+        self._edited_rows.add(row_idx)
+
+    def _finish_preview_editing(self, save: bool = True) -> None:
+        if not self._editing_item:
+            return
+        row_id, col_name, entry = self._editing_item
+        raw_val = entry.get().strip()
+        entry.destroy()
+        self._editing_item = None
+        if not save:
+            return
+        try:
+            row_idx = self._item_to_source_index(row_id)
+            if row_idx < 0 or row_idx >= len(self.preview_data):
+                return
+            old_val = str(self.preview_data[row_idx].get(col_name, ''))
+            new_val = self._coerce_preview_value(col_name, raw_val)
+            if old_val == new_val:
+                return
+            self._push_undo_snapshot()
+            self._update_preview_cell(row_idx, col_name, raw_val)
+            self._refresh_preview_tree_only()
+            self._update_summary()
+            self._push_preview_to_main()
+        except (ValueError, TypeError, tk.TclError):
+            pass
+
+    def _copy_preview_selection(self, event=None):
+        """선택 행 TSV 복사 (엑셀 붙여넣기 호환)."""
+        if not getattr(self, 'tree', None):
+            return "break"
+        items = self.tree.selection()
+        if not items:
+            focused = self.tree.focus()
+            if focused:
+                items = (focused,)
+        if not items:
+            return "break"
+        headers = [c[1] for c in PREVIEW_COLUMNS]
+        lines = ['\t'.join(headers)]
+        for item_id in items:
+            vals = self.tree.item(item_id, 'values')
+            lines.append('\t'.join(str(v) for v in vals))
+        self.tree.clipboard_clear()
+        self.tree.clipboard_append('\n'.join(lines))
+        return "break"
+
+    def _selected_preview_cells(self):
+        """선택 행 + 마지막 클릭 열 기준의 셀 좌표 목록."""
+        if not getattr(self, 'tree', None):
+            return []
+        cols = self._preview_col_names()
+        sel_items = list(self.tree.selection())
+        if not sel_items:
+            focus = self.tree.focus()
+            if focus:
+                sel_items = [focus]
+        if not sel_items:
+            return []
+        _row_anchor, col_idx = self._preview_anchor
+        col_idx = max(0, min(col_idx, len(cols) - 1))
+        col_name = cols[col_idx]
+        if col_name not in self._editable_preview_columns():
+            return []
+        out = []
+        for item_id in sel_items:
+            try:
+                row_idx = self._item_to_source_index(item_id)
+                if 0 <= row_idx < len(self.preview_data):
+                    out.append((row_idx, col_name))
+            except (ValueError, TypeError, tk.TclError):
+                continue
+        return out
+
+    def _clear_preview_selection(self, event=None):
+        """Delete: 선택 셀 비우기."""
+        cells = self._selected_preview_cells()
+        if not cells:
+            return "break"
+        self._push_undo_snapshot()
+        for row_idx, col_name in cells:
+            self._update_preview_cell(row_idx, col_name, '')
+        self._refresh_preview_tree_only()
+        self._update_summary()
+        self._push_preview_to_main()
+        return "break"
+
+    def _cut_preview_selection(self, event=None):
+        """Ctrl+X: 선택 셀 복사 후 비우기."""
+        cells = self._selected_preview_cells()
+        if not cells:
+            return "break"
+        values = []
+        for row_idx, col_name in cells:
+            values.append(str(self.preview_data[row_idx].get(col_name, '') or ''))
+        try:
+            self.tree.clipboard_clear()
+            self.tree.clipboard_append('\n'.join(values))
+        except tk.TclError:
+            pass
+        self._push_undo_snapshot()
+        for row_idx, col_name in cells:
+            self._update_preview_cell(row_idx, col_name, '')
+        self._refresh_preview_tree_only()
+        self._update_summary()
+        self._push_preview_to_main()
+        return "break"
+
+    def _paste_preview_from_clipboard(self, event=None):
+        """선택 셀을 시작점으로 TSV 블록 붙여넣기."""
+        if not getattr(self, 'tree', None):
+            return "break"
+        try:
+            raw = self.tree.clipboard_get()
+        except tk.TclError:
+            return "break"
+        lines = [ln for ln in raw.replace('\r', '').split('\n') if ln.strip()]
+        if not lines:
+            return "break"
+        start_row, start_col = self._preview_anchor  # start_row는 view index
+        cols = self._preview_col_names()
+        # 헤더 포함 복사분이면 첫 줄 스킵
+        first_parts = [p.strip() for p in lines[0].split('\t')]
+        if first_parts and len(first_parts) == len(cols):
+            header_names = [c[1] for c in PREVIEW_COLUMNS]
+            if all(fp in header_names for fp in first_parts[: min(3, len(first_parts))]):
+                lines = lines[1:]
+        if lines:
+            self._push_undo_snapshot()
+        view_items = list(self.tree.get_children())
+        for r_off, line in enumerate(lines):
+            view_idx = start_row + r_off
+            if view_idx >= len(view_items):
+                break
+            row_idx = self._item_to_source_index(view_items[view_idx])
+            if row_idx < 0 or row_idx >= len(self.preview_data):
+                continue
+            parts = [p.strip() for p in line.split('\t')]
+            for c_off, val in enumerate(parts):
+                col_idx = start_col + c_off
+                if col_idx >= len(cols):
+                    break
+                col_name = cols[col_idx]
+                self._update_preview_cell(row_idx, col_name, val)
+        self._refresh_preview_tree_only()
+        self._update_summary()
+        self._push_preview_to_main()
+        return "break"
     
     def _refresh_preview_tree_only(self) -> None:
         """미리보기 테이블만 현재 preview_data로 갱신 (요약/버튼/팝업 없음). 파싱 중 실시간 표시용."""
@@ -1374,10 +1957,13 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self.tree.delete(item)
         if not self.preview_data:
             return
-        for idx, row in enumerate(self.preview_data):
+        self._view_indices = self._build_view_indices()
+        for pos, src_idx in enumerate(self._view_indices):
+            row = self.preview_data[src_idx]
+            row['no'] = str(src_idx + 1)
             values = self._row_display_values(row)
-            tag = 'even' if idx % 2 == 0 else 'odd'
-            self.tree.insert('', END, values=values, tags=(tag,))
+            tag = 'edited' if src_idx in self._edited_rows else ('even' if pos % 2 == 0 else 'odd')
+            self.tree.insert('', END, iid=str(src_idx), values=values, tags=(tag,))
 
     def _display_preview(self) -> None:
         """미리보기 테이블 표시 — 한 번에가 아니라 순차적으로 행 추가 (보기 편하게)"""
@@ -1385,34 +1971,15 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             if not self.tree:
                 return
             self._push_preview_to_main()
-            for item in self.tree.get_children():
-                self.tree.delete(item)
-            if not self.preview_data:
-                self._update_summary()
-                return
-            # 행을 한꺼번에 넣지 않고 짧은 간격으로 순차 삽입
-            delay_ms = 25
-            data = list(self.preview_data)
-            columns = PREVIEW_COLUMNS
-
-            def _insert_row(idx: int) -> None:
-                if idx >= len(data) or not self.tree.winfo_exists():
-                    self._update_summary()
-                    if self.preview_data and self._has_required_docs():
-                        self.btn_upload.config(state='normal')
-                    else:
-                        self.btn_upload.config(state='disabled')
-                    if self.preview_data:
-                        self.btn_excel.config(state='normal')
-                    return
-                row = data[idx]
-                values = self._row_display_values(row)
-                tag = 'even' if idx % 2 == 0 else 'odd'
-                self.tree.insert('', END, values=values, tags=(tag,))
-                if self.dialog and self.dialog.winfo_exists():
-                    self.dialog.after(delay_ms, lambda i=idx + 1: _insert_row(i))
-
-            _insert_row(0)
+            self._refresh_preview_tree_only()
+            self._update_summary()
+            if self.preview_data and self._has_required_docs():
+                self.btn_upload.config(state='normal')
+            else:
+                self.btn_upload.config(state='disabled')
+            if self.preview_data:
+                self.btn_excel.config(state='normal')
+            self._update_filter_values_from_preview()
 
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(0, _update)

@@ -179,9 +179,11 @@ class CargoOverviewTabMixin:
             )
             self.tree_cargo_overview.column(col_id, width=width, anchor=anchor, stretch=True)
         scroll = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree_cargo_overview.yview)
-        self.tree_cargo_overview.configure(yscrollcommand=scroll.set)
+        scroll_x = ttk.Scrollbar(tree_frame, orient='horizontal', command=self.tree_cargo_overview.xview)
+        self.tree_cargo_overview.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
         self.tree_cargo_overview.pack(side=LEFT, fill=BOTH, expand=YES)
         scroll.pack(side=tk.RIGHT, fill='y')
+        scroll_x.pack(side=tk.BOTTOM, fill='x')
         apply_striped_rows(self.tree_cargo_overview, _is_dark)
         ThemeColors.configure_tags(self.tree_cargo_overview, _is_dark)
 

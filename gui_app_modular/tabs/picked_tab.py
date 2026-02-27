@@ -70,9 +70,11 @@ class PickedTabMixin:
             self.tree_picked.heading(col_id, text=label)
             self.tree_picked.column(col_id, width=width, anchor=anchor, stretch=True)
         scroll = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree_picked.yview)
-        self.tree_picked.configure(yscrollcommand=scroll.set)
+        scroll_x = ttk.Scrollbar(tree_frame, orient='horizontal', command=self.tree_picked.xview)
+        self.tree_picked.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
         self.tree_picked.pack(side=LEFT, fill=BOTH, expand=YES)
         scroll.pack(side=tk.RIGHT, fill='y')
+        scroll_x.pack(side=tk.BOTTOM, fill='x')
         try:
             apply_striped_rows(self.tree_picked, _is_dark)
         except Exception as e:
@@ -100,9 +102,11 @@ class PickedTabMixin:
             self.tree_picked_detail.heading(col_id, text=label)
             self.tree_picked_detail.column(col_id, width=width, anchor=anchor, stretch=True)
         scroll2 = ttk.Scrollbar(detail_tree_frame, orient=VERTICAL, command=self.tree_picked_detail.yview)
-        self.tree_picked_detail.configure(yscrollcommand=scroll2.set)
+        scroll2_x = ttk.Scrollbar(detail_tree_frame, orient='horizontal', command=self.tree_picked_detail.xview)
+        self.tree_picked_detail.configure(yscrollcommand=scroll2.set, xscrollcommand=scroll2_x.set)
         self.tree_picked_detail.pack(side=LEFT, fill=BOTH, expand=YES)
         scroll2.pack(side=tk.RIGHT, fill='y')
+        scroll2_x.pack(side=tk.BOTTOM, fill='x')
 
         self._refresh_picked()
 

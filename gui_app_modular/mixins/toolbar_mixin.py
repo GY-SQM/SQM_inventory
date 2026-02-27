@@ -472,6 +472,14 @@ class ToolbarMixin:
         m.add_separator()
         # 도구
         m.add_command(label="━━ 🔧 도구 ━━", state='disabled', font=self._tb_font_scale.heading())
+        if not hasattr(self, '_dev_mode_var'):
+            _dev_on = self._is_developer_mode_enabled() if hasattr(self, '_is_developer_mode_enabled') else False
+            self._dev_mode_var = tk.BooleanVar(value=_dev_on)
+        m.add_checkbutton(
+            label="  🧪 개발자 모드",
+            variable=self._dev_mode_var,
+            command=self._on_toggle_developer_mode
+        )
         # v5.9.0: 컨테이너 구분 옵션은 필터바 초기화 옆으로 이동
         # v3.8.4: 대시보드 자동 갱신
         if not hasattr(self, '_auto_refresh_var'):
@@ -491,8 +499,23 @@ class ToolbarMixin:
         # v5.5.3: PDF 변환 → 📁 파일 메뉴로 이동
         m.add_command(label="  🩺 데이터 정합성 검사", command=lambda: self._safe_call('_run_integrity_check'))
         m.add_separator()
-        m.add_command(label="  🗑️ 테스트 DB 초기화 (데이터 삭제)", command=lambda: self._safe_call('_show_test_db_reset_popup'))
+        if hasattr(self, '_is_developer_mode_enabled') and self._is_developer_mode_enabled():
+            m.add_command(label="  🗑️ 테스트 DB 초기화 (데이터 삭제)", command=lambda: self._safe_call('_show_test_db_reset_popup'))
         return m
+
+    def _on_toggle_developer_mode(self) -> None:
+        enabled = bool(getattr(self, '_dev_mode_var', None) and self._dev_mode_var.get())
+        ok = self._set_developer_mode_enabled(enabled) if hasattr(self, '_set_developer_mode_enabled') else False
+        if not ok:
+            CustomMessageBox.showerror(self.root, "개발자 모드", "설정을 저장하지 못했습니다.")
+            return
+        state_txt = "ON" if enabled else "OFF"
+        self._log(f"개발자 모드 변경: {state_txt}")
+        CustomMessageBox.showinfo(
+            self.root,
+            "개발자 모드",
+            f"개발자 모드가 {state_txt}로 저장되었습니다.\n메뉴 반영을 위해 앱을 다시 열어주세요."
+        )
 
     def _build_help_menu(self) -> 'tk.Menu':
         m = self._create_menu()

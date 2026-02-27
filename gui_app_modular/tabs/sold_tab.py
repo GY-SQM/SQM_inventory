@@ -77,9 +77,11 @@ class SoldTabMixin:
             self.tree_sold.heading(col_id, text=label)
             self.tree_sold.column(col_id, width=width, anchor=anchor, stretch=True)
         scroll = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree_sold.yview)
-        self.tree_sold.configure(yscrollcommand=scroll.set)
+        scroll_x = ttk.Scrollbar(tree_frame, orient='horizontal', command=self.tree_sold.xview)
+        self.tree_sold.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
         self.tree_sold.pack(side=LEFT, fill=BOTH, expand=YES)
         scroll.pack(side=tk.RIGHT, fill='y')
+        scroll_x.pack(side=tk.BOTTOM, fill='x')
         try:
             apply_striped_rows(self.tree_sold, _is_dark)
         except Exception as e:
@@ -111,9 +113,11 @@ class SoldTabMixin:
             self.tree_sold_detail.heading(col_id, text=label)
             self.tree_sold_detail.column(col_id, width=width, anchor=anchor, stretch=True)
         scroll2 = ttk.Scrollbar(detail_tree_frame, orient=VERTICAL, command=self.tree_sold_detail.yview)
-        self.tree_sold_detail.configure(yscrollcommand=scroll2.set)
+        scroll2_x = ttk.Scrollbar(detail_tree_frame, orient='horizontal', command=self.tree_sold_detail.xview)
+        self.tree_sold_detail.configure(yscrollcommand=scroll2.set, xscrollcommand=scroll2_x.set)
         self.tree_sold_detail.pack(side=LEFT, fill=BOTH, expand=YES)
         scroll2.pack(side=tk.RIGHT, fill='y')
+        scroll2_x.pack(side=tk.BOTTOM, fill='x')
 
         self._refresh_sold()
 

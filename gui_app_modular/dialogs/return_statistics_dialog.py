@@ -156,7 +156,14 @@ class ReturnStatisticsDialog:
                             ('pct', '비율', 60, 'e')]:
             self.tree1.heading(c, text=h)
             self.tree1.column(c, width=w, anchor=a)
-        self.tree1.pack(fill=BOTH, expand=True)
+        frame = ttk.Frame(tab)
+        frame.pack(fill=BOTH, expand=True)
+        sb1_y = ttk.Scrollbar(frame, orient=VERTICAL, command=self.tree1.yview)
+        sb1_x = ttk.Scrollbar(frame, orient='horizontal', command=self.tree1.xview)
+        self.tree1.configure(yscrollcommand=sb1_y.set, xscrollcommand=sb1_x.set)
+        self.tree1.pack(side=LEFT, fill=BOTH, expand=True)
+        sb1_y.pack(side=RIGHT, fill=Y)
+        sb1_x.pack(side=tk.BOTTOM, fill=X)
 
     def _build_tab2_lot(self):
         tab = tk.Frame(self.nb, bg=self.bg)
@@ -168,7 +175,14 @@ class ReturnStatisticsDialog:
                             ('reasons', '사유', 250, 'w')]:
             self.tree2.heading(c, text=h)
             self.tree2.column(c, width=w, anchor=a)
-        self.tree2.pack(fill=BOTH, expand=True)
+        frame = ttk.Frame(tab)
+        frame.pack(fill=BOTH, expand=True)
+        sb2_y = ttk.Scrollbar(frame, orient=VERTICAL, command=self.tree2.yview)
+        sb2_x = ttk.Scrollbar(frame, orient='horizontal', command=self.tree2.xview)
+        self.tree2.configure(yscrollcommand=sb2_y.set, xscrollcommand=sb2_x.set)
+        self.tree2.pack(side=LEFT, fill=BOTH, expand=True)
+        sb2_y.pack(side=RIGHT, fill=Y)
+        sb2_x.pack(side=tk.BOTTOM, fill=X)
 
     def _build_tab3_monthly(self):
         tab = tk.Frame(self.nb, bg=self.bg)
@@ -179,7 +193,14 @@ class ReturnStatisticsDialog:
                             ('weight_kg', '중량(kg)', 100, 'e')]:
             self.tree3.heading(c, text=h)
             self.tree3.column(c, width=w, anchor=a)
-        self.tree3.pack(fill=X, padx=5, pady=(5, 0))
+        frame = ttk.Frame(tab)
+        frame.pack(fill=X, padx=5, pady=(5, 0))
+        sb3_y = ttk.Scrollbar(frame, orient=VERTICAL, command=self.tree3.yview)
+        sb3_x = ttk.Scrollbar(frame, orient='horizontal', command=self.tree3.xview)
+        self.tree3.configure(yscrollcommand=sb3_y.set, xscrollcommand=sb3_x.set)
+        self.tree3.pack(side=LEFT, fill=X, expand=True)
+        sb3_y.pack(side=RIGHT, fill=Y)
+        sb3_x.pack(side=tk.BOTTOM, fill=X)
         self.chart_canvas = tk.Canvas(tab, bg='white', height=140, highlightthickness=0)
         self.chart_canvas.pack(fill=BOTH, expand=True, padx=5, pady=5)
 
@@ -192,7 +213,14 @@ class ReturnStatisticsDialog:
                             ('count', '반품 건수', 80, 'e')]:
             self.tree4.heading(c, text=h)
             self.tree4.column(c, width=w, anchor=a)
-        self.tree4.pack(fill=BOTH, expand=True)
+        frame = ttk.Frame(tab)
+        frame.pack(fill=BOTH, expand=True)
+        sb4_y = ttk.Scrollbar(frame, orient=VERTICAL, command=self.tree4.yview)
+        sb4_x = ttk.Scrollbar(frame, orient='horizontal', command=self.tree4.xview)
+        self.tree4.configure(yscrollcommand=sb4_y.set, xscrollcommand=sb4_x.set)
+        self.tree4.pack(side=LEFT, fill=BOTH, expand=True)
+        sb4_y.pack(side=RIGHT, fill=Y)
+        sb4_x.pack(side=tk.BOTTOM, fill=X)
 
     # ─── 기간 헬퍼 ───
 

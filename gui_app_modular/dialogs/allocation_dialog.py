@@ -135,9 +135,11 @@ class AllocationDialog:
             self.tree.column(col_id, width=width, anchor=anchor, minwidth=40)
 
         vsb = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=vsb.set)
+        hsb = ttk.Scrollbar(tree_frame, orient='horizontal', command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
         self.tree.pack(side=LEFT, fill=BOTH, expand=True)
         vsb.pack(side=RIGHT, fill=Y)
+        hsb.pack(side=tk.BOTTOM, fill=tk.X)
         try:
             from ..utils.tree_enhancements import TreeviewTotalFooter
             self._alloc_total_footer = TreeviewTotalFooter(
@@ -696,9 +698,11 @@ class AllocationDialog:
             tree_frame.pack(fill=BOTH, expand=True, padx=5, pady=5)
             st = ttk.Treeview(tree_frame, columns=cols, show='headings', height=15)
             scroll = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=st.yview)
-            st.configure(yscrollcommand=scroll.set)
+            scroll_x = ttk.Scrollbar(tree_frame, orient='horizontal', command=st.xview)
+            st.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
             st.pack(side=LEFT, fill=BOTH, expand=True)
             scroll.pack(side=RIGHT, fill=Y)
+            scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
             for c, h in zip(cols, hdrs):
                 st.heading(c, text=h)
                 st.column(c, width=100, anchor='center')

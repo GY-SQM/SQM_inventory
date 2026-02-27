@@ -288,7 +288,8 @@ class CustomMenuBar:
         self._add_command(tools_menu, "📋 로그 정리", self.app._on_cleanup_logs)
         self._add_command(tools_menu, "ℹ️  DB 정보", self.app._show_db_info)
         self._add_separator(tools_menu)
-        self._add_command(tools_menu, "🗑️ 테스트 DB 초기화 (데이터 삭제)", self.app._show_test_db_reset_popup)
+        if hasattr(self.app, '_is_developer_mode_enabled') and self.app._is_developer_mode_enabled():
+            self._add_command(tools_menu, "🗑️ 테스트 DB 초기화 (데이터 삭제)", self.app._show_test_db_reset_popup)
         
         # 고급 기능 (조건부)
         if HAS_FEATURES:

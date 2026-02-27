@@ -209,7 +209,8 @@ def extract_ship_date(gemini_data: dict, pdf_text: str = '') -> Tuple[Optional[d
                     logger.warning(f"[BL] Ship Date: {parsed} [정규식 폴백 ⚠️]")
                     return (parsed, 'regex', True)
 
-    logger.error("[BL] Ship Date: 찾지 못함 ❌")
+    # Ship Date는 일부 B/L에서 부재 가능(업무 진행 가능)하므로 ERROR 대신 WARNING으로 기록
+    logger.warning("[BL] Ship Date: 찾지 못함 (선택 필드)")
     return (None, 'none', False)
 
 
@@ -265,7 +266,8 @@ def extract_arrival_date(gemini_data: dict, pdf_text: str = '') -> Tuple[Optiona
             logger.warning(f"[DO] Arrival Date: {earliest} [all_dates 추정 🟡]")
             return (earliest, 'estimated', True)
 
-    logger.error("[DO] Arrival Date: 찾지 못함 ❌")
+    # Arrival Date는 문서 품질/형식에 따라 누락될 수 있어 WARNING으로 기록
+    logger.warning("[DO] Arrival Date: 찾지 못함 (수동 입력 가능)")
     return (None, 'none', False)
 
 

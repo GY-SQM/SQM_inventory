@@ -415,9 +415,11 @@ class InventoryTabMixin:
             self._inv_tonbag_detail_tree.heading(cid, text=txt)
             self._inv_tonbag_detail_tree.column(cid, width=w)
         sb = ttk.Scrollbar(detail_container, orient=VERTICAL, command=self._inv_tonbag_detail_tree.yview)
-        self._inv_tonbag_detail_tree.configure(yscrollcommand=sb.set)
+        sb_x = ttk.Scrollbar(detail_container, orient='horizontal', command=self._inv_tonbag_detail_tree.xview)
+        self._inv_tonbag_detail_tree.configure(yscrollcommand=sb.set, xscrollcommand=sb_x.set)
         self._inv_tonbag_detail_tree.pack(side=LEFT, fill=BOTH, expand=True)
         sb.pack(side='right', fill='y')
+        sb_x.pack(side='bottom', fill='x')
 
     def _on_inv_selection_change(self, event) -> None:
         """재고 선택 변경 → 톤백 상세 패널 갱신"""

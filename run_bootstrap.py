@@ -9,8 +9,19 @@ run.py는 이 모듈을 import하여 main()만 유지.
 import os
 import sys
 import logging
+from builtins import print as _builtin_print
 
 logger = logging.getLogger(__name__)
+
+
+def _cli_log(*args, **kwargs):
+    """CLI 출력과 파일 로그를 동시에 남기는 공통 출력기."""
+    msg = " ".join(str(a) for a in args)
+    logger.info(msg)
+    _builtin_print(*args, **kwargs)
+
+
+print = _cli_log
 
 try:
     from version import __version__, APP_NAME

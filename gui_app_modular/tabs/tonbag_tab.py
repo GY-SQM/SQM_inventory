@@ -512,9 +512,11 @@ class TonbagTabMixin:
             self._tb_lot_detail_tree.heading(cid, text=txt)
             self._tb_lot_detail_tree.column(cid, width=w)
         sb = ttk.Scrollbar(detail_container, orient=VERTICAL, command=self._tb_lot_detail_tree.yview)
-        self._tb_lot_detail_tree.configure(yscrollcommand=sb.set)
+        sb_x = ttk.Scrollbar(detail_container, orient='horizontal', command=self._tb_lot_detail_tree.xview)
+        self._tb_lot_detail_tree.configure(yscrollcommand=sb.set, xscrollcommand=sb_x.set)
         self._tb_lot_detail_tree.pack(side=LEFT, fill=BOTH, expand=True)
         sb.pack(side='right', fill='y')
+        sb_x.pack(side='bottom', fill='x')
 
     def _on_tonbag_selection_change(self, event) -> None:
         """톤백 선택 변경 → LOT 톤백 상세 패널 갱신"""
@@ -973,7 +975,7 @@ class TonbagTabMixin:
         """수동 출고 다이얼로그"""
         from ..utils.constants import tk, ttk
         from ..utils.ui_constants import (
-            DialogSize, Spacing, FontScale, center_dialog
+            DialogSize, Spacing, FontScale, center_dialog, apply_modal_window_options
         )
         
         # === UI 통일성: 폰트 스케일 ===
@@ -1272,7 +1274,7 @@ class TonbagTabMixin:
         dlg.title(f"📍 위치 변경 — {lot_no}-{sub_lt}")
         dlg.transient(self.root)
         dlg.grab_set()
-        dlg.resizable(False, False)
+        apply_modal_window_options(dlg)
         
         frame = ttk.Frame(dlg, padding=Spacing.LG)
         frame.pack(fill='both', expand=True)

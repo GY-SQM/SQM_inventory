@@ -206,10 +206,12 @@ class ShortcutGuideDialog:
             
             # 스크롤바
             scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
-            tree.configure(yscrollcommand=scrollbar.set)
+            scrollbar_x = ttk.Scrollbar(frame, orient='horizontal', command=tree.xview)
+            tree.configure(yscrollcommand=scrollbar.set, xscrollcommand=scrollbar_x.set)
             
             tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
             
             # 데이터 추가
             for shortcut, description in shortcuts:

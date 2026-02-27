@@ -14,12 +14,58 @@ from datetime import datetime
 from tkinter import filedialog
 
 from core.constants import DEFAULT_WAREHOUSE
+from core.types import safe_float
 
 logger = logging.getLogger(__name__)
 
 
 class InboundUploadMixin:
     """DB 업로드 + Excel 내보내기 로직 (OneStopInboundDialog에 MRO 합성)"""
+
+    def _preflight_validate_preview_data(self):
+        """DB 반영 전 미리보기 데이터 검증 (오류 리스트 반환)."""
+        rows = getattr(self, 'preview_data', []) or []
+        errors = []
+        seen_lots = {}
+        for idx, row in enumerate(rows, 1):
+            lot_no = str(row.get('lot_no', '') or '').strip()
+            product = str(row.get('product', '') or '').strip()
+            if not lot_no:
+                errors.append(f"{idx}행: LOT NO 필수")
+            if not product:
+                errors.append(f"{idx}행: PRODUCT 필수")
+            try:
+                nw = safe_float(row.get('net_weight', 0))
+                if nw <= 0:
+                    errors.append(f"{idx}행: NET(Kg) 0 초과 필요")
+            except Exception:
+                errors.append(f"{idx}행: NET(Kg) 숫자 형식 오류")
+            try:
+                mx = int(float(str(row.get('mxbg_pallet', '0')).replace(',', '') or 0))
+                if mx <= 0:
+                    errors.append(f"{idx}행: MXBG 1 이상 필요")
+            except Exception:
+                errors.append(f"{idx}행: MXBG 숫자 형식 오류")
+            arr = str(row.get('arrival_date', '') or '').strip()
+            cr = str(row.get('con_return', '') or '').strip()
+            if arr and (len(arr) != 10 or arr.count('-') != 2):
+                errors.append(f"{idx}행: ARRIVAL 날짜 형식 오류(YYYY-MM-DD)")
+            if cr and (len(cr) != 10 or cr.count('-') != 2):
+                errors.append(f"{idx}행: CON RETURN 날짜 형식 오류(YYYY-MM-DD)")
+            if arr and cr:
+                try:
+                    arr_d = datetime.strptime(arr[:10], '%Y-%m-%d').date()
+                    cr_d = datetime.strptime(cr[:10], '%Y-%m-%d').date()
+                    if cr_d < arr_d:
+                        errors.append(f"{idx}행: CON RETURN은 ARRIVAL 이상이어야 함")
+                except ValueError:
+                    pass
+            if lot_no:
+                if lot_no in seen_lots:
+                    errors.append(f"{idx}행: LOT 중복({lot_no}) - {seen_lots[lot_no]}행과 중복")
+                else:
+                    seen_lots[lot_no] = idx
+        return errors
 
     def _on_upload(self) -> None:
         """DB 업로드 (v3.8.8: 중복 LOT 사전 경고 + 위젯 안전 처리)"""
@@ -45,6 +91,21 @@ class InboundUploadMixin:
                     self.dialog, "필수 서류 누락",
                     "Packing List, Invoice/FA, Bill of Loading 3종 모두 필요합니다."
                 )
+            return
+
+        preflight_errors = self._preflight_validate_preview_data()
+        if preflight_errors:
+            try:
+                from ..utils.custom_messagebox import CustomMessageBox
+                CustomMessageBox.showerror(
+                    self.dialog, "입력 검증 실패",
+                    "미리보기 데이터 검증에서 오류가 발견되었습니다.\n\n"
+                    + "\n".join(preflight_errors[:12])
+                    + (f"\n... 외 {len(preflight_errors) - 12}건" if len(preflight_errors) > 12 else "")
+                )
+            except (ImportError, ModuleNotFoundError):
+                from tkinter import messagebox as msgbox
+                msgbox.showerror("입력 검증 실패", "\n".join(preflight_errors[:12]))
             return
 
         dup_lots = []
@@ -83,10 +144,12 @@ class InboundUploadMixin:
 
         try:
             from ..utils.custom_messagebox import CustomMessageBox
+            edited_cnt = len(getattr(self, '_edited_rows', set()) or set())
+            edited_suffix = f"\n수정된 행: {edited_cnt}건" if edited_cnt else ""
             ok = CustomMessageBox.askyesno(
                 self.dialog, "DB 업로드 확인",
                 f"{len(self.preview_data)}개 LOT를 데이터베이스에 저장합니다.\n\n"
-                f"이 작업은 되돌릴 수 없습니다.\n계속하시겠습니까?"
+                f"이 작업은 되돌릴 수 없습니다.{edited_suffix}\n계속하시겠습니까?"
             )
         except (ImportError, ModuleNotFoundError):
             from tkinter import messagebox as msgbox
@@ -187,8 +250,11 @@ class InboundUploadMixin:
                 self._log_safe("❌ engine.process_inbound 메서드 없음")
                 return False, []
 
-            _lots = getattr(pl, 'lots', []) or []
-            total = len(_lots)
+            if hasattr(self, '_get_upload_rows_for_db'):
+                _rows = list(self._get_upload_rows_for_db() or [])
+            else:
+                _rows = list(getattr(self, 'preview_data', []) or [])
+            total = len(_rows)
             if total == 0:
                 return False, []
 
@@ -198,10 +264,10 @@ class InboundUploadMixin:
             failed_rows = []
             _last_idx = -1  # DB 예외 시 행 번호 표시용
 
-            for idx, lot in enumerate(_lots):
+            for idx, row in enumerate(_rows):
                 _last_idx = idx
-                pct = 10 + int(80 * (idx + 1) / total)
-                lot_no = getattr(lot, 'lot_no', '') or ''
+                pct = 10 + int(80 * (idx + 1) / max(1, total))
+                lot_no = str(row.get('lot_no', '') or '')
                 self._update_progress(pct, f"📦 LOT {idx+1}/{total}: {lot_no}")
 
                 if lot_no:
@@ -215,78 +281,59 @@ class InboundUploadMixin:
                     except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
                         logger.debug(f'Suppressed: {_e}')
 
-                _tonbag = getattr(lot, 'tonbag_count', None)
-                if _tonbag is None or (isinstance(_tonbag, str) and str(_tonbag).strip() == ''):
-                    _tonbag = getattr(lot, 'mxbg_pallet', 10) or 10
+                _tonbag = row.get('mxbg_pallet', row.get('tonbag_count', 10))
                 try:
-                    _tonbag = int(float(_tonbag))
+                    _tonbag = int(float(str(_tonbag).replace(',', '') or 0))
                 except (TypeError, ValueError):
-                    _tonbag = getattr(lot, 'mxbg_pallet', 10) or 10
+                    _tonbag = 10
 
-                _arrival_raw = getattr(do, 'arrival_date', None) if do else None
-                _arrival = str(_arrival_raw) if _arrival_raw and str(_arrival_raw) != 'None' else ''
-                if _arrival:
-                    _a10 = (_arrival[:10] if len(_arrival) >= 10 else _arrival)
-                    if not (len(_a10) == 10 and _a10.count('-') == 2 and _a10.replace('-', '').isdigit()):
-                        _arrival = ''
+                _arrival = str(row.get('arrival_date', '') or '').strip()[:10]
+                _con_return = str(row.get('con_return', '') or '').strip()[:10]
                 _free_time = 0
-                _free_time_date = ''
-
-                if not _arrival and self.preview_data and idx < len(self.preview_data):
-                    _user_arr = self.preview_data[idx].get('arrival_date', '')
-                    if _user_arr:
-                        _ua = str(_user_arr)[:10]
-                        if len(_ua) == 10 and _ua.count('-') == 2 and _ua.replace('-', '').isdigit():
-                            _arrival = _ua
-                    _user_ft = self.preview_data[idx].get('free_time', '')
-                    if _user_ft:
-                        try:
-                            _free_time = int(_user_ft)
-                        except (ValueError, TypeError):
-                            pass
-
-                if do:
-                    _free_time_date = str(getattr(do, 'free_time_date', '') or '')
-                    if not _free_time_date:
-                        ft_infos = getattr(do, 'free_time_info', []) or []
-                        for ft in ft_infos:
-                            ftd = getattr(ft, 'free_time_date', '') or (ft.get('free_time_date', '') if isinstance(ft, dict) else '')
-                            if ftd:
-                                _free_time_date = str(ftd)
-                                break
-
-                    if _free_time_date and _arrival:
-                        try:
-                            _ft_dt = datetime.strptime(str(_free_time_date)[:10], '%Y-%m-%d').date()
-                            _arr_dt = datetime.strptime(str(_arrival)[:10], '%Y-%m-%d').date()
-                            _free_time = (_ft_dt - _arr_dt).days
-                            if _free_time < 0:
-                                _free_time = 0
-                        except (ValueError, TypeError):
-                            _free_time = 0
+                _ft_raw = str(row.get('free_time', '') or '').strip()
+                if _ft_raw:
+                    try:
+                        _free_time = int(float(_ft_raw.replace(',', '')))
+                    except (ValueError, TypeError):
+                        _free_time = 0
+                if not _con_return and do:
+                    ft_infos = getattr(do, 'free_time_info', []) or []
+                    for ft in ft_infos:
+                        ftd = getattr(ft, 'free_time_date', '') or (ft.get('free_time_date', '') if isinstance(ft, dict) else '')
+                        if ftd:
+                            _con_return = str(ftd)[:10]
+                            break
+                if _con_return and _arrival and not _ft_raw:
+                    try:
+                        _ft_dt = datetime.strptime(_con_return[:10], '%Y-%m-%d').date()
+                        _arr_dt = datetime.strptime(_arrival[:10], '%Y-%m-%d').date()
+                        _free_time = max(0, (_ft_dt - _arr_dt).days)
+                    except (ValueError, TypeError):
+                        _free_time = 0
 
                 packing_dict = {
-                    'lot_no': getattr(lot, 'lot_no', '') or '',
-                    'lot_sqm': getattr(lot, 'lot_sqm', '') or '',
-                    'sap_no': getattr(pl, 'sap_no', '') or (getattr(invoice, 'sap_no', '') if invoice else '') or '',
+                    'lot_no': lot_no,
+                    'lot_sqm': str(row.get('lot_sqm', '') or ''),
+                    'sap_no': str(row.get('sap_no', '') or getattr(pl, 'sap_no', '') or (getattr(invoice, 'sap_no', '') if invoice else '') or ''),
                     'bl_no': self._format_bl(
+                        str(row.get('bl_no', '') or '') or
                         (getattr(bl, 'bl_no', '') if bl else '') or
                         (getattr(do, 'bl_no', '') if do else '') or ''
                     ),
-                    'container_no': getattr(lot, 'container_no', '') or '',
-                    'product': getattr(pl, 'product', '') or 'LITHIUM CARBONATE',
-                    'product_code': getattr(pl, 'code', '') or '',
-                    'net_weight': getattr(lot, 'net_weight_kg', 0) or 0,
-                    'gross_weight': getattr(lot, 'gross_weight_kg', 0) or 0,
-                    'mxbg_pallet': getattr(lot, 'mxbg_pallet', 10) or 10,
+                    'container_no': str(row.get('container_no', '') or ''),
+                    'product': str(row.get('product', '') or getattr(pl, 'product', '') or 'LITHIUM CARBONATE'),
+                    'product_code': str(row.get('product_code', '') or getattr(pl, 'code', '') or ''),
+                    'net_weight': safe_float(row.get('net_weight', 0) or 0),
+                    'gross_weight': safe_float(row.get('gross_weight', 0) or 0),
+                    'mxbg_pallet': _tonbag,
                     'tonbag_count': _tonbag,
-                    'salar_invoice_no': getattr(invoice, 'salar_invoice_no', '') if invoice else '',
-                    'ship_date': self._date_str(getattr(bl, 'ship_date', None) if bl else None) or self._date_str(getattr(invoice, 'invoice_date', None) if invoice else None) or '',
+                    'salar_invoice_no': str(row.get('salar_invoice_no', '') or (getattr(invoice, 'salar_invoice_no', '') if invoice else '') or ''),
+                    'ship_date': str(row.get('ship_date', '') or self._date_str(getattr(bl, 'ship_date', None) if bl else None) or self._date_str(getattr(invoice, 'invoice_date', None) if invoice else None) or ''),
                     'arrival_date': _arrival,
                     'free_time': _free_time,
-                    'free_time_date': _free_time_date,
-                    'con_return': _free_time_date[:10] if _free_time_date else '',
-                    'warehouse': str(getattr(do, 'warehouse', DEFAULT_WAREHOUSE)) if do else DEFAULT_WAREHOUSE,
+                    'free_time_date': _con_return,
+                    'con_return': _con_return,
+                    'warehouse': str(row.get('warehouse', '') or (getattr(do, 'warehouse', DEFAULT_WAREHOUSE) if do else DEFAULT_WAREHOUSE)),
                     'vessel': getattr(pl, 'vessel', '') or '',
                 }
 
@@ -359,17 +406,17 @@ class InboundUploadMixin:
                         bl_data=bl_dict, do_data=do_dict
                     )
                     if result.get('success'):
-                        created_lots.append(getattr(lot, "lot_no", ""))
+                        created_lots.append(lot_no)
                     else:
                         err_msg = result.get('message', '') or ', '.join(result.get('errors', []))
-                        errors.append(f"LOT {getattr(lot, 'lot_no', '')}: {err_msg}")
+                        errors.append(f"LOT {lot_no}: {err_msg}")
                         failed_rows.append({
                             'row': idx + 2, 'row_num': idx + 2,
                             'value': err_msg, 'column': 'LOT NO',
                             'missing_columns': [],
                         })
                 except (ValueError, TypeError, AttributeError) as e:
-                    errors.append(f"LOT {getattr(lot, 'lot_no', '')}: {e}")
+                    errors.append(f"LOT {lot_no}: {e}")
                     failed_rows.append({
                         'row': idx + 2, 'row_num': idx + 2,
                         'value': str(e), 'column': 'LOT NO',

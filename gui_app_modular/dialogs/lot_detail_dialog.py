@@ -181,9 +181,11 @@ class LotDetailDialogMixin:
             tb_tree.column(cid, width=w, anchor=anchor)
 
         sb_tb = ttk.Scrollbar(tab_tonbag, orient=VERTICAL, command=tb_tree.yview)
-        tb_tree.configure(yscrollcommand=sb_tb.set)
+        sb_tb_x = ttk.Scrollbar(tab_tonbag, orient='horizontal', command=tb_tree.xview)
+        tb_tree.configure(yscrollcommand=sb_tb.set, xscrollcommand=sb_tb_x.set)
         tb_tree.pack(side=LEFT, fill=BOTH, expand=True)
         sb_tb.pack(side=RIGHT, fill=Y)
+        sb_tb_x.pack(side='bottom', fill='x')
 
         avail_cnt = 0
         picked_cnt = 0
@@ -254,9 +256,11 @@ class LotDetailDialogMixin:
             mv_tree.column(cid, width=w, anchor=anchor)
 
         sb_mv = ttk.Scrollbar(tab_history, orient=VERTICAL, command=mv_tree.yview)
-        mv_tree.configure(yscrollcommand=sb_mv.set)
+        sb_mv_x = ttk.Scrollbar(tab_history, orient='horizontal', command=mv_tree.xview)
+        mv_tree.configure(yscrollcommand=sb_mv.set, xscrollcommand=sb_mv_x.set)
         mv_tree.pack(side=LEFT, fill=BOTH, expand=True)
         sb_mv.pack(side=RIGHT, fill=Y)
+        sb_mv_x.pack(side='bottom', fill='x')
 
         type_icons = {
             'INBOUND': '📥 입고', 'OUTBOUND': '📤 출고',

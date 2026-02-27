@@ -96,10 +96,12 @@ class OutboundPreviewDialogMixin:
             tree.column(col, width=width, anchor=anchor)
         
         scrollbar = ttk.Scrollbar(detail_frame, orient=VERTICAL, command=tree.yview)
-        tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar_x = ttk.Scrollbar(detail_frame, orient='horizontal', command=tree.xview)
+        tree.configure(yscrollcommand=scrollbar.set, xscrollcommand=scrollbar_x.set)
         
         tree.pack(side=LEFT, fill=BOTH, expand=True)
         scrollbar.pack(side=RIGHT, fill=Y)
+        scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
         
         # Validate and populate
         errors = []

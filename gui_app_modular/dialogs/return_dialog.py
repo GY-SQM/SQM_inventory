@@ -96,9 +96,11 @@ class ReturnInboundPreviewDialog:
             self.tree.column(cid, width=w, anchor=anchor)
 
         sb = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=sb.set)
+        sb_x = ttk.Scrollbar(tree_frame, orient='horizontal', command=self.tree.xview)
+        self.tree.configure(yscrollcommand=sb.set, xscrollcommand=sb_x.set)
         self.tree.pack(side=LEFT, fill=BOTH, expand=True)
         sb.pack(side=RIGHT, fill=Y)
+        sb_x.pack(side=tk.BOTTOM, fill=tk.X)
 
         # 데이터 로드
         for idx, item in enumerate(items):

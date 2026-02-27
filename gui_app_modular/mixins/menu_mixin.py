@@ -10,6 +10,8 @@ v2.9.91 - gui_app.py에서 분리
 """
 
 import logging
+import os
+import configparser
 
 from ..utils.ui_constants import CustomMessageBox
 logger = logging.getLogger(__name__)
@@ -25,6 +27,32 @@ class MenuMixin:
     
     # 메뉴바 스타일: 'custom' (ttkbootstrap) 또는 'native' (tk.Menu)
     MENUBAR_STYLE = 'custom'
+
+    def _is_developer_mode_enabled(self) -> bool:
+        """settings.ini [ui] developer_mode 플래그."""
+        cfg = configparser.ConfigParser()
+        try:
+            cfg.read(os.path.join(os.getcwd(), 'settings.ini'), encoding='utf-8')
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
+            logger.debug(f"개발자 모드 설정 읽기 실패(무시): {e}")
+            return False
+        return cfg.getboolean('ui', 'developer_mode', fallback=False)
+
+    def _set_developer_mode_enabled(self, enabled: bool) -> bool:
+        """개발자 모드 플래그 저장."""
+        cfg = configparser.ConfigParser()
+        settings_path = os.path.join(os.getcwd(), 'settings.ini')
+        try:
+            cfg.read(settings_path, encoding='utf-8')
+            if not cfg.has_section('ui'):
+                cfg.add_section('ui')
+            cfg.set('ui', 'developer_mode', '1' if enabled else '0')
+            with open(settings_path, 'w', encoding='utf-8') as f:
+                cfg.write(f)
+            return True
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
+            logger.error(f"개발자 모드 설정 저장 실패: {e}", exc_info=True)
+            return False
     
     def _setup_menu(self) -> None:
         """메뉴 구성"""
@@ -222,7 +250,8 @@ class MenuMixin:
         tools_menu.add_command(label="📋 로그 정리", command=self._on_cleanup_logs)
         tools_menu.add_command(label="ℹ️ DB 정보", command=self._show_db_info)
         tools_menu.add_separator()
-        tools_menu.add_command(label="🗑️ 테스트 DB 초기화 (데이터 삭제)", command=self._show_test_db_reset_popup)
+        if self._is_developer_mode_enabled():
+            tools_menu.add_command(label="🗑️ 테스트 DB 초기화 (데이터 삭제)", command=self._show_test_db_reset_popup)
         
         if HAS_FEATURES:
             tools_menu.add_separator()

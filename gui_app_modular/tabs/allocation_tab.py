@@ -76,9 +76,11 @@ class AllocationTabMixin:
             self.tree_allocation.heading(col_id, text=label)
             self.tree_allocation.column(col_id, width=width, anchor=anchor, stretch=True)
         scroll = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree_allocation.yview)
-        self.tree_allocation.configure(yscrollcommand=scroll.set)
+        scroll_x = ttk.Scrollbar(tree_frame, orient='horizontal', command=self.tree_allocation.xview)
+        self.tree_allocation.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
         self.tree_allocation.pack(side=LEFT, fill=BOTH, expand=YES)
         scroll.pack(side=tk.RIGHT, fill='y')
+        scroll_x.pack(side=tk.BOTTOM, fill='x')
         try:
             apply_striped_rows(self.tree_allocation, _is_dark)
         except Exception as e:
@@ -112,9 +114,11 @@ class AllocationTabMixin:
             self.tree_allocation_detail.heading(col_id, text=label)
             self.tree_allocation_detail.column(col_id, width=width, anchor=anchor, stretch=True)
         scroll2 = ttk.Scrollbar(detail_tree_frame, orient=VERTICAL, command=self.tree_allocation_detail.yview)
-        self.tree_allocation_detail.configure(yscrollcommand=scroll2.set)
+        scroll2_x = ttk.Scrollbar(detail_tree_frame, orient='horizontal', command=self.tree_allocation_detail.xview)
+        self.tree_allocation_detail.configure(yscrollcommand=scroll2.set, xscrollcommand=scroll2_x.set)
         self.tree_allocation_detail.pack(side=LEFT, fill=BOTH, expand=YES)
         scroll2.pack(side=tk.RIGHT, fill='y')
+        scroll2_x.pack(side=tk.BOTTOM, fill='x')
         # 전체 배정 보기 하단 합계 (건수, 배정수량 MT)
         from ..utils.tree_enhancements import TreeviewTotalFooter
         self._alloc_detail_footer = TreeviewTotalFooter(

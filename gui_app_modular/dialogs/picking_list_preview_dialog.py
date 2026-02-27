@@ -161,9 +161,11 @@ class PickingListPreviewDialog:
                 tree.insert("", tk.END, values=(mat, desc, total, unit, len(batches), batch_summary))
 
         scroll = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=tree.yview)
-        tree.configure(yscrollcommand=scroll.set)
+        scroll_x = ttk.Scrollbar(table_frame, orient='horizontal', command=tree.xview)
+        tree.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
         tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
 
         # ─── 테이블 하단 합계 (건수, 무게) ───
         n_items = len(items)
