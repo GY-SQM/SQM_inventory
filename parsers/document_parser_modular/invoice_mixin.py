@@ -103,13 +103,30 @@ class InvoiceMixin:
         result.source_file = pdf_path
         result.parsed_at = datetime.now()
 
-        # Gemini 결과 매핑(최소 필드)
+        # Gemini 결과 매핑
         # InvoiceData.customer는 읽기전용 프로퍼티(customer_name 반환) → customer_name에 설정
         result.sap_no = getattr(gemini_result, 'sap_no', '') or ''
         result.invoice_no = getattr(gemini_result, 'invoice_no', '') or ''
         result.salar_invoice_no = result.invoice_no
         result.bl_no = getattr(gemini_result, 'bl_no', '') or ''
         result.customer_name = getattr(gemini_result, 'customer', '') or ''
+        result.product_code = getattr(gemini_result, 'product_code', '') or ''
+        result.product_name = getattr(gemini_result, 'product', '') or ''
+        result.quantity_mt = safe_float(getattr(gemini_result, 'quantity_mt', 0))
+        result.unit_price = safe_float(getattr(gemini_result, 'unit_price', 0))
+        result.total_amount = safe_float(getattr(gemini_result, 'total_amount', 0))
+        result.currency = (getattr(gemini_result, 'currency', 'USD') or 'USD')
+        result.incoterm = getattr(gemini_result, 'incoterm', '') or ''
+        result.origin = getattr(gemini_result, 'origin', '') or ''
+        result.destination = getattr(gemini_result, 'destination', '') or ''
+        result.vessel = getattr(gemini_result, 'vessel', '') or ''
+        result.net_weight_kg = safe_float(getattr(gemini_result, 'net_weight_kg', 0))
+        result.gross_weight_kg = safe_float(getattr(gemini_result, 'gross_weight_kg', 0))
+        result.package_type = getattr(gemini_result, 'package_type', '') or ''
+        try:
+            result.package_count = int(safe_float(getattr(gemini_result, 'package_count', 0)))
+        except (ValueError, TypeError):
+            result.package_count = 0
         if hasattr(result, 'supplier'):
             result.supplier = getattr(gemini_result, 'supplier', '') or ''
 

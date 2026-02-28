@@ -11,6 +11,7 @@ SQM v6.0 — 반품 입고 엔진
 """
 
 import logging
+import sqlite3
 from datetime import date, datetime
 from typing import Any, List
 
@@ -108,17 +109,17 @@ def process_return_inbound(engine: Any, parsed: dict, source_file: str = "") -> 
                 db.execute(
                     """
                     INSERT INTO return_history
-                    (lot_no, sub_lt, return_date, original_customer, original_sale_ref, reason, remark)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (lot_no, sub_lt, return_date, original_customer, original_sale_ref, reason, remark, weight_kg)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (lot_no, sub_lt, today, tonbag.get("picked_to"), tonbag.get("sale_ref", ""), reason, remark),
+                    (lot_no, sub_lt, today, tonbag.get("picked_to"), tonbag.get("sale_ref", ""), reason, remark, tb_weight),
                 )
                 db.execute(
                     """
-                    INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at)
-                    VALUES (?, 'RETURN', ?, ?, ?)
+                    INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, source_type, source_file, created_at)
+                    VALUES (?, 'RETURN', ?, ?, ?, ?, ?)
                     """,
-                    (lot_no, tb_weight, f"sub_lt={sub_lt}, reason={reason}", now),
+                    (lot_no, tb_weight, f"sub_lt={sub_lt}, reason={reason}", "RETURN_EXCEL", source_file or "", now),
                 )
                 db.execute(
                     """
@@ -135,8 +136,8 @@ def process_return_inbound(engine: Any, parsed: dict, source_file: str = "") -> 
                             "UPDATE allocation_plan SET status = 'CANCELLED', cancelled_at = ? WHERE lot_no = ? AND sub_lt = ? AND status = 'RESERVED'",
                             (now, lot_no, sub_lt),
                         )
-                    except Exception:
-                        pass
+                    except (sqlite3.OperationalError, ValueError, TypeError, KeyError, AttributeError) as _ae:
+                        logger.debug(f"[v6.2.2] allocation_plan CANCELLED 스킵: {_ae}")
                 else:
                     db.execute(
                         """
@@ -150,18 +151,46 @@ def process_return_inbound(engine: Any, parsed: dict, source_file: str = "") -> 
                 result["returned"] += 1
                 result["details"].append({"lot_no": lot_no, "sub_lt": sub_lt, "weight": tb_weight})
 
-            # sold_table RETURNED (해당 picking_id)
+            # sold_table RETURNED (lot_no + sub_lt 기반)
             for r in return_rows:
-                db.execute("UPDATE sold_table SET status = 'RETURNED' WHERE picking_id = ?", (r["picking_id"],))
+                try:
+                    db.execute(
+                        "UPDATE sold_table SET status = 'RETURNED' "
+                        "WHERE lot_no = ? AND sub_lt = ? AND status = 'SOLD'",
+                        (r["lot_no"], r["sub_lt"]),
+                    )
+                except (sqlite3.OperationalError, ValueError, TypeError, KeyError, AttributeError) as _se:
+                    logger.debug(f"[v6.2.2] sold_table RETURNED 스킵: {_se}")
+                # 반품 후 문서 연계 점검용 감사 이력 (ReturnMixin 구현 재사용)
+                if hasattr(engine, "_log_return_doc_review_audit"):
+                    try:
+                        engine._log_return_doc_review_audit(
+                            lot_no=r["lot_no"],
+                            sub_lt=r["sub_lt"],
+                            reason=r.get("reason", ""),
+                            source_type="RETURN_EXCEL",
+                            source_file=source_file or "",
+                        )
+                    except (sqlite3.OperationalError, ValueError, TypeError, KeyError, AttributeError) as _ae:
+                        logger.debug(f"[v6.2.2] return doc audit 스킵: {_ae}")
 
             returned_lots = set(r["lot_no"] for r in return_rows)
             for rlt in returned_lots:
                 if hasattr(engine, "_recalc_lot_status"):
                     engine._recalc_lot_status(rlt)
 
+            # return_mixin과 동일하게 트랜잭션 안에서 정합성 검증
+            if hasattr(engine, "verify_lot_integrity") and returned_lots:
+                for rlt in returned_lots:
+                    integrity = engine.verify_lot_integrity(rlt)
+                    if not integrity.get("valid", True):
+                        raise ValueError(
+                            f"반품 후 정합성 실패 ({rlt}): {integrity.get('errors', [])}"
+                        )
+
         result["success"] = True
         logger.info(f"[ReturnInboundEngine] 반품 입고 완료: {result['returned']}건 (파일: {source_file})")
-    except Exception as e:
+    except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError, TypeError, KeyError, AttributeError, OSError, RuntimeError) as e:
         result["errors"].append(str(e))
         logger.exception("반품 입고 트랜잭션 실패")
 

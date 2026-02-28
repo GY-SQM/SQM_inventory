@@ -1,0 +1,58 @@
+diff --git a/gui_app_modular/utils/theme_refresh.py b/gui_app_modular/utils/theme_refresh.py
+index 1c6d3dd..cdcfceb 100644
+--- a/gui_app_modular/utils/theme_refresh.py
++++ b/gui_app_modular/utils/theme_refresh.py
+@@ -147,6 +147,21 @@ def _refresh_native_widget(widget, colors: dict) -> None:
+     is_dark = colors['is_dark']
+     theme_fg = colors['fg']
+     theme_bg = colors['bg']
++    sel_bg = colors.get('sel_bg', '#0078D7')
++    sel_fg = colors.get('sel_fg', '#ffffff')
++
++    def _brightness_of(color_value: str):
++        """
++        위젯 기준 실제 RGB 밝기(0~255) 계산.
++        시스템 색상명(SystemWindowText 등)도 winfo_rgb로 해석 가능.
++        """
++        try:
++            r16, g16, b16 = widget.winfo_rgb(color_value)
++            r8, g8, b8 = r16 / 257.0, g16 / 257.0, b16 / 257.0
++            return (r8 * 299 + g8 * 587 + b8 * 114) / 1000.0
++        except (tk.TclError, RuntimeError, ValueError):
++            return None
++
+     try:
+         current_fg = str(widget.cget('fg')) if hasattr(widget, 'cget') else ''
+         current_bg = str(widget.cget('bg')) if hasattr(widget, 'cget') else ''
+@@ -154,17 +169,23 @@ def _refresh_native_widget(widget, colors: dict) -> None:
+         return
+     if not current_fg:
+         return
+-    fg_is_dark = _is_dark_color(current_fg) if current_fg.startswith('#') else (current_fg.lower() in ('black', '#000000', ''))
+-    needs_fix = False
+-    if is_dark and fg_is_dark:
+-        needs_fix = True
+-    elif not is_dark and not fg_is_dark and current_fg.lower() in ('white', '#ffffff', '#fff', '#f0f0f0', '#e0e0e0', '#ecf0f1'):
+-        needs_fix = True
++    fg_b = _brightness_of(current_fg)
++    bg_b = _brightness_of(current_bg)
++
++    # 색상을 해석할 수 없거나 대비가 부족하면 테마 색으로 강제 동기화
++    needs_fix = fg_b is None or bg_b is None
++    if not needs_fix:
++        low_contrast = abs(fg_b - bg_b) < 80
++        wrong_bg_for_theme = (is_dark and bg_b > 170) or ((not is_dark) and bg_b < 85)
++        wrong_fg_for_theme = (is_dark and fg_b < 120) or ((not is_dark) and fg_b > 180)
++        needs_fix = low_contrast or wrong_bg_for_theme or wrong_fg_for_theme
++
+     if needs_fix:
+         try:
+             widget.configure(fg=theme_fg)
+-            if current_bg.lower() in ('white', '#ffffff', 'black', '#000000', ''):
+-                widget.configure(bg=theme_bg)
++            widget.configure(bg=theme_bg)
++            if isinstance(widget, tk.Listbox):
++                widget.configure(selectbackground=sel_bg, selectforeground=sel_fg)
+             if isinstance(widget, tk.Text):
+                 widget.configure(insertbackground=theme_fg)
+         except (tk.TclError, RuntimeError):

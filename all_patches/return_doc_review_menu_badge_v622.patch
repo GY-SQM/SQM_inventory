@@ -1,0 +1,158 @@
+diff --git a/gui_app_modular/mixins/custom_menubar.py b/gui_app_modular/mixins/custom_menubar.py
+index d5dd6e5..ebfdba2 100644
+--- a/gui_app_modular/mixins/custom_menubar.py
++++ b/gui_app_modular/mixins/custom_menubar.py
+@@ -11,6 +11,7 @@ ttkbootstrap 기반 메뉴바
+ 
+ import logging
+ import os  # v5.3.5
++import sqlite3
+ import tkinter as tk
+ from ..utils.ui_constants import CustomMessageBox, ThemeColors
+ from typing import Dict, Callable
+@@ -80,6 +81,25 @@ class CustomMenuBar:
+         
+         # 메뉴 구성
+         self._create_menus()
++
++    def _get_return_doc_review_pending_count(self, days: int = 30) -> int:
++        """최근 N일 반품 문서점검 대기건(RETURN_DOC_REVIEW) 개수."""
++        try:
++            row = self.app.engine.db.fetchone(
++                """
++                SELECT COUNT(*) AS cnt
++                FROM stock_movement
++                WHERE movement_type = 'RETURN_DOC_REVIEW'
++                  AND DATE(created_at) >= DATE('now', ?)
++                """,
++                (f"-{int(days)} days",),
++            )
++            if not row:
++                return 0
++            return int((row.get('cnt') if isinstance(row, dict) else row[0]) or 0)
++        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError, TypeError, KeyError, AttributeError) as e:
++            logger.debug(f"[custom_menubar] 반품 문서점검 카운트 조회 오류: {e}")
++            return 0
+     
+     def _get_first_child(self):
+         """첫 번째 자식 위젯 반환 (더 이상 사용 안 함)"""
+@@ -151,7 +171,9 @@ class CustomMenuBar:
+             optional = entry[2] if len(entry) > 2 else False
+             callback = getattr(self.app, method_name, None)
+             if method_name == "_show_return_dialog":
+-                return_sub = self._add_submenu(inbound_sub, label)
++                pending = self._get_return_doc_review_pending_count(30)
++                badge = f" [{pending}]" if pending > 0 else ""
++                return_sub = self._add_submenu(inbound_sub, f"{label}{badge}")
+                 if callable(callback):
+                     for sub_label, mode in FILE_MENU_INBOUND_RETURN_SUB_ITEMS:
+                         self._add_command(return_sub, sub_label, lambda md=mode, fn=callback: fn(md))
+diff --git a/gui_app_modular/mixins/menu_mixin.py b/gui_app_modular/mixins/menu_mixin.py
+index c4e0a7f..c6c456f 100644
+--- a/gui_app_modular/mixins/menu_mixin.py
++++ b/gui_app_modular/mixins/menu_mixin.py
+@@ -12,6 +12,7 @@ v2.9.91 - gui_app.py에서 분리
+ import logging
+ import os
+ import configparser
++import sqlite3
+ 
+ from ..utils.ui_constants import CustomMessageBox
+ logger = logging.getLogger(__name__)
+@@ -28,6 +29,25 @@ class MenuMixin:
+     # 메뉴바 스타일: 'custom' (ttkbootstrap) 또는 'native' (tk.Menu)
+     MENUBAR_STYLE = 'custom'
+ 
++    def _get_return_doc_review_pending_count(self, days: int = 30) -> int:
++        """최근 N일 반품 문서점검 대기건(RETURN_DOC_REVIEW) 개수."""
++        try:
++            row = self.engine.db.fetchone(
++                """
++                SELECT COUNT(*) AS cnt
++                FROM stock_movement
++                WHERE movement_type = 'RETURN_DOC_REVIEW'
++                  AND DATE(created_at) >= DATE('now', ?)
++                """,
++                (f"-{int(days)} days",),
++            )
++            if not row:
++                return 0
++            return int((row.get('cnt') if isinstance(row, dict) else row[0]) or 0)
++        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError, TypeError, KeyError, AttributeError) as e:
++            logger.debug(f"반품 문서점검 카운트 조회 오류: {e}")
++            return 0
++
+     def _is_developer_mode_enabled(self) -> bool:
+         """settings.ini [ui] developer_mode 플래그."""
+         cfg = configparser.ConfigParser()
+@@ -156,14 +176,16 @@ class MenuMixin:
+                 upload_menu.add_command(label="  " + label, command=cmd, font=_font)
+         upload_menu.add_separator()
+         _return_cmd = getattr(self, "_show_return_dialog", None)
++        pending = self._get_return_doc_review_pending_count(30)
++        return_label = f"  🔄 반품 (재입고){f' [{pending}]' if pending > 0 else ''}"
+         if callable(_return_cmd):
+             return_sub = tk.Menu(upload_menu, tearoff=0, font=_font)
+-            upload_menu.add_cascade(label="  🔄 반품 (재입고)", menu=return_sub, font=_font)
++            upload_menu.add_cascade(label=return_label, menu=return_sub, font=_font)
+             for sub_label, mode in FILE_MENU_INBOUND_RETURN_SUB_ITEMS:
+                 return_sub.add_command(label="  " + sub_label, command=lambda md=mode: _return_cmd(md), font=_font)
+         else:
+             upload_menu.add_command(
+-                label="  🔄 반품 (재입고)",
++                label=return_label,
+                 command=lambda: CustomMessageBox.showinfo(self.root, "반품", "반품 기능 필요"),
+                 font=_font
+             )
+diff --git a/gui_app_modular/mixins/toolbar_mixin.py b/gui_app_modular/mixins/toolbar_mixin.py
+index 0514d05..610707a 100644
+--- a/gui_app_modular/mixins/toolbar_mixin.py
++++ b/gui_app_modular/mixins/toolbar_mixin.py
+@@ -32,6 +32,25 @@ def _pick_font(root) -> str:
+ class ToolbarMixin:
+     """v3.8.4: 통합 메뉴바 (ThemeColors 단일 소스, Phase5: 메뉴 헬퍼·미니멀)"""
+ 
++    def _get_return_doc_review_pending_count(self, days: int = 30) -> int:
++        """최근 N일 반품 문서점검 대기건(RETURN_DOC_REVIEW) 개수."""
++        try:
++            row = self.engine.db.fetchone(
++                """
++                SELECT COUNT(*) AS cnt
++                FROM stock_movement
++                WHERE movement_type = 'RETURN_DOC_REVIEW'
++                  AND DATE(created_at) >= DATE('now', ?)
++                """,
++                (f"-{int(days)} days",),
++            )
++            if not row:
++                return 0
++            return int((row.get('cnt') if isinstance(row, dict) else row[0]) or 0)
++        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError, TypeError, KeyError, AttributeError) as e:
++            logger.debug(f"반품 문서점검 카운트 조회 오류: {e}")
++            return 0
++
+     def _load_toolbar_colors(self) -> None:
+         """ThemeColors 단일 소스 — 툴바는 항상 다크 스타일 (Phase2/5)"""
+         try:
+@@ -334,7 +353,9 @@ class ToolbarMixin:
+                     if callable(_show_return):
+                         for sub_label, mode in FILE_MENU_INBOUND_RETURN_SUB_ITEMS:
+                             return_sub.add_command(label=f"  {sub_label}", command=lambda md=mode: _show_return(md))
+-                    m.add_cascade(label=f"  {label}", menu=return_sub)
++                    pending = self._get_return_doc_review_pending_count(30)
++                    badge = f" [{pending}]" if pending > 0 else ""
++                    m.add_cascade(label=f"  {label}{badge}", menu=return_sub)
+                 else:
+                     m.add_command(label=f"  {label}", command=lambda mn=method_name: self._safe_call(mn))
+         except ImportError:
+@@ -349,7 +370,9 @@ class ToolbarMixin:
+             if callable(_show_return):
+                 return_sub.add_command(label="  📝 소량 반품 (1~2건)", command=lambda: _show_return(0))
+                 return_sub.add_command(label="  📂 다량 반품 (Excel)", command=lambda: _show_return(1))
+-            m.add_cascade(label="  🔄 반품 (재입고)", menu=return_sub)
++            pending = self._get_return_doc_review_pending_count(30)
++            badge = f" [{pending}]" if pending > 0 else ""
++            m.add_cascade(label=f"  🔄 반품 (재입고){badge}", menu=return_sub)
+         return m
+ 
+     def _build_outbound_menu(self) -> 'tk.Menu':

@@ -63,6 +63,21 @@ class BarcodeScanEngine:
                 self.db.execute("ALTER TABLE uid_verify_history ADD COLUMN sale_ref TEXT")
             except Exception:
                 pass
+            try:
+                self.db.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_verify_history_ref "
+                    "ON uid_verify_history(outbound_ref)"
+                )
+                self.db.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_verify_history_at "
+                    "ON uid_verify_history(verified_at DESC)"
+                )
+                self.db.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_verify_history_sale "
+                    "ON uid_verify_history(sale_ref)"
+                )
+            except Exception:
+                pass
         except Exception as e:
             logger.debug(f"uid_verify_history 테이블 생성 스킵: {e}")
 
@@ -178,10 +193,10 @@ class BarcodeScanEngine:
 
     def verify_outbound_scan(self, expected_uids: Set[str], scanned_uids_raw: List[str],
                               outbound_ref: str = '', scan_file_name: str = '', sale_ref: str = '') -> Dict:
-        # expected_uids 인자는 하위호환 유지용(실제 검증은 DB PICKED 기반으로 통일)
-        _ = expected_uids
         picked_rows, uid_map, sublt_map = self._build_picked_maps(sale_ref=sale_ref or None)
-        expected_ids = {int(r['id']) for r in picked_rows}
+        # expected_uids가 넘어오면 호출자 기준(expected_uids) 우선, 없으면 DB PICKED fallback
+        use_db_expected = not bool(expected_uids) and bool(picked_rows)
+        expected_ids = {int(r['id']) for r in picked_rows} if use_db_expected else set()
 
         seen_codes, duplicates = set(), []
         matched_ids = set()
@@ -194,20 +209,34 @@ class BarcodeScanEngine:
                 duplicates.append(code)
                 continue
             seen_codes.add(code)
-            row = uid_map.get(code) or sublt_map.get(code) or sublt_map.get(_normalize_sublt(code))
-            if row:
-                matched_ids.add(int(row['id']))
+            if use_db_expected:
+                row = uid_map.get(code) or sublt_map.get(code) or sublt_map.get(_normalize_sublt(code))
+                if row:
+                    matched_ids.add(int(row['id']))
+                else:
+                    extra_codes.append(code)
             else:
-                extra_codes.append(code)
+                # DB PICKED가 없으면 호출자 expected_uids로 fallback 검증 (테스트/레거시 호환)
+                pass
 
-        missing_rows = [r for r in picked_rows if int(r['id']) not in matched_ids]
-        missing = sorted([
-            _clean_uid(r.get('tonbag_uid') or '') or str(r.get('sub_lt', ''))
-            for r in missing_rows
-        ])
-        extra = sorted(set(extra_codes))
+        if use_db_expected:
+            missing_rows = [r for r in picked_rows if int(r['id']) not in matched_ids]
+            missing = sorted([
+                _clean_uid(r.get('tonbag_uid') or '') or str(r.get('sub_lt', ''))
+                for r in missing_rows
+            ])
+            extra = sorted(set(extra_codes))
+            expected_count = len(expected_ids)
+        else:
+            expected_clean = {_clean_uid(u) for u in (expected_uids or set()) if _clean_uid(u)}
+            expected_norm = {_normalize_sublt(u) for u in expected_clean}
+            scanned_norm = {_normalize_sublt(s) for s in seen_codes}
+            missing = sorted([u for u in expected_clean if _normalize_sublt(u) not in scanned_norm])
+            extra = sorted([s for s in seen_codes if _normalize_sublt(s) not in expected_norm])
+            expected_count = len(expected_clean)
         duplicates = sorted(set(duplicates))
-        passed = (not missing) and (not extra) and (not duplicates)
+        # 중복은 경고로만 취급 (PASS 유지)
+        passed = (not missing) and (not extra)
         pass_swap = False
         swap_lots = []
         if (not duplicates) and missing and extra:
@@ -235,12 +264,18 @@ class BarcodeScanEngine:
         result = {
             'result': 'PASS' if passed else ('PASS_SWAP' if pass_swap else 'FAIL'),
             'missing': missing, 'extra': extra, 'duplicates': duplicates,
-            'expected_count': len(expected_ids), 'scanned_count': len(scanned_uids_raw),
+            'expected_count': expected_count, 'scanned_count': len(scanned_uids_raw),
             'scanned_unique_count': len(seen_codes),
             'swap_lots': swap_lots,
         }
         if passed:
-            result['message'] = f"✅ UID 대조 통과 ({len(expected_ids)}개 일치)"
+            if duplicates:
+                result['message'] = (
+                    f"✅ UID 대조 통과 ({expected_count}개 일치, "
+                    f"중복 {len(duplicates)}개 경고)"
+                )
+            else:
+                result['message'] = f"✅ UID 대조 통과 ({expected_count}개 일치)"
         elif pass_swap:
             result['message'] = (
                 f"⚠️ UID 대조 조건부 통과(PASS_SWAP): "
@@ -424,15 +459,7 @@ class BarcodeScanEngine:
             else:
                 seen.add(c)
                 uniq_codes.append(c)
-        if duplicates:
-            return {
-                'success': False,
-                'sold': 0,
-                'not_found': [],
-                'duplicates': sorted(set(duplicates)),
-                'remaining_picked': 0,
-                'errors': [f"중복 UID 스캔: {len(set(duplicates))}개"],
-            }
+        dup_set = sorted(set(duplicates))
 
         sold_count, not_found, swap_count = 0, [], 0
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -566,8 +593,30 @@ class BarcodeScanEngine:
             'sold': sold_count,
             'swap_count': swap_count,
             'not_found': not_found,
+            'duplicates': dup_set,
             'remaining_picked': remaining_cnt,
         }
+
+    def process_barcode_scan_to_sold_from_file(self, file_path: str, sale_ref: str = None) -> Dict:
+        """레거시 호환용: 파일 경로 기반 호출."""
+        return self.process_barcode_scan_to_sold(file_path, sale_ref=sale_ref)
+
+    def get_picked_full_info(self, sale_ref: str = None) -> List[Dict]:
+        """PICKED 톤백 상세 정보 반환 (검증 미리보기용)."""
+        query = (
+            "SELECT id, lot_no, sub_lt, weight, tonbag_uid, sale_ref, "
+            "picked_to, picked_date, location "
+            "FROM inventory_tonbag WHERE status='PICKED'"
+        )
+        params = []
+        if sale_ref:
+            query += " AND sale_ref = ?"
+            params.append(sale_ref)
+        query += " ORDER BY lot_no, sub_lt"
+        try:
+            return self.db.fetchall(query, tuple(params)) or []
+        except Exception:
+            return []
 
     def get_verify_history(self, limit: int = 50) -> List[Dict]:
         try:

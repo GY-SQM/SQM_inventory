@@ -12,6 +12,7 @@ v2.9.91 - gui_app.py에서 분리
 import logging
 import os
 import configparser
+import sqlite3
 
 from ..utils.ui_constants import CustomMessageBox
 logger = logging.getLogger(__name__)
@@ -27,6 +28,38 @@ class MenuMixin:
     
     # 메뉴바 스타일: 'custom' (ttkbootstrap) 또는 'native' (tk.Menu)
     MENUBAR_STYLE = 'custom'
+
+    def _get_return_doc_review_pending_count(self, days: int = 30) -> int:
+        """최근 N일 반품 문서점검 대기건(RETURN_DOC_REVIEW) 개수."""
+        try:
+            row = self.engine.db.fetchone(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM stock_movement
+                WHERE movement_type = 'RETURN_DOC_REVIEW'
+                  AND DATE(created_at) >= DATE('now', ?)
+                """,
+                (f"-{int(days)} days",),
+            )
+            if not row:
+                return 0
+            return int((row.get('cnt') if isinstance(row, dict) else row[0]) or 0)
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError, TypeError, KeyError, AttributeError) as e:
+            logger.debug(f"반품 문서점검 카운트 조회 오류: {e}")
+            return 0
+
+    @staticmethod
+    def _format_return_review_badge(count: int) -> str:
+        """
+        반품 문서점검 메뉴 배지 문자열.
+        - 0건: 표시 없음
+        - 1~4건: 🟡 [N]
+        - 5건 이상: 🔴 [N]
+        """
+        if count <= 0:
+            return ""
+        icon = "🔴" if count >= 5 else "🟡"
+        return f" {icon} [{count}]"
 
     def _is_developer_mode_enabled(self) -> bool:
         """settings.ini [ui] developer_mode 플래그."""
@@ -156,14 +189,16 @@ class MenuMixin:
                 upload_menu.add_command(label="  " + label, command=cmd, font=_font)
         upload_menu.add_separator()
         _return_cmd = getattr(self, "_show_return_dialog", None)
+        pending = self._get_return_doc_review_pending_count(30)
+        return_label = f"  🔄 반품 (재입고){self._format_return_review_badge(pending)}"
         if callable(_return_cmd):
             return_sub = tk.Menu(upload_menu, tearoff=0, font=_font)
-            upload_menu.add_cascade(label="  🔄 반품 (재입고)", menu=return_sub, font=_font)
+            upload_menu.add_cascade(label=return_label, menu=return_sub, font=_font)
             for sub_label, mode in FILE_MENU_INBOUND_RETURN_SUB_ITEMS:
                 return_sub.add_command(label="  " + sub_label, command=lambda md=mode: _return_cmd(md), font=_font)
         else:
             upload_menu.add_command(
-                label="  🔄 반품 (재입고)",
+                label=return_label,
                 command=lambda: CustomMessageBox.showinfo(self.root, "반품", "반품 기능 필요"),
                 font=_font
             )

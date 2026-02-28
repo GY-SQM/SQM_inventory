@@ -41,6 +41,7 @@ MOVEMENT_RELOCATE = 'RELOCATE'                # v7.0.1: 톤백 위치 이동
 MOVEMENT_DO_UPDATE = 'DO_UPDATE'              # D/O 후속 연결 UPDATE 이력
 MOVEMENT_INVOICE_UPDATE = 'INVOICE_UPDATE'    # Invoice 후속 연결 UPDATE 이력
 MOVEMENT_BL_UPDATE = 'BL_UPDATE'              # B/L 후속 연결 UPDATE 이력
+MOVEMENT_RETURN_DOC_REVIEW = 'RETURN_DOC_REVIEW'  # 반품 후 문서 연계 점검 필요 이력
 
 # ═══════════════════════════════════════════════════════
 # 2. 창고

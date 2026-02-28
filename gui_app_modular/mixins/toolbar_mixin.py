@@ -32,6 +32,38 @@ def _pick_font(root) -> str:
 class ToolbarMixin:
     """v3.8.4: 통합 메뉴바 (ThemeColors 단일 소스, Phase5: 메뉴 헬퍼·미니멀)"""
 
+    def _get_return_doc_review_pending_count(self, days: int = 30) -> int:
+        """최근 N일 반품 문서점검 대기건(RETURN_DOC_REVIEW) 개수."""
+        try:
+            row = self.engine.db.fetchone(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM stock_movement
+                WHERE movement_type = 'RETURN_DOC_REVIEW'
+                  AND DATE(created_at) >= DATE('now', ?)
+                """,
+                (f"-{int(days)} days",),
+            )
+            if not row:
+                return 0
+            return int((row.get('cnt') if isinstance(row, dict) else row[0]) or 0)
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError, TypeError, KeyError, AttributeError) as e:
+            logger.debug(f"반품 문서점검 카운트 조회 오류: {e}")
+            return 0
+
+    @staticmethod
+    def _format_return_review_badge(count: int) -> str:
+        """
+        반품 문서점검 메뉴 배지 문자열.
+        - 0건: 표시 없음
+        - 1~4건: 🟡 [N]
+        - 5건 이상: 🔴 [N]
+        """
+        if count <= 0:
+            return ""
+        icon = "🔴" if count >= 5 else "🟡"
+        return f" {icon} [{count}]"
+
     def _load_toolbar_colors(self) -> None:
         """ThemeColors 단일 소스 — 툴바는 항상 다크 스타일 (Phase2/5)"""
         try:
@@ -334,7 +366,9 @@ class ToolbarMixin:
                     if callable(_show_return):
                         for sub_label, mode in FILE_MENU_INBOUND_RETURN_SUB_ITEMS:
                             return_sub.add_command(label=f"  {sub_label}", command=lambda md=mode: _show_return(md))
-                    m.add_cascade(label=f"  {label}", menu=return_sub)
+                    pending = self._get_return_doc_review_pending_count(30)
+                    badge = self._format_return_review_badge(pending)
+                    m.add_cascade(label=f"  {label}{badge}", menu=return_sub)
                 else:
                     m.add_command(label=f"  {label}", command=lambda mn=method_name: self._safe_call(mn))
         except ImportError:
@@ -349,7 +383,9 @@ class ToolbarMixin:
             if callable(_show_return):
                 return_sub.add_command(label="  📝 소량 반품 (1~2건)", command=lambda: _show_return(0))
                 return_sub.add_command(label="  📂 다량 반품 (Excel)", command=lambda: _show_return(1))
-            m.add_cascade(label="  🔄 반품 (재입고)", menu=return_sub)
+            pending = self._get_return_doc_review_pending_count(30)
+            badge = self._format_return_review_badge(pending)
+            m.add_cascade(label=f"  🔄 반품 (재입고){badge}", menu=return_sub)
         return m
 
     def _build_outbound_menu(self) -> 'tk.Menu':

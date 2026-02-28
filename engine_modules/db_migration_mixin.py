@@ -49,6 +49,84 @@ class DatabaseMigrationMixin:
         self._migrate_v628_allocation_import_batch()
         self._migrate_v629_allocation_gate_columns()
         self._migrate_v630_allocation_approval_workflow()
+        self._migrate_v631_sales_order_perf()
+        self._migrate_v632_sales_order_import_log()
+
+    def _migrate_v631_sales_order_perf(self) -> None:
+        """
+        v6.2.3: Sales Order 업로드 성능/정합성 보강
+        - picking_table 복합 인덱스(샘플/일반 필터 포함)
+        - sold_table 조회 인덱스
+        """
+        try:
+            self.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_picking_lot_pick_status_sample_id
+                ON picking_table(lot_no, picking_no, status, is_sample, id)
+                """
+            )
+        except (sqlite3.OperationalError, OSError) as e:
+            logger.debug(f"[v6.2.3] idx_picking_lot_pick_status_sample_id 스킵: {e}")
+
+        try:
+            self.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_picking_lot_pick_status_id
+                ON picking_table(lot_no, picking_no, status, id)
+                """
+            )
+        except (sqlite3.OperationalError, OSError) as e:
+            logger.debug(f"[v6.2.3] idx_picking_lot_pick_status_id 스킵: {e}")
+
+        try:
+            self.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_sold_order_status
+                ON sold_table(sales_order_no, status)
+                """
+            )
+        except (sqlite3.OperationalError, OSError) as e:
+            logger.debug(f"[v6.2.3] idx_sold_order_status 스킵: {e}")
+
+    def _migrate_v632_sales_order_import_log(self) -> None:
+        """
+        v6.2.3: Sales Order 업로드 감사 로그 테이블.
+        """
+        try:
+            self.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sales_order_import_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    import_run_id TEXT,
+                    sales_order_no TEXT,
+                    file_name TEXT,
+                    file_hash TEXT,
+                    mode TEXT DEFAULT 'normal',
+                    sold_count INTEGER DEFAULT 0,
+                    pending_count INTEGER DEFAULT 0,
+                    warnings_json TEXT DEFAULT '[]',
+                    elapsed_ms INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    created_by TEXT DEFAULT 'system'
+                )
+                """
+            )
+            self.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_so_import_log_run
+                ON sales_order_import_log(import_run_id)
+                """
+            )
+            self.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_so_import_log_so
+                ON sales_order_import_log(sales_order_no, created_at)
+                """
+            )
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v6.2.3] sales_order_import_log 마이그레이션 실패: {e}")
+            self.rollback()
 
     def _migrate_v630_allocation_approval_workflow(self) -> None:
         """

@@ -11,6 +11,7 @@ ttkbootstrap 기반 메뉴바
 
 import logging
 import os  # v5.3.5
+import sqlite3
 import tkinter as tk
 from ..utils.ui_constants import CustomMessageBox, ThemeColors
 from typing import Dict, Callable
@@ -80,6 +81,38 @@ class CustomMenuBar:
         
         # 메뉴 구성
         self._create_menus()
+
+    def _get_return_doc_review_pending_count(self, days: int = 30) -> int:
+        """최근 N일 반품 문서점검 대기건(RETURN_DOC_REVIEW) 개수."""
+        try:
+            row = self.app.engine.db.fetchone(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM stock_movement
+                WHERE movement_type = 'RETURN_DOC_REVIEW'
+                  AND DATE(created_at) >= DATE('now', ?)
+                """,
+                (f"-{int(days)} days",),
+            )
+            if not row:
+                return 0
+            return int((row.get('cnt') if isinstance(row, dict) else row[0]) or 0)
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError, TypeError, KeyError, AttributeError) as e:
+            logger.debug(f"[custom_menubar] 반품 문서점검 카운트 조회 오류: {e}")
+            return 0
+
+    @staticmethod
+    def _format_return_review_badge(count: int) -> str:
+        """
+        반품 문서점검 메뉴 배지 문자열.
+        - 0건: 표시 없음
+        - 1~4건: 🟡 [N]
+        - 5건 이상: 🔴 [N]
+        """
+        if count <= 0:
+            return ""
+        icon = "🔴" if count >= 5 else "🟡"
+        return f" {icon} [{count}]"
     
     def _get_first_child(self):
         """첫 번째 자식 위젯 반환 (더 이상 사용 안 함)"""
@@ -151,7 +184,9 @@ class CustomMenuBar:
             optional = entry[2] if len(entry) > 2 else False
             callback = getattr(self.app, method_name, None)
             if method_name == "_show_return_dialog":
-                return_sub = self._add_submenu(inbound_sub, label)
+                pending = self._get_return_doc_review_pending_count(30)
+                badge = self._format_return_review_badge(pending)
+                return_sub = self._add_submenu(inbound_sub, f"{label}{badge}")
                 if callable(callback):
                     for sub_label, mode in FILE_MENU_INBOUND_RETURN_SUB_ITEMS:
                         self._add_command(return_sub, sub_label, lambda md=mode, fn=callback: fn(md))

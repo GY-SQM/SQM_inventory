@@ -19,11 +19,22 @@ picking_table에서 매칭된 톤백을 SOLD 처리한다.
 import logging
 import os
 import re
+import math
+import hashlib
+import json
+import uuid
+import time
+from datetime import datetime
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 TONBAG_WEIGHT_KG = 500.0
+
+
+def _round_half_up(x: float) -> int:
+    """0.5는 항상 올림(은행가 반올림 회피)."""
+    return int(math.floor((x or 0) + 0.5))
 
 # Excel 헤더 별칭 (대소문자/공백 차이 허용)
 _HEADER_ALIASES = {
@@ -217,6 +228,263 @@ class SalesOrderEngine:
     def __init__(self, db: Any) -> None:
         self.db = db
 
+    def _compute_need_count(self, item: dict) -> int:
+        """라인별 필요 톤백 수 계산(CT/PLT 우선, 없으면 NW 기반)."""
+        ct_plt = item.get("ct_plt")
+        nw_kg = item.get("nw_kg")
+        is_sample = bool(item.get("is_sample"))
+        try:
+            if ct_plt and int(ct_plt) > 0:
+                return int(ct_plt)
+        except Exception:
+            pass
+        try:
+            if nw_kg and float(nw_kg) > 0:
+                unit_w = 1.0 if is_sample else TONBAG_WEIGHT_KG
+                return max(1, _round_half_up((float(nw_kg) or 0.0) / unit_w))
+        except Exception:
+            pass
+        return 1
+
+    def _prefetch_picking_rows(self, lot_no: str, picking_no: str, is_sample_flag: int, limit: int) -> list:
+        """(LOT, PickingNo, is_sample) 그룹 단위 ACTIVE 선조회."""
+        if not lot_no or not picking_no or limit <= 0:
+            return []
+        try:
+            return self.db.fetchall(
+                """
+                SELECT id, lot_no, tonbag_id, sub_lt, tonbag_uid, qty_kg, is_sample
+                FROM picking_table
+                WHERE lot_no = ? AND picking_no = ? AND status = 'ACTIVE'
+                  AND COALESCE(is_sample, 0) = ?
+                ORDER BY id ASC
+                LIMIT ?
+                """,
+                (lot_no, picking_no, int(is_sample_flag or 0), int(limit)),
+            )
+        except Exception:
+            # 구버전 DB(is_sample 컬럼 미존재) 폴백
+            try:
+                return self.db.fetchall(
+                    """
+                    SELECT id, lot_no, tonbag_id, sub_lt, tonbag_uid, qty_kg
+                    FROM picking_table
+                    WHERE lot_no = ? AND picking_no = ? AND status = 'ACTIVE'
+                    ORDER BY id ASC
+                    LIMIT ?
+                    """,
+                    (lot_no, picking_no, int(limit)),
+                )
+            except Exception:
+                return []
+
+    def _process_items_grouped(self, items: list, so_no: str, so_file: str, result: dict) -> None:
+        """
+        v6.2.3: 그룹 선조회 + FIFO + 배치 반영.
+        - (lot_no, picking_no, is_sample) 단위로 prefetch
+        - 부분 SOLD 금지(부족 시 PENDING)
+        """
+        groups = {}
+        ordered_keys = []
+        for item in items:
+            lot_no = item.get("lot_no") or ""
+            picking_no = item.get("picking_no") or ""
+            is_sample_flag = 1 if bool(item.get("is_sample")) else 0
+            key = (lot_no, picking_no, is_sample_flag)
+            if key not in groups:
+                groups[key] = []
+                ordered_keys.append(key)
+            item["_need_count"] = self._compute_need_count(item)
+            groups[key].append(item)
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        picking_updates = []   # (so_no, id)
+        tonbag_updates = []    # (so_no, tonbag_id)
+        inventory_delta = {}   # lot_no -> kg sum
+        sold_rows = []         # sold_table rows
+        pending_rows = []      # sold_table PENDING rows
+        movement_rows = []     # stock_movement rows
+
+        for lot_no, picking_no, is_sample_flag in ordered_keys:
+            group_items = groups[(lot_no, picking_no, is_sample_flag)]
+            total_need = sum(int(it.get("_need_count") or 1) for it in group_items)
+            pool = self._prefetch_picking_rows(lot_no, picking_no, is_sample_flag, total_need)
+            ptr = 0
+
+            for item in group_items:
+                need_count = int(item.get("_need_count") or 1)
+
+                # picking_no 누락 또는 수량 부족 시 부분처리 금지 → PENDING
+                if not picking_no or ptr + need_count > len(pool):
+                    found = 0 if not picking_no else max(0, len(pool) - ptr)
+                    pending_rows.append((
+                        item["lot_no"], so_no, so_file, item["picking_no"], item["sap_no"], item["bl_no"],
+                        item["customer"], item["sku"], item["delivery_date"],
+                        round((item["nw_kg"] or 0) / 1000.0, 4), item["nw_kg"] or 0, need_count,
+                    ))
+                    result["pending"] += 1
+                    reason = "Picking No 없음 → PENDING 보관" if not picking_no else (
+                        f"필요 {need_count}개 대비 ACTIVE {found}개 (부분처리 금지, PENDING)"
+                    )
+                    result["skipped"].append({"lot_no": lot_no, "picking_no": picking_no, "reason": reason})
+                    result["warnings"].append(f"⚠️ {lot_no} (PK:{picking_no}): {reason}")
+                    continue
+
+                alloc_rows = pool[ptr: ptr + need_count]
+                ptr += need_count
+                lot_kg = 0.0
+
+                for pk_row in alloc_rows:
+                    pid = pk_row.get("id")
+                    if pid is not None:
+                        picking_updates.append((so_no, pid))
+                    tonbag_id = pk_row.get("tonbag_id")
+                    if tonbag_id:
+                        tonbag_updates.append((so_no, tonbag_id))
+
+                    qty_kg = pk_row.get("qty_kg")
+                    if qty_kg is None or qty_kg == "":
+                        qty_kg = 1.0 if bool(item.get("is_sample")) else TONBAG_WEIGHT_KG
+                    try:
+                        qty_kg = float(qty_kg)
+                    except Exception:
+                        qty_kg = 0.0
+
+                    lot_kg += qty_kg
+                    sold_rows.append((
+                        item["lot_no"], tonbag_id, pk_row.get("sub_lt"), pk_row.get("tonbag_uid"), pid,
+                        so_no, so_file, item["picking_no"], item["sap_no"], item["bl_no"], item["customer"],
+                        item["sku"], item["delivery_date"], round(qty_kg / 1000.0, 4), qty_kg, item["ct_plt"] or 0,
+                    ))
+
+                if lot_kg > 0:
+                    inventory_delta[lot_no] = float(inventory_delta.get(lot_no, 0.0)) + lot_kg
+                    movement_rows.append((lot_no, lot_kg, f"SO#{so_no}"))
+                result["sold"] += len(alloc_rows)
+
+        if hasattr(self.db, "executemany"):
+            if picking_updates:
+                self.db.executemany(
+                    """
+                    UPDATE picking_table
+                    SET status = 'SOLD', sold_date = ?, sales_order_no = ?
+                    WHERE id = ?
+                    """,
+                    [(now, so, pid) for so, pid in picking_updates],
+                )
+            if tonbag_updates:
+                self.db.executemany(
+                    """
+                    UPDATE inventory_tonbag
+                    SET status = 'SOLD', outbound_date = ?, sale_ref = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    [(now, so, now, tid) for so, tid in tonbag_updates],
+                )
+            if inventory_delta:
+                self.db.executemany(
+                    """
+                    UPDATE inventory
+                    SET current_weight = MAX(0, current_weight - ?), updated_at = ?
+                    WHERE lot_no = ?
+                    """,
+                    [(kg, now, lot) for lot, kg in inventory_delta.items()],
+                )
+            if sold_rows:
+                self.db.executemany(
+                    """
+                    INSERT INTO sold_table (
+                        lot_no, tonbag_id, sub_lt, tonbag_uid, picking_id,
+                        sales_order_no, sales_order_file,
+                        picking_no, sap_no, bl_no, customer, sku,
+                        delivery_date, sold_qty_mt, sold_qty_kg, ct_plt,
+                        status, sold_date, created_at, created_by
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        'SOLD', ?, ?, 'system'
+                    )
+                    """,
+                    [row + (now, now) for row in sold_rows],
+                )
+            if pending_rows:
+                self.db.executemany(
+                    """
+                    INSERT INTO sold_table (
+                        lot_no, sales_order_no, sales_order_file,
+                        picking_no, sap_no, bl_no, customer, sku,
+                        delivery_date, sold_qty_mt, sold_qty_kg, ct_plt,
+                        status, created_at, created_by
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, 'system'
+                    )
+                    """,
+                    [row + (now,) for row in pending_rows],
+                )
+            if movement_rows:
+                self.db.executemany(
+                    """
+                    INSERT INTO stock_movement
+                        (lot_no, movement_type, qty_kg, remarks, movement_date, created_at)
+                    VALUES (?, 'SOLD', ?, ?, ?, ?)
+                    """,
+                    [(lot, qty, remarks, now, now) for lot, qty, remarks in movement_rows],
+                )
+        else:
+            for so, pid in picking_updates:
+                self.db.execute(
+                    "UPDATE picking_table SET status='SOLD', sold_date=?, sales_order_no=? WHERE id=?",
+                    (now, so, pid),
+                )
+            for so, tid in tonbag_updates:
+                self.db.execute(
+                    "UPDATE inventory_tonbag SET status='SOLD', outbound_date=?, sale_ref=?, updated_at=? WHERE id=?",
+                    (now, so, now, tid),
+                )
+            for lot, kg in inventory_delta.items():
+                self.db.execute(
+                    "UPDATE inventory SET current_weight=MAX(0, current_weight-?), updated_at=? WHERE lot_no=?",
+                    (kg, now, lot),
+                )
+            for row in sold_rows:
+                self.db.execute(
+                    """
+                    INSERT INTO sold_table (
+                        lot_no, tonbag_id, sub_lt, tonbag_uid, picking_id,
+                        sales_order_no, sales_order_file,
+                        picking_no, sap_no, bl_no, customer, sku,
+                        delivery_date, sold_qty_mt, sold_qty_kg, ct_plt,
+                        status, sold_date, created_at, created_by
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                        'SOLD', ?, ?, 'system'
+                    )
+                    """,
+                    row + (now, now),
+                )
+            for row in pending_rows:
+                self.db.execute(
+                    """
+                    INSERT INTO sold_table (
+                        lot_no, sales_order_no, sales_order_file,
+                        picking_no, sap_no, bl_no, customer, sku,
+                        delivery_date, sold_qty_mt, sold_qty_kg, ct_plt,
+                        status, created_at, created_by
+                    ) VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, 'system'
+                    )
+                    """,
+                    row + (now,),
+                )
+            for lot, qty, remarks in movement_rows:
+                self.db.execute(
+                    """
+                    INSERT INTO stock_movement
+                        (lot_no, movement_type, qty_kg, remarks, movement_date, created_at)
+                    VALUES (?, 'SOLD', ?, ?, ?, ?)
+                    """,
+                    (lot, qty, remarks, now, now),
+                )
+
     def check_duplicate(self, sales_order_no: str) -> dict:
         """
         동일 Sales Order No가 이미 처리됐는지 확인
@@ -238,10 +506,104 @@ class SalesOrderEngine:
             "first_date": row.get("first_date"),
         }
 
+    def _pending_exists_for_item(self, sales_order_no: str, item: dict) -> bool:
+        """해당 SO/LOT/PickingNo 기준 미해결 PENDING 존재 여부."""
+        lot_no = item.get("lot_no") or ""
+        picking_no = item.get("picking_no") or ""
+        if not lot_no:
+            return False
+        try:
+            rows = self.db.fetchall(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM sold_table
+                WHERE sales_order_no = ?
+                  AND status = 'PENDING'
+                  AND lot_no = ?
+                  AND COALESCE(picking_no, '') = ?
+                """,
+                (sales_order_no, lot_no, picking_no),
+            )
+            return int((rows[0] or {}).get("cnt", 0) or 0) > 0
+        except Exception:
+            return False
+
+    def _resolve_pending_for_item(self, sales_order_no: str, item: dict) -> int:
+        """retry_pending_only에서 기존 PENDING을 RESOLVED로 마감."""
+        lot_no = item.get("lot_no") or ""
+        picking_no = item.get("picking_no") or ""
+        if not lot_no:
+            return 0
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cur = self.db.execute(
+            """
+            UPDATE sold_table
+            SET status = 'RESOLVED',
+                remark = COALESCE(remark, '') || ?
+            WHERE sales_order_no = ?
+              AND status = 'PENDING'
+              AND lot_no = ?
+              AND COALESCE(picking_no, '') = ?
+            """,
+            (f" | resolved@{now}", sales_order_no, lot_no, picking_no),
+        )
+        try:
+            return int(cur.rowcount or 0)
+        except Exception:
+            return 0
+
+    def _insert_sales_order_import_log(
+        self,
+        import_run_id: str,
+        so_no: str,
+        so_file: str,
+        file_hash: str,
+        mode: str,
+        sold_count: int,
+        pending_count: int,
+        warnings: list,
+        elapsed_ms: int,
+    ) -> Optional[int]:
+        """Sales Order 업로드 실행 로그를 남긴다."""
+        try:
+            warnings_json = json.dumps(warnings or [], ensure_ascii=False)
+            cur = self.db.execute(
+                """
+                INSERT INTO sales_order_import_log (
+                    import_run_id, sales_order_no, file_name, file_hash,
+                    mode, sold_count, pending_count, warnings_json, elapsed_ms,
+                    created_at, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    import_run_id,
+                    so_no or "",
+                    so_file or "",
+                    file_hash or "",
+                    mode or "normal",
+                    int(sold_count or 0),
+                    int(pending_count or 0),
+                    warnings_json,
+                    int(elapsed_ms or 0),
+                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "system",
+                ),
+            )
+            try:
+                return int(cur.lastrowid)
+            except Exception:
+                return None
+        except Exception as e:
+            logger.debug(f"[SalesOrderEngine] import_log 기록 스킵: {e}")
+            return None
+
     def process(
         self,
         file_path: str,
         sales_order_file: str = "",
+        allow_duplicate: bool = False,
+        mode: str = "normal",
+        file_hash: str = "",
     ) -> dict:
         """
         Sales Order Excel 파일 → SOLD/PENDING 처리
@@ -261,6 +623,12 @@ class SalesOrderEngine:
             "remaining_picked": 0,
             "skipped": [],
             "warnings": [],
+            "duplicate": None,
+            "mode": mode,
+            "import_run_id": uuid.uuid4().hex,
+            "resolved_pending": 0,
+            "import_log_id": None,
+            "elapsed_ms": 0,
         }
 
         parser = SalesOrderParser()
@@ -275,22 +643,70 @@ class SalesOrderEngine:
         items = parsed["items"]
         result["sales_order_no"] = so_no
         result["warnings"].extend(parsed.get("warnings", []))
+        result["file_hash"] = file_hash or ""
 
+        dup = self.check_duplicate(so_no)
+        result["duplicate"] = dup
+        if dup.get("exists") and (not allow_duplicate) and (mode != "retry_pending_only"):
+            result["warnings"].append(
+                f"⚠️ 중복 Sales Order 감지: SO#{so_no} — 기존 SOLD {dup.get('sold_count', 0)}건"
+            )
+            result["warnings"].append("중복 방지 정책에 따라 기본 차단되었습니다.")
+            return result
+
+        started = time.perf_counter()
         try:
-            for item in items:
-                self._process_item(item, so_no, sales_order_file, result)
-
-            self.db.commit()
+            if hasattr(self.db, "transaction"):
+                with self.db.transaction("IMMEDIATE"):
+                    if mode == "retry_pending_only":
+                        retry_items = [it for it in items if self._pending_exists_for_item(so_no, it)]
+                        skipped = len(items) - len(retry_items)
+                        if skipped > 0:
+                            result["warnings"].append(f"ℹ️ retry_pending_only: 기존 PENDING 없는 {skipped}행은 스킵")
+                        self._process_items_grouped(retry_items, so_no, sales_order_file, result)
+                        for it in retry_items:
+                            result["resolved_pending"] += self._resolve_pending_for_item(so_no, it)
+                    else:
+                        self._process_items_grouped(items, so_no, sales_order_file, result)
+            else:
+                if mode == "retry_pending_only":
+                    retry_items = [it for it in items if self._pending_exists_for_item(so_no, it)]
+                    skipped = len(items) - len(retry_items)
+                    if skipped > 0:
+                        result["warnings"].append(f"ℹ️ retry_pending_only: 기존 PENDING 없는 {skipped}행은 스킵")
+                    self._process_items_grouped(retry_items, so_no, sales_order_file, result)
+                    for it in retry_items:
+                        result["resolved_pending"] += self._resolve_pending_for_item(so_no, it)
+                else:
+                    self._process_items_grouped(items, so_no, sales_order_file, result)
+                self.db.commit()
             result["success"] = True
             result["remaining_picked"] = self._count_remaining_picked()
+            result["elapsed_ms"] = int((time.perf_counter() - started) * 1000)
+
+            result["import_log_id"] = self._insert_sales_order_import_log(
+                import_run_id=result["import_run_id"],
+                so_no=so_no,
+                so_file=sales_order_file,
+                file_hash=file_hash,
+                mode=mode,
+                sold_count=result["sold"],
+                pending_count=result["pending"],
+                warnings=result["warnings"],
+                elapsed_ms=result["elapsed_ms"],
+            )
 
             logger.info(
                 f"[SalesOrderEngine] SO#{so_no} 완료 — "
                 f"SOLD:{result['sold']} PENDING:{result['pending']} "
-                f"잔여PICKED:{result['remaining_picked']}"
+                f"잔여PICKED:{result['remaining_picked']} "
+                f"elapsed={result['elapsed_ms']}ms mode={mode}"
             )
         except Exception as e:
-            self.db.rollback()
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
             result["success"] = False
             result["warnings"].append(f"❌ 처리 오류 (롤백): {e}")
             logger.error(f"[SalesOrderEngine] 오류 → 롤백: {e}")
@@ -576,7 +992,12 @@ class SalesOrderEngine:
         return result
 
 
-def apply_sales_order_to_db(engine: Any, file_path: str) -> dict:
+def apply_sales_order_to_db(
+    engine: Any,
+    file_path: str,
+    allow_duplicate: bool = False,
+    mode: str = "normal",
+) -> dict:
     """
     앱 엔진 + Sales Order Excel 경로로 DB 반영 (PICKED → SOLD/PENDING).
 
@@ -592,7 +1013,18 @@ def apply_sales_order_to_db(engine: Any, file_path: str) -> dict:
     """
     db = getattr(engine, "db", engine)
     pe = SalesOrderEngine(db)
-    result = pe.process(file_path, sales_order_file=os.path.basename(file_path))
+    try:
+        with open(file_path, "rb") as f:
+            file_hash = hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        file_hash = ""
+    result = pe.process(
+        file_path,
+        sales_order_file=os.path.basename(file_path),
+        allow_duplicate=allow_duplicate,
+        mode=mode,
+        file_hash=file_hash,
+    )
     if not result["success"]:
         msg = "; ".join(result["warnings"]) if result["warnings"] else "Sales Order 처리 실패"
         raise RuntimeError(msg)

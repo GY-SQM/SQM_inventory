@@ -8,6 +8,8 @@ v2.9.91 - Extracted from inventory.py
 Return (반품) processing functions
 """
 
+import json
+import sqlite3
 import logging
 from datetime import date, datetime
 from typing import List, Dict
@@ -24,7 +26,7 @@ class ReturnMixin:
     
     def get_returnable_tonbags(self, lot_no: str = None) -> List[Dict]:
         """
-        Get tonbags that can be returned (status = PICKED)
+        Get tonbags that can be returned.
         
         Args:
             lot_no: Optional filter by LOT number
@@ -39,7 +41,7 @@ class ReturnMixin:
                 i.sap_no, i.bl_no, i.product
             FROM inventory_tonbag t
             LEFT JOIN inventory i ON t.lot_no = i.lot_no
-            WHERE t.status = 'PICKED'
+            WHERE t.status IN ('PICKED', 'CONFIRMED', 'SHIPPED', 'SOLD', 'RESERVED')
         """
         params = []
         
@@ -151,12 +153,12 @@ class ReturnMixin:
                     self.db.execute("""
                         INSERT INTO return_history 
                         (lot_no, sub_lt, return_date, original_customer, 
-                         original_sale_ref, reason, remark)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                         original_sale_ref, reason, remark, weight_kg)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         lot_no, sub_lt, date.today(),
                         tonbag['picked_to'], tonbag.get('sale_ref', ''),
-                        reason, remark
+                        reason, remark, tb_weight
                     ))
                     
                     # v5.1.5: stock_movement 이력 추가 (반품)
@@ -193,7 +195,7 @@ class ReturnMixin:
                                 UPDATE allocation_plan SET status = 'CANCELLED', cancelled_at = ?
                                 WHERE lot_no = ? AND sub_lt = ? AND status = 'RESERVED'
                             """, (now, lot_no, sub_lt))
-                        except Exception as _e:
+                        except (sqlite3.OperationalError, ValueError, TypeError) as _e:
                             logger.debug(f"Suppressed: {_e}")
                     else:
                         # PICKED/SOLD: inventory current_weight 복구
@@ -212,7 +214,7 @@ class ReturnMixin:
                                 "UPDATE picking_table SET status='RETURNED', sold_date=? "
                                 "WHERE lot_no=? AND sub_lt=? AND status IN ('ACTIVE','SOLD')",
                                 (now, lot_no, sub_lt))
-                        except Exception as _pe:
+                        except (sqlite3.OperationalError, ValueError, TypeError) as _pe:
                             logger.debug(f"[v6.0.1] picking_table RETURNED 스킵: {_pe}")
                     # v6.0.1 패치: sold_table RETURNED
                     if was_status == 'SOLD':
@@ -222,8 +224,16 @@ class ReturnMixin:
                                 "remark=COALESCE(remark,'')||? "
                                 "WHERE lot_no=? AND sub_lt=? AND status='SOLD'",
                                 (f" | 반품:{now} 사유:{reason}", lot_no, sub_lt))
-                        except Exception as _se:
+                        except (sqlite3.OperationalError, ValueError, TypeError) as _se:
                             logger.debug(f"[v6.0.1] sold_table RETURNED 스킵: {_se}")
+                    # v6.2.2: 반품 후 문서 연계 점검용 감사 이력
+                    self._log_return_doc_review_audit(
+                        lot_no=lot_no,
+                        sub_lt=sub_lt,
+                        reason=reason,
+                        source_type=_src,
+                        source_file=source_file,
+                    )
 
                     result['returned'] += 1
                     result['details'].append({
@@ -253,11 +263,93 @@ class ReturnMixin:
                 
                 result['success'] = result['returned'] > 0
                 
-        except (ValueError, TypeError, AttributeError) as e:
+        except (ValueError, TypeError, AttributeError,
+                sqlite3.OperationalError, sqlite3.IntegrityError) as e:
             result['errors'].append(f"Return processing error: {e}")
             logger.exception("Return processing error")
         
         return result
+
+    def _log_return_doc_review_audit(
+        self, lot_no: str, sub_lt: int, reason: str = "",
+        source_type: str = "", source_file: str = ""
+    ) -> None:
+        """
+        반품 시점의 문서 연계 정보 스냅샷을 stock_movement에 기록.
+        - 자동 문서 수정은 하지 않고, 점검 필요 근거를 남긴다.
+        """
+        try:
+            inv = self.db.fetchone(
+                "SELECT sap_no, bl_no, salar_invoice_no FROM inventory WHERE lot_no = ? LIMIT 1",
+                (lot_no,),
+            ) or {}
+            sold = self.db.fetchone(
+                """
+                SELECT id, picking_no, sales_order_no, sap_no, bl_no, customer, sold_date
+                FROM sold_table
+                WHERE lot_no = ? AND sub_lt = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (lot_no, sub_lt),
+            ) or {}
+            pick = self.db.fetchone(
+                """
+                SELECT id, picking_no, sales_order_no, outbound_id, customer, sold_date
+                FROM picking_table
+                WHERE lot_no = ? AND sub_lt = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (lot_no, sub_lt),
+            ) or {}
+
+            details = {
+                "lot_no": lot_no,
+                "sub_lt": int(sub_lt) if sub_lt is not None else None,
+                "reason": reason or "",
+                "inventory": {
+                    "sap_no": str(inv.get("sap_no", "") or ""),
+                    "bl_no": str(inv.get("bl_no", "") or ""),
+                    "invoice_no": str(inv.get("salar_invoice_no", "") or ""),
+                },
+                "sold_table": {
+                    "id": sold.get("id"),
+                    "picking_no": str(sold.get("picking_no", "") or ""),
+                    "sales_order_no": str(sold.get("sales_order_no", "") or ""),
+                    "sap_no": str(sold.get("sap_no", "") or ""),
+                    "bl_no": str(sold.get("bl_no", "") or ""),
+                    "customer": str(sold.get("customer", "") or ""),
+                    "sold_date": str(sold.get("sold_date", "") or ""),
+                },
+                "picking_table": {
+                    "id": pick.get("id"),
+                    "picking_no": str(pick.get("picking_no", "") or ""),
+                    "sales_order_no": str(pick.get("sales_order_no", "") or ""),
+                    "outbound_id": str(pick.get("outbound_id", "") or ""),
+                    "customer": str(pick.get("customer", "") or ""),
+                    "sold_date": str(pick.get("sold_date", "") or ""),
+                },
+                "action_required": "Review D/O, Invoice, B/L linkage after return",
+            }
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            movement_type = 'RETURN_DOC_REVIEW'
+            remarks = f"return doc linkage review required: lot={lot_no}, sub_lt={sub_lt}"
+            ref_id = sold.get("id") or pick.get("id")
+            ref_table = "sold_table" if sold.get("id") else ("picking_table" if pick.get("id") else "inventory")
+            self.db.execute(
+                """
+                INSERT INTO stock_movement
+                (lot_no, movement_type, qty_kg, remarks, source_type, source_file, ref_table, ref_id, details_json, created_at)
+                VALUES (?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    lot_no, movement_type, remarks, source_type or 'RETURN_SINGLE', source_file or '',
+                    ref_table, ref_id, json.dumps(details, ensure_ascii=False), now,
+                ),
+            )
+        except (sqlite3.OperationalError, ValueError, TypeError, KeyError, AttributeError) as e:
+            logger.debug(f"[return-doc-audit] 스킵: {e}")
     
     def return_single_tonbag(self, lot_no: str, sub_lt: int,
                              reason: str = None, remark: str = None) -> Dict:
@@ -282,7 +374,7 @@ class ReturnMixin:
     
     def bulk_return_by_lot(self, lot_no: str, reason: str = None) -> Dict:
         """
-        Return all PICKED tonbags for a LOT
+        Return all returnable tonbags for a LOT.
         
         Args:
             lot_no: LOT number
@@ -291,17 +383,17 @@ class ReturnMixin:
         Returns:
             Result dict
         """
-        # Get all picked tonbags for this lot
+        # Get all returnable tonbags for this lot
         picked = self.db.fetchall("""
             SELECT lot_no, sub_lt FROM inventory_tonbag
-            WHERE lot_no = ? AND status = 'PICKED'
+            WHERE lot_no = ? AND status IN ('PICKED', 'CONFIRMED', 'SHIPPED', 'SOLD', 'RESERVED')
         """, (lot_no,))
         
         if not picked:
             return {
                 'success': False,
                 'returned': 0,
-                'errors': [f"No picked tonbags found for LOT: {lot_no}"]
+                'errors': [f"No returnable tonbags found for LOT: {lot_no}"]
             }
         
         return_data = [
@@ -309,11 +401,11 @@ class ReturnMixin:
             for row in picked
         ]
         
-        return self.process_return(return_data)
-
-    def _recalc_lot_status_return(self, lot_no: str):
-        """DEPRECATED(v5.2.0): _recalc_lot_status()를 직접 호출하세요"""
-        self._recalc_lot_status(lot_no)
+        return self.process_return(
+            return_data,
+            source_type='RETURN_BULK',
+            source_file=''
+        )
 
     def get_return_statistics(self, start_date: str = '', end_date: str = '',
                               lot_no: str = '') -> Dict:
@@ -419,7 +511,8 @@ class ReturnMixin:
                 for r in rows
             ]
 
-        except Exception as e:
+        except (sqlite3.OperationalError, ValueError, TypeError,
+                AttributeError, KeyError) as e:
             logger.error(f"[get_return_statistics] 오류: {e}", exc_info=True)
 
         return result

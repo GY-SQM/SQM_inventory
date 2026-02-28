@@ -20,6 +20,26 @@ logger = logging.getLogger(__name__)
 class DashboardDataMixin:
     """대시보드 데이터 수집 및 차트 Mixin"""
 
+    def _get_return_doc_review_pending_count(self, days: int = 30) -> int:
+        """
+        반품 후 문서 연계 점검 필요 건수 집계.
+        RETURN_DOC_REVIEW movement를 기준으로 최근 N일 건수를 조회한다.
+        """
+        try:
+            row = self.engine.db.fetchone(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM stock_movement
+                WHERE movement_type = 'RETURN_DOC_REVIEW'
+                  AND DATE(created_at) >= DATE('now', ?)
+                """,
+                (f"-{int(days)} days",),
+            )
+            return int((row.get('cnt') if isinstance(row, dict) else row[0]) or 0) if row else 0
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError, TypeError, KeyError, OSError) as e:
+            logger.debug(f"반품 문서점검 대기건 조회 오류: {e}")
+            return 0
+
     def _collect_alerts(self) -> List[Dict]:
         """알림 수집"""
         alerts = []
@@ -70,6 +90,15 @@ class DashboardDataMixin:
                     })
             except Exception as _re:
                 logger.debug(f"반품 알림 수집 오류: {_re}")
+
+            # 5. 반품 후 문서 연계 점검 대기 알림
+            pending_review = self._get_return_doc_review_pending_count(30)
+            if pending_review > 0:
+                alerts.append({
+                    'icon': '📄',
+                    'message': f"반품 문서점검 대기 {pending_review}건 (최근 30일)",
+                    'severity': 'error' if pending_review >= 5 else 'warning'
+                })
             
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"알림 수집 오류: {e}")
@@ -406,8 +435,14 @@ class DashboardDataMixin:
         if not selection:
             return
         
-        # LOT 번호 추출 시도
         text = self.alert_listbox.get(selection[0])
+
+        # 반품 문서점검 대기 알림은 반품 통계 화면으로 이동
+        if "반품 문서점검 대기" in text and hasattr(self, "_show_return_statistics"):
+            self._show_return_statistics()
+            return
+
+        # LOT 번호 추출 시도
         # 예: "📉 LOT-001: 재고 부족 (500kg)"
         if ':' in text:
             lot_part = text.split(':')[0]
@@ -665,6 +700,9 @@ class DashboardDataMixin:
             rate = data['return_rate']
             rate_icon = '🟢' if rate < 3 else ('🟡' if rate < 10 else '🔴')
             lines.append(f"  반품률: {rate_icon} {rate:.1f}%")
+            pending_review = self._get_return_doc_review_pending_count(30)
+            review_icon = '🟢' if pending_review == 0 else ('🟡' if pending_review < 5 else '🔴')
+            lines.append(f"  문서점검 대기: {review_icon} {pending_review}건")
             lines.append("")
             if data['top_reasons']:
                 lines.append("  상위 사유:")
