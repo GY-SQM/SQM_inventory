@@ -315,8 +315,8 @@ class AllocationParser:
                 if pd.notna(qty_val):
                     try:
                         row.qty_mt = safe_float(qty_val)
-                        # Sub LOT 수 계산 (약 500kg = 0.5MT per 톤백)
-                        row.sublot_count = max(1, int(row.qty_mt / 0.5))
+                        # 톤백 개수는 엔진에서 LOT 단위중량(500/1000kg)으로 계산한다.
+                        row.sublot_count = 0
                     except (ValueError, TypeError) as _e:
                         logger.debug(f"[allocation_parser] 무시: {_e}")
 

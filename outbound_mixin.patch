@@ -1,0 +1,200 @@
+--- a/engine_modules/inventory_modular/outbound_mixin.py	2026-02-28 16:05:20.014634597 +0000
++++ b/engine_modules/inventory_modular/outbound_mixin.py	2026-02-28 16:05:20.019634596 +0000
+@@ -1223,23 +1223,36 @@
+         return result
+ 
+     # ═══════════════════════════════════════════════════════
+-    # v6.12 Stage4: 빠른 출고 (Quick Outbound)
++    # v6.2.4 Stage4: 빠른 출고 (Quick Outbound) — 성능 개선판
+     # ═══════════════════════════════════════════════════════
+ 
+     def quick_outbound(self, lot_no: str, count: int, customer: str,
+                         reason: str = '', operator: str = '') -> Dict:
+         """
+         빠른 출고: Allocation 없이 소량 즉시 출고.
+-        최대 QUICK_OUTBOUND_MAX_TONBAGS개, PICKED에서 멈춤.
+-        allocation_plan source='QUICK' 자동 기록.
++        최대 QUICK_OUTBOUND_MAX_TONBAGS개, AVAILABLE → PICKED 직접 전환.
++
++        v6.2.4 개선:
++          [C-QP-3] 이중 UPDATE 제거 (AVAILABLE → PICKED 직접)
++          [C-QP-3] allocation_plan INSERT EXECUTED 직접
++          [C-QP-3] quick_ref UUID 접미로 충돌 방지
++          [C-QP-4] sqlite3 예외 포착 확장
+         """
++        import uuid
+         from engine_modules.constants import QUICK_OUTBOUND_MAX_TONBAGS
+-        result = {'success': False, 'picked_count': 0, 'total_weight_kg': 0, 'errors': []}
+ 
++        result = {
++            'success': False, 'picked_count': 0,
++            'total_weight_kg': 0, 'errors': []
++        }
++
++        # ── 입력 검증 ──
+         if count > QUICK_OUTBOUND_MAX_TONBAGS:
+-            result['errors'].append(f"빠른 출고 최대 {QUICK_OUTBOUND_MAX_TONBAGS}개 (요청: {count}개)")
++            result['errors'].append(
++                f"빠른 출고 최대 {QUICK_OUTBOUND_MAX_TONBAGS}개 (요청: {count}개)")
+             return result
+-        if not customer.strip():
++        customer = (customer or '').strip()
++        if not customer:
+             result['errors'].append("고객명 필수")
+             return result
+         lot_no = str(lot_no).strip()
+@@ -1250,72 +1263,124 @@
+         try:
+             with self.db.transaction("IMMEDIATE"):
+                 tonbags = self.db.fetchall(
+-                    """SELECT id, sub_lt, weight, tonbag_uid FROM inventory_tonbag
+-                       WHERE lot_no = ? AND status = ? AND COALESCE(is_sample,0) = 0
++                    """SELECT id, sub_lt, weight, tonbag_uid
++                       FROM inventory_tonbag
++                       WHERE lot_no = ? AND status = ?
++                         AND COALESCE(is_sample, 0) = 0
+                        ORDER BY sub_lt DESC LIMIT ?""",
+                     (lot_no, STATUS_AVAILABLE, count))
+ 
+                 if len(tonbags) < count:
+-                    raise ValueError(f"가용 톤백 부족: {len(tonbags)}개 (요청: {count}개)")
++                    raise ValueError(
++                        f"가용 톤백 부족: {len(tonbags)}개 (요청: {count}개)")
+ 
+                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+-                quick_ref = f"QUICK-{now.replace(' ','_').replace(':','')}"
++                # [C-QP-3] UUID 접미로 동일 초 충돌 방지
++                quick_ref = f"QUICK-{now.replace(' ', '_').replace(':', '')}-{uuid.uuid4().hex[:6]}"
+                 total_weight = 0.0
+ 
+                 for tb in tonbags:
+                     tb_w = tb['weight'] or 0
+-                    # AVAILABLE → RESERVED
+-                    self.db.execute(
+-                        "UPDATE inventory_tonbag SET status=?, picked_to=?, sale_ref=?, updated_at=? WHERE id=?",
+-                        (STATUS_RESERVED, customer, quick_ref, now, tb['id']))
+-                    # allocation_plan QUICK
+-                    self.db.execute(
+-                        """INSERT INTO allocation_plan
+-                        (lot_no, tonbag_id, sub_lt, customer, sale_ref, qty_mt, status, source_file, created_at)
+-                        VALUES (?,?,?,?,?,?,'RESERVED',?,?)""",
+-                        (lot_no, tb['id'], tb['sub_lt'], customer, quick_ref, tb_w/1000.0, f"QUICK:{reason}:{operator}", now))
+-                    # RESERVED → PICKED
+-                    self.db.execute(
+-                        "UPDATE inventory_tonbag SET status=?, picked_date=?, outbound_date=?, updated_at=? WHERE id=?",
+-                        (STATUS_PICKED, now, now, now, tb['id']))
+-                    # allocation_plan EXECUTED
++
++                    # ★ [C-QP-3] AVAILABLE → PICKED 직접 (이중 UPDATE 제거)
+                     self.db.execute(
+-                        "UPDATE allocation_plan SET status='EXECUTED', executed_at=? WHERE tonbag_id=? AND sale_ref=? AND status='RESERVED'",
+-                        (now, tb['id'], quick_ref))
++                        """UPDATE inventory_tonbag
++                           SET status = ?, picked_to = ?, sale_ref = ?,
++                               picked_date = ?, outbound_date = ?, updated_at = ?
++                           WHERE id = ?""",
++                        (STATUS_PICKED, customer, quick_ref, now, now, now, tb['id']))
++
++                    # ★ [C-QP-3] allocation_plan INSERT EXECUTED 직접
++                    try:
++                        self.db.execute(
++                            """INSERT INTO allocation_plan
++                               (lot_no, tonbag_id, sub_lt, customer, sale_ref,
++                                qty_mt, status, source, source_file, executed_at, created_at)
++                               VALUES (?, ?, ?, ?, ?, ?, 'EXECUTED', 'QUICK', ?, ?, ?)""",
++                            (lot_no, tb['id'], tb['sub_lt'], customer, quick_ref,
++                             tb_w / 1000.0,
++                             f"reason={reason}, op={operator}",
++                             now, now))
++                    except (sqlite3.OperationalError, OSError) as e:
++                        # source 컬럼 미존재 시 fallback
++                        if "source" in str(e).lower():
++                            self.db.execute(
++                                """INSERT INTO allocation_plan
++                                   (lot_no, tonbag_id, sub_lt, customer, sale_ref,
++                                    qty_mt, status, source_file, executed_at, created_at)
++                                   VALUES (?, ?, ?, ?, ?, ?, 'EXECUTED', ?, ?, ?)""",
++                                (lot_no, tb['id'], tb['sub_lt'], customer, quick_ref,
++                                 tb_w / 1000.0,
++                                 f"QUICK:reason={reason}:op={operator}",
++                                 now, now))
++                        else:
++                            raise
++
+                     # picking_table
+                     try:
+                         self.db.execute(
+                             """INSERT INTO picking_table
+-                            (lot_no, tonbag_id, sub_lt, tonbag_uid, customer, qty_kg, status, picking_date, created_by, remark)
+-                            VALUES (?,?,?,?,?,?,'ACTIVE',?,'system',?)""",
+-                            (lot_no, tb['id'], tb['sub_lt'], tb.get('tonbag_uid') or '', customer, tb_w, now,
++                               (lot_no, tonbag_id, sub_lt, tonbag_uid,
++                                customer, qty_kg, status, picking_date,
++                                created_by, remark)
++                               VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?, 'system', ?)""",
++                            (lot_no, tb['id'], tb['sub_lt'],
++                             tb.get('tonbag_uid') or '', customer, tb_w, now,
+                              f"QUICK: {reason}, op={operator}"))
+-                    except Exception: pass
++                    except Exception as e:
++                        logger.debug(f"picking_table INSERT skipped: {e}")
++
+                     total_weight += tb_w
+                     result['picked_count'] += 1
+ 
+                 # inventory 차감
+                 self.db.execute(
+-                    "UPDATE inventory SET current_weight=MAX(0,current_weight-?), picked_weight=picked_weight+?, updated_at=? WHERE lot_no=?",
++                    """UPDATE inventory
++                       SET current_weight = MAX(0, current_weight - ?),
++                           picked_weight = picked_weight + ?,
++                           updated_at = ?
++                       WHERE lot_no = ?""",
+                     (total_weight, total_weight, now, lot_no))
++
+                 # stock_movement
+                 self.db.execute(
+-                    "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) VALUES (?,'QUICK_OUTBOUND',?,?,?)",
+-                    (lot_no, total_weight, f"customer={customer}, reason={reason}, op={operator}, count={count}", now))
++                    """INSERT INTO stock_movement
++                       (lot_no, movement_type, qty_kg, remarks, created_at)
++                       VALUES (?, 'QUICK_OUTBOUND', ?, ?, ?)""",
++                    (lot_no, total_weight,
++                     f"customer={customer}, reason={reason}, "
++                     f"op={operator}, count={count}, ref={quick_ref}",
++                     now))
+ 
+                 self._recalc_lot_status(lot_no)
++
++                # 정합성 검증
+                 if hasattr(self, 'verify_lot_integrity'):
+                     integrity = self.verify_lot_integrity(lot_no)
+                     if not integrity.get('valid', True):
+-                        raise ValueError(f"빠른 출고 정합성 실패 ({lot_no}): {integrity.get('errors',[])}")
++                        err_list = integrity.get('errors', [])
++                        err_msg = "; ".join(str(e) for e in err_list[:3])
++                        raise ValueError(
++                            f"빠른 출고 정합성 실패 ({lot_no}): {err_msg}")
+ 
+                 result['success'] = True
+                 result['total_weight_kg'] = total_weight
+-                result['message'] = f"빠른 출고: {result['picked_count']}개 → PICKED ({total_weight:,.0f}kg)"
++                result['quick_ref'] = quick_ref
++                result['message'] = (
++                    f"빠른 출고: {result['picked_count']}개 → PICKED "
++                    f"({total_weight:,.0f}kg)")
+                 logger.info(result['message'])
+ 
++        # [C-QP-4] 예외 처리 범위 확장
+         except (ValueError, TypeError) as e:
+             result['errors'].append(str(e))
+-            logger.error(f"빠른 출고 오류: {e}", exc_info=True)
++            logger.error(f"빠른 출고 검증 오류: {e}", exc_info=True)
++        except (sqlite3.OperationalError, sqlite3.IntegrityError) as e:
++            result['errors'].append(f"DB 오류: {e}")
++            logger.error(f"빠른 출고 DB 오류: {e}", exc_info=True)
++        except Exception as e:
++            result['errors'].append(f"예기치 않은 오류: {e}")
++            logger.error(f"빠른 출고 미예상 오류: {e}", exc_info=True)
++
+         return result

@@ -16,20 +16,83 @@ from .ui_constants import apply_modal_window_options, center_dialog, ThemeColors
 logger = logging.getLogger(__name__)
 
 # 데이터 행 수 (가로·세로 선이 보이는 그리드)
-DEFAULT_DATA_ROWS = 20
+DEFAULT_DATA_ROWS = 30      # 기본 행 수 (붙여넣기 시 자동 확장)
+MAX_DATA_ROWS = 200         # 최대 행 수 (메모리 보호)
+
+# 헤더 행 자동 감지 키워드
+_HEADER_KEYWORDS = {
+    'lot_no', 'lot no', 'lotno', 'sap_no', 'sap no', 'product',
+    'qty_mt', 'qty', 'mt', 'customer', 'sold_to', 'sale_ref',
+    'outbound_date', 'warehouse', 'wh', '품명', '수량', '고객'
+}
 
 
-def _paste_into_grid(entries: List[List[tk.Entry]], ncols: int, sep_cell="\t", sep_row="\n") -> None:
-    """클립보드 내용을 구분자로 나눠 Entry 그리드에 채움."""
+def _detect_header_row(line: str, ncols: int) -> bool:
+    """붙여넣기 첫 행이 헤더인지 감지."""
+    parts = [p.strip().lower().replace(' ', '_') for p in line.replace('\r', '').split('\t')]
+    match_count = sum(1 for p in parts if p in _HEADER_KEYWORDS)
+    return match_count >= min(2, ncols)
+
+
+def _paste_into_grid(entries: List[List[tk.Entry]], ncols: int,
+                     inner_frame=None, col_widths=None, bg_cell='#FFFFFF',
+                     fg_cell='#333333', sep_cell="\t", sep_row="\n") -> int:
+    """클립보드 내용을 Entry 그리드에 채움. 행 자동확장/헤더 스킵 지원."""
     try:
         raw = entries[0][0].winfo_toplevel().clipboard_get()
     except tk.TclError:
-        return
-    lines = [ln.strip() for ln in raw.strip().split(sep_row) if ln.strip()]
+        return 0
+    lines = [ln for ln in raw.strip().split(sep_row) if ln.strip()]
     if not lines:
-        return
-    for row_idx, line in enumerate(lines):
+        return 0
+
+    # 헤더 행 스킵
+    start_line = 0
+    if _detect_header_row(lines[0], ncols):
+        start_line = 1
+        logger.info("붙여넣기: 헤더 행 감지 → 스킵")
+    data_lines = lines[start_line:]
+    if not data_lines:
+        return 0
+
+    # 첫 빈 행 찾기
+    start_row = 0
+    for ri, row_e in enumerate(entries):
+        if all(not (e.get() or '').strip() for e in row_e):
+            start_row = ri
+            break
+
+    # 행 부족 시 자동 확장
+    needed_rows = start_row + len(data_lines)
+    while len(entries) < needed_rows and len(entries) < MAX_DATA_ROWS:
+        if inner_frame is None:
+            break
+        row_idx = len(entries)
+        row_entries = []
+        for col_idx in range(ncols):
+            width_chars = max(4, min((col_widths[col_idx] if col_widths else 80) // 8, 24))
+            e = tk.Entry(
+                inner_frame,
+                width=width_chars,
+                font=("맑은 고딕", 9),
+                relief="solid",
+                bd=1,
+                bg=bg_cell,
+                fg=fg_cell,
+                insertbackground=fg_cell,
+            )
+            e.grid(row=row_idx, column=col_idx, sticky="nsew", padx=0, pady=0)
+            row_entries.append(e)
+        entries.append(row_entries)
+
+    filled = 0
+    for data_idx, line in enumerate(data_lines):
+        row_idx = start_row + data_idx
         if row_idx >= len(entries):
+            logger.warning(
+                f"붙여넣기 행 초과: {len(data_lines)}행 중 {filled}행만 채움 "
+                f"(최대 {MAX_DATA_ROWS}행)"
+            )
             break
         parts = [p.strip() for p in line.replace("\r", "").split(sep_cell)]
         for col_idx in range(ncols):
@@ -39,6 +102,9 @@ def _paste_into_grid(entries: List[List[tk.Entry]], ncols: int, sep_cell="\t", s
                 entries[row_idx][col_idx].insert(0, val)
             except (tk.TclError, IndexError):
                 pass
+        filled += 1
+
+    return filled
 
 
 def show_paste_table_dialog(
@@ -144,7 +210,10 @@ def show_paste_table_dialog(
     canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     def _on_paste(event=None):
-        _paste_into_grid(entries, ncols)
+        count = _paste_into_grid(entries, ncols, inner, col_widths, bg_cell, fg_cell)
+        if count > 0:
+            inner.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
         return "break"
 
     inner.bind("<Control-v>", _on_paste)
@@ -164,14 +233,27 @@ def show_paste_table_dialog(
                     row[cid] = (e.get() or "").strip()
                 except (tk.TclError, TypeError):
                     row[cid] = ""
-            if any(row.get(cid) for cid in col_ids):
+            if row.get(col_ids[0], '').strip():
                 rows.append(row)
-        win.destroy()
         if on_confirm and rows:
             try:
                 on_confirm(rows)
+                win.destroy()
             except Exception as e:
                 logger.exception("paste_table on_confirm: %s", e)
+                try:
+                    from .ui_constants import CustomMessageBox
+                    CustomMessageBox.showerror(win, "오류", f"처리 중 오류:\n{e}")
+                except Exception:
+                    pass
+        elif not rows:
+            try:
+                from .ui_constants import CustomMessageBox
+                CustomMessageBox.showwarning(win, "데이터 없음", "유효한 데이터가 없습니다.")
+            except Exception:
+                pass
+        else:
+            win.destroy()
 
     def _on_cancel():
         win.destroy()

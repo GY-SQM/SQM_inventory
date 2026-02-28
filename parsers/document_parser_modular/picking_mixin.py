@@ -14,6 +14,7 @@ SQM 피킹리스트 PDF 파서 — 최종 로직 (라벨-라인 기반, 하드�
 파이프라인: PDF/Text 추출 → 블록(줄) 목록 → Quantity/Batch/Storage 파싱 → 메타 파싱
             → 정규화(MT→kg, 콤마 제거) → 하드스톱 검증 → success/errors
 """
+import os
 import re
 import logging
 from dataclasses import dataclass, field
@@ -76,6 +77,7 @@ class PickingListResult:
     sample:  List[PickingLotItem]      = field(default_factory=list)
     summary: Dict                      = field(default_factory=dict)
     errors:  List[str]                 = field(default_factory=list)
+    warnings: List[str]                = field(default_factory=list)
     success: bool                      = False
 
 
@@ -87,6 +89,25 @@ class PickingListParserMixin:
       - parse_picking_list(pdf_path)  : PDF 파일
       - parse_from_text(all_text)    : 이미 추출된 텍스트(OCR 등)
     """
+
+    def _strict_mode(self, key: str, default: bool = False) -> bool:
+        """
+        항목별 strict 여부를 ENV로 제어.
+        예: SQM_PICKING_STRICT_TONBAG_5MT=true
+        """
+        raw = str(os.environ.get(f'SQM_PICKING_STRICT_{key.upper()}', '')).strip().lower()
+        if raw in ('1', 'true', 'yes', 'on', 'y'):
+            return True
+        if raw in ('0', 'false', 'no', 'off', 'n'):
+            return False
+        return default
+
+    @staticmethod
+    def _append_issue(result: PickingListResult, message: str, strict: bool) -> None:
+        if strict:
+            result.errors.append(message)
+            return
+        result.warnings.append(message)
 
     def parse_picking_list(self, pdf_path: str) -> PickingListResult:
         """PDF에서 텍스트 추출 후 파싱. 추출 실패 시 errors에 메시지."""
@@ -130,6 +151,7 @@ class PickingListParserMixin:
                 'lot_integrity': tb_set == {s.lot_no for s in result.sample},
                 'tonbag_count':  len(result.tonbag),
                 'sample_count':  len(result.sample),
+                'warning_count': len(result.warnings),
             }
             result.success = len(result.errors) == 0
             if result.success:
@@ -155,12 +177,16 @@ class PickingListParserMixin:
             result.errors.append('샘플 배치가 없습니다. 문서 형식 또는 OCR을 확인하세요.')
 
         if tb_set - sp_set:
-            result.errors.append(
-                f'샘플 없는 톤백 LOT {len(tb_set - sp_set)}개: {sorted(tb_set - sp_set)[:5]}...'
+            self._append_issue(
+                result,
+                f'샘플 없는 톤백 LOT {len(tb_set - sp_set)}개: {sorted(tb_set - sp_set)[:5]}...',
+                strict=self._strict_mode('lot_integrity', default=False),
             )
         if sp_set - tb_set:
-            result.errors.append(
-                f'톤백 없는 샘플 LOT {len(sp_set - tb_set)}개: {sorted(sp_set - tb_set)[:5]}...'
+            self._append_issue(
+                result,
+                f'톤백 없는 샘플 LOT {len(sp_set - tb_set)}개: {sorted(sp_set - tb_set)[:5]}...',
+                strict=self._strict_mode('lot_integrity', default=False),
             )
 
         sum_tonbag_kg = sum(r.weight_kg for r in tb)
@@ -168,25 +194,33 @@ class PickingListParserMixin:
         if tb and abs(sum_tonbag_kg - len(tb) * 5000.0) > 1.0:
             expected_per_lot = sum_tonbag_kg / len(tb) if len(tb) else 0
             if expected_per_lot and abs(expected_per_lot - 5000.0) > 100.0:
-                result.errors.append(
-                    f'본품 배치당 중량 이상: 합계 {sum_tonbag_kg:.0f} kg, {len(tb)} LOT (기대: 5 MT/LOT)'
+                self._append_issue(
+                    result,
+                    f'본품 배치당 중량 이상: 합계 {sum_tonbag_kg:.0f} kg, {len(tb)} LOT (기대: 5 MT/LOT)',
+                    strict=self._strict_mode('tonbag_5mt', default=False),
                 )
         if sp and abs(sum_sample_kg - len(sp) * 1.0) > 0.01:
-            result.errors.append(
-                f'샘플 배치 합계 불일치: {sum_sample_kg:.2f} kg (기대: {len(sp)} kg, 1 kg/LOT)'
+            self._append_issue(
+                result,
+                f'샘플 배치 합계 불일치: {sum_sample_kg:.2f} kg (기대: {len(sp)} kg, 1 kg/LOT)',
+                strict=self._strict_mode('sample_1kg', default=False),
             )
 
         total_nw = result.meta.total_nw_kg
         if total_nw:
             nw_val = _normalize_num(RE_LARGE_KG.search(total_nw).group(1) if RE_LARGE_KG.search(total_nw) else total_nw)
             if nw_val > 100000 and abs(sum_tonbag_kg - nw_val) > 0.01 * nw_val:
-                result.errors.append(
-                    f'본품 총량 불일치: 배치 합 {sum_tonbag_kg:.0f} kg vs 문서 NW {total_nw.strip()}'
+                self._append_issue(
+                    result,
+                    f'본품 총량 불일치: 배치 합 {sum_tonbag_kg:.0f} kg vs 문서 NW {total_nw.strip()}',
+                    strict=self._strict_mode('nw_total', default=False),
                 )
         expected_bags = round(sum_tonbag_kg / UNIT_WEIGHT_KG)
         if tb and expected_bags > 0 and abs(expected_bags - len(tb) * 10) > len(tb):
-            result.errors.append(
-                f'Big bag 수 불일치: 예상 {expected_bags}ea (500kg net 기준) vs LOT당 10백 기대'
+            self._append_issue(
+                result,
+                f'Big bag 수 불일치: 예상 {expected_bags}ea (500kg net 기준) vs LOT당 10백 기대',
+                strict=self._strict_mode('bigbag_count', default=False),
             )
 
     def _extract_pdf_blocks(self, pdf_path: str) -> List[str]:

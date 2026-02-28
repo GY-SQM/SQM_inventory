@@ -1,0 +1,73 @@
+--- a/gui_app_modular/dialogs/allocation_dialog.py	2026-02-28 16:05:20.038634590 +0000
++++ b/gui_app_modular/dialogs/allocation_dialog.py	2026-02-28 16:05:20.041634589 +0000
+@@ -27,28 +27,20 @@
+ 
+ 
+ def _allocation_tonbag_sample_counts(rows: list) -> tuple:
+-    """Allocation 행에서 톤백 개수와 샘플(1kg) 개수 추정. (tonbag_est, sample_count)
+-    v6.12 Addon-G: sublot_count/tonbag_count가 있으면 우선 사용 (500/1000 무관).
+-    """
+-    tonbag_est = 0
++    """Allocation 행에서 500kg 톤백 개수와 샘플(1kg) 개수 계산. (tonbag_500, sample_count)"""
++    tonbag_500 = 0
+     sample_count = 0
+     for r in rows:
+         qty = 0.0
+-        sublot = 0
+         if hasattr(r, 'get'):
+             qty = float(r.get('qty_mt') or 0)
+-            sublot = int(r.get('sublot_count') or r.get('tonbag_count') or 0)
+         else:
+             qty = float(getattr(r, 'qty_mt', 0) or 0)
+-            sublot = int(getattr(r, 'sublot_count', 0) or getattr(r, 'tonbag_count', 0) or 0)
+         if qty >= SAMPLE_MT_THRESHOLD:
+-            if sublot > 0:
+-                tonbag_est += sublot  # v6.12: 문서에 명시된 톤백 수 우선
+-            else:
+-                tonbag_est += int(round(qty * 1000 / 500))  # fallback 추정
++            tonbag_500 += int(round(qty * 1000 / 500))  # MT → 500kg 단위
+         else:
+             sample_count += 1
+-    return tonbag_est, sample_count
++    return tonbag_500, sample_count
+ 
+ 
+ ALLOC_PREVIEW_COLUMNS = [
+@@ -109,9 +101,9 @@
+         self._file_var.set("(붙여넣기 데이터)")
+         self._fill_tree_from_parsed_rows()
+         total_mt = sum(float(r.get('qty_mt') or 0) for r in rows)
+-        tb_est, samp = _allocation_tonbag_sample_counts(rows)
++        tb500, samp = _allocation_tonbag_sample_counts(rows)
+         self._summary_var.set(
+-            f"고객: (붙여넣기) | 총 {len(rows)}행 | 총량: {total_mt:.4f} MT | 톤백 {tb_est}개, 샘플 {samp}개"
++            f"고객: (붙여넣기) | 총 {len(rows)}행 | 총량: {total_mt:.4f} MT | 500kg {tb500}개, 샘플 {samp}개"
+         )
+         if self.parsed_rows:
+             self.btn_reserve.config(state='normal')
+@@ -143,9 +135,11 @@
+             self.tree.column(col_id, width=width, anchor=anchor, minwidth=40)
+ 
+         vsb = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree.yview)
+-        self.tree.configure(yscrollcommand=vsb.set)
++        hsb = ttk.Scrollbar(tree_frame, orient='horizontal', command=self.tree.xview)
++        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+         self.tree.pack(side=LEFT, fill=BOTH, expand=True)
+         vsb.pack(side=RIGHT, fill=Y)
++        hsb.pack(side=tk.BOTTOM, fill=tk.X)
+         try:
+             from ..utils.tree_enhancements import TreeviewTotalFooter
+             self._alloc_total_footer = TreeviewTotalFooter(
+@@ -267,10 +261,10 @@
+         elif total is None:
+             total = 0.0
+         fname = path.split('/')[-1].split(chr(92))[-1]
+-        tb_est, samp = _allocation_tonbag_sample_counts(self.parsed_rows)
++        tb500, samp = _allocation_tonbag_sample_counts(self.parsed_rows)
+         self._summary_var.set(
+             f"고객: {customer} | 총 {len(self.parsed_rows)}행 | 총량: {total:.4f} MT | "
+-            f"톤백 {tb_est}개, 샘플 {samp}개 | 파싱: {elapsed_sec:.2f}초 | {fname}"
++            f"500kg {tb500}개, 샘플 {samp}개 | 파싱: {elapsed_sec:.2f}초 | {fname}"
+         )
+ 
+         if self.parsed_rows:

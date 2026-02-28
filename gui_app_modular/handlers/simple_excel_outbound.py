@@ -253,6 +253,9 @@ class SimpleExcelOutboundMixin:
                 item.get('sale_ref', ''),
                 status
             ))
+        # 입력용 미리보기: 전역 Editable Treeview 허용 (status는 편집 금지)
+        tree._enable_global_editable = True
+        tree._editable_exclude_cols = {"status"}
 
         tree.pack(fill=BOTH, expand=YES, padx=10, pady=5)
 
@@ -261,6 +264,28 @@ class SimpleExcelOutboundMixin:
         btn_frame.pack(fill='x')
 
         def execute():
+            # 편집된 그리드 값을 items로 재구성(LOT, KG, customer, sale_ref)
+            edited_items = []
+            for iid in tree.get_children(""):
+                vals = tree.item(iid, "values")
+                try:
+                    lot_no = str(vals[0]).strip()
+                    weight_kg = float(str(vals[1]).replace(",", "").strip() or 0)
+                    customer = str(vals[3]).strip()
+                    sale_ref = str(vals[4]).strip()
+                except (ValueError, TypeError, IndexError):
+                    continue
+                if not lot_no or weight_kg <= 0:
+                    continue
+                edited_items.append({
+                    "lot_no": lot_no,
+                    "weight_kg": weight_kg,
+                    "customer": customer,
+                    "sale_ref": sale_ref,
+                })
+            if edited_items:
+                items[:] = edited_items
+
             # 에러 있는 항목 확인
             has_error = any('❌' in str(tree.item(iid, 'values')[5]) for iid in tree.get_children())
             if has_error:

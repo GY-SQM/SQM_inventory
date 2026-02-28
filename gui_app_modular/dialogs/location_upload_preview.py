@@ -176,6 +176,9 @@ class LocationUploadPreviewDialog:
             )
             
             tree.insert('', 'end', values=values, tags=(tag,))
+        # 입력용: 새 위치(location)만 전역 편집 허용
+        tree._enable_global_editable = True
+        tree._editable_exclude_cols = {'row_num', 'uid', 'lot_no', 'product', 'current_location', 'status'}
         
         # 배경만 넣으면 테마에 따라 글자색이 배경과 비슷해져 안 보일 수 있음 → foreground 명시
         _fg = ThemeColors.get('text_primary', is_dark)
@@ -238,6 +241,18 @@ class LocationUploadPreviewDialog:
     
     def _on_confirm_click(self):
         """확인 버튼 클릭"""
+        # 편집된 location 값을 matched 데이터에 동기화
+        try:
+            idx = 0
+            for iid in self.matched_tree.get_children(""):
+                vals = self.matched_tree.item(iid, "values")
+                if idx >= len(self.result.get('matched', [])):
+                    break
+                if len(vals) >= 6:
+                    self.result['matched'][idx]['location'] = str(vals[5]).strip()
+                idx += 1
+        except Exception as e:
+            logger.debug(f"위치 편집값 동기화 스킵: {e}")
         if self.on_confirm:
             self.on_confirm(self.result['matched'])
         self.dialog.destroy()

@@ -495,6 +495,10 @@ class ToolbarMixin:
             label="  🔍 정합성 검사/복구",
             command=self._on_integrity_check
         )
+        m.add_command(
+            label="  🧪 운영 DB 스키마 점검(1회)",
+            command=self._on_operational_schema_check_once
+        )
         # v5.5.3: Gemini API → 📁 파일 메뉴로 이동
         m.add_separator()
         # v5.5.3: PDF 변환 → 📁 파일 메뉴로 이동
@@ -966,6 +970,66 @@ class ToolbarMixin:
                 
         except (RuntimeError, ValueError) as e:
             CustomMessageBox.showerror(self.root, "오류", f"정합성 검사 오류:\n{e}")
+
+    def _on_operational_schema_check_once(self) -> None:
+        """운영 DB 기준 스키마 점검(1회) — Allocation 원장화 필수 항목 확인."""
+        try:
+            db = getattr(getattr(self, "engine", None), "db", None)
+            if db is None:
+                CustomMessageBox.showwarning(self.root, "스키마 점검", "DB 연결이 없어 점검할 수 없습니다.")
+                return
+
+            def _table_exists(name: str) -> bool:
+                row = db.fetchone(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (name,)
+                )
+                return bool(row)
+
+            def _index_exists(name: str) -> bool:
+                row = db.fetchone(
+                    "SELECT name FROM sqlite_master WHERE type='index' AND name=?",
+                    (name,)
+                )
+                return bool(row)
+
+            def _cols(name: str) -> set:
+                rows = db.fetchall(f"PRAGMA table_info({name})") or []
+                return {str(r.get("name", "")).strip().lower() for r in rows}
+
+            checks = []
+            checks.append(("table:allocation_import_batch", _table_exists("allocation_import_batch")))
+            checks.append(("table:lot_reservation", _table_exists("lot_reservation")))
+
+            sm_cols = _cols("stock_movement")
+            ap_cols = _cols("allocation_plan")
+            req_sm = {"ref_table", "ref_id", "source", "actor", "details_json"}
+            req_ap = {"import_batch_id", "line_no", "gate_status", "fail_code", "fail_reason", "validated_at"}
+            checks.append(("stock_movement.ref_trace_cols", req_sm.issubset(sm_cols)))
+            checks.append(("allocation_plan.gate_cols", req_ap.issubset(ap_cols)))
+            checks.append(("index:ux_alloc_line", _index_exists("ux_alloc_line")))
+            checks.append(("index:idx_stock_mv_ref", _index_exists("idx_stock_mv_ref")))
+
+            ok_count = sum(1 for _, ok in checks if ok)
+            ng = [name for name, ok in checks if not ok]
+            lines = [
+                f"[운영 DB 스키마 점검 결과] {ok_count}/{len(checks)} 통과",
+                "",
+            ]
+            for name, ok in checks:
+                lines.append(f"{'✅' if ok else '❌'} {name}")
+            if ng:
+                lines += [
+                    "",
+                    "누락 항목이 있어도 앱 재시작 시 마이그레이션으로 자동 보정될 수 있습니다.",
+                    "재시작 후 다시 점검해도 동일하면 알려주세요.",
+                ]
+                CustomMessageBox.showwarning(self.root, "운영 DB 스키마 점검", "\n".join(lines))
+            else:
+                CustomMessageBox.showinfo(self.root, "운영 DB 스키마 점검", "\n".join(lines))
+        except Exception as e:
+            logger.error(f"운영 DB 스키마 점검 오류: {e}", exc_info=True)
+            CustomMessageBox.showerror(self.root, "스키마 점검 오류", str(e))
 
     # ═══════════════════════════════════════════════════════
     # 유틸리티

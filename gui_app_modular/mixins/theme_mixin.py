@@ -148,7 +148,7 @@ class ThemeMixin:
         try:
             from ..utils.theme_refresh import refresh_all_widgets_for_theme
             stats = refresh_all_widgets_for_theme(self)
-            logger.debug(f"[v6.1.1] _update_theme_colors: {stats}")
+            logger.debug(f"[v6.2.3] _update_theme_colors: {stats}")
         except (ImportError, Exception) as e:
             logger.debug(f"theme_refresh 실패, fallback 사용: {e}")
             self._update_theme_colors_fallback()

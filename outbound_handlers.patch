@@ -1,0 +1,106 @@
+--- a/gui_app_modular/handlers/outbound_handlers.py	2026-02-28 16:05:38.139628754 +0000
++++ b/gui_app_modular/handlers/outbound_handlers.py	2026-02-28 16:05:38.144628753 +0000
+@@ -746,23 +746,97 @@
+                 if not rows:
+                     CustomMessageBox.showwarning(self.root, "경고", "붙여넣기 데이터가 없습니다.")
+                     return
+-                normalized = []
+-                for r in rows:
++
++                # ── [M-QP-7] 2차 방어: 헤더 행 스킵 ──
++                _hdr_kw = {'lot_no', 'lot no', 'lotno', 'sap_no', 'product', 'qty'}
++                if rows and str(rows[0].get('lot_no', '')).strip().lower().replace(' ', '_') in _hdr_kw:
++                    rows = rows[1:]
++
++                # ── 1단계: 파싱 + qty_mt 정규화 ──
++                parsed = []
++                parse_errors = []
++                for idx, r in enumerate(rows, 1):
++                    lot_no = str(r.get('lot_no', '')).strip()
++                    if not lot_no:
++                        continue
++                    raw_qty = str(r.get('qty_mt', '0')).replace(',', '').replace(' ', '').strip()
+                     try:
+-                        qty = float(str(r.get('qty_mt', '0')).replace(',', '').strip() or 0)
++                        qty = float(raw_qty) if raw_qty else 0.0
+                     except (ValueError, TypeError):
++                        parse_errors.append(f"행 {idx}: QTY 파싱 실패 '{r.get('qty_mt', '')}'")
+                         qty = 0.0
+-                    if not str(r.get('lot_no', '')).strip():
++                    # [M-QP-4] qty_mt=0 필터링
++                    if qty <= 0:
++                        parse_errors.append(f"행 {idx}: {lot_no} — QTY ≤ 0 (건너뜀)")
+                         continue
+                     row = dict(r)
++                    row['lot_no'] = lot_no
+                     row['qty_mt'] = qty
+-                    row['sublot_count'] = max(1, int(qty / 0.5))
+-                    normalized.append(row)
+-                if not normalized:
+-                    CustomMessageBox.showwarning(self.root, "경고", "유효한 LOT NO·QTY 행이 없습니다.")
++                    parsed.append(row)
++
++                if parse_errors:
++                    logger.warning(f"빠른 출고 파싱 경고: {parse_errors}")
++                if not parsed:
++                    msg = "유효한 LOT NO · QTY 행이 없습니다."
++                    if parse_errors:
++                        msg += "\n\n" + "\n".join(parse_errors[:8])
++                    CustomMessageBox.showwarning(self.root, "경고", msg)
+                     return
++
++                # ── 2단계: [M-QP-2] 동일 LOT 합산 ──
++                from collections import OrderedDict
++                lot_merged = OrderedDict()
++                for row in parsed:
++                    ln = row['lot_no']
++                    if ln in lot_merged:
++                        lot_merged[ln]['qty_mt'] += row['qty_mt']
++                    else:
++                        lot_merged[ln] = dict(row)
++                merged = list(lot_merged.values())
++
++                # ── 3단계: [M-QP-1] LOT 존재 + 가용 사전 검증 ──
++                lot_nos = [r['lot_no'] for r in merged]
++                validation_errors = []
++                try:
++                    placeholders = ",".join("?" * len(lot_nos))
++                    avail_rows = self.engine.db.fetchall(
++                        f"SELECT lot_no, COUNT(*) as avail_cnt "
++                        f"FROM inventory_tonbag "
++                        f"WHERE lot_no IN ({placeholders}) AND status='AVAILABLE' "
++                        f"AND COALESCE(is_sample,0)=0 "
++                        f"GROUP BY lot_no",
++                        tuple(lot_nos))
++                    avail_map = {r['lot_no']: r['avail_cnt'] for r in avail_rows}
++                    for row in merged:
++                        if row['lot_no'] not in avail_map:
++                            validation_errors.append(f"❌ {row['lot_no']}: LOT 미등록 또는 가용 톤백 없음")
++                except Exception as e:
++                    logger.warning(f"빠른 출고 사전 검증 실패 (계속 진행): {e}")
++
++                if validation_errors:
++                    warn_msg = "다음 LOT에 문제가 있습니다:\n\n" + "\n".join(validation_errors[:10])
++                    warn_msg += "\n\n문제 LOT을 제외하고 계속 진행할까요?"
++                    if not CustomMessageBox.askyesno(self.root, "LOT 검증 경고", warn_msg):
++                        return
++                    problem_lots = {e.split(':')[0].replace('❌ ', '').strip() for e in validation_errors}
++                    merged = [r for r in merged if r['lot_no'] not in problem_lots]
++                    if not merged:
++                        CustomMessageBox.showwarning(self.root, "경고", "유효한 LOT이 없습니다.")
++                        return
++
++                # ── 4단계: [C-QP-2] sublot_count 동적 단가 ──
++                for row in merged:
++                    try:
++                        from engine_modules.constants import get_tonbag_unit_weight
++                        unit_w = get_tonbag_unit_weight(self.engine.db, row['lot_no'])
++                    except Exception:
++                        unit_w = 500.0
++                    unit_mt = unit_w / 1000.0
++                    row['sublot_count'] = max(1, int(row['qty_mt'] / unit_mt + 0.001))
++
++                # ── 5단계: AllocationDialog 전달 ──
+                 dlg = AllocationDialog(self, self.engine)
+-                dlg.show_with_data(normalized)
++                dlg.show_with_data(merged)

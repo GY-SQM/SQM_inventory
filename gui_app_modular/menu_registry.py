@@ -39,8 +39,13 @@ FILE_MENU_INBOUND_RETURN_SUB_ITEMS = [
 # 출고 서브메뉴에 들어갈 항목 (순서 유지)
 FILE_MENU_OUTBOUND_ITEMS = [
     ("📋 Allocation 입력 (파일/붙여넣기)", "_on_allocation_input_unified"),
+    ("✅ Allocation 승인 대기", "_show_allocation_approval_queue", True),
+    ("📜 승인 이력(조회)", "_show_allocation_approval_history", True),
+    ("📌 예약 반영(승인분)", "_apply_approved_allocation", True),
+    None,  # 구분선
     ("📋 Picking List 업로드 (PDF)", "_on_picking_list_upload"),
     ("📊 바코드 스캔 업로드 (CSV/Excel)", "_on_barcode_scan_upload"),
+    ("🔁 Swap 리포트 (기간/필터)", "_show_swap_report_dialog", True),
     ("📊 Sales Order 업로드 (Excel)", "_on_sales_order_upload", True),  # optional
     ("📋 출고 현황 조회", "_show_outbound_history", True),
     None,  # 구분선

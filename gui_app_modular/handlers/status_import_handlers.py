@@ -136,6 +136,9 @@ class StatusImportHandlersMixin:
             tree.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
             for r in preview_rows:
                 tree.insert("", "end", values=r)
+            # 입력용 미리보기: 전역 Editable Treeview 허용 (상태는 편집 금지)
+            tree._enable_global_editable = True
+            tree._editable_exclude_cols = {"status"}
             cnt_ok = sum(1 for r in preview_rows if r[5] == "적용가능")
             cnt_nf = sum(1 for r in preview_rows if r[5] == "재고없음")
             cnt_done = sum(1 for r in preview_rows if r[5] == "이미출고")
@@ -149,7 +152,28 @@ class StatusImportHandlersMixin:
                 not_found = 0
                 already_picked = 0
                 blocked_reversed = 0  # SOLD/DEPLETED/RETURNED → PICKED 역전 차단 건수
-                with self.engine.db.transaction():
+
+                # 편집된 그리드 값 우선 반영
+                grid_rows = []
+                for iid in tree.get_children(""):
+                    vals = tree.item(iid, "values")
+                    if not vals:
+                        continue
+                    try:
+                        lot_no = str(vals[0]).strip()
+                        tonbag_no = self._safe_int(vals[1], 0)
+                        customer = str(vals[2]).strip()
+                        outbound_date = self._safe_date(vals[3])
+                        sale_ref = str(vals[4]).strip()
+                    except (ValueError, TypeError, IndexError):
+                        continue
+                    if not lot_no or tonbag_no <= 0:
+                        continue
+                    grid_rows.append((lot_no, tonbag_no, customer, outbound_date, sale_ref))
+
+                source_rows = grid_rows if grid_rows else []
+                if not source_rows:
+                    # 폴백: 기존 df 기반
                     for idx, row in df.iterrows():
                         lot_no = str(row.get(lot_col, ''))
                         if not lot_no or lot_no == 'nan':
@@ -160,6 +184,10 @@ class StatusImportHandlersMixin:
                         customer = str(row.get(customer_col, '')) if customer_col and pd.notna(row.get(customer_col)) else ''
                         sale_ref = str(row.get(ref_col, '')) if ref_col and pd.notna(row.get(ref_col)) else ''
                         outbound_date = self._safe_date(row.get(date_col)) if date_col else date.today()
+                        source_rows.append((lot_no, tonbag_no, customer, outbound_date, sale_ref))
+
+                with self.engine.db.transaction():
+                    for lot_no, tonbag_no, customer, outbound_date, sale_ref in source_rows:
                         existing = self.engine.db.fetchone(
                             "SELECT id, status FROM inventory_tonbag WHERE lot_no=? AND sub_lt=?",
                             (lot_no, tonbag_no)

@@ -834,8 +834,26 @@ class InventoryTabMixin:
             else:
                 inventory = self.engine.get_all_inventory()
 
+            # Avail 컬럼: LOT별 판매가능 톤백 수 일괄 조회 (샘플 제외)
+            # - 행별 쿼리(N+1)로 인한 성능/예외 변동을 줄이고, 기본값 0을 보장한다.
+            avail_map = {}
+            try:
+                avail_rows = self.engine.db.fetchall(
+                    "SELECT lot_no, COUNT(*) AS cnt "
+                    "FROM inventory_tonbag "
+                    "WHERE status = 'AVAILABLE' AND COALESCE(is_sample, 0) = 0 "
+                    "GROUP BY lot_no"
+                )
+                avail_map = {
+                    str(r.get('lot_no', '')).strip(): int(r.get('cnt', 0) or 0)
+                    for r in (avail_rows or [])
+                }
+            except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
+                logger.debug(f"Avail 일괄 조회 실패(기본 0 처리): {e}")
+                avail_map = {}
+
             for item in inventory:
-                lot_no = str(item.get('lot_no', ''))
+                lot_no = str(item.get('lot_no', '')).strip()
                 product = str(item.get('product', ''))
                 sap_no = str(item.get('sap_no', ''))
 
@@ -889,16 +907,8 @@ class InventoryTabMixin:
                         vals.append(str(item.get('customs_status', '') or ''))
                         continue
                     elif col_id == 'avail_bags':
-                        # v5.6.0/v5.6.9: Avail = 현재 판매가능 톤백 수 실시간 (샘플 제외)
-                        try:
-                            tb_row = self.engine.db.fetchone(
-                                "SELECT COUNT(*) as cnt FROM inventory_tonbag "
-                                "WHERE lot_no = ? AND status = 'AVAILABLE' AND COALESCE(is_sample, 0) = 0",
-                                (lot_no,))
-                            avail_cnt = tb_row['cnt'] if tb_row and isinstance(tb_row, dict) else (tb_row[0] if tb_row else 0)
-                            vals.append(str(avail_cnt))
-                        except (ValueError, TypeError, KeyError, AttributeError):
-                            vals.append('')
+                        # Avail = 판매가능(샘플 제외) 톤백 수. 값이 없으면 0을 표시.
+                        vals.append(str(avail_map.get(lot_no, 0)))
                         continue
                     
                     v = item.get(col_id, '')

@@ -90,6 +90,8 @@ class ReturnInboundPreviewDialog:
         self.tree = ttk.Treeview(
             tree_frame, columns=self.DISPLAY_COLS, show='headings', height=15
         )
+        # 자체 인라인 편집 로직 사용(전역 editable 훅 중복 방지)
+        self.tree._disable_global_editable = True
         for cid, hdr, w in zip(self.DISPLAY_COLS, self.HEADERS, self.WIDTHS):
             self.tree.heading(cid, text=hdr)
             anchor = 'e' if cid in ('weight_mt', 'tonbag_count') else 'center'

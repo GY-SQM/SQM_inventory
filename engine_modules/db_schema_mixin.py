@@ -28,6 +28,11 @@ class DatabaseSchemaMixin:
         self._migrate_v243()
         # v6.0: allocation_plan / picking_table / sold_table 은 반드시 생성 (v243 중간 실패 시에도)
         self._ensure_allocation_and_picking_sold_tables()
+        # 최신 마이그레이션 체인 실행 (idempotent). 신규 컬럼/인덱스 보강 반영.
+        try:
+            self._run_all_migrations()
+        except Exception as e:
+            logger.warning(f"[스키마] 전체 마이그레이션 체인 실행 스킵/실패: {e}")
 
     def _ensure_allocation_and_picking_sold_tables(self) -> None:
         """allocation_plan, picking_table, sold_table 존재 보장 (예약·출고 이력용)."""
@@ -213,11 +218,23 @@ class DatabaseSchemaMixin:
                 movement_date TIMESTAMP,
                 source_type TEXT DEFAULT '',
                 source_file TEXT DEFAULT '',
+                ref_table TEXT,
+                ref_id INTEGER,
+                source TEXT,
+                actor TEXT,
+                details_json TEXT,
                 remarks TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (lot_no) REFERENCES inventory(lot_no)
             )
         """)
+        try:
+            # 구 DB(컬럼 미존재)에서는 초기화 단계에서 실패할 수 있으므로 마이그레이션에서 재시도.
+            self.execute(
+                "CREATE INDEX IF NOT EXISTS idx_stock_mv_ref ON stock_movement(ref_table, ref_id)"
+            )
+        except sqlite3.OperationalError as e:
+            logger.debug(f"[스키마] idx_stock_mv_ref 생성 지연(마이그레이션에서 재시도): {e}")
         self.execute("""
             CREATE TABLE IF NOT EXISTS return_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -234,6 +251,21 @@ class DatabaseSchemaMixin:
             )
         """)
         logger.info("[스키마] stock_movement, return_history 테이블 생성 완료")
+
+        self.execute("""
+            CREATE TABLE IF NOT EXISTS allocation_import_batch (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_file TEXT,
+                conflict_policy TEXT DEFAULT 'block_duplicates',
+                total_lines INTEGER DEFAULT 0,
+                passed_lines INTEGER DEFAULT 0,
+                failed_lines INTEGER DEFAULT 0,
+                report_csv_path TEXT,
+                report_json_path TEXT,
+                imported_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        logger.info("[스키마] allocation_import_batch 테이블 생성 완료")
 
     def _init_snapshot_tables(self) -> None:
         """재고 스냅샷(inventory_snapshot) 테이블"""

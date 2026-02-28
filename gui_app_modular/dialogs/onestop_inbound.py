@@ -165,7 +165,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     def _create_dialog(self) -> None:
         """원스톱 입고 팝업 생성"""
         self.dialog = tk.Toplevel(self.parent)
-        self.dialog.title("📥 입고 — SQM v3.9.4")
+        self.dialog.title("📥 입고 — SQM v6.2.3")
         self.dialog.minsize(720, 520)
         apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
@@ -340,6 +340,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             height=18, selectmode='extended',
             style='Preview.Treeview'
         )
+        # 자체 편집/붙여넣기/Undo-Redo 로직 사용(전역 editable 훅 중복 방지)
+        self.tree._disable_global_editable = True
         self.tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _tree_dark), foreground=_tree_fg)
         self.tree.tag_configure('even', background=ThemeColors.get('bg_card', _tree_dark), foreground=_tree_fg)
         self.tree.tag_configure('edited', background=ThemeColors.get('warning', _tree_dark), foreground=_tree_fg)

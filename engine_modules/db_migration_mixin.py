@@ -42,6 +42,155 @@ class DatabaseMigrationMixin:
         self._migrate_v601_picking_list_meta()
         self._migrate_v622_query_indexes()
         self._migrate_v623_stock_movement_audit_columns()
+        self._migrate_v624_allocation_fingerprint()
+        self._migrate_v625_uid_swap_report_indexes()
+        self._migrate_v626_allocation_lot_mode_indexes()
+        self._migrate_v627_stock_movement_ref_columns()
+        self._migrate_v628_allocation_import_batch()
+        self._migrate_v629_allocation_gate_columns()
+        self._migrate_v630_allocation_approval_workflow()
+
+    def _migrate_v630_allocation_approval_workflow(self) -> None:
+        """
+        v6.2.3: Allocation 승인 워크플로우 스키마
+        - allocation_plan: workflow_status/risk_flags/approved_by/approved_at/rejected_reason
+        - allocation_approval: 승인/반려 이력
+        """
+        alter_cols = [
+            ("workflow_status", "TEXT DEFAULT 'AUTO_APPROVED'"),
+            ("risk_flags", "TEXT DEFAULT ''"),
+            ("approved_by", "TEXT"),
+            ("approved_at", "TEXT"),
+            ("rejected_reason", "TEXT"),
+        ]
+        try:
+            for col_name, col_type in alter_cols:
+                try:
+                    self.execute(f"ALTER TABLE allocation_plan ADD COLUMN {col_name} {col_type}")
+                    logger.info(f"[v6.2.3] allocation_plan.{col_name} 컬럼 추가 완료")
+                except (sqlite3.OperationalError, OSError) as e:
+                    if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                        logger.debug(f"[v6.2.3] allocation_plan.{col_name} 이미 존재")
+                    else:
+                        raise
+
+            self.execute(
+                """
+                CREATE TABLE IF NOT EXISTS allocation_approval (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    allocation_plan_id INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    actor TEXT,
+                    reason TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+                """
+            )
+            self.execute(
+                "CREATE INDEX IF NOT EXISTS idx_alloc_approval_plan ON allocation_approval(allocation_plan_id, created_at)"
+            )
+            self.execute(
+                "CREATE INDEX IF NOT EXISTS idx_alloc_plan_workflow ON allocation_plan(status, workflow_status, lot_no)"
+            )
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v6.2.3] allocation 승인 워크플로우 마이그레이션 실패: {e}")
+            self.rollback()
+
+    def _migrate_v627_stock_movement_ref_columns(self) -> None:
+        """
+        v6.2.3: stock_movement 근거 추적 컬럼 보강
+        - ref_table/ref_id/source/actor/details_json
+        """
+        alter_cols = [
+            ("ref_table", "TEXT"),
+            ("ref_id", "INTEGER"),
+            ("source", "TEXT"),
+            ("actor", "TEXT"),
+            ("details_json", "TEXT"),
+        ]
+        try:
+            for col_name, col_type in alter_cols:
+                try:
+                    self.execute(f"ALTER TABLE stock_movement ADD COLUMN {col_name} {col_type}")
+                    logger.info(f"[v6.2.3] stock_movement.{col_name} 컬럼 추가 완료")
+                except (sqlite3.OperationalError, OSError) as e:
+                    if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                        logger.debug(f"[v6.2.3] stock_movement.{col_name} 이미 존재")
+                    else:
+                        raise
+            try:
+                self.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_stock_mv_ref ON stock_movement(ref_table, ref_id)"
+                )
+            except (sqlite3.OperationalError, OSError) as e:
+                logger.debug(f"[v6.2.3] idx_stock_mv_ref 생성 스킵: {e}")
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v6.2.3] stock_movement ref 컬럼 마이그레이션 실패: {e}")
+            self.rollback()
+
+    def _migrate_v628_allocation_import_batch(self) -> None:
+        """
+        v6.2.3: allocation_import_batch 테이블 추가
+        - Allocation 업로드 이력/실패 리포트 경로 기록
+        """
+        try:
+            self.execute(
+                """
+                CREATE TABLE IF NOT EXISTS allocation_import_batch (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_file TEXT,
+                    conflict_policy TEXT DEFAULT 'block_duplicates',
+                    total_lines INTEGER DEFAULT 0,
+                    passed_lines INTEGER DEFAULT 0,
+                    failed_lines INTEGER DEFAULT 0,
+                    report_csv_path TEXT,
+                    report_json_path TEXT,
+                    imported_at TEXT DEFAULT (datetime('now'))
+                )
+                """
+            )
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v6.2.3] allocation_import_batch 마이그레이션 실패: {e}")
+            self.rollback()
+
+    def _migrate_v629_allocation_gate_columns(self) -> None:
+        """
+        v6.2.3: allocation_plan 원장/검증 컬럼 보강
+        - import_batch_id/line_no
+        - gate_status/fail_code/fail_reason/validated_at
+        - ux_alloc_line(import_batch_id, line_no)
+        """
+        alter_cols = [
+            ("import_batch_id", "INTEGER"),
+            ("line_no", "INTEGER"),
+            ("gate_status", "TEXT"),
+            ("fail_code", "TEXT"),
+            ("fail_reason", "TEXT"),
+            ("validated_at", "TEXT"),
+        ]
+        try:
+            for col_name, col_type in alter_cols:
+                try:
+                    self.execute(f"ALTER TABLE allocation_plan ADD COLUMN {col_name} {col_type}")
+                    logger.info(f"[v6.2.3] allocation_plan.{col_name} 컬럼 추가 완료")
+                except (sqlite3.OperationalError, OSError) as e:
+                    if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                        logger.debug(f"[v6.2.3] allocation_plan.{col_name} 이미 존재")
+                    else:
+                        raise
+            try:
+                self.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ux_alloc_line ON allocation_plan(import_batch_id, line_no)"
+                )
+            except (sqlite3.OperationalError, OSError) as e:
+                logger.debug(f"[v6.2.3] ux_alloc_line 생성 스킵: {e}")
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v6.2.3] allocation_plan gate 컬럼 마이그레이션 실패: {e}")
+            self.rollback()
 
     def _migrate_v622_query_indexes(self) -> None:
         """
@@ -98,6 +247,78 @@ class DatabaseMigrationMixin:
             self.commit()
         except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
             logger.error(f"[v6.2.3] stock_movement 감사 컬럼 마이그레이션 실패: {e}")
+            self.rollback()
+
+    def _migrate_v624_allocation_fingerprint(self) -> None:
+        """
+        v6.2.3: allocation_plan.source_fingerprint 컬럼 추가 (중복 업로드 감지 강화)
+        """
+        try:
+            try:
+                self.execute("ALTER TABLE allocation_plan ADD COLUMN source_fingerprint TEXT DEFAULT ''")
+                logger.info("[v6.2.3] allocation_plan.source_fingerprint 컬럼 추가 완료")
+            except (sqlite3.OperationalError, OSError) as e:
+                if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                    logger.debug(f"[v6.2.3] allocation_plan.source_fingerprint 이미 존재: {e}")
+                else:
+                    raise
+            try:
+                self.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_alloc_plan_source_fp "
+                    "ON allocation_plan(source_fingerprint)"
+                )
+            except (sqlite3.OperationalError, OSError) as e:
+                logger.debug(f"[v6.2.3] idx_alloc_plan_source_fp 생성 스킵: {e}")
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v6.2.3] allocation fingerprint 마이그레이션 실패: {e}")
+            self.rollback()
+
+    def _migrate_v625_uid_swap_report_indexes(self) -> None:
+        """
+        v6.2.3: Swap 리포트 조회 성능용 인덱스 보강
+        - uid_swap_history.created_at
+        - uid_swap_history.lot_no + created_at
+        """
+        try:
+            self.execute(
+                """
+                CREATE TABLE IF NOT EXISTS uid_swap_history (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    lot_no              TEXT NOT NULL,
+                    expected_tonbag_id  INTEGER,
+                    expected_uid        TEXT,
+                    scanned_tonbag_id   INTEGER,
+                    scanned_uid         TEXT,
+                    reason              TEXT,
+                    created_at          TEXT DEFAULT (datetime('now'))
+                )
+                """
+            )
+            self.execute(
+                "CREATE INDEX IF NOT EXISTS idx_uid_swap_created_at ON uid_swap_history(created_at)"
+            )
+            self.execute(
+                "CREATE INDEX IF NOT EXISTS idx_uid_swap_lot_created ON uid_swap_history(lot_no, created_at)"
+            )
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v6.2.3] uid_swap_history 인덱스 마이그레이션 실패: {e}")
+            self.rollback()
+
+    def _migrate_v626_allocation_lot_mode_indexes(self) -> None:
+        """
+        v6.2.3: LOT 단위 예약 모드 조회/소진 성능 인덱스
+        - allocation_plan(status, tonbag_id, lot_no)
+        """
+        try:
+            self.execute(
+                "CREATE INDEX IF NOT EXISTS idx_alloc_plan_status_tonbag_lot "
+                "ON allocation_plan(status, tonbag_id, lot_no)"
+            )
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v6.2.3] allocation_plan LOT 모드 인덱스 마이그레이션 실패: {e}")
             self.rollback()
 
     def _migrate_v601_picking_list_meta(self) -> None:
@@ -888,6 +1109,7 @@ class DatabaseMigrationMixin:
                     outbound_date TEXT,
                     status TEXT DEFAULT 'RESERVED',
                     source_file TEXT,
+                    source_fingerprint TEXT DEFAULT '',
                     created_at TEXT DEFAULT (datetime('now')),
                     executed_at TEXT,
                     cancelled_at TEXT,
@@ -905,6 +1127,10 @@ class DatabaseMigrationMixin:
             self.execute("""
                 CREATE INDEX IF NOT EXISTS idx_alloc_plan_date 
                 ON allocation_plan(outbound_date)
+            """)
+            self.execute("""
+                CREATE INDEX IF NOT EXISTS idx_alloc_plan_source_fp
+                ON allocation_plan(source_fingerprint)
             """)
             logger.info("[v5.9.3] allocation_plan 테이블 생성 완료")
         except (sqlite3.OperationalError, OSError) as e:

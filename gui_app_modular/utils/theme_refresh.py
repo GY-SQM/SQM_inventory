@@ -193,15 +193,15 @@ def refresh_all_widgets_for_theme(app) -> dict:
             elif isinstance(w, tk.Label) and not isinstance(w, ttk.Label):
                 _refresh_native_widget(w, colors)
                 stats['native_widgets'] += 1
-        logger.info(f"[v6.1.1] Theme refresh: Treeview={stats['treeviews']}, Native={stats['native_widgets']}, dark={stats['is_dark']}")
+        logger.info(f"[v6.2.3] Theme refresh: Treeview={stats['treeviews']}, Native={stats['native_widgets']}, dark={stats['is_dark']}")
     except Exception as e:
-        logger.error(f"[v6.1.1] Theme refresh 실패: {e}")
+        logger.error(f"[v6.2.3] Theme refresh 실패: {e}")
     return stats
 
 
 def debug_dump_widget_theme_status(app) -> str:
     """현재 화면의 모든 위젯 테마 상태를 덤프 (디버그용)."""
-    lines = ["=" * 70, "SQM v6.1.1 Widget Theme Status Dump", "=" * 70]
+    lines = ["=" * 70, "SQM v6.2.3 Widget Theme Status Dump", "=" * 70]
     colors = get_theme_colors_from_style()
     lines.append(f"Theme colors: fg={colors['fg']}, bg={colors['bg']}, dark={colors['is_dark']}\n")
     tree_count = 0

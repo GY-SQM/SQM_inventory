@@ -252,7 +252,7 @@ def generate_monthly_report(engine, year: int = None, month: int = None,
     
     elements.append(Spacer(1, 5*mm))
     elements.append(Paragraph(
-        f"생성: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | SQM v3.9.8",
+        f"생성: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | SQM v6.2.3",
         ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7, textColor=colors.grey)
     ))
     
@@ -566,7 +566,7 @@ def generate_transaction_statement(engine, customer: str = '',
     # 푸터
     elements.append(Spacer(1, 10*mm))
     elements.append(Paragraph(
-        f"생성: {datetime.now().strftime('%Y-%m-%d %H:%M')} | SQM v4.1.1 | GY Logistics",
+        f"생성: {datetime.now().strftime('%Y-%m-%d %H:%M')} | SQM v6.2.3 | GY Logistics",
         ParagraphStyle('Footer', parent=styles['Normal'], fontName=fn, fontSize=7,
                        textColor=colors.grey, alignment=1)))
     

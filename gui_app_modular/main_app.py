@@ -120,6 +120,16 @@ class SQMInventoryApp:
         
         # Setup UI
         self._setup_ui()
+
+        # v6.2.3: 전역 Editable Treeview 바인딩 (Ctrl+C/X/V, Delete, 더블클릭 편집)
+        try:
+            from .utils.global_editable_tree import install_global_editable_tree
+            install_global_editable_tree(self.root)
+            logger.info("✅ 전역 Editable Treeview 적용 완료")
+        except ImportError as e:
+            logger.debug(f"전역 Editable Treeview 로딩 실패 (무시): {e}")
+        except (ValueError, TypeError, KeyError, AttributeError, OSError) as e:
+            logger.warning(f"전역 Editable Treeview 적용 실패: {e}")
         
         # Load data
         self._load_initial_data()

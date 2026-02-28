@@ -58,7 +58,7 @@ class DOUpdateDialog:
         from ..utils.ui_constants import ThemeColors, CustomMessageBox, DialogSize, center_dialog, apply_modal_window_options
 
         self.dialog = tk.Toplevel(self.parent)
-        self.dialog.title("📋 D/O 후속 연결 — SQM v5.6.6")
+        self.dialog.title("📋 D/O 후속 연결 — SQM v6.2.3")
         self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
         apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
