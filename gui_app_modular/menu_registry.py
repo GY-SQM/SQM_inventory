@@ -18,7 +18,7 @@ FILE_MENU_INBOUND_ITEMS = [
     ("📊 엑셀 파일 수동 입고", "_bulk_import_inventory_simple"),
     ("📋 D/O 후속 연결", "_on_do_update"),
     ("📍 톤백 위치 매핑", "_on_tonbag_location_upload", True),
-    ("📋 입고현황 불러오기", "_bulk_import_inventory", True),
+    ("📋 입고 현황 조회", "_bulk_import_inventory", True),
     ("📂 반품 입고 (Excel)", "_on_return_inbound_upload"),
     ("🔄 반품 (재입고)", "_show_return_dialog"),  # 소량/다량 반품 다이얼로그
     ("📊 반품 사유 통계", "_show_return_statistics"),
@@ -42,6 +42,7 @@ FILE_MENU_OUTBOUND_ITEMS = [
     ("📋 Picking List 업로드 (PDF)", "_on_picking_list_upload"),
     ("📊 바코드 스캔 업로드 (CSV/Excel)", "_on_barcode_scan_upload"),
     ("📊 Sales Order 업로드 (Excel)", "_on_sales_order_upload", True),  # optional
+    ("📋 출고 현황 조회", "_show_outbound_history", True),
     None,  # 구분선
     ("📤 빠른 출고 (붙여넣기)", "_on_quick_outbound_paste"),
     None,  # 구분선

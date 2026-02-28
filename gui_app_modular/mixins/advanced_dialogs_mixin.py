@@ -926,33 +926,52 @@ class AdvancedDialogsMixin:
         ttk.Button(btn_frame, text="닫기", command=dialog.destroy).pack(side='left', padx=10)
 
     # ═══════════════════════════════════════════════════════
-    # v3.8.4: 출고 이력 조회
+    # v3.8.4: 출고 현황 조회
     # ═══════════════════════════════════════════════════════
     
     def _show_outbound_history(self) -> None:
-        """출고 이력(stock_movement) 조회 팝업"""
-        from ..utils.constants import tk, ttk, BOTH, X, Y, LEFT, RIGHT, END
+        """출고 현황(stock_movement) 조회 팝업"""
+        from datetime import datetime as _dt, timedelta
+        from ..utils.constants import tk, ttk, BOTH, X, Y, LEFT, RIGHT, END, W
         from ..utils.custom_messagebox import CustomMessageBox
         
         dialog = tk.Toplevel(self.root)
-        dialog.title("📋 출고 이력 조회")
-        dialog.geometry("900x500")
+        dialog.title("📋 출고 현황 조회")
+        dialog.geometry("980x560")
         apply_modal_window_options(dialog)
         dialog.transient(self.root)
         
-        # 필터
-        filter_frame = ttk.Frame(dialog)
-        filter_frame.pack(fill=X, padx=10, pady=5)
-        
-        ttk.Label(filter_frame, text="유형:").pack(side=LEFT, padx=5)
+        # 입고 현황 조회와 동일한 기간 필터 UI 패턴
+        top = ttk.LabelFrame(dialog, text="📅 조회 기간 (출고일 기준)")
+        top.pack(fill=X, padx=10, pady=(10, 5))
+        top_inner = ttk.Frame(top)
+        top_inner.pack(fill=X, padx=8, pady=8)
+
+        ttk.Label(top_inner, text="시작일").pack(side=LEFT, padx=(0, 4))
+        entry_start = ttk.Entry(top_inner, width=12)
+        entry_start.pack(side=LEFT, padx=(0, 8))
+        ttk.Label(top_inner, text="종료일").pack(side=LEFT, padx=(0, 4))
+        entry_end = ttk.Entry(top_inner, width=12)
+        entry_end.pack(side=LEFT, padx=(0, 8))
+
+        today = _dt.now()
+        first = today.replace(day=1)
+        entry_start.insert(0, first.strftime('%Y-%m-%d'))
+        entry_end.insert(0, today.strftime('%Y-%m-%d'))
+
+        # 기존 상세 필터(유형/LOT)는 유지
+        ttk.Label(top_inner, text="유형").pack(side=LEFT, padx=(12, 4))
         type_var = tk.StringVar(value='전체')
-        type_cb = ttk.Combobox(filter_frame, textvariable=type_var, state='readonly', width=15,
-                               values=['전체', 'OUTBOUND', 'CANCEL_OUTBOUND', 'INBOUND', 'RETURN'])
-        type_cb.pack(side=LEFT, padx=5)
-        
-        ttk.Label(filter_frame, text="LOT:").pack(side=LEFT, padx=(15, 5))
+        ttk.Combobox(
+            top_inner,
+            textvariable=type_var,
+            state='readonly',
+            width=15,
+            values=['전체', 'OUTBOUND', 'CANCEL_OUTBOUND', 'INBOUND', 'RETURN']
+        ).pack(side=LEFT, padx=(0, 8))
+        ttk.Label(top_inner, text="LOT").pack(side=LEFT, padx=(4, 4))
         lot_var = tk.StringVar()
-        ttk.Entry(filter_frame, textvariable=lot_var, width=15).pack(side=LEFT, padx=5)
+        ttk.Entry(top_inner, textvariable=lot_var, width=15).pack(side=LEFT, padx=(0, 8))
         
         # 트리뷰
         tree_frame = ttk.Frame(dialog)
@@ -962,27 +981,54 @@ class AdvancedDialogsMixin:
         tree = ttk.Treeview(tree_frame, columns=cols, show='headings', height=15)
         
         for col, text, w in [
-            ('id', 'ID', 50), ('lot_no', 'LOT NO', 120), ('type', '유형', 120),
-            ('qty_kg', '수량(kg)', 100), ('customer', '고객', 120),
-            ('date', '날짜', 100), ('created', '생성일', 140)
+            ('id', 'ID', 50), ('lot_no', 'LOT No.', 120), ('type', 'Type', 120),
+            ('qty_kg', 'Qty(Kg)', 100), ('customer', 'Customer', 120),
+            ('date', 'Movement Date', 110), ('created', 'Created At', 140)
         ]:
             tree.heading(col, text=text)
             tree.column(col, width=w, anchor='e' if col == 'qty_kg' else 'w')
         
-        scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
-        tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar_y = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
+        scrollbar_x = ttk.Scrollbar(tree_frame, orient='horizontal', command=tree.xview)
+        tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
         tree.pack(side=LEFT, fill=BOTH, expand=True)
-        scrollbar.pack(side=RIGHT, fill=Y)
+        scrollbar_y.pack(side=RIGHT, fill=Y)
+        scrollbar_x.pack(side='bottom', fill=X)
         
         # 합계
         summary_var = tk.StringVar(value="조회 버튼을 클릭하세요")
-        ttk.Label(dialog, textvariable=summary_var, font=('', 13, 'bold')).pack(pady=5)
+        ttk.Label(dialog, textvariable=summary_var, anchor=W).pack(fill=X, padx=10, pady=(0, 6))
+        btn_export = None
+
+        def _set_quick_range(days: int) -> None:
+            entry_end.delete(0, 'end')
+            entry_end.insert(0, today.strftime('%Y-%m-%d'))
+            entry_start.delete(0, 'end')
+            if days == 0:
+                entry_start.insert(0, today.replace(day=1).strftime('%Y-%m-%d'))
+            elif days == -1:
+                entry_start.insert(0, '2020-01-01')
+            else:
+                entry_start.insert(0, (today - timedelta(days=days)).strftime('%Y-%m-%d'))
+            do_search()
         
         def do_search():
+            nonlocal btn_export
             tree.delete(*tree.get_children())
             try:
+                start = entry_start.get().strip()
+                end = entry_end.get().strip()
+                try:
+                    _dt.strptime(start, '%Y-%m-%d')
+                    _dt.strptime(end, '%Y-%m-%d')
+                except (ValueError, TypeError):
+                    CustomMessageBox.showwarning(dialog, "날짜 오류", "YYYY-MM-DD 형식으로 입력하세요.")
+                    return
+
+                end_plus1 = (_dt.strptime(end, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
                 query = "SELECT id, lot_no, movement_type, qty_kg, '' AS customer, created_at AS movement_date, created_at FROM stock_movement WHERE 1=1"
-                params = []
+                params = [start, end_plus1]
+                query += " AND created_at >= ? AND created_at < ?"
                 
                 mv_type = type_var.get()
                 if mv_type != '전체':
@@ -1015,13 +1061,72 @@ class AdvancedDialogsMixin:
                         cust or '', str(mdate or '')[:10], str(created or '')[:19]
                     ))
                 
-                summary_var.set(f"조회: {len(rows)}건 | 총 수량: {total_kg:,.0f} kg")
+                summary_var.set(f"📊 {start} ~ {end} | Outbound Rows: {len(rows):,}건 | Total Weight: {total_kg:,.1f} Kg")
+                if btn_export is not None:
+                    btn_export.configure(state='normal' if rows else 'disabled')
                 
             except (ValueError, TypeError, KeyError) as e:
                 summary_var.set(f"오류: {e}")
+                if btn_export is not None:
+                    btn_export.configure(state='disabled')
+
+        def do_export_excel():
+            from ..utils.constants import filedialog
+            if not tree.get_children():
+                CustomMessageBox.showwarning(dialog, "경고", "내보낼 데이터가 없습니다.")
+                return
+            start = entry_start.get().strip().replace('-', '')
+            end = entry_end.get().strip().replace('-', '')
+            save_path = filedialog.asksaveasfilename(
+                title="Excel 저장",
+                defaultextension=".xlsx",
+                initialfile=f"출고현황_{start}_{end}.xlsx",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+            )
+            if not save_path:
+                return
+            try:
+                import openpyxl
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = "출고 현황"
+                ws.append(['ID', 'LOT No.', 'Type', 'Qty(Kg)', 'Customer', 'Movement Date', 'Created At'])
+                for iid in tree.get_children():
+                    vals = tree.item(iid, 'values')
+                    qty_txt = str(vals[3]).replace(',', '') if len(vals) > 3 else '0'
+                    try:
+                        qty_val = float(qty_txt or 0)
+                    except (ValueError, TypeError):
+                        qty_val = 0.0
+                    ws.append([
+                        vals[0] if len(vals) > 0 else '',
+                        vals[1] if len(vals) > 1 else '',
+                        vals[2] if len(vals) > 2 else '',
+                        qty_val,
+                        vals[4] if len(vals) > 4 else '',
+                        vals[5] if len(vals) > 5 else '',
+                        vals[6] if len(vals) > 6 else '',
+                    ])
+                wb.save(save_path)
+                CustomMessageBox.showinfo(dialog, "완료", f"저장 완료: {os.path.basename(save_path)}")
+                try:
+                    os.startfile(save_path)
+                except (AttributeError, OSError):
+                    pass
+            except ImportError:
+                CustomMessageBox.showerror(dialog, "오류", "openpyxl이 설치되지 않았습니다.")
+            except (OSError, PermissionError) as e:
+                CustomMessageBox.showerror(dialog, "오류", f"파일 저장 실패:\n{e}")
         
-        ttk.Button(filter_frame, text="🔍 조회", command=do_search).pack(side=LEFT, padx=15)
-        ttk.Button(filter_frame, text="❌ 닫기", command=dialog.destroy).pack(side=RIGHT, padx=5)
+        for label, days in [("이번 달", 0), ("최근 7일", 7), ("최근 30일", 30), ("최근 90일", 90), ("전체", -1)]:
+            ttk.Button(top_inner, text=label, width=8, command=lambda d=days: _set_quick_range(d)).pack(side=LEFT, padx=2)
+        ttk.Button(top_inner, text="🔍 조회", command=do_search).pack(side=LEFT, padx=(10, 0))
+
+        bottom = ttk.Frame(dialog)
+        bottom.pack(fill=X, padx=8, pady=(0, 8))
+        btn_export = ttk.Button(bottom, text="📊 Excel 내보내기", command=do_export_excel, state='disabled')
+        btn_export.pack(side=RIGHT, padx=5)
+        ttk.Button(bottom, text="❌ 닫기", command=dialog.destroy).pack(side=RIGHT, padx=5)
         
         # 초기 로드
         do_search()

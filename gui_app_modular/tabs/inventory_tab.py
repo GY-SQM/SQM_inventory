@@ -754,6 +754,40 @@ class InventoryTabMixin:
         self._parsing_preview_data = data
         self._refresh_inventory()
 
+    def _reset_inventory_view_for_new_inbound(self) -> None:
+        """추가 입고 시작 전 재고 탭 화면 상태를 초기화한다."""
+        try:
+            if hasattr(self, 'search_var'):
+                self.search_var.set('')
+            if hasattr(self, '_date_from_var'):
+                self._date_from_var.set('')
+            if hasattr(self, '_date_to_var'):
+                self._date_to_var.set('')
+            if hasattr(self, 'status_var'):
+                self.status_var.set('전체')
+
+            # 헤더 필터/콤보 필터 초기화
+            if hasattr(self, '_inv_filter_bar') and hasattr(self._inv_filter_bar, '_reset_filters'):
+                self._inv_filter_bar._reset_filters()
+            elif hasattr(self, '_reset_inv_combo_search'):
+                self._reset_inv_combo_search()
+
+            # [전체 톤백 펼치기] 상태라면 LOT 리스트 화면으로 복귀
+            if getattr(self, '_inv_show_all_tonbags', False):
+                self._on_back_to_lot_list()
+
+            # 선택/상세 패널 초기화
+            if hasattr(self, 'tree_inventory') and self.tree_inventory.winfo_exists():
+                self.tree_inventory.selection_remove(self.tree_inventory.selection())
+            if hasattr(self, '_inv_tonbag_detail_tree') and self._inv_tonbag_detail_tree.winfo_exists():
+                for iid in self._inv_tonbag_detail_tree.get_children():
+                    self._inv_tonbag_detail_tree.delete(iid)
+            if hasattr(self, '_inv_split_panel') and hasattr(self._inv_split_panel, 'set_detail_title'):
+                self._inv_split_panel.set_detail_title("🎒 톤백 상세 (선택 LOT)")
+        except Exception as e:
+            logger.debug(f"추가 입고 전 재고 화면 초기화 무시: {e}")
+        self._refresh_inventory()
+
     def _refresh_inventory(self) -> None:
         """재고 목록 새로고침 (18열 + 콤보 검색 + Date 기간)"""
         if not hasattr(self, 'tree_inventory'):

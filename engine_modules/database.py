@@ -147,6 +147,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
         
         # ★★★ v2.9.25: DB 스키마 자동 점검/마이그레이션 ★★★
         self._verify_schema()
+        self._log_explain_query_plan_once()
 
         if self.network_mode:
             logger.info(f"네트워크 모드 감지: WAL OFF, synchronous=FULL")
@@ -650,6 +651,72 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
                 monitor._record("DB_fetchall", elapsed, "fetchall")
         
         return result
+
+    def _log_explain_query_plan_once(self) -> None:
+        """
+        앱 시작 시 1회 핵심 쿼리의 실행 계획(EXPLAIN QUERY PLAN) 로그를 남긴다.
+        인덱스 적용 여부를 운영 환경에서 빠르게 점검하기 위한 진단 도구.
+        """
+        # 운영 기본 OFF: SQM_LOG_EQP=1 일 때만 활성화
+        if str(os.environ.get("SQM_LOG_EQP", "")).strip().lower() not in ("1", "true", "yes", "on"):
+            return
+
+        if getattr(self, "_eqp_logged_once", False):
+            return
+        self._eqp_logged_once = True
+
+        plans = [
+            (
+                "inbound_history_lot",
+                "SELECT lot_no, sap_no, bl_no, product, net_weight, mxbg_pallet, container_no, warehouse, stock_date, status "
+                "FROM inventory "
+                "WHERE ((stock_date IS NOT NULL AND stock_date <> '' AND stock_date >= ? AND stock_date < ?) "
+                "OR ((stock_date IS NULL OR stock_date = '') AND created_at >= ? AND created_at < ?)) "
+                "ORDER BY stock_date DESC, lot_no",
+                ("2026-01-01", "2026-02-01", "2026-01-01", "2026-02-01"),
+            ),
+            (
+                "inbound_history_tonbag_join",
+                "SELECT t.lot_no, t.sub_lt, t.tonbag_no, t.weight, t.is_sample, t.location, t.status, i.product, i.stock_date "
+                "FROM inventory_tonbag t "
+                "JOIN inventory i ON t.lot_no = i.lot_no "
+                "WHERE ((i.stock_date IS NOT NULL AND i.stock_date <> '' AND i.stock_date >= ? AND i.stock_date < ?) "
+                "OR ((i.stock_date IS NULL OR i.stock_date = '') AND i.created_at >= ? AND i.created_at < ?)) "
+                "ORDER BY t.lot_no, t.sub_lt",
+                ("2026-01-01", "2026-02-01", "2026-01-01", "2026-02-01"),
+            ),
+            (
+                "do_update_raw_exact_bl",
+                "SELECT lot_no, bl_no, product, net_weight, status, arrival_date, free_time, free_time_date, con_return, warehouse, container_no "
+                "FROM inventory WHERE COALESCE(lot_no,'') <> '' AND COALESCE(bl_no, '') = ? COLLATE NOCASE ORDER BY lot_no",
+                ("MAEU258468669",),
+            ),
+            (
+                "movement_lot_history",
+                "SELECT id, lot_no, movement_type, qty_kg, created_at "
+                "FROM stock_movement WHERE lot_no = ? ORDER BY created_at DESC",
+                ("1125122363",),
+            ),
+        ]
+
+        try:
+            cur = self.conn.cursor()
+            logger.info("[EQP] 시작: 핵심 쿼리 실행 계획 점검")
+            for name, sql, params in plans:
+                try:
+                    cur.execute("EXPLAIN QUERY PLAN " + sql, params)
+                    rows = cur.fetchall() or []
+                    details = []
+                    for r in rows:
+                        if hasattr(r, "keys"):
+                            details.append(str(r["detail"]))
+                        else:
+                            details.append(str(r[3]))
+                    logger.info(f"[EQP] {name}: {' | '.join(details)}")
+                except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+                    logger.debug(f"[EQP] {name} 점검 스킵: {e}")
+        except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+            logger.debug(f"[EQP] 초기화 실패: {e}")
 
     def insert_returning_id(self, sql: str, params: tuple = ()) -> Optional[int]:
         """

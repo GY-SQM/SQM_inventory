@@ -87,6 +87,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         
         # 파일 경로 저장
         self.file_paths = {}  # {doc_type: file_path}
+        self._last_selected_dir = ""
         
         # 파싱 결과
         self.parsed_results = {}
@@ -127,6 +128,16 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     def show(self, initial_files: dict = None) -> None:
         """팝업 표시. initial_files: { 'DO': 경로 } 등 드래그앤드롭/캡처 이미지 사전 지정."""
         self._initial_files = initial_files or {}
+        # 초기 파일이 있으면 해당 폴더를 다음 파일 선택의 시작 폴더로 사용
+        try:
+            for _p in self._initial_files.values():
+                if _p and os.path.exists(_p):
+                    _d = os.path.dirname(_p)
+                    if _d and os.path.isdir(_d):
+                        self._last_selected_dir = _d
+                        break
+        except Exception as e:
+            logger.debug(f"초기 폴더 경로 설정 무시: {e}")
         self._create_dialog()
     
     def _attach_doc_tooltip(self, widget, text: str):
@@ -509,9 +520,22 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             'DO': 'Delivery Order',
         }
         
+        # 직전에 선택한 폴더를 계속 열어 파일 선택 시간을 단축한다.
+        initial_dir = ""
+        try:
+            if self._last_selected_dir and os.path.isdir(self._last_selected_dir):
+                initial_dir = self._last_selected_dir
+            elif doc_type in self.file_paths:
+                prev_dir = os.path.dirname(self.file_paths.get(doc_type, ""))
+                if prev_dir and os.path.isdir(prev_dir):
+                    initial_dir = prev_dir
+        except Exception as e:
+            logger.debug(f"초기 폴더 계산 무시: {e}")
+
         file_path = filedialog.askopenfilename(
             parent=self.dialog,
             title=f"{type_names.get(doc_type, doc_type)} 파일 선택",
+            initialdir=initial_dir if initial_dir else None,
             filetypes=[
                 ("PDF files", "*.pdf"),
                 ("Image (D/O 캡처)", "*.png *.jpg *.jpeg"),
@@ -521,6 +545,13 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         
         if not file_path:
             return
+
+        try:
+            selected_dir = os.path.dirname(file_path)
+            if selected_dir and os.path.isdir(selected_dir):
+                self._last_selected_dir = selected_dir
+        except Exception as e:
+            logger.debug(f"선택 폴더 저장 무시: {e}")
         
         self.file_paths[doc_type] = file_path
         fname = os.path.basename(file_path)
@@ -2236,6 +2267,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                                 _root.after(500, _app._refresh_inventory)
                                 logger.info("[onestop] 재고 새로고침 예약 완료 (500ms)")
                             if _ask_more_inbound and hasattr(_app, '_on_onestop_inbound'):
+                                if hasattr(_app, '_reset_inventory_view_for_new_inbound'):
+                                    _root.after(300, _app._reset_inventory_view_for_new_inbound)
                                 _root.after(700, _app._on_onestop_inbound)
                                 logger.info("[onestop] 추가 입고 요청으로 원스톱 입고 재오픈")
                             elif not _ask_more_inbound:

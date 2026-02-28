@@ -413,34 +413,41 @@ class DOUpdateDialog:
         return containers
 
     def _match_lots_for_do(self, bl_no: str, do) -> Tuple[List[Dict], str]:
-        all_rows = self.engine.db.fetchall(
-            "SELECT lot_no, bl_no, product, net_weight, status, arrival_date, "
-            "free_time, free_time_date, con_return, warehouse, container_no "
-            "FROM inventory WHERE COALESCE(lot_no,'') <> '' ORDER BY lot_no"
-        ) or []
-        row_dicts = [self._to_row_dict(r) for r in all_rows]
-
         bl_raw = str(bl_no or '').strip()
+        if not bl_raw:
+            return [], ""
         bl_std = norm_bl_no(bl_raw) or ''
         container_set = self._extract_do_container_set(do)
 
-        raw_exact = [
-            r for r in row_dicts
-            if str(r.get('bl_no', '') or '').strip().upper() == bl_raw.upper()
-        ]
-        if raw_exact:
-            selected = raw_exact
-            method = "raw_exact_bl"
-        else:
-            norm_exact = [
-                r for r in row_dicts
-                if (norm_bl_no(r.get('bl_no', '')) or '') == bl_std and bl_std
-            ]
-            selected = norm_exact
-            method = "normalized_exact_bl"
+        base_sql = (
+            "SELECT lot_no, bl_no, product, net_weight, status, arrival_date, "
+            "free_time, free_time_date, con_return, warehouse, container_no "
+            "FROM inventory WHERE COALESCE(lot_no,'') <> '' "
+        )
 
-        # 보조 매칭: 후보가 많거나 0건일 때 BL+Container로 보정
-        if container_set:
+        # 1) raw exact (DB 우선)
+        raw_rows = self.engine.db.fetchall(
+            base_sql + "AND COALESCE(bl_no, '') = ? COLLATE NOCASE ORDER BY lot_no",
+            (bl_raw,)
+        ) or []
+        selected = [self._to_row_dict(r) for r in raw_rows]
+        method = "raw_exact_bl" if selected else ""
+
+        # 2) normalized exact (후보만 가져와 Python 정규화 비교)
+        if not selected and bl_std:
+            candidates = self.engine.db.fetchall(
+                base_sql + "AND COALESCE(bl_no, '') <> '' AND (bl_no LIKE ? OR bl_no LIKE ?) ORDER BY lot_no",
+                (f"%{bl_raw}%", f"%{bl_std}%")
+            ) or []
+            selected = []
+            for r in candidates:
+                row_d = self._to_row_dict(r)
+                if (norm_bl_no(row_d.get('bl_no', '')) or '') == bl_std:
+                    selected.append(row_d)
+            method = "normalized_exact_bl" if selected else ""
+
+        # 3) container 보조 매칭
+        if container_set and selected:
             narrowed = [
                 r for r in selected
                 if (norm_container_no(r.get('container_no', '')) or '') in container_set
@@ -448,15 +455,20 @@ class DOUpdateDialog:
             if narrowed:
                 selected = narrowed
                 method = f"{method}+container"
-            elif not selected and bl_std:
-                aux = [
-                    r for r in row_dicts
-                    if (norm_bl_no(r.get('bl_no', '')) or '') == bl_std
-                    and (norm_container_no(r.get('container_no', '')) or '') in container_set
-                ]
-                if aux:
-                    selected = aux
-                    method = "normalized_bl+container_aux"
+        elif container_set and not selected and bl_std:
+            aux_candidates = self.engine.db.fetchall(
+                base_sql + "AND COALESCE(bl_no, '') <> '' AND (bl_no LIKE ? OR bl_no LIKE ?) ORDER BY lot_no",
+                (f"%{bl_raw}%", f"%{bl_std}%")
+            ) or []
+            selected = []
+            for r in aux_candidates:
+                row_d = self._to_row_dict(r)
+                if (norm_bl_no(row_d.get('bl_no', '')) or '') == bl_std and (
+                    norm_container_no(row_d.get('container_no', '')) or ''
+                ) in container_set:
+                    selected.append(row_d)
+            if selected:
+                method = "normalized_bl+container_aux"
 
         # lot_no 중복 제거
         uniq = {}

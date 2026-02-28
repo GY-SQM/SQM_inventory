@@ -360,8 +360,11 @@ class DatabaseSchemaMixin:
             ("idx_inventory_sap_no", "inventory", "sap_no"),
             ("idx_inventory_status", "inventory", "status"),
             ("idx_inventory_stock_date", "inventory", "stock_date"),
+            ("idx_inventory_created_at", "inventory", "created_at"),
+            ("idx_inventory_stock_created", "inventory", "stock_date, created_at"),
             ("idx_inventory_product", "inventory", "product_code"),
             ("idx_inventory_warehouse", "inventory", "warehouse"),
+            ("idx_inventory_bl_no_nocase", "inventory", "bl_no COLLATE NOCASE"),
             ("idx_inventory_lot_product", "inventory", "lot_no, product_code"),
             ("idx_inventory_sap_status", "inventory", "sap_no, status"),
             ("idx_inventory_product_status", "inventory", "product_code, status"),
@@ -381,6 +384,7 @@ class DatabaseSchemaMixin:
             ("idx_movement_lot", "stock_movement", "lot_no"),
             ("idx_movement_type", "stock_movement", "movement_type"),
             ("idx_movement_date", "stock_movement", "created_at"),
+            ("idx_movement_lot_created", "stock_movement", "lot_no, created_at"),
         ]
         for idx_name, table, columns in indexes:
             try:

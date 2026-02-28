@@ -381,7 +381,7 @@ class ToolbarMixin:
             ('📊 LOT 리스트 Excel',  lambda: self._on_export_click(option=3)),
             ('🎒 톤백리스트 Excel',  lambda: self._on_export_click(option=4)),
             None,
-            ('📋 입출고 이력 조회', lambda: self._safe_call('_show_outbound_history')),
+            ('📋 출고 현황 조회', lambda: self._safe_call('_show_outbound_history')),
             ('📊 재고 추이 차트', lambda: self._safe_call('_show_snapshot_chart')),
             ('📄 거래명세서 생성', lambda: self._safe_call('_generate_outbound_invoice')),
         ])

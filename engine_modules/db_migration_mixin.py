@@ -40,6 +40,35 @@ class DatabaseMigrationMixin:
         self._migrate_v599_missing_columns()
         self._migrate_v600_picking_sold_tables()
         self._migrate_v601_picking_list_meta()
+        self._migrate_v622_query_indexes()
+
+    def _migrate_v622_query_indexes(self) -> None:
+        """
+        v6.2.2: 조회/후속연결 성능 인덱스 보강
+        - 입고현황 조회 기간 필터(stock_date, created_at)
+        - D/O 후속 연결 BL 매칭(case-insensitive)
+        - LOT 이동 이력 조회(lot_no + created_at)
+        """
+        idx_sql = [
+            "CREATE INDEX IF NOT EXISTS idx_inventory_created_at ON inventory(created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_inventory_stock_created ON inventory(stock_date, created_at)",
+            "CREATE INDEX IF NOT EXISTS idx_inventory_bl_no_nocase ON inventory(bl_no COLLATE NOCASE)",
+            "CREATE INDEX IF NOT EXISTS idx_movement_lot_created ON stock_movement(lot_no, created_at)",
+        ]
+        added = 0
+        for sql in idx_sql:
+            try:
+                self.execute(sql)
+                added += 1
+            except (sqlite3.OperationalError, OSError) as _e:
+                logger.debug(f"[v6.2.2] 인덱스 생성 스킵: {_e}")
+        if added:
+            try:
+                self.execute("ANALYZE")
+            except (sqlite3.OperationalError, OSError) as _e:
+                logger.debug(f"[v6.2.2] ANALYZE 스킵: {_e}")
+            self.commit()
+            logger.info(f"[v6.2.2] 조회 성능 인덱스 {added}개 점검/생성")
 
     def _migrate_v601_picking_list_meta(self) -> None:
         """v6.1.0: picking_list_order 메타데이터 컬럼 추가 (Gate-1 연동)."""
