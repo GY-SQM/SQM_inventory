@@ -211,6 +211,8 @@ class DatabaseSchemaMixin:
                 to_location TEXT,
                 customer TEXT,
                 movement_date TIMESTAMP,
+                source_type TEXT DEFAULT '',
+                source_file TEXT DEFAULT '',
                 remarks TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (lot_no) REFERENCES inventory(lot_no)

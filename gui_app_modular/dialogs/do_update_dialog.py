@@ -23,6 +23,7 @@ from typing import Optional, List, Dict, Tuple
 logger = logging.getLogger(__name__)
 
 from core.constants import DEFAULT_WAREHOUSE
+from engine_modules.constants import MOVEMENT_DO_UPDATE
 from core.types import norm_bl_no, norm_container_no
 
 
@@ -173,8 +174,8 @@ class DOUpdateDialog:
 
         except Exception as e:
             logger.error(f"D/O 파싱 오류: {e}", exc_info=True)
-            self._update_ui(lambda: self.status_label.configure(
-                text=f"❌ 파싱 오류: {e}"))
+            msg = f"❌ 파싱 오류: {e}"
+            self._update_ui(lambda m=msg: self.status_label.configure(text=m))
 
     def _update_ui(self, fn):
         """메인 스레드에서 UI 업데이트"""
@@ -314,6 +315,8 @@ class DOUpdateDialog:
 
         updated = 0
         verify_mismatch = []
+        _now_str = _dt.now().strftime('%Y-%m-%d %H:%M:%S')
+        _source_file = self.file_path or ''
         try:
             with self.engine.db.transaction():
                 for d in update_targets:
@@ -336,6 +339,20 @@ class DOUpdateDialog:
                         self._log(
                             f"  ✅ LOT {lot_no} 업데이트: {', '.join(d.get('changed_fields', []))}"
                         )
+                        # 감사 이력은 best-effort로 기록하고, 실패해도 본 UPDATE는 유지
+                        _changed_summary = '; '.join(
+                            f"{f}: {d['old'].get(f, '') or ''} -> {d['new'].get(f, '') or ''}"
+                            for f in d.get('changed_fields', [])
+                        )
+                        try:
+                            self.engine.db.execute(
+                                "INSERT INTO stock_movement "
+                                "(lot_no, movement_type, qty_kg, source_type, source_file, remarks, created_at) "
+                                "VALUES (?, ?, 0, 'DO_FOLLOWUP', ?, ?, ?)",
+                                (lot_no, MOVEMENT_DO_UPDATE, _source_file, _changed_summary, _now_str)
+                            )
+                        except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError) as _sm_e:
+                            logger.debug(f"stock_movement DO_UPDATE 기록 스킵: {_sm_e}")
 
             # 사후 검증 리포트(업데이트 건수/스킵/불일치)
             for d in update_targets:

@@ -14,6 +14,11 @@ import logging
 from ..utils.custom_messagebox import CustomMessageBox
 from datetime import datetime, timedelta
 from typing import Optional, Any
+from engine_modules.constants import (
+    MOVEMENT_INVOICE_UPDATE,
+    MOVEMENT_BL_UPDATE,
+    MOVEMENT_DO_UPDATE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +42,7 @@ class InboundUpdateMixin:
         try:
             if not (hasattr(self, 'engine') and hasattr(self.engine, 'db')):
                 return 0
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             with self.engine.db.transaction():
                 for lot_no in lot_numbers:
@@ -70,6 +76,16 @@ class InboundUpdateMixin:
                         self.engine.db.execute(sql, tuple(params))
                         updated_count += 1
                         self._log(f"OK Invoice → LOT {lot_no} 업데이트 (SAP: {sap_no})")
+                        _changes = f"sap={sap_no}, inv={salar_inv_no}, ship={ship_date or ''}"
+                        try:
+                            self.engine.db.execute(
+                                "INSERT INTO stock_movement "
+                                "(lot_no, movement_type, qty_kg, source_type, source_file, remarks, created_at) "
+                                "VALUES (?, ?, 0, 'INVOICE_FOLLOWUP', '', ?, ?)",
+                                (lot_no, MOVEMENT_INVOICE_UPDATE, _changes, now_str)
+                            )
+                        except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError) as _sm_e:
+                            logger.debug(f"stock_movement INVOICE_UPDATE 기록 스킵: {_sm_e}")
             
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             updated_count = 0
@@ -98,6 +114,7 @@ class InboundUpdateMixin:
         try:
             if not (hasattr(self, 'engine') and hasattr(self.engine, 'db')):
                 return 0
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             with self.engine.db.transaction():
                 # SAP NO로 먼저 매칭 시도
@@ -119,6 +136,15 @@ class InboundUpdateMixin:
                             self.engine.db.execute(sql, tuple(params))
                             updated_count += 1
                             self._log(f"OK B/L → LOT {lot_no} 업데이트 (BL: {bl_no})")
+                            try:
+                                self.engine.db.execute(
+                                    "INSERT INTO stock_movement "
+                                    "(lot_no, movement_type, qty_kg, source_type, source_file, remarks, created_at) "
+                                    "VALUES (?, ?, 0, 'BL_FOLLOWUP', '', ?, ?)",
+                                    (lot_no, MOVEMENT_BL_UPDATE, f"bl={bl_no}, ship={ship_date or ''}", now_str)
+                                )
+                            except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError) as _sm_e:
+                                logger.debug(f"stock_movement BL_UPDATE 기록 스킵: {_sm_e}")
                 
                 # SAP NO로 못 찾으면 vessel로 매칭
                 if updated_count == 0 and vessel:
@@ -140,6 +166,15 @@ class InboundUpdateMixin:
                             self.engine.db.execute(sql, tuple(params))
                             updated_count += 1
                             self._log(f"OK B/L(vessel) → LOT {lot_no} 업데이트 (BL: {bl_no})")
+                            try:
+                                self.engine.db.execute(
+                                    "INSERT INTO stock_movement "
+                                    "(lot_no, movement_type, qty_kg, source_type, source_file, remarks, created_at) "
+                                    "VALUES (?, ?, 0, 'BL_FOLLOWUP', '', ?, ?)",
+                                    (lot_no, MOVEMENT_BL_UPDATE, f"bl={bl_no}, vessel={vessel}, ship={ship_date or ''}", now_str)
+                                )
+                            except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError) as _sm_e:
+                                logger.debug(f"stock_movement BL_UPDATE 기록 스킵: {_sm_e}")
         
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             updated_count = 0
@@ -169,6 +204,7 @@ class InboundUpdateMixin:
         try:
             if not (hasattr(self, 'engine') and hasattr(self.engine, 'db')):
                 return 0
+            now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             with self.engine.db.transaction():
                 match_conditions = []
@@ -230,6 +266,15 @@ class InboundUpdateMixin:
                             self.engine.db.execute(sql, tuple(params))
                             updated_count += 1
                             self._log(f"OK D/O → LOT {lot_no} 업데이트 (도착일: {arrival_date}, Free Time: {free_time_days}일)")
+                            try:
+                                self.engine.db.execute(
+                                    "INSERT INTO stock_movement "
+                                    "(lot_no, movement_type, qty_kg, source_type, source_file, remarks, created_at) "
+                                    "VALUES (?, ?, 0, 'DO_FOLLOWUP', '', ?, ?)",
+                                    (lot_no, MOVEMENT_DO_UPDATE, f"arrival={arrival_date or ''}, ft={free_time_days}d, bl={bl_no}", now_str)
+                                )
+                            except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError) as _sm_e:
+                                logger.debug(f"stock_movement DO_UPDATE 기록 스킵: {_sm_e}")
         
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             updated_count = 0

@@ -41,6 +41,7 @@ class DatabaseMigrationMixin:
         self._migrate_v600_picking_sold_tables()
         self._migrate_v601_picking_list_meta()
         self._migrate_v622_query_indexes()
+        self._migrate_v623_stock_movement_audit_columns()
 
     def _migrate_v622_query_indexes(self) -> None:
         """
@@ -69,6 +70,35 @@ class DatabaseMigrationMixin:
                 logger.debug(f"[v6.2.2] ANALYZE 스킵: {_e}")
             self.commit()
             logger.info(f"[v6.2.2] 조회 성능 인덱스 {added}개 점검/생성")
+
+    def _migrate_v623_stock_movement_audit_columns(self) -> None:
+        """
+        v6.2.3: stock_movement 감사 추적 컬럼 보강
+        - source_type: 변경 출처 구분
+        - source_file: 원본 파일 경로/파일명
+        """
+        try:
+            try:
+                self.execute("ALTER TABLE stock_movement ADD COLUMN source_type TEXT DEFAULT ''")
+                logger.info("[v6.2.3] stock_movement.source_type 컬럼 추가 완료")
+            except (sqlite3.OperationalError, OSError) as e:
+                if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                    logger.debug(f"[v6.2.3] stock_movement.source_type 이미 존재: {e}")
+                else:
+                    raise
+
+            try:
+                self.execute("ALTER TABLE stock_movement ADD COLUMN source_file TEXT DEFAULT ''")
+                logger.info("[v6.2.3] stock_movement.source_file 컬럼 추가 완료")
+            except (sqlite3.OperationalError, OSError) as e:
+                if "duplicate" in str(e).lower() or "already exists" in str(e).lower():
+                    logger.debug(f"[v6.2.3] stock_movement.source_file 이미 존재: {e}")
+                else:
+                    raise
+            self.commit()
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            logger.error(f"[v6.2.3] stock_movement 감사 컬럼 마이그레이션 실패: {e}")
+            self.rollback()
 
     def _migrate_v601_picking_list_meta(self) -> None:
         """v6.1.0: picking_list_order 메타데이터 컬럼 추가 (Gate-1 연동)."""

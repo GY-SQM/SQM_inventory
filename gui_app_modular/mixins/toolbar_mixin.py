@@ -383,7 +383,6 @@ class ToolbarMixin:
             None,
             ('📋 출고 현황 조회', lambda: self._safe_call('_show_outbound_history')),
             ('📊 재고 추이 차트', lambda: self._safe_call('_show_snapshot_chart')),
-            ('📄 거래명세서 생성', lambda: self._safe_call('_generate_outbound_invoice')),
         ])
         return m
 
@@ -391,6 +390,8 @@ class ToolbarMixin:
         """v5.5.3: 고객 보고서 메뉴"""
         m = self._create_menu()
         self._add_menu_items(m, [
+            ('📄 거래명세서 생성', lambda: self._safe_call('_generate_outbound_invoice')),
+            None,
             ('📝 고객 보고서 생성', lambda: self._safe_call('_generate_customer_report')),
             ('📂 보고서 양식 관리', lambda: self._safe_call('_manage_report_templates')),
             None,
