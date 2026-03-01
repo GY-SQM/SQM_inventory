@@ -205,19 +205,19 @@ class ToolbarMixin:
         """7개 드롭다운 메뉴 (밑줄 스타일) + 툴팁"""
         menus = [
             ('📁 파일 ▼',      self._build_file_menu,
-             '파일 메뉴: 데이터베이스 열기/저장/백업, 설정 파일, 최근 파일, 종료 등 파일 관련 기능'),
+             '파일 관리 메뉴입니다. 열기, 백업, 복원, 종료를 한 흐름으로 처리합니다. 예: 대량 작업 전 백업을 생성한 뒤 파일 작업을 진행합니다.'),
             ('📥 입고 ▼',      self._build_inbound_menu,
-             '입고 메뉴: 원스톱 입고(PDF/엑셀), 로케이션 업로드, 입고 이력 조회 등 입고 처리 기능'),
+             '입고 처리 메뉴입니다. 입고 등록부터 D/O 후속 연결, 반품 재입고까지 순서대로 진행합니다. 예: 원스톱 입고 후 입고 현황에서 결과를 확인합니다.'),
             ('📤 출고 ▼',      self._build_outbound_menu,
-             '출고 메뉴: 선택 출고, 출고 템플릿, 출고 이력, 반품(재입고) 등 출고·반품 관련 기능'),
+             '출고 실행 메뉴입니다. 배정 입력, 피킹 리스트 업로드, 출고 처리와 이력 확인을 한 번에 수행합니다. 예: 승인 반영 후 피킹 파일을 올려 출고를 진행합니다.'),
             ('📊 재고 ▼',      self._build_report_menu,
-             '재고 메뉴: 재고 현황·통계, 대시보드, LOT/톤백 조회, 엑셀 내보내기 등 재고 조회·보고 기능'),
+             '재고 조회 메뉴입니다. LOT와 톤백 현황 확인, 내보내기 작업을 빠르게 실행합니다. 예: 상태별 재고를 확인한 뒤 통합 현황 파일로 저장합니다.'),
             ('📝 보고서 ▼',    self._build_customer_report_menu,
-             '보고서 메뉴: 고객별·기간별 보고서, PDF/엑셀 출력 등 보고서 생성·출력 기능'),
+             '보고서 생성 메뉴입니다. 거래명세서와 고객/기간 보고서를 조건에 맞춰 출력합니다. 예: 기간을 지정한 뒤 PDF 보고서를 생성해 공유하세요.'),
             ('🔧 설정/도구 ▼', self._build_settings_menu,
-             '설정/도구 메뉴: API 키·테마 설정, 데이터 검증, 마이그레이션, 개발자 도구 등'),
+             '설정 및 점검 메뉴입니다. 테마, API, 정합성 검사와 운영 도구를 관리합니다. 예: 작업 전 정합성 검사를 실행해 경고 항목을 먼저 정리합니다.'),
             ('❓ 도움말 ▼',    self._build_help_menu,
-             '도움말 메뉴: 단축키, 사용 안내, 정보·버전, 로그 보기 등'),
+             '도움말 메뉴입니다. 매뉴얼, 단축키, 버전·시스템 정보를 빠르게 확인할 수 있습니다. 예: 기능이 헷갈릴 때 단축키 안내부터 확인하세요.'),
         ]
 
         for item in menus:
@@ -261,7 +261,10 @@ class ToolbarMixin:
             btn.bind('<Leave>', make_leave(btn))
             self._all_menu_btns.append(btn)
             if tooltip:
-                self._attach_tooltip(btn, tooltip)
+                self._attach_tooltip(
+                    btn,
+                    self._fit_tooltip_length(tooltip, label=text, item_type='cascade')
+                )
 
         # v5.7.5: 검색 버튼 UI 제거 (메뉴 끝 검색 버튼 삭제)
 
@@ -1196,6 +1199,7 @@ class ToolbarMixin:
         
         def _restore_all_buttons():
             """모든 버튼 + 부모 프레임 색상 강제 복구"""
+            self._hide_active_menu_tooltip()
             try:
                 # v5.3.6: capture before state for anomaly logging
                 _before = {
@@ -1253,8 +1257,10 @@ class ToolbarMixin:
                 logger.debug(f"[toolbar_mixin] 무시: {_e}")
         
         try:
+            self._prepare_menu_tooltip_bindings(menu)
             menu.tk_popup(x, y)
         finally:
+            self._hide_active_menu_tooltip()
             try:
                 menu.grab_release()
             except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
@@ -1290,6 +1296,7 @@ class ToolbarMixin:
     def _attach_tooltip(self, widget, text: str):
         tip_win = None
         after_id = None
+        text = self._fit_tooltip_length(text)
         def show():
             nonlocal tip_win
             if tip_win: return
@@ -1315,6 +1322,319 @@ class ToolbarMixin:
         widget.bind('<Enter>', schedule, add='+')
         widget.bind('<Leave>', cancel, add='+')
         widget.bind('<Button-1>', cancel, add='+')
+
+    # ---------------------------------------------------------------------
+    # 메뉴/서브메뉴 공통 툴팁 엔진
+    # 기준:
+    # 1) 명시 툴팁이 있으면 우선 사용
+    # 2) 없으면 라벨 기반 자동 설명 생성
+    # 3) 파괴/위험성 있는 작업(삭제/초기화/종료 등)은 경고성 문구 추가
+    # 4) 툴팁은 예시 포함, 길이는 약 120자(100~130자)로 보정
+    # ---------------------------------------------------------------------
+    def _prepare_menu_tooltip_bindings(self, root_menu: 'tk.Menu') -> None:
+        """팝업 직전에 메뉴 트리 전체에 hover 툴팁 바인딩을 준비한다."""
+        visited = set()
+
+        def _walk(menu_obj: 'tk.Menu') -> None:
+            if menu_obj is None:
+                return
+            menu_id = str(menu_obj)
+            if menu_id in visited:
+                return
+            visited.add(menu_id)
+
+            if not getattr(menu_obj, '_sqm_menu_tooltip_bound', False):
+                try:
+                    menu_obj.bind('<<MenuSelect>>', lambda e, m=menu_obj: self._on_menu_select_for_tooltip(m), add='+')
+                    menu_obj.bind('<Unmap>', lambda e: self._hide_active_menu_tooltip(), add='+')
+                    menu_obj.bind('<Leave>', lambda e: self._hide_active_menu_tooltip(), add='+')
+                    menu_obj._sqm_menu_tooltip_bound = True
+                except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as e:
+                    logger.debug(f"menu tooltip bind skip: {e}")
+
+            try:
+                end_idx = menu_obj.index('end')
+                if end_idx is None:
+                    return
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+                return
+
+            for idx in range(int(end_idx) + 1):
+                try:
+                    if menu_obj.type(idx) != 'cascade':
+                        continue
+                    sub_menu_name = menu_obj.entrycget(idx, 'menu')
+                    if not sub_menu_name:
+                        continue
+                    sub_menu = menu_obj.nametowidget(sub_menu_name)
+                    _walk(sub_menu)
+                except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+                    continue
+
+        _walk(root_menu)
+
+    def _on_menu_select_for_tooltip(self, menu_obj: 'tk.Menu') -> None:
+        """활성 메뉴 항목을 감지해 툴팁을 표시한다."""
+        try:
+            active_idx = menu_obj.index('active')
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+            active_idx = None
+
+        if active_idx is None:
+            self._hide_active_menu_tooltip()
+            return
+
+        try:
+            item_type = menu_obj.type(active_idx)
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+            self._hide_active_menu_tooltip()
+            return
+
+        if item_type in ('separator', 'tearoff'):
+            self._hide_active_menu_tooltip()
+            return
+
+        tip_text = self._get_menu_entry_tooltip(menu_obj, int(active_idx), item_type)
+        if not tip_text:
+            self._hide_active_menu_tooltip()
+            return
+
+        try:
+            x, y = self.root.winfo_pointerxy()
+            self._show_active_menu_tooltip(x + 14, y + 20, tip_text)
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+            self._hide_active_menu_tooltip()
+
+    def _get_menu_entry_tooltip(self, menu_obj: 'tk.Menu', idx: int, item_type: str) -> str:
+        """명시 툴팁 또는 라벨 기반 자동 툴팁을 반환한다."""
+        try:
+            raw_label = str(menu_obj.entrycget(idx, 'label') or '')
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+            raw_label = ''
+        label = self._normalize_menu_label(raw_label)
+
+        fixed_tip = self._get_fixed_menu_tooltip(label, item_type)
+        if fixed_tip:
+            return self._fit_tooltip_length(fixed_tip, label=label, item_type=item_type)
+
+        explicit = getattr(menu_obj, '_sqm_entry_tooltips', None)
+        if isinstance(explicit, dict):
+            value = explicit.get(idx)
+            if value:
+                return self._fit_tooltip_length(str(value), label=label, item_type=item_type)
+
+        if not label:
+            return ''
+
+        inferred = self._infer_menu_tooltip(label, item_type)
+        return self._fit_tooltip_length(inferred, label=label, item_type=item_type)
+
+    def _normalize_menu_label(self, label: str) -> str:
+        """메뉴 라벨의 장식 문자/여백을 정리해 의미만 남긴다."""
+        cleaned = str(label or '').replace('\t', ' ').replace('  ', ' ').strip()
+        for token in ['▼', '━━', '→']:
+            cleaned = cleaned.replace(token, ' ')
+        return " ".join(cleaned.split()).strip(' -')
+
+    def _infer_menu_tooltip(self, label: str, item_type: str) -> str:
+        """메뉴 라벨에서 목적을 추론해 툴팁 문구를 생성한다."""
+        low = label.lower()
+        danger_keywords = ('삭제', '초기화', '종료', '복원', '취소')
+        export_keywords = ('내보내기', '저장', 'pdf', 'excel', '리포트', '보고서')
+        open_keywords = ('열기', '조회', '설정', '정보', '도움말')
+
+        if item_type == 'cascade':
+            if '반품' in label:
+                return f"'{label}' 하위 메뉴를 열어 반품 관련 작업을 선택합니다."
+            if '백업' in label:
+                return f"'{label}' 하위 메뉴를 열어 백업/복원 작업을 선택합니다."
+            return f"'{label}' 하위 메뉴를 엽니다."
+
+        if any(k in label for k in danger_keywords):
+            return f"'{label}' 작업을 실행합니다. 데이터 변경이 발생할 수 있으니 내용을 확인하세요."
+        if any(k in low for k in export_keywords):
+            return f"'{label}' 기능을 실행해 파일 생성/내보내기를 진행합니다."
+        if any(k in label for k in open_keywords):
+            return f"'{label}' 화면 또는 기능을 엽니다."
+        if '새로고침' in label:
+            return f"'{label}'를 실행해 현재 데이터를 다시 불러옵니다."
+        if '검사' in label or '검증' in label:
+            return f"'{label}'를 실행해 데이터 상태를 점검합니다."
+        return f"'{label}' 기능을 실행합니다."
+
+    def _get_fixed_menu_tooltip(self, label: str, item_type: str) -> str:
+        """2차 대상(대표 20개) 메뉴 항목의 고정 툴팁 문구."""
+        if item_type not in ('command', 'checkbutton', 'radiobutton', 'cascade'):
+            return ''
+
+        # 정규화된 라벨 exact 매칭 + 부분 매칭 혼합
+        exact_rules = {
+            "백업 생성": "백업 생성 기능입니다. 현재 DB를 안전하게 보관해 복구 기준점을 만듭니다. 예: 대량 입출고 전에 백업을 먼저 생성한 뒤 작업을 시작합니다.",
+            "복원": "복원 기능입니다. 선택한 백업 시점으로 DB를 되돌립니다. 예: 잘못 반영된 작업이 생기면 최근 정상 백업을 선택해 즉시 복원합니다.",
+            "백업 목록": "백업 목록 조회 기능입니다. 백업 파일과 생성 시점을 확인할 수 있습니다. 예: 복원 전에 최신 정상 백업의 날짜를 먼저 확인합니다.",
+            "자동 백업 설정": "자동 백업 설정 기능입니다. 주기 백업으로 운영 중 데이터 손실 위험을 줄입니다. 예: 업무시간에는 30분 또는 1시간 간격으로 설정합니다.",
+            "소량 반품 (1~2건)": "소량 반품 처리 기능입니다. 1~2건 반품을 화면에서 바로 재입고로 반영합니다. 예: 단건 반품 접수 시 LOT 확인 후 즉시 처리합니다.",
+            "다량 반품 (Excel)": "다량 반품 일괄 처리 기능입니다. 엑셀 반품 데이터를 한 번에 재입고로 반영합니다. 예: 월말 반품 파일을 업로드해 일괄 처리합니다.",
+            "D/O 후속 연결": "D/O 후속 연결 기능입니다. 입고 후 도착한 D/O 문서를 기존 LOT 정보에 보강합니다. 예: Free Time 누락 LOT를 선택해 도착 정보를 연결합니다.",
+            "Picking List 업로드 (PDF)": "피킹 리스트 업로드 기능입니다. PDF에서 출고 대상 LOT와 수량을 불러옵니다. 예: 선적 전 받은 피킹 PDF를 올려 출고 준비를 시작합니다.",
+            "바코드 스캔 업로드 (CSV/Excel)": "바코드 스캔 업로드 기능입니다. 현장 스캔 결과를 출고 데이터에 빠르게 반영합니다. 예: 스캔 CSV/Excel 파일을 올려 피킹 결과를 검증합니다.",
+            "일괄 변환": "일괄 변환 기능입니다. 여러 문서를 한 번에 변환해 반복 작업 시간을 줄입니다. 예: 월간 PDF 묶음을 선택해 일괄 변환으로 처리합니다.",
+            "분석": "문서 분석 기능입니다. 문서 구조와 필드 인식 가능 여부를 먼저 점검합니다. 예: 신규 양식은 변환 전에 분석으로 품질을 확인합니다.",
+            "정합성 검사/복구": "정합성 검사/복구 기능입니다. 데이터 오류를 점검하고 복구 가능한 항목을 안내합니다. 예: 수량 불일치가 보이면 즉시 검사/복구를 실행합니다.",
+            "데이터 정합성 검사": "데이터 정합성 검사 기능입니다. 입출고 및 재고 연결 상태를 종합 점검합니다. 예: 마감 전에 검사를 실행해 누락·중복 데이터를 정리합니다.",
+            "운영 DB 스키마 점검(1회)": "운영 DB 스키마 점검 기능입니다. 컬럼·인덱스 상태를 1회 확인합니다. 예: 패치 적용 직후 점검을 실행해 누락 스키마를 확인합니다.",
+            "테스트 DB 초기화 (데이터 삭제)": "테스트 DB 초기화 기능입니다. 검증용 데이터를 삭제해 환경을 다시 구성합니다. 예: 재테스트 전에 초기화해 깨끗한 상태로 시작합니다.",
+            "AI 채팅": "AI 채팅 기능입니다. 업무 문맥 기반 질의응답으로 처리 방향을 빠르게 확인합니다. 예: 반품 분류 기준이 애매하면 AI에 초안을 요청합니다.",
+            "API 설정": "API 설정 기능입니다. AI 사용을 위한 키와 모델 옵션을 등록합니다. 예: 신규 PC에서는 키 저장 후 테스트까지 완료합니다.",
+            "API 테스트": "API 연결 테스트 기능입니다. 저장된 키의 인증과 응답 상태를 즉시 확인합니다. 예: 키 변경 직후 테스트를 눌러 실패 여부를 먼저 점검합니다.",
+            "Excel": "Excel 변환 기능입니다. 선택한 문서를 편집 가능한 엑셀 형식으로 변환합니다. 예: PDF 양식을 Excel로 바꿔 필요한 항목만 정리합니다.",
+            "Word": "Word 변환 기능입니다. 선택한 문서를 워드 형식으로 변환해 문구 수정에 사용합니다. 예: 고객 제출 문서를 Word로 변환해 바로 편집합니다.",
+        }
+
+        exact_tip = exact_rules.get(label)
+        if exact_tip:
+            return exact_tip
+
+        partial_rules = [
+            ("백업 생성", exact_rules["백업 생성"]),
+            ("복원", exact_rules["복원"]),
+            ("백업 목록", exact_rules["백업 목록"]),
+            ("자동 백업 설정", exact_rules["자동 백업 설정"]),
+            ("소량 반품 (1~2건)", exact_rules["소량 반품 (1~2건)"]),
+            ("다량 반품 (Excel)", exact_rules["다량 반품 (Excel)"]),
+            ("D/O 후속 연결", exact_rules["D/O 후속 연결"]),
+            ("Picking List 업로드 (PDF)", exact_rules["Picking List 업로드 (PDF)"]),
+            ("바코드 스캔 업로드 (CSV/Excel)", exact_rules["바코드 스캔 업로드 (CSV/Excel)"]),
+            ("일괄 변환", exact_rules["일괄 변환"]),
+            ("분석", exact_rules["분석"]),
+            ("정합성 검사/복구", exact_rules["정합성 검사/복구"]),
+            ("데이터 정합성 검사", exact_rules["데이터 정합성 검사"]),
+            ("운영 DB 스키마 점검(1회)", exact_rules["운영 DB 스키마 점검(1회)"]),
+            ("테스트 DB 초기화 (데이터 삭제)", exact_rules["테스트 DB 초기화 (데이터 삭제)"]),
+            ("AI 채팅", exact_rules["AI 채팅"]),
+            ("API 설정", exact_rules["API 설정"]),
+            ("API 테스트", exact_rules["API 테스트"]),
+        ]
+
+        for key, tip in partial_rules:
+            if key in label:
+                return tip
+        return ''
+
+    def _fit_tooltip_length(self, text: str, label: str = '', item_type: str = 'command') -> str:
+        """툴팁 문구를 예시 포함 + 약 120자(100~130자)로 보정한다."""
+        if not text:
+            return ''
+
+        min_len = 100
+        max_len = 130
+        cleaned = " ".join(str(text).split())
+        if not cleaned:
+            return ''
+
+        # 예시 문구 강제 포함
+        if '예:' not in cleaned:
+            example = self._build_tooltip_example(label, item_type)
+            if example:
+                cleaned = f"{cleaned} {example}"
+        cleaned = self._normalize_tooltip_tone(cleaned)
+
+        if len(cleaned) > max_len:
+            return cleaned[: max_len - 3].rstrip() + "..."
+
+        if len(cleaned) < min_len:
+            filler = self._build_tooltip_filler(label, item_type)
+            if filler:
+                candidate = f"{cleaned} {filler}"
+                if len(candidate) > max_len:
+                    return candidate[: max_len - 3].rstrip() + "..."
+                cleaned = candidate
+        return self._normalize_tooltip_tone(cleaned)
+
+    def _build_tooltip_example(self, label: str, item_type: str) -> str:
+        """툴팁에 붙일 예시 문구를 생성한다."""
+        label = (label or '').strip()
+        if item_type == 'cascade':
+            return f"예: '{label or '하위 메뉴'}'를 눌러 세부 작업을 선택합니다."
+
+        if any(k in label for k in ('삭제', '초기화', '복원', '취소')):
+            return f"예: 실행 전 대상 행/기간을 먼저 확인한 뒤 진행하세요."
+        if any(k in label.lower() for k in ('pdf', 'excel', '내보내기', '저장', '보고서', '리포트')):
+            return f"예: 조건 입력 후 파일 경로를 선택하면 결과 파일이 생성됩니다."
+        if any(k in label for k in ('조회', '열기', '설정', '정보', '도움말')):
+            return f"예: 클릭하면 관련 화면이 열리고 옵션을 바로 바꿀 수 있습니다."
+        if '새로고침' in label:
+            return f"예: 최신 DB 상태를 다시 읽어 목록과 통계를 즉시 갱신합니다."
+        if '검사' in label or '검증' in label:
+            return f"예: 점검 결과의 경고/오류를 확인한 뒤 필요한 조치를 진행합니다."
+        return f"예: 클릭하면 '{label or '선택한'}' 작업이 실행됩니다."
+
+    def _build_tooltip_filler(self, label: str, item_type: str) -> str:
+        """최소 길이 미달 시 자연스러운 보강 문구를 만든다."""
+        if item_type == 'cascade':
+            return "마우스를 올린 뒤 클릭하면 연결된 하위 기능 목록을 펼쳐 작업 흐름에 맞게 선택할 수 있습니다."
+        if any(k in (label or '') for k in ('삭제', '초기화', '복원', '종료', '취소')):
+            return "변경 즉시 데이터에 반영될 수 있으니 현재 상태를 확인하고 필요한 경우 백업 후 진행하는 것을 권장합니다."
+        return "작업 전 대상 데이터와 조건을 확인하면 오입력이나 재작업을 줄이고 원하는 결과를 더 빠르게 얻을 수 있습니다."
+
+    def _normalize_tooltip_tone(self, text: str) -> str:
+        """툴팁 문장 끝 어미를 '-합니다.' 톤으로 통일한다."""
+        if not text:
+            return ''
+        normalized = str(text)
+        replacements = [
+            ("하세요.", "합니다."),
+            ("하세요", "합니다"),
+            ("하십시오.", "합니다."),
+            ("하십시오", "합니다"),
+            ("해 주세요.", "합니다."),
+            ("해 주세요", "합니다"),
+            ("해주세요.", "합니다."),
+            ("해주세요", "합니다"),
+        ]
+        for src, dst in replacements:
+            normalized = normalized.replace(src, dst)
+        return " ".join(normalized.split())
+
+    def _show_active_menu_tooltip(self, x: int, y: int, text: str) -> None:
+        """활성 메뉴 항목 툴팁을 화면에 표시한다."""
+        tip_win = getattr(self, '_active_menu_tooltip_win', None)
+        if tip_win is None or not tip_win.winfo_exists():
+            tip_win = tk.Toplevel(self.root)
+            tip_win.wm_overrideredirect(True)
+            self._active_menu_tooltip_win = tip_win
+            _tip_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+            label = tk.Label(
+                tip_win,
+                justify='left',
+                background=ThemeColors.get('bg_card', _tip_dark),
+                foreground=ThemeColors.get('text_primary', _tip_dark),
+                relief='solid',
+                borderwidth=1,
+                font=self._tb_font_scale.body(),
+                padx=Spacing.SM,
+                pady=Spacing.SM,
+                wraplength=420,
+            )
+            label.pack()
+            tip_win._sqm_label = label
+
+        try:
+            tip_win._sqm_label.config(text=text)
+            tip_win.wm_geometry(f"+{int(x)}+{int(y)}")
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+            self._hide_active_menu_tooltip()
+
+    def _hide_active_menu_tooltip(self) -> None:
+        """활성 메뉴 툴팁을 숨긴다."""
+        tip_win = getattr(self, '_active_menu_tooltip_win', None)
+        if tip_win is not None:
+            try:
+                if tip_win.winfo_exists():
+                    tip_win.destroy()
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+                pass
+        self._active_menu_tooltip_win = None
 
     def _refresh_all_data(self) -> None:
         try:
