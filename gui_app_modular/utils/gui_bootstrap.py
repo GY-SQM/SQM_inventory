@@ -160,7 +160,9 @@ RECENT_FILES_FILE = BASE_DIR / "recent_files.json"
 try:
     from version import __version__, APP_NAME
 except ImportError:
-    __version__ = "0.0.0"
+    __version__ = "0.0.0"  # S2-3: version.py 누락 시 fallback
+    import logging as _vlog
+    _vlog.getLogger(__name__).warning("[버전] version.py 로드 실패 → fallback 0.0.0")
     APP_NAME = "SQM 재고관리 시스템"
 
 # ═══════════════════════════════════════════════════════════════

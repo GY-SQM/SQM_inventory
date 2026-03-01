@@ -85,8 +85,8 @@ class ReturnStatisticsDialog:
             try:
                 self.date_start.entry.delete(0, END)
                 self.date_start.entry.insert(0, default_start)
-            except Exception:
-                pass
+            except Exception as _de:
+                logging.getLogger(__name__).debug(f"[반품통계] 시작일 설정 실패: {_de}")
         else:
             self.date_start = ttk.Entry(filter_frame, width=12)
             self.date_start.pack(side=LEFT, padx=2)
@@ -101,8 +101,8 @@ class ReturnStatisticsDialog:
             try:
                 self.date_end.entry.delete(0, END)
                 self.date_end.entry.insert(0, default_end)
-            except Exception:
-                pass
+            except Exception as _de:
+                logging.getLogger(__name__).debug(f"[반품통계] 종료일 설정 실패: {_de}")
         else:
             self.date_end = ttk.Entry(filter_frame, width=12)
             self.date_end.pack(side=LEFT, padx=2)
@@ -240,8 +240,8 @@ class ReturnStatisticsDialog:
             else:
                 widget.delete(0, END)
                 widget.insert(0, val)
-        except Exception:
-            pass
+        except Exception as _we:
+            logging.getLogger(__name__).debug(f"[반품통계] 위젯 값 설정 실패: {_we}")
 
     def _quick_range(self, days: int):
         today = date.today()

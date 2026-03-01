@@ -475,8 +475,8 @@ def _extract_text_from_pdf(pdf_path: str) -> Tuple[str, List[str]]:
         if doc is not None:
             try:
                 doc.close()
-            except Exception:
-                pass
+            except Exception as _ce:
+                logging.getLogger(__name__).debug(f"[PL파서] 문서 닫기 실패: {_ce}")
 
 
 def parse_picking_list_pdf(pdf_path: str) -> PickingDoc:

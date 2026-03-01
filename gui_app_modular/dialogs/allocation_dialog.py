@@ -277,8 +277,8 @@ class AllocationDialog:
         if self._cell_editor:
             try:
                 self._cell_editor.destroy()
-            except Exception:
-                pass
+            except Exception as _ce:
+                logging.getLogger(__name__).debug(f"[Allocation] 셀 에디터 정리 실패: {_ce}")
         self._cell_editor = None
         self._cell_editor_ctx = None
 

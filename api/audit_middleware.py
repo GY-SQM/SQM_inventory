@@ -87,8 +87,8 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
                 if payload:
                     username = payload.get('sub', '')
                     role = payload.get('role', '')
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[Audit] JWT 파싱 실패: {e}")
 
         # 요청 본문 (POST만, 크기 제한)
         request_body = ''
@@ -97,8 +97,8 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
                 body = await request.body()
                 if len(body) < 4096:
                     request_body = body.decode('utf-8', errors='replace')
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[Audit] 요청 본문 읽기 실패: {e}")
 
         # 실행
         error_detail = ''
@@ -128,11 +128,13 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
                 'error_detail': error_detail,
             }
 
-            # DB 기록
-            self._log_to_db(entry)
+            # DB 기록 — 비동기 격리 (P1-2: 이벤트 루프 블로킹 방지)
+            import asyncio
+            loop = asyncio.get_event_loop()
+            loop.run_in_executor(None, self._log_to_db, entry)
 
-            # JSON 파일 기록
-            self._log_to_file(entry)
+            # JSON 파일 기록 — 비동기 격리
+            loop.run_in_executor(None, self._log_to_file, entry)
 
             # 콘솔 로그 (간략)
             level = logging.WARNING if status_code >= 400 else logging.INFO

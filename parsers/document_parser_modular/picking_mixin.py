@@ -35,12 +35,50 @@ RE_LARGE_KG = re.compile(r'([\d,]+\.?\d*)\s*KG\b', re.IGNORECASE)
 
 
 def _normalize_num(s: str) -> float:
-    """천단위 콤마 제거 후 float. 빈 문자열/실패 시 0."""
+    """천단위 구분자 제거 후 float. 유럽식(점=천단위, 콤마=소수) 자동 감지.
+    
+    예시:
+        '300.000,00' → 300000.0  (유럽식)
+        '1.234,56'   → 1234.56   (유럽식)
+        '5,000.00'   → 5000.0    (미국/한국식)
+        '5.00'       → 5.0       (소수점)
+        ''           → 0.0
+    """
     if not s or not isinstance(s, str):
         return 0.0
+    s = s.strip()
     try:
-        return float(re.sub(r'[,\s]', '', s.strip()))
-    except ValueError:
+        # ★ S4-4: 유럽식 감지 — 콤마가 마지막 구분자이고 점이 그 앞에 있으면 유럽식
+        # 패턴: 숫자.숫자.숫자,숫자  또는  숫자.숫자,숫자
+        if re.search(r'\d\.\d{3}[,]', s):
+            # 유럽식: 점=천단위 제거, 콤마→점
+            s = s.replace('.', '').replace(',', '.')
+        elif ',' in s and '.' in s:
+            # 미국식: 콤마=천단위 제거 (점이 소수점)
+            last_comma = s.rfind(',')
+            last_dot = s.rfind('.')
+            if last_dot > last_comma:
+                # 미국식: 5,000.00
+                s = s.replace(',', '')
+            else:
+                # 유럽식: 5.000,00
+                s = s.replace('.', '').replace(',', '.')
+        elif ',' in s and '.' not in s:
+            # 콤마만 있음: 천단위 또는 소수점 판단
+            parts = s.split(',')
+            if len(parts) == 2 and len(parts[1]) <= 2:
+                # 소수점 가능성: 1234,56 → 1234.56
+                s = s.replace(',', '.')
+            else:
+                # 천단위: 1,234,567 → 1234567
+                s = s.replace(',', '')
+        else:
+            # 콤마 없음: 점만 또는 순수 숫자
+            pass
+        # 공백/기타 제거
+        s = re.sub(r'[\s]', '', s)
+        return float(s)
+    except (ValueError, TypeError):
         return 0.0
 
 

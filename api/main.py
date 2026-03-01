@@ -28,14 +28,29 @@ from fastapi import FastAPI, Query, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# 인증 의존성 (Optional — 없으면 인증 없이 운영)
+# 인증 의존성 — Fail-Closed: Import 실패 시 모든 API 차단
 try:
     from api.auth import get_current_user, require_role
     _auth_available = True
 except ImportError:
     _auth_available = False
-    def get_current_user(): return {}
-    def require_role(r='viewer'): return lambda: {}
+    logger.warning("[보안] api.auth 모듈 로드 실패 — 모든 인증 엔드포인트 503 반환")
+
+    def get_current_user():
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=503,
+            detail="인증 모듈 로드 실패 — 관리자에게 문의하세요"
+        )
+
+    def require_role(r='viewer'):
+        def _deny():
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=503,
+                detail="인증 모듈 로드 실패 — 관리자에게 문의하세요"
+            )
+        return _deny
 
 # 프로젝트 루트를 path에 추가
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -78,14 +93,21 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS (개발용 - 프로덕션에서는 도메인 제한)
+# CORS — 환경변수 기반 분리 (P1-1)
+# 기본값: localhost만 허용. 운영 시 SQM_CORS_ORIGINS="https://sqm.example.com,https://admin.sqm.com"
+_cors_env = os.environ.get("SQM_CORS_ORIGINS", "http://localhost:3000,http://localhost:8080")
+_cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+_cors_allow_all = _cors_origins == ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=not _cors_allow_all,  # 와일드카드 + credentials는 브라우저가 차단
     allow_methods=["*"],
     allow_headers=["*"],
 )
+if _cors_allow_all:
+    logger.warning("[보안] CORS allow_origins=['*'] — 운영 환경에서는 도메인 제한 권장")
 
 # JWT 인증 라우터
 try:
@@ -113,8 +135,8 @@ try:
     try:
         engine = get_engine()
         _audit_db = engine.db
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[Audit] 엔진 DB 연결 실패 — Audit 로깅 비활성: {e}")
     app.add_middleware(AuditLogMiddleware, db=_audit_db)
     _audit_enabled = True
     logger.info("[API] 감사 로깅 활성화")
@@ -201,8 +223,8 @@ def health_check():
         engine = get_engine()
         engine.db.fetchone("SELECT 1")
         db_ok = True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"[Health] DB 체크 실패: {e}")
     return HealthResponse(
         status="ok" if db_ok else "degraded",
         version="7.0.0-alpha",
@@ -264,8 +286,8 @@ def get_dashboard(user: dict = Depends(require_role('viewer'))):
             return_rate = ReturnRateSummary(
                 return_count=rc, outbound_count=oc, return_rate=round(rate, 1),
                 return_weight_kg=rw, top_reasons=[])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[반품통계] 조회 실패: {e}")
 
         total_cnt = r.get('total_cnt', 0) or 0
         total_kg = float(r.get('total_kg', 0) or 0)
@@ -518,13 +540,31 @@ def api_outbound(req: OutboundRequest, user: dict = Depends(require_role('operat
     """
     engine = get_engine()
 
+    # ★ P0-2: 엔진은 weight_kg를 기대 — tonbag_count → weight_kg 변환
+    #   SQM 원칙: 500kg/1000kg 톤백이 혼재 → DB에서 실제 단가 조회
+    try:
+        from engine_modules.constants import get_tonbag_unit_weight
+        unit_weight = get_tonbag_unit_weight(engine.db, req.lot_no)
+    except Exception:
+        unit_weight = 500.0  # fallback
+        logger.warning(f"[출고] LOT {req.lot_no} 톤백 단가 조회 실패 → 기본값 {unit_weight}kg 사용")
+
+    calculated_weight_kg = float(req.tonbag_count) * unit_weight
+
     allocation_data = {
         'lot_no': req.lot_no,
         'customer': req.customer,
         'sales_order': req.sales_order,
         'picking_no': req.picking_no,
         'tonbag_count': req.tonbag_count,
+        'weight_kg': calculated_weight_kg,  # ★ 엔진이 기대하는 키
+        'qty_mt': calculated_weight_kg / 1000.0,
     }
+
+    logger.info(
+        f"[출고] API → 엔진: LOT={req.lot_no}, "
+        f"tonbag_count={req.tonbag_count} × {unit_weight}kg = {calculated_weight_kg}kg"
+    )
 
     try:
         result = engine.process_outbound(

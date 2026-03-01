@@ -61,8 +61,9 @@ class BarcodeScanEngine:
             """)
             try:
                 self.db.execute("ALTER TABLE uid_verify_history ADD COLUMN sale_ref TEXT")
-            except Exception:
-                pass
+            except Exception as _ae:
+                # 컬럼 이미 존재 시 정상 (sqlite3.OperationalError: duplicate column)
+                logging.getLogger(__name__).debug(f"[바코드] sale_ref 컬럼 추가 스킵: {_ae}")
             try:
                 self.db.execute(
                     "CREATE INDEX IF NOT EXISTS idx_verify_history_ref "
@@ -76,8 +77,8 @@ class BarcodeScanEngine:
                     "CREATE INDEX IF NOT EXISTS idx_verify_history_sale "
                     "ON uid_verify_history(sale_ref)"
                 )
-            except Exception:
-                pass
+            except Exception as _ie:
+                logging.getLogger(__name__).debug(f"[바코드] sale_ref 인덱스 생성 스킵: {_ie}")
         except Exception as e:
             logger.debug(f"uid_verify_history 테이블 생성 스킵: {e}")
 

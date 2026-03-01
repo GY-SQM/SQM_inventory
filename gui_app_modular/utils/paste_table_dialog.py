@@ -244,14 +244,14 @@ def show_paste_table_dialog(
                 try:
                     from .ui_constants import CustomMessageBox
                     CustomMessageBox.showerror(win, "오류", f"처리 중 오류:\n{e}")
-                except Exception:
-                    pass
+                except Exception as _ui_e:
+                    logging.getLogger(__name__).debug(f"[붙여넣기] 오류 표시 실패: {_ui_e}")
         elif not rows:
             try:
                 from .ui_constants import CustomMessageBox
                 CustomMessageBox.showwarning(win, "데이터 없음", "유효한 데이터가 없습니다.")
-            except Exception:
-                pass
+            except Exception as _ui_e:
+                logging.getLogger(__name__).debug(f"[붙여넣기] 경고 표시 실패: {_ui_e}")
         else:
             win.destroy()
 

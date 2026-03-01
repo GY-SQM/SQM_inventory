@@ -170,8 +170,8 @@ class ThemeMixin:
                     _st.configure(sn, foreground=fg, background=bg, fieldbackground=bg)
                     _st.map(sn, foreground=[('selected', p['tree_select_fg']), ('!selected', fg)], background=[('selected', p['tree_select_bg'])])
                     _st.configure(f"{sn}.Heading", foreground=fg, background=bg_sec)
-                except Exception:
-                    pass
+                except Exception as _te:
+                    logger.debug(f"[테마] Treeview 스타일 적용 실패 ({sn}): {_te}")
         except Exception as _e:
             logger.debug(f"fallback 전역 스타일 갱신 무시: {_e}")
 

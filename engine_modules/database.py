@@ -139,7 +139,8 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
         self._connection = None
         self._cursor = None
         self._last_backup_time = None
-        self._in_transaction = False
+        # P0-3: _in_transaction → thread-local (self._local.in_transaction)
+        # 초기화는 각 스레드에서 getattr()로 처리
 
         self._init_database()
         self._set_busy_timeout()
@@ -231,14 +232,14 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
         self._write_lock.acquire()
 
         # ✅ v2.5.4 수정: 중첩 트랜잭션 시 락을 유지한 채로 yield
-        if self._in_transaction:
+        if getattr(self._local, 'in_transaction', False):
             try:
                 yield
             finally:
                 self._write_lock.release()  # RLock 카운터 감소
             return
 
-        self._in_transaction = True
+        self._local.in_transaction = True
         try:
             self.conn.execute(f"BEGIN {mode}")
             yield
@@ -259,7 +260,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
             
             raise  # 모든 예외 재발생
         finally:
-            self._in_transaction = False
+            self._local.in_transaction = False
             self._write_lock.release()
 
     # =========================================================================
@@ -462,7 +463,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
                 cursor.execute(sql, params)
 
                 # ✅ 트랜잭션 중이면 commit하지 않음 (롤백 가능하도록)
-                if not self._in_transaction:
+                if not getattr(self._local, 'in_transaction', False):
                     self.conn.commit()
 
                 return cursor
@@ -493,7 +494,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
                 cursor.executemany(sql, params_list)
 
                 # ✅ 트랜잭션 중이면 commit하지 않음
-                if not self._in_transaction:
+                if not getattr(self._local, 'in_transaction', False):
                     self.conn.commit()
 
                 return cursor
@@ -522,7 +523,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
         - SQLITE_BUSY 시 지수 백오프 재시도 (최대 3회)
         """
         self._write_lock.acquire()
-        if self._in_transaction:
+        if getattr(self._local, 'in_transaction', False):
             # 중첩 트랜잭션: 이미 시작됨 (RLock 카운터만 증가)
             return
         
@@ -532,7 +533,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
         for attempt in range(max_retries):
             try:
                 self.conn.execute("BEGIN IMMEDIATE")
-                self._in_transaction = True
+                self._local.in_transaction = True
                 logger.debug("트랜잭션 시작 (BEGIN IMMEDIATE)")
                 return
             except sqlite3.OperationalError as e:
@@ -556,7 +557,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
             self.conn.commit()
             logger.debug("트랜잭션 커밋 완료")
         finally:
-            self._in_transaction = False
+            self._local.in_transaction = False
             try:
                 self._write_lock.release()
             except RuntimeError as _e:
@@ -570,7 +571,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
             self.conn.rollback()
             logger.debug("트랜잭션 롤백 완료")
         finally:
-            self._in_transaction = False
+            self._local.in_transaction = False
             try:
                 self._write_lock.release()
             except RuntimeError as _e:

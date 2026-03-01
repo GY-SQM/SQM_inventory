@@ -21,21 +21,10 @@ class RefreshMixin:
     Mixed into SQMInventoryApp class
     """
     
-    def _on_search_legacy(self, *args) -> None:
-        """[LEGACY] Search input changed - InventoryTabMixin 사용"""
-        self._refresh_inventory()
-    
-    def _on_status_filter_legacy(self, event=None) -> None:
-        """[LEGACY] Status filter changed - InventoryTabMixin 사용"""
-        self._refresh_inventory()
-    
-    def _on_tonbag_search_legacy(self, *args) -> None:
-        """[LEGACY] Tonbag search input changed - TonbagTabMixin 사용"""
-        self._refresh_tonbag()
-    
-    def _on_tonbag_filter_legacy(self, event=None) -> None:
-        """[LEGACY] Tonbag status filter changed - TonbagTabMixin 사용"""
-        self._refresh_tonbag()
+    # ★ S2-1: 레거시 함수 4개 삭제됨 (호출처 0건 확인)
+    # 삭제: _on_search_legacy, _on_status_filter_legacy,
+    #        _on_tonbag_search_legacy, _on_tonbag_filter_legacy
+    # 이유: InventoryTabMixin / TonbagTabMixin이 대체
 
     def _refresh_main_tabs(self) -> None:
         """상위 메뉴 작업 후 필수 탭 즉시 반영"""

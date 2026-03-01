@@ -366,8 +366,8 @@ class OutboundHandlersMixin:
         # 레거시 폴백
         try:
             notebook.select(1)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[출고UI] 탭 선택 실패: {e}")
     
     def _on_outbound_click(self) -> None:
         """v4.0.5 Phase2: 파일 선택 → 미리보기 팝업 → 사용자 확인 → DB 반영"""
@@ -1391,8 +1391,8 @@ class OutboundHandlersMixin:
         try:
             from ..utils.ui_constants import center_dialog
             center_dialog(d, self.root)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[출고UI] 다이얼로그 센터링 실패: {e}")
 
     def _on_barcode_scan_upload(self) -> None:
         """v6.12 Stage3: 바코드 스캔 파일 업로드 → UID 대조 + PICKED→SOLD"""
@@ -1649,8 +1649,8 @@ class OutboundHandlersMixin:
         try:
             dt = datetime.strptime(base_date_text.strip(), "%Y-%m-%d")
             month_token = dt.strftime("%Y-%m")
-        except Exception:
-            pass
+        except (ValueError, TypeError) as e:
+            logger.debug(f"[출고UI] 날짜 파싱 실패: {e}")
         root = get_app_base_dir()
         out_dir = os.path.join(root, "reports", "swap", month_token)
         os.makedirs(out_dir, exist_ok=True)

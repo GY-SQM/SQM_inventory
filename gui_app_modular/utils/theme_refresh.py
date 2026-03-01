@@ -240,8 +240,8 @@ def debug_dump_widget_theme_status(app) -> str:
                         if isinstance(tfg, (list, tuple)):
                             tfg = tfg[0] if tfg else ''
                         tag_info.append(f"{tag}:fg={tfg}")
-                except Exception:
-                    pass
+                except Exception as _te:
+                    logging.getLogger(__name__).debug(f"[테마] 태그 정보 조회 실패: {_te}")
             lines.append(f"  [TV#{tree_count}] style={sn} | {', '.join(tag_info) if tag_info else 'no tags'}")
             for tag in ('odd', 'even'):
                 try:
@@ -251,8 +251,8 @@ def debug_dump_widget_theme_status(app) -> str:
                         problems.append(f"⚠️ TV#{tree_count}({sn}): '{tag}' fg='{tfg}' on DARK")
                     elif not colors['is_dark'] and tfg.lower() in ('white', '#ffffff'):
                         problems.append(f"⚠️ TV#{tree_count}({sn}): '{tag}' fg='{tfg}' on LIGHT")
-                except Exception:
-                    pass
+                except Exception as _te:
+                    logging.getLogger(__name__).debug(f"[테마] 색상 검사 실패: {_te}")
     lines.append(f"\nTotal Treeviews: {tree_count}")
     if problems:
         lines.append("\n─── PROBLEMS ───")

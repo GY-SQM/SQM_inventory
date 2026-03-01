@@ -75,8 +75,8 @@ def _read_lots_from_inventory(excel_path: Path) -> list:
         try:
             if str(lot_no).upper().startswith("LOT") and len(lot_no) < 15:
                 continue
-        except Exception:
-            pass
+        except (ValueError, TypeError):
+            pass  # LOT 번호 형식 필터링 — 의도적 skip
         seen.add(lot_no)
         lots.append({
             "lot_no": lot_no,

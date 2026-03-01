@@ -38,13 +38,13 @@ class InboundHistoryDialog:
             try:
                 from ..utils.ui_constants import CustomMessageBox
                 CustomMessageBox.showerror(self.parent, "오류", f"입고현황 조회 창 초기화 오류:\n{e}")
-            except Exception:
-                pass
+            except Exception as _ui_e:
+                logging.getLogger(__name__).debug(f"[입고현황] 오류 표시 실패: {_ui_e}")
             try:
                 if self.dialog and self.dialog.winfo_exists():
                     self.dialog.destroy()
-            except Exception:
-                pass
+            except Exception as _de:
+                logging.getLogger(__name__).debug(f"[입고현황] 다이얼로그 정리 실패: {_de}")
 
     def _create_dialog(self) -> None:
         from ..utils.constants import tk, ttk, BOTH, X, Y, LEFT, RIGHT, W

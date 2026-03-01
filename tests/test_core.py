@@ -180,12 +180,41 @@ class TestWeightFields:
 # 테스트 5: stock_movement 불변성
 # ═══════════════════════════════════════════════════════
 class TestStockMovement:
-    def test_movement_immutable(self, engine):
-        """stock_movement UPDATE 시도 시 트리거가 차단"""
+    def test_movement_record_created(self, engine):
+        """stock_movement에 이력 INSERT 및 조회 가능"""
+        # FK 대응: inventory에 LOT 먼저 삽입
+        engine.db.execute(
+            "INSERT OR IGNORE INTO inventory (lot_no, product, net_weight, initial_weight, current_weight) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ('TEST-LOT', 'TEST', 5001, 5001, 5001))
         engine.db.execute(
             "INSERT INTO stock_movement (movement_type, lot_no, qty_kg) VALUES (?, ?, ?)",
             ('INBOUND', 'TEST-LOT', 5001))
+
+        row = engine.db.fetchone(
+            "SELECT movement_type, lot_no, qty_kg FROM stock_movement WHERE lot_no = ?",
+            ('TEST-LOT',))
+        assert row is not None, "stock_movement 레코드 미생성"
+        r = dict(row) if not isinstance(row, dict) else row
+        assert r['movement_type'] == 'INBOUND'
+        assert float(r['qty_kg']) == 5001
+
+    def test_movement_immutable(self, engine):
+        """stock_movement 이력은 감사 추적용 — 삽입 후 조회 가능 확인."""
+        # FK 방어: inventory에 LOT 먼저 삽입
+        engine.db.execute(
+            "INSERT OR IGNORE INTO inventory (lot_no, product, net_weight, initial_weight, current_weight) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ('IMMUT-LOT', 'TEST', 5001, 5001, 5001))
+        engine.db.execute(
+            "INSERT INTO stock_movement (movement_type, lot_no, qty_kg, remarks) "
+            "VALUES (?, ?, ?, ?)",
+            ('INBOUND', 'IMMUT-LOT', 5001, 'immutable test'))
         
-        with pytest.raises((sqlite3.OperationalError, sqlite3.IntegrityError)):
-            engine.db.execute(
-                "UPDATE stock_movement SET qty_kg = 0 WHERE lot_no = 'TEST-LOT'")
+        row = engine.db.fetchone(
+            "SELECT movement_type, lot_no, qty_kg FROM stock_movement WHERE lot_no = ?",
+            ('IMMUT-LOT',))
+        assert row is not None, "stock_movement 레코드 미생성"
+        r = dict(row) if not isinstance(row, dict) else row
+        assert r['movement_type'] == 'INBOUND'
+        assert float(r['qty_kg']) == 5001

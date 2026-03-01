@@ -1,3 +1,4 @@
+import logging
 # -*- coding: utf-8 -*-
 """
 판매 가능(재고) vs 판매 배정(Allocation) LOT 규칙 검증.
@@ -108,8 +109,8 @@ def get_allocation_lot_qty_mt(allocation_paths: list) -> dict:
                 if lot and str(lot).strip():
                     lot = str(lot).strip()
                     lot_qty[lot] = lot_qty.get(lot, 0) + qty
-        except Exception:
-            pass
+        except Exception as _pe:
+            logging.getLogger(__name__).debug(f"[검증] 파일 파싱 오류: {_pe}")
     return lot_qty
 
 

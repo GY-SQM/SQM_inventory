@@ -80,3 +80,6 @@ generated_allocation/
 terminals/
 agent-transcripts/
 clean_export.py
+
+# 아카이브 (운영 코드 아님)
+_archive/

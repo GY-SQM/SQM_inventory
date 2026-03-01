@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 # -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 — 비즈니스 상수 (v5.6.8)
@@ -83,8 +86,8 @@ def get_tonbag_unit_weight(db, lot_no: str) -> float:
             w = float(row['weight'] if isinstance(row, dict) else row[0])
             if w > 0:
                 return w
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"[constants] 톤백 단가 조회 실패 (LOT={lot_no}): {e}")
     return DEFAULT_TONBAG_WEIGHT
 
 

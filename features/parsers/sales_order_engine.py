@@ -236,14 +236,14 @@ class SalesOrderEngine:
         try:
             if ct_plt and int(ct_plt) > 0:
                 return int(ct_plt)
-        except Exception:
-            pass
+        except (ValueError, TypeError) as e:
+            logger.debug(f"[SO파서] 톤백 수 파싱 실패: {e}")
         try:
             if nw_kg and float(nw_kg) > 0:
                 unit_w = 1.0 if is_sample else TONBAG_WEIGHT_KG
                 return max(1, _round_half_up((float(nw_kg) or 0.0) / unit_w))
-        except Exception:
-            pass
+        except (ValueError, TypeError, ZeroDivisionError) as e:
+            logger.debug(f"[SO파서] 중량→수량 변환 실패: {e}")
         return 1
 
     def _prefetch_picking_rows(self, lot_no: str, picking_no: str, is_sample_flag: int, limit: int) -> list:
@@ -705,8 +705,8 @@ class SalesOrderEngine:
         except Exception as e:
             try:
                 self.db.rollback()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"[SO파서] 롤백 실패 (데이터 손실 위험): {e}")
             result["success"] = False
             result["warnings"].append(f"❌ 처리 오류 (롤백): {e}")
             logger.error(f"[SalesOrderEngine] 오류 → 롤백: {e}")

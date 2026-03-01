@@ -423,7 +423,18 @@ class OutboundMixin(InventoryBaseMixin):
                 raise
         
         if stop_at_picked:
+            # ★ S4-1 FIX (S3-BUG-1): inventory 무게 갱신 추가
+            # 이전: 톤백만 PICKED 변경, inventory 무게 미갱신 → 정합성 실패 → 롤백
+            # 수정: current_weight↓ + picked_weight↑ → 정합성 유지
+            self._update_lot_after_pick(lot_no, weight_kg)
             self._recalc_lot_status(lot_no)
+            # PICK 이력 기록 (OUTBOUND와 구분)
+            self.db.execute(
+                """INSERT INTO stock_movement 
+                (lot_no, movement_type, qty_kg, remarks, created_at)
+                VALUES (?, 'PICK', ?, ?, ?)""" ,
+                (lot_no, weight_kg, f"customer={customer},source={source}", now)
+            )
             return {'lot_no': lot_no, 'weight_kg': weight_kg, 'tonbags_picked': picked_count}
         
         # ★ 2단계: inventory 업데이트
@@ -804,8 +815,8 @@ class OutboundMixin(InventoryBaseMixin):
                 result["import_batch_id"] = import_batch_id
                 try:
                     self.db.commit()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"[출고] 커밋 실패 (데이터 손실 위험): {e}")
             except Exception as e:
                 logger.debug(f"allocation_import_batch 생성 스킵: {e}")
 
@@ -1144,8 +1155,8 @@ class OutboundMixin(InventoryBaseMixin):
                 )
                 try:
                     self.db.commit()
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"[출고] 커밋 실패 (데이터 손실 위험): {e}")
             except Exception as e:
                 logger.debug(f"allocation_import_batch 집계 업데이트 스킵: {e}")
 
@@ -1170,8 +1181,8 @@ class OutboundMixin(InventoryBaseMixin):
                         )
                         try:
                             self.db.commit()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning(f"[출고] 커밋 실패 (데이터 손실 위험): {e}")
                     except Exception as e:
                         logger.debug(f"allocation_import_batch 리포트 경로 업데이트 스킵: {e}")
 

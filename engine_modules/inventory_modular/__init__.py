@@ -106,4 +106,6 @@ __all__ = [
 try:
     from version import __version__
 except ImportError:
-    __version__ = "0.0.0"
+    __version__ = "0.0.0"  # S2-3: version.py 누락 시 fallback
+    import logging as _vlog
+    _vlog.getLogger(__name__).warning("[버전] version.py 로드 실패 → fallback 0.0.0")

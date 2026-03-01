@@ -841,8 +841,8 @@ def setup_dialog_geometry_persistence(
     if saved and re.match(r'^\d+x\d+(\+-?\d+\+-?\d+)?$', saved.strip()):
         try:
             dialog.geometry(saved)
-        except Exception:
-            pass
+        except Exception as _ge:
+            logging.getLogger(__name__).debug(f"[UI] 다이얼로그 geometry 복원 실패: {_ge}")
     if not saved or not dialog.winfo_geometry().strip():
         w, h = DialogSize.calculate(parent, default_size_type)
         dialog.geometry(f"{w}x{h}")

@@ -1,3 +1,6 @@
+import logging
+
+_tree_logger = logging.getLogger(__name__)
 # -*- coding: utf-8 -*-
 """
 Global editable behavior for ttk.Treeview widgets.
@@ -35,16 +38,16 @@ def install_global_editable_tree(root) -> None:
         if callable(cb):
             try:
                 cb()
-            except Exception:
-                pass
+            except Exception as e:
+                _tree_logger.debug(f"[EditableTree] {e}")
 
     def _cancel_editor(tree: ttk.Treeview) -> None:
         editor = getattr(tree, "_global_cell_editor", None)
         if editor is not None:
             try:
                 editor.destroy()
-            except Exception:
-                pass
+            except Exception as e:
+                _tree_logger.debug(f"[EditableTree] {e}")
         tree._global_cell_editor = None
         tree._global_cell_editor_ctx = None
 
@@ -56,8 +59,8 @@ def install_global_editable_tree(root) -> None:
         row_id, col_name = ctx
         try:
             tree.set(row_id, col_name, editor.get().strip())
-        except Exception:
-            pass
+        except Exception as e:
+            _tree_logger.debug(f"[EditableTree] {e}")
         _cancel_editor(tree)
         _notify_changed(tree)
 
@@ -90,15 +93,15 @@ def install_global_editable_tree(root) -> None:
         try:
             tree.clipboard_clear()
             tree.clipboard_append(txt)
-        except Exception:
-            pass
+        except Exception as e:
+            _tree_logger.debug(f"[EditableTree] {e}")
 
     def _delete_rows(tree: ttk.Treeview) -> None:
         for iid in list(tree.selection() or ()):
             try:
                 tree.delete(iid)
-            except Exception:
-                pass
+            except Exception as e:
+                _tree_logger.debug(f"[EditableTree] {e}")
         _notify_changed(tree)
 
     def _cut_rows(tree: ttk.Treeview) -> None:
@@ -109,8 +112,8 @@ def install_global_editable_tree(root) -> None:
         for iid in list(tree.get_children("") or ()):
             try:
                 tree.delete(iid)
-            except Exception:
-                pass
+            except Exception as e:
+                _tree_logger.debug(f"[EditableTree] {e}")
         _notify_changed(tree)
 
     def _paste_rows(tree: ttk.Treeview) -> None:
@@ -129,8 +132,8 @@ def install_global_editable_tree(root) -> None:
             vals = (parts + [""] * len(cols))[:len(cols)]
             try:
                 tree.insert("", "end", values=vals)
-            except Exception:
-                pass
+            except Exception as e:
+                _tree_logger.debug(f"[EditableTree] {e}")
         _notify_changed(tree)
 
     def _on_double_click(event):

@@ -17,6 +17,7 @@ import os
 import sys
 import sqlite3
 import logging
+import pytest
 from datetime import datetime, date
 
 # 프로젝트 루트를 path에 추가
@@ -454,9 +455,18 @@ def test_mixed_500_1000():
 # ═══════════════════════════════════════════════════════
 # 테스트 9: 진단 스크립트
 # ═══════════════════════════════════════════════════════
+try:
+    from utils.db_tonbag_weight_diagnostic import diagnose_tonbag_weights as _dtw
+    _dtw_available = True
+except (ImportError, ModuleNotFoundError):
+    _dtw_available = False
+
+@pytest.mark.skipif(not _dtw_available,
+                    reason="utils.db_tonbag_weight_diagnostic 모듈 미존재")
 def test_diagnostic_script():
     """db_tonbag_weight_diagnostic가 500/1000 혼합을 정확히 감지."""
     import tempfile
+    from utils.db_tonbag_weight_diagnostic import diagnose_tonbag_weights
     db = TestDB()
     create_lot(db, "DIAG500", bag_count=10, unit_weight=500.0)
     create_lot(db, "DIAG1000", bag_count=5, unit_weight=1000.0)
@@ -468,7 +478,6 @@ def test_diagnostic_script():
     db.conn.backup(backup_conn)
     backup_conn.close()
 
-    from utils.db_tonbag_weight_diagnostic import diagnose_tonbag_weights
     diag = diagnose_tonbag_weights(tmp.name)
 
     assert diag['total_tonbags'] == 15, f"톤백 수 불일치: {diag['total_tonbags']}"  # 10 + 5
