@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - Preflight 검증 모듈 (v2.5.4)
 
@@ -19,10 +20,10 @@ Created: 2025-01-13
 
 
 import logging
-from dataclasses import dataclass, field
 from datetime import datetime
+from typing import List, Dict, Any, Tuple
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ class PreflightIssue:
     # 필드명 → Excel 열 매핑 (입고/출고 공통)
     FIELD_TO_COLUMN = {
         'lot_no': 'A',
-        'sub_lt': 'B',
+        'sub_lt': 'B', 
         'weight': 'C',
         'qty': 'C',
         'container_no': 'D',
@@ -97,17 +98,17 @@ class PreflightIssue:
 
     def __str__(self) -> str:
         prefix = "❌" if self.level in (PreflightErrorLevel.FATAL, PreflightErrorLevel.ERROR) else "⚠️"
-
+        
         # ★ 셀 위치 표시 (v2.5.4)
         cell_loc = self.get_cell_location()
         field_info = f"[{self.field}]" if self.field else ""
-
+        
         value_info = f" 값='{self.value}'" if self.value is not None and str(self.value).strip() else ""
         base = f"{prefix} [{cell_loc}] {field_info} {self.message}{value_info}"
         if self.suggestion:
             base += f" 💡 {self.suggestion}"
         return base
-
+    
     def to_popup_str(self) -> str:
         """팝업용 간결한 문자열"""
         cell_loc = self.get_cell_location()
@@ -703,7 +704,7 @@ class PreflightErrorReport:
         """
         try:
             from openpyxl import Workbook
-            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             from openpyxl.utils import get_column_letter
         except ImportError:
             logger.warning("openpyxl 모듈 없음 - Excel 저장 불가")

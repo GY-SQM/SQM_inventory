@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM v5.9.6 — 출고 예정 탭
 ==========================
@@ -6,18 +7,12 @@ Balance(Kg) = current_weight - allocated_kg
 LOT 클릭 시 출고/톤백·샘플 이력 팝업 (Excel/PDF 출력 가능)
 """
 
-import logging
 import tkinter as tk
-from tkinter import END, filedialog
-
-from ..utils.ui_constants import (
-    DialogSize,
-    Spacing,
-    ThemeColors,
-    apply_modal_window_options,
-    center_dialog,
-    get_status_display,
-)
+from tkinter import ttk
+from tkinter import filedialog
+from tkinter import END
+from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options, get_status_display
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +41,9 @@ class OutboundScheduledTabMixin:
 
     def _setup_outbound_scheduled_tab(self) -> None:
         """출고 예정 탭 설정"""
-        from ..utils.constants import BOTH, LEFT, VERTICAL, YES, X, ttk
+        from ..utils.constants import ttk, VERTICAL, BOTH, YES, LEFT, X
 
-        _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        _ = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
 
         # 버튼 바
         btn_frame = ttk.Frame(self.tab_outbound_scheduled)
@@ -59,6 +54,17 @@ class OutboundScheduledTabMixin:
                    command=self._refresh_outbound_scheduled).pack(side=LEFT, padx=Spacing.XS)
         ttk.Button(btn_frame, text="📦 톤백포함",
                    command=self._show_tonbag_included_popup).pack(side=LEFT, padx=Spacing.XS)
+
+        # v6.2.7: 제품 필터 콤보박스
+        ttk.Label(btn_frame, text="  제품:").pack(side=LEFT, padx=(Spacing.SM, 0))
+        self._ob_product_filter_var = getattr(self, '_tk_module', __import__('tkinter')).StringVar(value='전체')
+        self._ob_product_filter = ttk.Combobox(
+            btn_frame, textvariable=self._ob_product_filter_var,
+            state='readonly', width=20
+        )
+        self._ob_product_filter['values'] = ['전체']
+        self._ob_product_filter.pack(side=LEFT, padx=Spacing.XS)
+        self._ob_product_filter.bind('<<ComboboxSelected>>', lambda e: self._refresh_outbound_scheduled())
 
         # v5.9.7: 스플릿 패널 (마스터-상세)
         from ..utils.split_panel import MasterDetailSplitPanel
@@ -115,7 +121,7 @@ class OutboundScheduledTabMixin:
 
     def _setup_ob_allocation_detail_panel(self) -> None:
         """출고예정 탭 상세 패널: Allocation 이력"""
-        from ..utils.constants import BOTH, LEFT, VERTICAL, X, ttk
+        from ..utils.constants import ttk, VERTICAL, BOTH, LEFT, END, X
         detail_container = self._ob_split_panel.get_detail_container()
         # 톤백포함 버튼 (전체 LOT 톤백 예정 현황 팝업)
         ob_detail_bar = ttk.Frame(detail_container)
@@ -183,7 +189,8 @@ class OutboundScheduledTabMixin:
 
     def _show_tonbag_included_popup(self) -> None:
         """톤백포함 — 전체 LOT에 대한 톤백 예정/이력 (RESERVED, PICKED, SOLD, SHIPPED)"""
-        from ..utils.constants import BOTH, END, LEFT, X, ttk
+        from ..utils.constants import ttk, BOTH, LEFT, END, X
+        from ..utils.ui_constants import apply_tooltip
         try:
             rows = self.engine.get_all_tonbag_outbound_status()
         except Exception as e:
@@ -200,7 +207,7 @@ class OutboundScheduledTabMixin:
         fg = ThemeColors.get('text_primary', is_dark)
         popup.configure(bg=bg)
         header = tk.Frame(popup, bg=bg, padx=15, pady=10)
-        header.pack(fill=X)
+        header.pack(fill='x')
         tk.Label(header, text=f"전체 LOT 톤백 예정/이력 — {len(rows)}건",
                  font=('맑은 고딕', 12, 'bold'), bg=bg, fg=fg).pack(anchor='w')
         tk.Label(header, text="판매배정·판매화물 결정·출고·선적 상태 톤백 (LOT별 정렬)",
@@ -241,8 +248,28 @@ class OutboundScheduledTabMixin:
         for child in self.tree_outbound_scheduled.get_children():
             self.tree_outbound_scheduled.delete(child)
 
+        # v6.2.7: 제품 필터 콤보 갱신
+        try:
+            from gui_app_modular.dialogs.product_master_helper import get_product_choices
+            product_choices = ['전체'] + get_product_choices(self.engine.db, include_code=False)
+            if hasattr(self, '_ob_product_filter'):
+                current = self._ob_product_filter_var.get()
+                self._ob_product_filter['values'] = product_choices
+                if current not in product_choices:
+                    self._ob_product_filter_var.set('전체')
+        except Exception:
+            pass
+
         try:
             data = self.engine.get_inventory_outbound_scheduled()
+
+            # v6.2.7: 제품 필터 적용
+            product_filter = getattr(self, '_ob_product_filter_var', None)
+            if product_filter and product_filter.get() != '전체':
+                selected_product = product_filter.get().upper()
+                data = [d for d in data 
+                        if selected_product in str(d.get('product', '')).upper()]
+
             total_balance_kg = 0.0
             total_alloc_kg = 0.0
             total_alloc_count = 0
@@ -315,9 +342,8 @@ class OutboundScheduledTabMixin:
     def _on_export_outbound_scheduled(self) -> None:
         """출고 예정 테이블 Excel 내보내기 (같은 이름 있으면 _1, _2 ... 로 저장)"""
         from tkinter import filedialog
-
-        from ..utils.excel_file_helper import get_unique_excel_path
         from ..utils.ui_constants import CustomMessageBox
+        from ..utils.excel_file_helper import get_unique_excel_path
         path = filedialog.asksaveasfilename(
             defaultextension='.xlsx',
             filetypes=[('Excel', '*.xlsx')],
@@ -335,7 +361,7 @@ class OutboundScheduledTabMixin:
 
     def _show_lot_outbound_history_popup(self, lot_no: str) -> None:
         """LOT 출고 이력 팝업 — 톤백·샘플 출고/예약 이력 (Excel/PDF 출력)"""
-        from ..utils.constants import BOTH, END, LEFT, VERTICAL, X, ttk
+        from ..utils.constants import ttk, VERTICAL, BOTH, LEFT, END
         from ..utils.ui_constants import apply_tooltip
 
         history = self.engine.get_lot_outbound_history(lot_no)
@@ -356,7 +382,7 @@ class OutboundScheduledTabMixin:
 
         # 헤더
         header = tk.Frame(popup, bg=bg, padx=15, pady=10)
-        header.pack(fill=X)
+        header.pack(fill='x')
         tk.Label(header, text=f"📦 {lot_no}  |  {product}",
                  font=('맑은 고딕', 14, 'bold'), bg=bg, fg=fg).pack(anchor='w')
         tk.Label(header, text="출고된 톤백·샘플 이력 (여러 번에 걸친 출고 포함)",
@@ -394,7 +420,7 @@ class OutboundScheduledTabMixin:
 
         # 버튼: Excel, PDF, 닫기
         btn_bar = tk.Frame(popup, bg=bg, pady=8)
-        btn_bar.pack(fill=X, padx=10)
+        btn_bar.pack(fill='x', padx=10)
 
         def _export_excel():
             from ..utils.excel_file_helper import get_unique_excel_path
@@ -459,9 +485,8 @@ class OutboundScheduledTabMixin:
     def _export_lot_outbound_history_excel(self, lot_no: str, output_path: str,
                                             history: list) -> None:
         """LOT 출고 이력 Excel 저장"""
-        import re
-
         import pandas as pd
+        import re
         rows = []
         for idx, row in enumerate(history, 1):
             st_raw = str(row.get('tonbag_status', '')).strip()
@@ -483,8 +508,8 @@ class OutboundScheduledTabMixin:
 
     def _export_lot_outbound_history_pdf(self, lot_no: str, history: list) -> None:
         """LOT 출고 이력 PDF 저장"""
+        import os
         from tkinter import filedialog
-
         from ..utils.ui_constants import CustomMessageBox
 
         path = filedialog.asksaveasfilename(

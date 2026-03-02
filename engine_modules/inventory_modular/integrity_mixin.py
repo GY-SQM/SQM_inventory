@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 데이터 정합성 + 스냅샷 + 알림 Mixin
 ============================================================
@@ -155,33 +156,33 @@ class IntegrityMixin:
                 TOLERANCE = 0.5  # 0.5kg 허용
 
                 # 방법: (initial_weight - 1) / 톤백수 = 단가 → 500 or 1000이어야 함
-                unit_weight = (iw - SAMPLE_WEIGHT) / tb_total if tb_total > 0 else 0
+                # (iw - SAMPLE_WEIGHT) / tb_total → 개별 톤백 무게로 대체 확인
 
                 # 개별 톤백 무게 확인 (일반 톤백만)
                 tb_weights = self.db.fetchall(
                     "SELECT weight FROM inventory_tonbag WHERE lot_no = ? AND COALESCE(is_sample,0) = 0",
                     (lot_no,))
-
+                
                 if tb_weights:
                     weights = [float(r['weight'] or 0) for r in tb_weights]
                     unique_weights = set(round(w, 1) for w in weights)
-
+                    
                     # 모든 톤백이 동일 무게인지 확인
                     if len(unique_weights) > 1:
                         result['warnings'].append(
                             f"톤백 무게 불균일: {sorted(unique_weights)}")
-
+                    
                     # 단가가 500 or 1000인지 확인
                     avg_weight = sum(weights) / len(weights)
                     is_valid_unit = any(
                         abs(avg_weight - vw) < TOLERANCE for vw in VALID_UNIT_WEIGHTS)
-
+                    
                     if not is_valid_unit:
                         result['errors'].append(
                             f"대원칙 위반: 톤백 평균 {avg_weight:.1f}kg "
                             f"(허용: {VALID_UNIT_WEIGHTS})")
                         result['valid'] = False
-
+                    
                     # LOT 총무게 정합성: 톤백합 + 샘플 = initial_weight
                     tonbag_sum = sum(weights)
                     expected_total = tonbag_sum + SAMPLE_WEIGHT
@@ -190,7 +191,7 @@ class IntegrityMixin:
                             f"대원칙 총무게 불일치: initial({iw:.1f}) ≠ "
                             f"톤백합({tonbag_sum:.1f}) + 샘플({SAMPLE_WEIGHT}) = {expected_total:.1f}")
                         result['valid'] = False
-
+                    
                     result['details']['unit_weight'] = round(avg_weight, 1)
                     result['details']['principle_valid'] = is_valid_unit
 

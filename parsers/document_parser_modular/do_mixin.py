@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - D/O (Delivery Order) 파서 Mixin
 ======================================================
@@ -8,12 +9,12 @@ v5.8.6.B: Arrival Date 하이브리드 추출 + Free Time 계산 복원
 버전: v5.8.6.B
 """
 
-import logging
 import re
-from datetime import date, datetime
+import logging
+from datetime import datetime, date
 from typing import Optional
 
-from ..document_models import ContainerInfo, DOData, FreeTimeInfo
+from ..document_models import DOData, ContainerInfo, FreeTimeInfo
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class DOMixin:
     D/O (Delivery Order) 파서 Mixin
     ★ v5.8.6.B: Arrival Date 하이브리드 + Free Time 계산 복원
     """
-
+    
     def parse_do(self, pdf_path: Optional[str] = None, image_bytes: Optional[bytes] = None,
                  image_path: Optional[str] = None, use_gemini: bool = True) -> Optional[DOData]:
         """
@@ -68,8 +69,7 @@ class DOMixin:
             logger.info(f"[DO] Gemini API(강제)로 파싱: {pdf_path}")
 
         from features.ai.gemini_parser import GeminiDocumentParser
-
-        from ..document_models import ContainerInfo, DOData, FreeTimeInfo
+        from ..document_models import DOData, ContainerInfo, FreeTimeInfo
 
         gemini_parser = GeminiDocumentParser(self.gemini_api_key)
         gemini_result = None
@@ -89,7 +89,7 @@ class DOMixin:
 
         if not use_image and (not gemini_result or not getattr(gemini_result, 'success', False)):
             try:
-                from core.config import DISABLE_OPENAI_FALLBACK, OPENAI_API_KEY
+                from core.config import OPENAI_API_KEY, DISABLE_OPENAI_FALLBACK
                 if not DISABLE_OPENAI_FALLBACK and OPENAI_API_KEY and OPENAI_API_KEY.strip():
                     from features.ai.openai_parser import try_parse_do
                     openai_result = try_parse_do(pdf_path)
@@ -122,9 +122,8 @@ class DOMixin:
         # ═══════════════════════════════════════════════════════
         try:
             from utils.date_utils import (
-                calculate_free_time_status,
-                extract_arrival_date,
-                extract_pdf_text,
+                extract_arrival_date, extract_pdf_text,
+                calculate_free_time_status
             )
 
             # Gemini 결과를 dict로 변환
@@ -231,7 +230,7 @@ class DOMixin:
         if _with_date:
             print(f"[DO con_return 파싱] Gemini에서 반납일 추출된 항목 수: {len(_with_date)} — {_with_date}")
         else:
-            print("[DO con_return 파싱] Gemini에서 반납일 0건 — 이유: API 응답 containers[]에 con_return_date/free_time_date/free_time(날짜형) 없음. OCR 폴백 시도 예정.")
+            print(f"[DO con_return 파싱] Gemini에서 반납일 0건 — 이유: API 응답 containers[]에 con_return_date/free_time_date/free_time(날짜형) 없음. OCR 폴백 시도 예정.")
 
         # 반납일 공통값 보급: 한 컨테이너라도 반납일이 있으면 빈 free_time_info에 동일값 적용 (D/O에서 하나만 적힌 경우)
         first_date = ''
@@ -258,10 +257,7 @@ class DOMixin:
         if _need_ocr and _ocr_source:
             print(f"[DO con_return 파싱] OCR 폴백 실행 — Free Time 표 직접 추출 시도: {_ocr_source}")
             try:
-                from parsers.do_free_time_ocr import (
-                    normalize_container,
-                    parse_do_free_time,
-                )
+                from parsers.do_free_time_ocr import parse_do_free_time, normalize_container
                 ocr_result = parse_do_free_time(_ocr_source)
                 free_time_map = ocr_result.get("free_time_map") or {}
                 if free_time_map:
@@ -304,14 +300,14 @@ class DOMixin:
                 logger.debug("[DO] OCR 폴백 실패(무시): %s", ocr_err)
                 print(f"[DO con_return 파싱] OCR 폴백 실패 — 이유: {ocr_err}")
         elif _need_ocr and not _ocr_source:
-            print("[DO con_return 파싱] OCR 폴백 미실행 — PDF/이미지 경로 없음 (캡처 바이트만 전달된 경우)")
+            print(f"[DO con_return 파싱] OCR 폴백 미실행 — PDF/이미지 경로 없음 (캡처 바이트만 전달된 경우)")
 
         # [디버그] 최종 con_return 요약
         _final = [(getattr(ft, 'container_no', ''), getattr(ft, 'free_time_date', '')) for ft in result.free_time_info if (getattr(ft, 'free_time_date', '') or '').strip()]
         if _final:
             print(f"[DO con_return 파싱] 최종 반납일 적용됨 (재고 CON RETURN에 사용): {_final}\n")
         else:
-            print("[DO con_return 파싱] 최종 반납일 없음 — 재고 화면 CON RETURN·FREE TIME 비게 됨. D/O 문서의 'Free Time' 또는 '프리타임' 컬럼(날짜) 확인.\n")
+            print(f"[DO con_return 파싱] 최종 반납일 없음 — 재고 화면 CON RETURN·FREE TIME 비게 됨. D/O 문서의 'Free Time' 또는 '프리타임' 컬럼(날짜) 확인.\n")
 
         # Free Time(컨테이너 반납일) 미추출 시 로그 — D/O 문서에 "프리타임"/Free Time 컬럼(반납일) 확인
         if result.containers and (not result.free_time_info or all(not (getattr(ft, 'free_time_date', '') or '').strip() for ft in result.free_time_info)):
@@ -324,15 +320,15 @@ class DOMixin:
         if not HAS_NEW_GENAI or not self.gemini_api_key:
             logger.warning("[DO] Gemini API 사용 불가")
             return result
-
+        
         try:
             images = self._pdf_to_images(pdf_path, max_pages=3)
             if not images:
                 logger.warning("[DO] 이미지 변환 실패")
                 return result
-
+            
             client = genai.Client(api_key=self.gemini_api_key)
-
+            
             prompt = """
 이 D/O(Delivery Order/화물인도지시서) 이미지에서 다음 정보를 추출해주세요:
 
@@ -359,20 +355,20 @@ JSON 형식으로 응답해주세요:
             contents = [prompt]
             for img_bytes in images[:2]:
                 contents.append(types.Part.from_bytes(data=img_bytes, mime_type="image/png"))
-
+            
             response = client.models.generate_content(
                 model=getattr(self, 'model_name', 'gemini-2.5-flash'),
                 contents=contents
             )
-
+            
             response_text = response.text
             logger.debug(f"[DO] Gemini 응답: {response_text[:500]}")
-
+            
             import json
             json_match = re.search(r'\{[\s\S]*\}', response_text)
             if json_match:
                 data = json.loads(json_match.group())
-
+                
                 if data.get('do_no'):
                     result.do_no = data['do_no']
                 if data.get('bl_no'):
@@ -381,7 +377,7 @@ JSON 형식으로 응답해주세요:
                     result.sap_no = data['sap_no']
                 if data.get('vessel'):
                     result.vessel = data['vessel']
-
+                
                 # ★ v5.8.6.B: normalize_date 사용
                 if data.get('arrival_date'):
                     try:
@@ -393,7 +389,7 @@ JSON 형식으로 응답해주세요:
                             result.arrival_date = date(int(parts[0]), int(parts[1]), int(parts[2]))
                         except (ValueError, TypeError, KeyError) as e:
                             logger.debug(f"Suppressed: {e}")
-
+                
                 if data.get('containers'):
                     for c in data['containers']:
                         container = ContainerInfo(
@@ -401,15 +397,15 @@ JSON 형식으로 응답해주세요:
                             seal_no=c.get('seal', '')
                         )
                         result.containers.append(container)
-
+                
                 if data.get('free_time_days'):
                     result.free_time = FreeTimeInfo(
                         storage_free_days=data['free_time_days']
                     )
-
+                
                 logger.info("[DO] Gemini 파싱 성공")
-
+            
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"[DO] Gemini 파싱 오류: {e}")
-
+        
         return result

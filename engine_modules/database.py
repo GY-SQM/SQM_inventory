@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - SQLite 데이터베이스 모듈
 ==============================================
@@ -37,13 +38,21 @@ v3.6.0: Docstring 보강
 버전: v3.6.0
 """
 
-import logging
-import os
 import sqlite3
+
+# v6.2.7: Python 3.12+ DeprecationWarning 대응
+# sqlite3 기본 date/datetime 어댑터가 3.12에서 deprecated
+import datetime as _dt
+sqlite3.register_adapter(_dt.date, lambda d: d.isoformat())
+sqlite3.register_adapter(_dt.datetime, lambda d: d.isoformat())
+sqlite3.register_converter("date", lambda b: _dt.date.fromisoformat(b.decode()))
+sqlite3.register_converter("datetime", lambda b: _dt.datetime.fromisoformat(b.decode()))
+import os
+import logging
 import threading
-from contextlib import contextmanager
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import Optional, List, Dict, Tuple, Any, TYPE_CHECKING
+from contextlib import contextmanager
 
 # 타입 힌팅용 (런타임에는 import 안 함)
 if TYPE_CHECKING:
@@ -143,7 +152,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
         self._init_database()
         self._set_busy_timeout()
         self._create_indexes()
-
+        
         # ★★★ v2.9.25: DB 스키마 자동 점검/마이그레이션 ★★★
         self._verify_schema()
         self._log_explain_query_plan_once()
@@ -247,7 +256,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
             # Phase 3: 모든 예외에서 롤백
             self.conn.rollback()
             logger.error(f"트랜잭션 롤백: {type(e).__name__}: {e}")
-
+            
             # HardStopException은 절대 삼키지 않음
             try:
                 from .exceptions import HardStopException
@@ -255,7 +264,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
                     logger.warning("HardStopException 감지 - 즉시 재발생")
             except ImportError as _e:
                 logger.debug(f"Suppressed: {_e}")
-
+            
             raise  # 모든 예외 재발생
         finally:
             self._local.in_transaction = False
@@ -524,7 +533,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
         if getattr(self._local, 'in_transaction', False):
             # 중첩 트랜잭션: 이미 시작됨 (RLock 카운터만 증가)
             return
-
+        
         # BEGIN IMMEDIATE도 SQLITE_BUSY 가능 → 재시도
         max_retries = 3
         retry_delay = 0.5
@@ -628,28 +637,27 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
         Phase 5: 성능 측정 추가
         """
         try:
-            import time
-
             from .performance import monitor
+            import time
             start = time.time()
         except ImportError:
             monitor = None
             start = None
-
+        
         cursor = self.conn.cursor()
         cursor.execute(sql, params)
         result = cursor.fetchall()
-
+        
         # v5.0.0: sqlite3.Row를 dict로 변환
         result = [dict(row) for row in result] if result else []
-
+        
         # 성능 측정
         if monitor and start:
             elapsed = time.time() - start
             if elapsed > 0.5:  # 0.5초 이상 느린 쿼리만
                 logger.warning(f"⚠️ 느린 쿼리 ({elapsed:.3f}s): {sql[:100]}...")
                 monitor._record("DB_fetchall", elapsed, "fetchall")
-
+        
         return result
 
     def _log_explain_query_plan_once(self) -> None:

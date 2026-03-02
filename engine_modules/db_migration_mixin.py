@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM Inventory - Database Migration Mixin
 =========================================
@@ -419,8 +420,8 @@ class DatabaseMigrationMixin:
                 logger.debug(f'[v6.1.0] {col} 이미 존재: {e}')
         try:
             self.commit()
-        except sqlite3.OperationalError as e:
-            logger.warning(f"[_migrate_v601_picking_list_meta] Suppressed: {e}")
+        except sqlite3.OperationalError:
+            pass
 
     def _migrate_v588_con_return(self) -> None:
         """
@@ -782,23 +783,23 @@ class DatabaseMigrationMixin:
                     logger.debug(f"[v4.2.0] tonbag_uid 컬럼 이미 존재: {e}")
                 else:
                     raise
-
+            
             # ========================================
             # 2단계: 기존 데이터 백필
             # ========================================
             logger.info("[v4.2.0] 기존 데이터 tonbag_uid 백필 시작...")
-
+            
             # 샘플 톤백 (is_sample=1 또는 sub_lt=0)
-            updated_sample = self.execute("""
+            _updated_sample = self.execute("""
                 UPDATE inventory_tonbag
                 SET tonbag_uid = lot_no || '-S0'
                 WHERE (COALESCE(is_sample, 0) = 1 OR sub_lt = 0)
                   AND (tonbag_uid IS NULL OR tonbag_uid = '')
             """)
             logger.info("[v4.2.0] 샘플 백필 완료")
-
+            
             # 일반 톤백
-            updated_normal = self.execute("""
+            _updated_normal = self.execute("""
                 UPDATE inventory_tonbag
                 SET tonbag_uid = lot_no || '-' || CAST(sub_lt AS TEXT)
                 WHERE COALESCE(is_sample, 0) = 0
@@ -806,19 +807,19 @@ class DatabaseMigrationMixin:
                   AND (tonbag_uid IS NULL OR tonbag_uid = '')
             """)
             logger.info("[v4.2.0] 일반 톤백 백필 완료")
-
+            
             # ========================================
             # 3단계: 유니크 인덱스 생성
             # ========================================
             logger.info("[v4.2.0] 인덱스 생성 시작...")
-
+            
             # UID 전체 유니크
             self.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_tonbag_uid_unique
                 ON inventory_tonbag(tonbag_uid)
             """)
             logger.info("[v4.2.0] idx_tonbag_uid_unique 생성 완료")
-
+            
             # 샘플 LOT당 1개 보장
             self.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_tonbag_sample_per_lot
@@ -826,7 +827,7 @@ class DatabaseMigrationMixin:
                 WHERE COALESCE(is_sample, 0) = 1
             """)
             logger.info("[v4.2.0] idx_tonbag_sample_per_lot 생성 완료")
-
+            
             # ========================================
             # 4단계: INSERT 트리거 (UID 자동 생성)
             # ========================================
@@ -846,7 +847,7 @@ class DatabaseMigrationMixin:
                 END;
             """)
             logger.info("[v4.2.0] trg_tonbag_uid_insert 생성 완료")
-
+            
             # ========================================
             # 5단계: UPDATE 트리거 (UID 자동 갱신)
             # ========================================
@@ -865,13 +866,13 @@ class DatabaseMigrationMixin:
                 END;
             """)
             logger.info("[v4.2.0] trg_tonbag_uid_update 생성 완료")
-
+            
             # ========================================
             # 6단계: 커밋
             # ========================================
             self.commit()
             logger.info("[v4.2.0] ✅ tonbag_uid 마이그레이션 완료")
-
+            
         except (sqlite3.OperationalError, OSError, sqlite3.IntegrityError) as e:
             logger.error(f"[v4.2.0] ❌ 마이그레이션 실패: {e}")
             self.rollback()
@@ -993,7 +994,7 @@ class DatabaseMigrationMixin:
         if added:
             self.commit()
             logger.info(f"[v3.9.6] 검색 인덱스 {added}개 추가")
-
+    
     def _migrate_v423_tonbag_location(self) -> None:
         """
         v4.2.3: inventory_tonbag.location 추가 (톤백 위치 관리)
@@ -1018,7 +1019,7 @@ class DatabaseMigrationMixin:
                     logger.debug(f"[v4.2.3] location 컬럼 이미 존재: {e}")
                 else:
                     raise
-
+            
             # ========================================
             # 2단계: location_updated_at 컬럼 추가
             # ========================================
@@ -1030,7 +1031,7 @@ class DatabaseMigrationMixin:
                     logger.debug(f"[v4.2.3] location_updated_at 컬럼 이미 존재: {e}")
                 else:
                     raise
-
+            
             # ========================================
             # 3단계: 인덱스 생성
             # ========================================
@@ -1039,10 +1040,10 @@ class DatabaseMigrationMixin:
                 logger.info("[v4.2.3] location 인덱스 생성 완료")
             except (sqlite3.OperationalError, OSError) as e:
                 logger.debug(f"[v4.2.3] 인덱스 생성 실패 (무시): {e}")
-
+            
             self.commit()
             logger.info("✅ [v4.2.3] 톤백 위치 관리 마이그레이션 완료")
-
+            
         except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
             logger.error(f"❌ [v4.2.3] 톤백 위치 마이그레이션 실패: {e}")
             raise

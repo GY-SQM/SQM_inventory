@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - Packing List 파서 Mixin
 ==============================================
@@ -19,9 +20,12 @@ v3.6.0: document_parser_v2.py에서 분리
 버전: v3.6.0
 """
 
+import os
+import re
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict
+from core.types import safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,7 @@ class PackingMixin:
         >>> parser = MyParser(gemini_api_key='your_key')
         >>> packing = parser.parse_packing_list('packing.pdf')
     """
-
+    
     def parse_packing_list(self, pdf_path: str) -> Optional['PackingListData']:
         """
         Packing List PDF 파싱
@@ -61,7 +65,7 @@ class PackingMixin:
             - 키가 없으면 하드-스톱(예외)
             - 실패 시 정규식 폴백을 하지 않습니다.
         """
-        from ..document_models import LOTInfo, PackingListData, PackingListRow
+        from ..document_models import PackingListData, PackingListRow, LOTInfo
 
         # API-Only Gate
         self._require_gemini_api_key()
@@ -83,7 +87,7 @@ class PackingMixin:
 
         if not gemini_result or not getattr(gemini_result, 'success', False) or len(getattr(gemini_result, 'lots', []) or []) == 0:
             try:
-                from core.config import DISABLE_OPENAI_FALLBACK, OPENAI_API_KEY
+                from core.config import OPENAI_API_KEY, DISABLE_OPENAI_FALLBACK
                 if DISABLE_OPENAI_FALLBACK:
                     logger.info("[PACKING_LIST] OpenAI 폴백 비활성(설정) — Gemini만 사용")
                 elif not OPENAI_API_KEY or not OPENAI_API_KEY.strip():

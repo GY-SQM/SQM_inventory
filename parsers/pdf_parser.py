@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 통합 PDF 파서 (v2.5.4)
 Packing List, Invoice, B/L, D/O 문서 자동 파싱
@@ -10,12 +11,12 @@ Author: Ruby
 Version: 2.5.4
 """
 
-import logging
 import re
-from dataclasses import dataclass, field
-from datetime import date, datetime
+import logging
+from datetime import datetime, date
+from typing import Optional, List, Dict, Any, Tuple
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -154,8 +155,8 @@ class PDFParser:
             'BL': 0,
             'DO': 0
         }
-        detection_source = None
-
+        # _detection_source removed (v6.2.7: unused)  # noqa: F841
+        
         try:
             # ============================================
             # 1단계: 파일명 기반 감지 (가장 신뢰성 높음!)
@@ -183,12 +184,12 @@ class PDFParser:
 
             # Packing List: PACKING, PACKINGLIST, PL, PLIST (숫자 접미사 포함)
             # 예: PackingList1.pdf, PACKING_LIST.pdf, 2200033057_PL.pdf
-            if ('PACKINGLIST' in filename or 'PACKING_LIST' in filename or
+            if ('PACKINGLIST' in filename or 'PACKING_LIST' in filename or 
                 'PACKING' in filename or '_PL' in filename or 'PL_' in filename or
                 'PLIST' in filename):
                 logger.info(f"[문서감지] 1단계(파일명): PACKING_LIST ({filename})")
                 return "PACKING_LIST"
-
+            
             # 숫자 접미사 패턴 (PACKINGLIST1, PACKING1 등)
             import re
             if re.search(r'PACKING\s*LIST\d*', filename) or re.search(r'PACKING\d+', filename):
@@ -220,18 +221,18 @@ class PDFParser:
                                    "UNIT PRICE USD", "TOTAL AMOUNT USD", "FOB VALUE", "SAP NO"]
                 invoice_score = sum(2 for kw in invoice_keywords if kw in text_upper)
                 detection_scores['INVOICE'] += invoice_score
-
+                
                 # B/L 키워드 점수
                 bl_keywords = ["NON-NEGOTIABLE WAYBILL", "BILL OF LADING", "BOOKING NO",
                               "SHIPPER:", "CONSIGNEE:", "NOTIFY PARTY:", "SHIPPED ON BOARD"]
                 bl_score = sum(2 for kw in bl_keywords if kw in text_upper)
                 detection_scores['BL'] += bl_score
-
+                
                 # D/O 키워드 점수
                 do_keywords = ["DELIVERY ORDER", "발급확인서", "FREE TIME", "화물인도지시서", "컨테이너"]
                 do_score = sum(2 for kw in do_keywords if kw in text_upper or kw in text)
                 detection_scores['DO'] += do_score
-
+                
                 # Packing List 키워드 점수
                 packing_keywords = ["PACKING LIST", "PACKINGLIST", "FOLIO:", "LOT NO",
                                    "NET WEIGHT", "GROSS WEIGHT", "MAXIBAG", "MX 500", "MX500", "MXBG"]
@@ -251,19 +252,18 @@ class PDFParser:
             if use_gemini_fallback and max_score < 4:
                 try:
                     from gemini_parser import GeminiDocumentParser
-
                     from core.config import GEMINI_API_KEY
-
+                    
                     if GEMINI_API_KEY and GEMINI_API_KEY != 'your-api-key-here':
                         gemini = GeminiDocumentParser(GEMINI_API_KEY)
-
+                        
                         # Gemini에게 문서 유형 질문
                         gemini_type = gemini.detect_document_type(pdf_path)
-
+                        
                         if gemini_type and gemini_type != "UNKNOWN":
                             logger.info(f"[문서감지] 3단계(Gemini): {gemini_type} ({filename})")
                             return gemini_type
-
+                            
                 except (ImportError, ModuleNotFoundError) as gemini_error:
                     logger.warning(f"[문서감지] Gemini fallback 실패: {gemini_error}")
 
