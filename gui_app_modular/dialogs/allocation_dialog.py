@@ -8,6 +8,7 @@ import logging
 import threading
 import time
 import tkinter as tk
+from collections import Counter
 from tkinter import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y, filedialog, ttk
 
 from ..utils.ui_constants import (
@@ -519,6 +520,27 @@ class AllocationDialog:
             CustomMessageBox.showwarning(self.dialog, "경고", "예약할 행이 없습니다.")
             return
 
+        # 업로드 원본 내부 중복 LOT는 정합성 보호를 위해 전량 제외
+        dedup = self._exclude_duplicate_lots_for_integrity(self.parsed_rows)
+        excluded_rows = dedup.get('excluded_rows', 0)
+        excluded_lots = dedup.get('excluded_lots', [])
+        if excluded_rows > 0:
+            self.parsed_rows = dedup.get('filtered_rows', [])
+            self._fill_tree_from_parsed_rows()
+            preview = ", ".join(excluded_lots[:15])
+            more = f"\n... 외 {len(excluded_lots) - 15}건" if len(excluded_lots) > 15 else ""
+            CustomMessageBox.showwarning(
+                self.dialog,
+                "중복 LOT 자동 제외",
+                "업로드 데이터 내 중복 LOT가 감지되어 해당 화물은 배정에서 제외했습니다.\n\n"
+                f"제외 LOT: {len(excluded_lots)}건\n"
+                f"제외 행: {excluded_rows}행\n\n"
+                f"{preview}{more}"
+            )
+            if not self.parsed_rows:
+                CustomMessageBox.showwarning(self.dialog, "예약 중단", "중복 제외 후 남은 배정 대상이 없습니다.")
+                return
+
         dup = self._check_duplicate_allocation_file()
         if dup.get('is_duplicate'):
             dup_msg = (
@@ -643,6 +665,42 @@ class AllocationDialog:
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"예약 실행 오류: {e}", exc_info=True)
             CustomMessageBox.showerror(self.dialog, "오류", f"예약 실행 중 오류:\n{e}")
+
+    def _exclude_duplicate_lots_for_integrity(self, rows: list) -> dict:
+        """업로드 데이터 내부 LOT 중복을 모두 제외한다(정합성 우선 정책)."""
+        if not rows:
+            return {"filtered_rows": [], "excluded_rows": 0, "excluded_lots": []}
+
+        normalized_lots = []
+        for r in rows:
+            raw = (r.get('lot_no') if hasattr(r, 'get') else getattr(r, 'lot_no', ''))
+            lot = str(raw or '').strip().upper()
+            normalized_lots.append(lot)
+
+        counter = Counter([lot for lot in normalized_lots if lot])
+        duplicate_lot_set = {lot for lot, cnt in counter.items() if cnt > 1}
+        if not duplicate_lot_set:
+            return {"filtered_rows": rows, "excluded_rows": 0, "excluded_lots": []}
+
+        filtered_rows = []
+        excluded_rows = 0
+        for r, lot in zip(rows, normalized_lots):
+            if lot and lot in duplicate_lot_set:
+                excluded_rows += 1
+                continue
+            filtered_rows.append(r)
+
+        excluded_lots = sorted(list(duplicate_lot_set))
+        logger.warning(
+            "[allocation] duplicate lots excluded: lots=%d rows=%d",
+            len(excluded_lots),
+            excluded_rows,
+        )
+        return {
+            "filtered_rows": filtered_rows,
+            "excluded_rows": excluded_rows,
+            "excluded_lots": excluded_lots,
+        }
 
     def _check_duplicate_allocation_file(self) -> dict:
         """같은 Allocation 입력이 이미 예약됐는지 확인 (fingerprint 우선)."""

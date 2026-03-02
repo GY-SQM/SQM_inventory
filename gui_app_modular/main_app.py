@@ -173,6 +173,9 @@ class SQMInventoryApp:
         
         # v3.0: UI 운영 헬퍼 초기화
         self.ui_helper = None  # _setup_ui에서 초기화
+        # 전역 중복 검사 가드
+        self._dup_guard_last_signature = ""
+        self._dup_guard_interval_ms = 60000
     
     def _init_engine(self) -> None:
         """Initialize database engine"""
@@ -425,10 +428,56 @@ class SQMInventoryApp:
             self._refresh_tonbag()
             if hasattr(self, '_refresh_summary'):
                 self._refresh_summary()
+            self._start_duplicate_guard()
             self._log("Data loaded")
         except (AttributeError, RuntimeError) as e:
             logger.error(f"Initial data load error: {e}")
             self._log(f"X Data load error: {e}")
+
+    def _start_duplicate_guard(self) -> None:
+        """전역 중복 검사 자동 루프 시작."""
+        try:
+            self.root.after(2500, self._run_duplicate_guard_once)
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.debug(f"duplicate guard start skip: {e}")
+
+    def _run_duplicate_guard_once(self) -> None:
+        """전역 식별 키 중복 검사 1회 실행 후 재예약."""
+        try:
+            if not self.engine or not hasattr(self.engine, "db"):
+                return
+            from .utils.duplicate_guard import scan_duplicate_keys
+
+            findings = scan_duplicate_keys(self.engine.db)
+            signature = "\n".join(findings)
+            if findings:
+                self._set_status(f"⚠️ 중복 감지 {len(findings)}건")
+                if signature != self._dup_guard_last_signature:
+                    self._log("⚠️ 전역 중복 검사 결과:")
+                    for line in findings[:10]:
+                        self._log(f"   - {line}")
+                    if len(findings) > 10:
+                        self._log(f"   ... 외 {len(findings) - 10}건")
+                    popup_lines = findings[:5]
+                    popup_msg = "중복 데이터가 감지되었습니다.\n\n"
+                    popup_msg += "\n".join([f"• {x}" for x in popup_lines])
+                    if len(findings) > 5:
+                        popup_msg += f"\n\n... 외 {len(findings) - 5}건"
+                    CustomMessageBox.showwarning(
+                        self.root,
+                        "중복 데이터 경고",
+                        popup_msg
+                    )
+                self._dup_guard_last_signature = signature
+            else:
+                self._dup_guard_last_signature = ""
+        except (ImportError, ModuleNotFoundError, ValueError, TypeError, AttributeError) as e:
+            logger.debug(f"duplicate guard run skip: {e}")
+        finally:
+            try:
+                self.root.after(self._dup_guard_interval_ms, self._run_duplicate_guard_once)
+            except (ValueError, TypeError, AttributeError) as e:
+                logger.debug(f"duplicate guard reschedule skip: {e}")
 
     def _save_startup_snapshot(self) -> None:
         """v3.8.4 A6: 프로그램 시작 시 일별 재고 스냅샷 저장"""
