@@ -12,11 +12,18 @@ import logging
 import sqlite3
 import csv
 import os
+import hashlib
 from datetime import datetime
 
 from ..utils.ui_constants import CustomMessageBox, ThemeColors, apply_tooltip
 from utils.path_utils import get_app_base_dir
 logger = logging.getLogger(__name__)
+
+try:
+    import openpyxl  # type: ignore
+    HAS_OPENPYXL = True
+except Exception:
+    HAS_OPENPYXL = False
 
 
 class OutboundHandlersMixin:
@@ -52,7 +59,7 @@ class OutboundHandlersMixin:
     
     def _on_simple_outbound(self) -> None:
         """Simple outbound dialog - enter LOT and quantity (v4.0.3: UI 분리)"""
-        from ..utils.constants import tk, ttk, VERTICAL, BOTH, LEFT, RIGHT, X, Y, END, W
+        from ..utils.constants import tk, ttk, VERTICAL, BOTH, LEFT, RIGHT, X, Y, END, W, filedialog
         from ..utils.constants import HAS_TTKBOOTSTRAP
 
         # v4.0.3: UI 위젯 생성을 별도 메서드로 분리
@@ -60,15 +67,215 @@ class OutboundHandlersMixin:
         dialog, lot_text, preview_tree = w['dialog'], w['lot_text'], w['preview_tree']
         summary_var, customer_var = w['summary_var'], w['customer_var']
         sale_ref_var, btn_frame = w['sale_ref_var'], w['btn_frame']
+        proof_docs = []
+        proof_hashes = set()
+        tonbag_meta_by_item = {}
+        out_scan_state = {"loaded": False, "records": [], "matched": [], "unmatched": []}
+
+        proof_status_var = tk.StringVar(value="첨부 없음")
+        out_scan_status_var = tk.StringVar(value="파일 미선택")
+        unmatched_var = tk.StringVar(value="")
+
+        def _normalize_tonbag_key(raw):
+            if raw is None:
+                return ""
+            return str(raw).strip().upper().replace(" ", "").replace("-", "").replace("_", "")
+
+        def _hash_file(path):
+            h = hashlib.sha256()
+            with open(path, 'rb') as f:
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    h.update(chunk)
+            return h.hexdigest()
+
+        def _attach_proof_doc():
+            paths = filedialog.askopenfilenames(
+                parent=dialog,
+                title="근거문서 선택",
+                filetypes=[
+                    ("지원 파일", "*.pdf *.png *.jpg *.jpeg *.xlsx *.csv *.txt *.docx"),
+                    ("모든 파일", "*.*"),
+                ],
+            )
+            for fpath in paths:
+                try:
+                    fhash = _hash_file(fpath)
+                    if fhash in proof_hashes:
+                        CustomMessageBox.showwarning(dialog, "중복 파일",
+                                                     f"{os.path.basename(fpath)}\n이미 첨부된 문서입니다.")
+                        continue
+                    proof_hashes.add(fhash)
+                    proof_docs.append({
+                        "id": fhash[:16],
+                        "name": os.path.basename(fpath),
+                        "path": fpath,
+                        "size": os.path.getsize(fpath),
+                        "hash": fhash,
+                        "added_at": datetime.now().strftime("%H:%M:%S"),
+                    })
+                except Exception as e:
+                    logger.error(f"[SimpleOutbound] 근거문서 첨부 실패: {fpath} -> {e}")
+                    CustomMessageBox.showerror(dialog, "첨부 오류", str(e))
+            proof_listbox.delete(0, END)
+            for d in proof_docs:
+                proof_listbox.insert(END, f"📄 {d['name']} ({d['size']/1024:.1f}KB) [{d['added_at']}]")
+            proof_status_var.set(f"📎 {len(proof_docs)}건 첨부" if proof_docs else "첨부 없음")
+
+        def _preview_proof_doc(event=None):
+            sel = proof_listbox.curselection()
+            if not sel:
+                return
+            doc = proof_docs[sel[0]]
+            path = doc["path"]
+            if not os.path.exists(path):
+                CustomMessageBox.showwarning(dialog, "파일 없음", path)
+                return
+            ext = os.path.splitext(path)[1].lower()
+            if ext == ".pdf":
+                try:
+                    os.startfile(path)
+                except Exception:
+                    CustomMessageBox.showinfo(dialog, "문서 정보", f"PDF 파일:\n{path}")
+                return
+            if ext in (".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"):
+                try:
+                    from PIL import Image, ImageTk
+                except Exception:
+                    CustomMessageBox.showwarning(dialog, "미리보기 불가", "Pillow 미설치로 이미지 미리보기를 열 수 없습니다.")
+                    return
+                win = tk.Toplevel(dialog)
+                win.title(f"미리보기 - {doc['name']}")
+                img = Image.open(path)
+                img.thumbnail((800, 600), Image.Resampling.LANCZOS if hasattr(Image, "Resampling") else Image.LANCZOS)
+                ph = ImageTk.PhotoImage(img)
+                lb = tk.Label(win, image=ph)
+                lb.image = ph
+                lb.pack()
+                return
+            CustomMessageBox.showinfo(
+                dialog, "문서 정보",
+                f"파일: {doc['name']}\n크기: {doc['size']/1024:.1f}KB\nhash: {doc['hash'][:24]}..."
+            )
+
+        def _parse_out_scan_file(path):
+            ext = os.path.splitext(path)[1].lower()
+            records = []
+            if ext in (".xlsx", ".xls") and HAS_OPENPYXL:
+                wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
+                ws = wb.active
+                rows = list(ws.iter_rows(values_only=True))
+                wb.close()
+                if not rows:
+                    return []
+                header = [str(c).strip().lower() if c is not None else "" for c in rows[0]]
+                key_idx = next((i for i, h in enumerate(header) if any(k in h for k in ["tonbag_id", "tonbag", "tb_id", "uid", "id", "톤백"])), None)
+                wt_idx = next((i for i, h in enumerate(header) if any(k in h for k in ["weight", "kg", "무게", "중량"])), None)
+                start = 1 if key_idx is not None else 0
+                if key_idx is None:
+                    key_idx, wt_idx = 0, 1
+                for row in rows[start:]:
+                    if not row or len(row) <= key_idx:
+                        continue
+                    key = str(row[key_idx]).strip() if row[key_idx] is not None else ""
+                    if not key:
+                        continue
+                    w = 0.0
+                    if wt_idx is not None and len(row) > wt_idx and row[wt_idx] is not None:
+                        try:
+                            w = float(str(row[wt_idx]).replace(",", "").strip())
+                        except Exception:
+                            w = 0.0
+                    records.append({"raw_key": key, "key": _normalize_tonbag_key(key), "weight": w})
+                return records
+
+            with open(path, "r", encoding="utf-8-sig", newline="") as f:
+                sample = f.read(2048)
+                f.seek(0)
+                try:
+                    dialect = csv.Sniffer().sniff(sample, delimiters=",\t|;")
+                except Exception:
+                    dialect = csv.excel
+                rows = list(csv.reader(f, dialect))
+            if not rows:
+                return []
+            header = [str(c).strip().lower() for c in rows[0]]
+            key_idx = next((i for i, h in enumerate(header) if any(k in h for k in ["tonbag_id", "tonbag", "tb_id", "uid", "id", "톤백"])), None)
+            wt_idx = next((i for i, h in enumerate(header) if any(k in h for k in ["weight", "kg", "무게", "중량"])), None)
+            start = 1 if key_idx is not None else 0
+            if key_idx is None:
+                key_idx, wt_idx = 0, 1
+            for row in rows[start:]:
+                if not row or len(row) <= key_idx:
+                    continue
+                key = str(row[key_idx]).strip()
+                if not key:
+                    continue
+                w = 0.0
+                if wt_idx is not None and len(row) > wt_idx:
+                    try:
+                        w = float(str(row[wt_idx]).replace(",", "").strip() or 0)
+                    except Exception:
+                        w = 0.0
+                records.append({"raw_key": key, "key": _normalize_tonbag_key(key), "weight": w})
+            return records
+
+        def _load_out_scan_file():
+            path = filedialog.askopenfilename(
+                parent=dialog,
+                title="OUT 스캔 파일 선택",
+                filetypes=[("스캔 파일", "*.csv *.tsv *.txt *.xlsx *.xls"), ("모든 파일", "*.*")],
+            )
+            if not path:
+                return
+            try:
+                recs = _parse_out_scan_file(path)
+            except Exception as e:
+                CustomMessageBox.showerror(dialog, "파싱 오류", f"OUT 파일 파싱 실패:\n{e}")
+                return
+            if not recs:
+                CustomMessageBox.showwarning(dialog, "경고", "유효한 스캔 데이터가 없습니다.")
+                return
+
+            selected_items = preview_tree.selection()
+            selected_keys = set()
+            for iid in selected_items:
+                meta = tonbag_meta_by_item.get(iid, {})
+                if meta.get("key"):
+                    selected_keys.add(meta["key"])
+            if not selected_keys:
+                CustomMessageBox.showwarning(dialog, "안내", "Preview 후 출고 톤백을 먼저 선택하세요.")
+                return
+
+            matched = [r for r in recs if r["key"] in selected_keys]
+            unmatched = [r for r in recs if r["key"] not in selected_keys]
+            out_scan_state["loaded"] = True
+            out_scan_state["records"] = recs
+            out_scan_state["matched"] = matched
+            out_scan_state["unmatched"] = unmatched
+
+            out_scan_status_var.set(
+                f"📊 {os.path.basename(path)} | 전체 {len(recs)}건 | 매칭 {len(matched)} | 미매칭 {len(unmatched)}"
+            )
+            if unmatched:
+                preview_ids = ", ".join(r["raw_key"] for r in unmatched[:5])
+                more = f" 외 {len(unmatched)-5}건" if len(unmatched) > 5 else ""
+                unmatched_var.set(f"⛔ 미매칭 {len(unmatched)}건 (무단 출고 의심): {preview_ids}{more}")
+            else:
+                unmatched_var.set("")
         
         def on_preview():
             """Preview: LOT별 톤백 상세 표시 (v3.8.4)"""
             preview_tree.delete(*preview_tree.get_children())
+            tonbag_meta_by_item.clear()
             
             lines_input = lot_text.get("1.0", END).strip().split('\n')
             total_kg = 0
             tonbag_count = 0
             warnings = []
+            lot_requests = {}
             
             for line in lines_input:
                 line = line.strip()
@@ -86,8 +293,9 @@ class OutboundHandlersMixin:
                 except ValueError:
                     warnings.append(f"수량 오류: {line}")
                     continue
-                
-                qty_kg = qty_mt * 1000
+                lot_requests[lot_no] = lot_requests.get(lot_no, 0.0) + (qty_mt * 1000)
+
+            for lot_no, qty_kg in lot_requests.items():
                 
                 # LOT 존재 확인
                 lot_info = self.engine.db.fetchone(
@@ -110,7 +318,7 @@ class OutboundHandlersMixin:
                 
                 # 판매가능 톤백 조회
                 tonbags = self.engine.db.fetchall(
-                    """SELECT sub_lt, weight, status, location 
+                    """SELECT id, sub_lt, weight, status, location 
                        FROM inventory_tonbag 
                        WHERE lot_no = ? AND status = 'AVAILABLE'
                        ORDER BY sub_lt DESC""",
@@ -130,6 +338,8 @@ class OutboundHandlersMixin:
                     tb_weight = tb['weight'] or 0
                     sub_lt = tb['sub_lt']
                     loc = tb['location'] or ''
+                    tb_id = str(tb.get('id') or f"{lot_no}-{sub_lt}")
+                    normalized_key = _normalize_tonbag_key(tb_id)
                     
                     status = '✅ 출고' if remaining >= tb_weight else '⚠️ 초과'
                     
@@ -137,6 +347,12 @@ class OutboundHandlersMixin:
                         f"  └ {lot_no}", str(sub_lt), product,
                         f"{tb_weight:,.0f}", status, loc
                     ), tags=('tonbag',))
+                    tonbag_meta_by_item[item_id] = {
+                        "lot_no": lot_no,
+                        "tonbag_id": tb_id,
+                        "key": normalized_key,
+                        "weight": float(tb_weight or 0),
+                    }
                     
                     # 자동 선택 (요청 수량 만큼)
                     preview_tree.selection_add(item_id)
@@ -171,18 +387,23 @@ class OutboundHandlersMixin:
             if selected:
                 # 선택된 톤백에서 LOT별 수량 집계
                 lot_weights = {}
+                selected_keys = set()
                 for item_id in selected:
                     values = preview_tree.item(item_id)['values']
                     tags = preview_tree.item(item_id).get('tags', ())
                     
                     if 'lot_header' in tags:
                         continue  # LOT 헤더는 건너뜀
-                    
-                    lot_no = str(values[0]).replace('└', '').strip()
-                    try:
-                        weight = float(str(values[3]).replace(',', ''))
-                    except (ValueError, IndexError):
-                        continue
+                    meta = tonbag_meta_by_item.get(item_id, {})
+                    lot_no = str(meta.get("lot_no") or str(values[0]).replace('└', '').strip())
+                    weight = float(meta.get("weight") or 0)
+                    if weight <= 0:
+                        try:
+                            weight = float(str(values[3]).replace(',', ''))
+                        except (ValueError, IndexError):
+                            continue
+                    if meta.get("key"):
+                        selected_keys.add(meta["key"])
                     
                     if lot_no not in lot_weights:
                         lot_weights[lot_no] = 0
@@ -195,8 +416,20 @@ class OutboundHandlersMixin:
                         'qty_mt': weight_kg / 1000.0,
                         'sold_to': customer,
                         'customer': customer,
-                        'sale_ref': sale_ref
+                        'sale_ref': sale_ref,
+                        'proof_doc_ids': [d['id'] for d in proof_docs],
                     })
+
+                # OUT 스캔 파일이 있으면 미매칭 하드스톱
+                if out_scan_state.get("loaded"):
+                    unmatched = out_scan_state.get("unmatched", [])
+                    if unmatched:
+                        CustomMessageBox.showerror(
+                            self.root, "출고 중단",
+                            f"OUT 스캔 파일에 미매칭 톤백 {len(unmatched)}건이 있어 출고를 중단합니다.\n"
+                            f"(무단 출고 의심)\n미매칭을 정리한 후 다시 진행하세요."
+                        )
+                        return
             
             if not allocation_items:
                 # Fallback: 텍스트 입력에서 추출
@@ -218,7 +451,8 @@ class OutboundHandlersMixin:
                         'qty_mt': qty_mt,
                         'sold_to': customer,
                         'customer': customer,
-                        'sale_ref': sale_ref
+                        'sale_ref': sale_ref,
+                        'proof_doc_ids': [d['id'] for d in proof_docs],
                     })
             
             if not allocation_items:
@@ -256,6 +490,7 @@ class OutboundHandlersMixin:
                 f"고객: {customer}\n"
                 f"📦 톤백: {len(tonbag_items)}개 ({tonbag_qty:.3f} MT)\n"
                 f"🧪 샘플: {len(sample_items)}개 ({sample_qty:.3f} MT)\n"
+                f"📎 근거문서: {len(proof_docs)}건\n"
                 f"합계: {len(allocation_items)}건 ({total_qty:.3f} MT)\n\n"
                 f"※ 현장 출고 후 [출고 확정]으로 최종 처리하세요."
             )
@@ -309,6 +544,28 @@ class OutboundHandlersMixin:
                 logger.error(f"출고 오류: {e}")
                 err_msg = str(e)[:500]
                 CustomMessageBox.showerror(self.root, "출고 오류", f"출고 처리 중 오류:\n\n{err_msg}")
+
+        # v6.3.0: 근거문서 + OUT 스캔 업로드 바
+        aux_frame = ttk.Frame(btn_frame.master)
+        aux_frame.pack(fill=X, pady=(0, 6))
+
+        proof_frame = ttk.LabelFrame(aux_frame, text="📎 근거문서 (선택)")
+        proof_frame.pack(fill=X, pady=(0, 4))
+        proof_btn_row = ttk.Frame(proof_frame)
+        proof_btn_row.pack(fill=X, padx=6, pady=4)
+        ttk.Button(proof_btn_row, text="+ 파일 첨부", command=_attach_proof_doc).pack(side=LEFT, padx=2)
+        ttk.Label(proof_btn_row, textvariable=proof_status_var).pack(side=LEFT, padx=8)
+        proof_listbox = tk.Listbox(proof_frame, height=3, font=("Consolas", 9))
+        proof_listbox.pack(fill=X, padx=6, pady=(0, 6))
+        proof_listbox.bind("<Double-1>", _preview_proof_doc)
+
+        out_frame = ttk.LabelFrame(aux_frame, text="📊 OUT 스캔 파일")
+        out_frame.pack(fill=X)
+        out_btn_row = ttk.Frame(out_frame)
+        out_btn_row.pack(fill=X, padx=6, pady=4)
+        ttk.Button(out_btn_row, text="📂 파일 불러오기 (csv/xlsx)", command=_load_out_scan_file).pack(side=LEFT, padx=2)
+        ttk.Label(out_btn_row, textvariable=out_scan_status_var).pack(side=LEFT, padx=8)
+        ttk.Label(out_frame, textvariable=unmatched_var, foreground="#dc2626").pack(fill=X, padx=6, pady=(0, 6))
         
         # Button style
         btn_style = {"bootstyle": "info"} if HAS_TTKBOOTSTRAP else {}
