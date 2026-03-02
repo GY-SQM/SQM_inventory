@@ -1,8 +1,9 @@
-__version__ = '6.2.9'
+# -*- coding: utf-8 -*-
+__version__ = '6.3.0'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
-    '6.2.9': '🚀 v6.2.9: CodeQuality 최종본 반영 — parser/engine 품질 패치, 제품 마스터/리포트 경로 정리, 테스트/CI 보강 및 안정화',
+    '6.3.0': '🧹 v6.3.0: 코드 품질 대청소 — 데드코드 4,648줄 삭제(52함수+5파일), 미사용 import 10건·f-string 8건·변수 3건 정리, SQL 화이트리스트 보안 강화, Python 3.12 호환, 제품 마스터 8종 내장·자동감지·출고 필터, GitHub Actions CI(3버전 매트릭스+70% 게이트), 테스트 449→493건, outbound 커버리지 24%→80%',
     '6.2.7': '🛡️ v6.2.7: 4-AI 통합 디버깅 — P0 인증Fail-Closed/출고계약/트랜잭션thread-local, P1 CORS분리/Audit비동기/JWT캐싱, except:pass 40→0건, 레거시삭제/아카이브격리/__version__단일화',
     '6.2.5': '🚀 v6.2.5: 빠른 출고/바코드 스캔 안정화 — 붙여넣기 자동확장·헤더스킵·LOT 사전검증·중복합산, quick_outbound 성능/예외 처리 강화, 스캔 sale_ref 스코프·재검증(TOCTOU)·정규화 및 QA 체크리스트/패치 스크립트 추가',
     '6.2.3': '✨ v6.2.3: 조회/입고 UX 정리 — 입고·출고 현황 조회 메뉴/라벨 통일, 기간 필터 UI 일원화, 조회창 내보내기/버튼 문구 통일, 추가 입고 시 메인 재고 화면 초기화, 원스톱 파일 선택 폴더 기억',

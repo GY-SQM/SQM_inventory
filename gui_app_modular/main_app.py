@@ -793,49 +793,7 @@ if __name__ == '__main__':
         menu_fix = cfg.getint('ui', 'menu_fix_enabled', fallback=1)
         return {"menu_fix_enabled": menu_fix}
 
-    def _apply_menu_theme_fix(self):
-        """Try to normalize Tk Menu colors for light/dark theme."""
-        s = self._read_ui_settings()
-        if not s.get("menu_fix_enabled", 1):
-            return
-        theme_name = None
-        try:
-            theme = getattr(getattr(self, 'style', None), 'theme', None)
-            theme_name = theme.name if theme else None
-        except (ValueError, TypeError, KeyError, AttributeError, OSError):
-            theme_name = None
 
-        is_light = False
-        if theme_name:
-            is_light = any(k in theme_name.lower() for k in [
-                'litera','flatly','cosmo','sandstone','yeti','journal','pulse','minty','lumen'
-            ])
-        try:
-            bg = self.root.cget('bg')
-            is_light = is_light or (str(bg).lower() in ['white', '#ffffff', '#f0f0f0'])
-        except (ValueError, TypeError, KeyError, AttributeError, OSError) as _e:
-            logger.debug(f"Suppressed: {_e}")
-
-        bgc = '#ffffff' if is_light else '#202020'
-        fgc = '#000000' if is_light else '#ffffff'
-
-        try:
-            if hasattr(self, 'menubar') and self.menubar:
-                self.menubar.configure(background=bgc, foreground=fgc, activebackground=bgc, activeforeground=fgc)
-        except (ValueError, TypeError, KeyError, AttributeError, OSError) as _e:
-            logger.debug(f"Suppressed: {_e}")
-
-        for attr in ['tools_menu','file_menu','help_menu','edit_menu']:
-            try:
-                m = getattr(self, attr, None)
-                if m is not None:
-                    m.configure(background=bgc, foreground=fgc, activebackground=bgc, activeforeground=fgc)
-            except (ValueError, TypeError, KeyError, AttributeError, OSError) as _e:
-                logger.debug(f"Suppressed: {_e}")
-
-    # --------------------------
-
-    # v6.2.7: 제품별 재고 현황 리포트
     def _show_product_inventory_report(self):
         """도구 > 제품별 재고 현황 리포트."""
         try:
@@ -867,36 +825,3 @@ if __name__ == '__main__':
 
     # v5.3.4: Tools Menu Ensure (100% 연결 목표)
     # --------------------------
-    def _ensure_tools_menu(self):
-        """Ensure there is a '도구' menu and it contains the DB migration command."""
-        from .utils.constants import tk
-        try:
-            menubar = getattr(self, 'menubar', None)
-            if menubar is None:
-                # try to find local menubar variable patterns (fallback)
-                menubar = getattr(self, '_menubar', None)
-            if menubar is None:
-                return
-
-            # If we already have tools_menu, just ensure command exists
-            tools_menu = getattr(self, 'tools_menu', None) or getattr(self, 'tools_menu_ref', None) or getattr(self, 'tools_menu_obj', None)
-            if tools_menu is None:
-                # create a new tools_menu and attach
-                try:
-                    tools_menu = tk.Menu(menubar, tearoff=0)
-                    self.tools_menu = tools_menu
-                    menubar.add_cascade(label='도구', menu=tools_menu)
-                except (ValueError, TypeError, KeyError, AttributeError, OSError):
-                    return
-
-            # add command if not present (Tk Menu doesn't provide easy enumeration; try to add safely)
-            try:
-                tools_menu.add_separator()
-            except (ValueError, TypeError, KeyError, AttributeError, OSError) as _e:
-                logger.debug(f"Suppressed: {_e}")
-            try:
-                tools_menu.add_command(label='DB 마이그레이션(v5.3.0)', command=self._on_run_v530_migration)
-            except (ValueError, TypeError, KeyError, AttributeError, OSError) as _e:
-                logger.debug(f"Suppressed: {_e}")
-        except (ValueError, TypeError, KeyError, AttributeError, OSError) as _e:
-            logger.debug(f"Suppressed: {_e}")

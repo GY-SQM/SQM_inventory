@@ -2248,27 +2248,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             f"Gross {total_gross:,.0f} kg"
         )
     
-    def _check_parsing_duplicates(self) -> str:
-        """파싱 결과에서 입고 중복 여부 검사 (lot_no 기준). 중복이 있으면 안내 문구 반환, 없으면 빈 문자열."""
-        if not self.preview_data:
-            return ""
-        from collections import Counter
-        lot_counts = Counter(str(r.get('lot_no', '')).strip() for r in self.preview_data if str(r.get('lot_no', '')).strip())
-        dups = [(lot, cnt) for lot, cnt in lot_counts.items() if cnt > 1]
-        if not dups:
-            return ""
-        parts = [f"LOT NO {lot} ({cnt}건)" for lot, cnt in dups[:10]]
-        if len(dups) > 10:
-            parts.append(f"외 {len(dups) - 10}건")
-        return "중복: " + ", ".join(parts)
 
-    # v5.9.4: _on_upload, _upload_thread, _save_to_db, _export_to_excel
-    # → inbound_upload_mixin.py (InboundUploadMixin)으로 분리
-    
-    # ═══════════════════════════════════════════════════════════
-    # 유틸리티
-    # ═══════════════════════════════════════════════════════════
-    
     def _show_success_and_close(self, count: int):
         def _close():
             if self.dialog and self.dialog.winfo_exists():

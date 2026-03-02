@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 심플 엑셀 출고
 =====================================
@@ -14,9 +15,9 @@ v5.6.0: 최소 필드(lot_no + weight_kg)만으로 출고 처리
 """
 
 import logging
-from datetime import date
+from datetime import datetime, date
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -24,124 +25,11 @@ logger = logging.getLogger(__name__)
 class SimpleExcelOutboundMixin:
     """심플 엑셀 출고 Mixin"""
 
-    def _on_simple_excel_outbound(self) -> None:
-        """심플 엑셀 출고 — Excel/데이터 입력 원칙: 데이터 붙여넣기 vs 파일 업로드 → 미리보기 → 확정"""
-        from utils.constants import filedialog
-
-        from ..utils.custom_messagebox import CustomMessageBox
-
-        choice = "upload"
-        if hasattr(self, "_show_template_or_upload_choice"):
-            choice = self._show_template_or_upload_choice("심플 출고", "simple_outbound")
-            if choice is None:
-                return
-            if choice == "template":
-                self._show_simple_outbound_paste_dialog()
-                return
-        file_path = filedialog.askopenfilename(
-            title="심플 출고 엑셀 선택",
-            filetypes=[
-                ("Excel", "*.xlsx *.xls"),
-                ("CSV", "*.csv"),
-                ("All", "*.*"),
-            ]
-        )
-        if not file_path:
-            return
-
-        try:
-            import pandas as pd
-        except ImportError:
-            CustomMessageBox.error(None, "오류", "pandas 라이브러리가 필요합니다.")
-            return
-
-        try:
-            # 파일 읽기
-            ext = Path(file_path).suffix.lower()
-            if ext == '.csv':
-                df = pd.read_csv(file_path, dtype=str)
-            else:
-                df = pd.read_excel(file_path, dtype=str)
-
-            # 컬럼명 정규화 (소문자, 공백→언더스코어)
-            df.columns = [c.strip().lower().replace(' ', '_') for c in df.columns]
-
-            # 필수 컬럼 확인
-            lot_col = None
-            weight_col = None
-            customer_col = None
-            sale_ref_col = None
-
-            for c in df.columns:
-                if c in ('lot_no', 'lot', 'lotno', 'lot_number'):
-                    lot_col = c
-                elif c in ('weight_kg', 'weight', 'qty_kg', 'kg'):
-                    weight_col = c
-                elif c in ('qty_mt', 'mt', 'weight_mt'):
-                    weight_col = c  # MT → 나중에 ×1000
-                elif c in ('customer', 'sold_to', 'buyer'):
-                    customer_col = c
-                elif c in ('sale_ref', 'sales_ref', 'reference', 'ref'):
-                    sale_ref_col = c
-
-            if not lot_col:
-                CustomMessageBox.error(None, "컬럼 오류",
-                    "lot_no 컬럼을 찾을 수 없습니다.\n\n"
-                    "필수 컬럼: lot_no (또는 lot, lotno)\n"
-                    f"발견된 컬럼: {list(df.columns)}")
-                return
-
-            if not weight_col:
-                CustomMessageBox.error(None, "컬럼 오류",
-                    "weight_kg 컬럼을 찾을 수 없습니다.\n\n"
-                    "필수 컬럼: weight_kg (또는 qty_mt, weight, kg)\n"
-                    f"발견된 컬럼: {list(df.columns)}")
-                return
-
-            # 데이터 파싱
-            is_mt = weight_col in ('qty_mt', 'mt', 'weight_mt')
-            outbound_items = []
-
-            for idx, row in df.iterrows():
-                lot_no = str(row.get(lot_col, '')).strip()
-                if not lot_no:
-                    continue
-
-                try:
-                    weight = float(str(row.get(weight_col, 0)).replace(',', ''))
-                    if is_mt:
-                        weight = weight * 1000  # MT → KG
-                except (ValueError, TypeError):
-                    continue
-
-                if weight <= 0:
-                    continue
-
-                customer = str(row.get(customer_col, '')).strip() if customer_col else ''
-                sale_ref = str(row.get(sale_ref_col, '')).strip() if sale_ref_col else ''
-
-                outbound_items.append({
-                    'lot_no': lot_no,
-                    'weight_kg': weight,
-                    'customer': customer,
-                    'sale_ref': sale_ref,
-                })
-
-            if not outbound_items:
-                CustomMessageBox.warning(None, "데이터 없음", "유효한 출고 데이터가 없습니다.")
-                return
-
-            # 미리보기 다이얼로그
-            self._show_simple_outbound_preview(outbound_items)
-
-        except (ValueError, TypeError, KeyError) as e:
-            logger.error(f"심플 엑셀 출고 오류: {e}", exc_info=True)
-            CustomMessageBox.error(None, "오류", f"파일 처리 중 오류:\n{e}")
 
     def _show_simple_outbound_paste_dialog(self) -> None:
         """심플 출고 — 내장 형식에 데이터 붙여넣기 후 미리보기 (Excel/데이터 입력 원칙)."""
-        from ..utils.custom_messagebox import CustomMessageBox
         from ..utils.paste_table_dialog import show_paste_table_dialog
+        from ..utils.custom_messagebox import CustomMessageBox
 
         columns = [
             ("lot_no", "LOT NO", 120),
@@ -189,8 +77,7 @@ class SimpleExcelOutboundMixin:
 
     def _show_simple_outbound_preview(self, items: List[Dict]) -> None:
         """심플 출고 미리보기"""
-        from utils.constants import BOTH, YES, tk, ttk
-
+        from utils.constants import tk, ttk, BOTH, YES
         from ..utils.custom_messagebox import CustomMessageBox
 
         dialog = tk.Toplevel(self.root)
@@ -334,33 +221,3 @@ class SimpleExcelOutboundMixin:
         ttk.Button(btn_frame, text="✅ 출고 실행", command=execute).pack(side='right', padx=5)
         ttk.Button(btn_frame, text="❌ 취소", command=dialog.destroy).pack(side='right', padx=5)
 
-    def _download_simple_outbound_template(self) -> None:
-        """심플 출고 엑셀 양식 다운로드"""
-        from utils.constants import filedialog
-
-        from ..utils.custom_messagebox import CustomMessageBox
-
-        try:
-            import pandas as pd
-        except ImportError:
-            CustomMessageBox.error(None, "오류", "pandas 라이브러리가 필요합니다.")
-            return
-
-        save_path = filedialog.asksaveasfilename(
-            title="심플 출고 양식 저장",
-            defaultextension=".xlsx",
-            filetypes=[("Excel", "*.xlsx")],
-            initialfile=f"simple_outbound_template_{date.today().strftime('%Y%m%d')}.xlsx"
-        )
-        if not save_path:
-            return
-
-        df = pd.DataFrame({
-            'lot_no': ['1125081447', '1125081448'],
-            'weight_kg': [2500, 3000],
-            'customer': ['ABC Corp', 'XYZ Inc'],
-            'sale_ref': ['SR-001', 'SR-002'],
-        })
-
-        df.to_excel(save_path, index=False, sheet_name='Outbound')
-        CustomMessageBox.info(None, "완료", f"양식 저장 완료:\n{save_path}")

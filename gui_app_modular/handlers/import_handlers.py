@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - Excel 입고 처리 핸들러
 =====================================
@@ -11,17 +12,16 @@ Excel 파일 입고 처리, 컬럼 자동 인식, 데이터 변환
 
 import logging
 import os
-from typing import Dict, Optional
-
 from ..utils.ui_constants import CustomMessageBox
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
 
 def _open_file_with_default_app(file_path: str, parent=None, ask_yes=None) -> bool:
     """OS 기본 앱으로 파일 열기 (엑셀 템플릿 등). 동일 이름 열림 시 순번 붙여서 오픈 제안."""
-    from ..utils.custom_messagebox import CustomMessageBox
     from ..utils.excel_file_helper import open_excel_with_fallback
+    from ..utils.custom_messagebox import CustomMessageBox
     if parent and ask_yes is None:
         ask_yes = lambda t, m: CustomMessageBox.askyesno(parent, t, m)
     if parent and ask_yes:
@@ -48,21 +48,15 @@ class ImportHandlersMixin:
     SQMInventoryApp 클래스에 mix-in 됩니다.
     v5.8.9: 3가지 매핑(수동 입고/빠른 출고/위치) 시 [템플릿 열기] vs [파일 업로드] 선택.
     """
-
+    
     def _show_template_or_upload_choice(self, title: str, kind: str) -> Optional[str]:
         """Excel/데이터 입력 원칙: 데이터 붙여넣기 vs 파일 업로드 선택. 반환: 'template' | 'upload' | None(취소)."""
         import tkinter as tk
         from tkinter import ttk
-
         from ..utils.ui_constants import (
-            UPLOAD_CHOICE_BTN_PASTE,
-            UPLOAD_CHOICE_BTN_UPLOAD,
-            UPLOAD_CHOICE_HEADER,
-            UPLOAD_CHOICE_PASTE,
-            UPLOAD_CHOICE_UPLOAD,
-            DialogSize,
-            apply_modal_window_options,
-            center_dialog,
+            center_dialog, DialogSize, apply_modal_window_options,
+            UPLOAD_CHOICE_HEADER, UPLOAD_CHOICE_PASTE, UPLOAD_CHOICE_UPLOAD,
+            UPLOAD_CHOICE_BTN_PASTE, UPLOAD_CHOICE_BTN_UPLOAD,
         )
         result = [None]
         win = tk.Toplevel(self.root)
@@ -93,7 +87,7 @@ class ImportHandlersMixin:
         win.protocol("WM_DELETE_WINDOW", win.destroy)
         win.wait_window(win)
         return result[0]
-
+    
     def _create_and_open_template(self, kind: str) -> None:
         """kind: inbound | outbound_tonbag | location. 템플릿 생성 → 저장 → 기본 앱으로 열기."""
         from ..utils.constants import filedialog
@@ -145,7 +139,7 @@ class ImportHandlersMixin:
 
     def _on_inbound_paste_confirm(self, rows: list) -> None:
         """스프레드시트 붙여넣기 확인 시 DataFrame으로 변환 후 입고 처리."""
-        from ..utils.constants import HAS_PANDAS, pd
+        from ..utils.constants import pd, HAS_PANDAS
         if not HAS_PANDAS or not rows:
             CustomMessageBox.showwarning(self.root, "경고", "입력된 데이터가 없습니다.")
             return
@@ -173,7 +167,7 @@ class ImportHandlersMixin:
         v5.8.9: file_path가 None이면 [템플릿 열기] vs [파일 업로드] 선택 후 진행.
         """
         from ..utils.constants import filedialog
-
+        
         if file_path is None:
             choice = self._show_template_or_upload_choice("수동 입고", "inbound")
             if choice is None:
@@ -188,13 +182,13 @@ class ImportHandlersMixin:
                     ("All files", "*.*")
                 ]
             )
-
+        
         if not file_path:
             return  # 취소됨
-
+        
         # 파일 타입 자동 감지
         file_type = self._detect_excel_type(file_path)
-
+        
         if file_type == 'inbound':
             self._import_inbound_excel_auto(file_path)
         elif file_type == 'outbound':
@@ -212,7 +206,7 @@ class ImportHandlersMixin:
                 self._import_inbound_excel_auto(file_path)
             else:
                 self._import_outbound_excel_auto(file_path)
-
+    
     def _detect_excel_type(self, file_path: str) -> str:
         """
         Excel 파일 타입 자동 감지
@@ -220,46 +214,46 @@ class ImportHandlersMixin:
         Returns:
             'inbound' | 'outbound' | 'location' | 'unknown'
         """
-        from ..utils.constants import HAS_PANDAS, pd
-
+        from ..utils.constants import pd, HAS_PANDAS
+        
         if not HAS_PANDAS:
             return 'unknown'
-
+        
         try:
             df = pd.read_excel(file_path, nrows=10)
             columns_lower = [str(c).lower() for c in df.columns]
-
+            
             # 입고 Excel 특징: lot_no, sap_no, product, weight
             inbound_keywords = ['lot', 'sap', 'product', 'weight', 'qty']
-            inbound_score = sum(1 for kw in inbound_keywords
+            inbound_score = sum(1 for kw in inbound_keywords 
                                if any(kw in c for c in columns_lower))
-
+            
             # 출고 Excel 특징: outbound, customer, destination, tonbag_count(간편 출고 템플릿)
             outbound_keywords = ['outbound', 'customer', 'destination', 'ship', 'deliver', 'tonbag']
-            outbound_score = sum(1 for kw in outbound_keywords
+            outbound_score = sum(1 for kw in outbound_keywords 
                                 if any(kw in c for c in columns_lower))
-
+            
             # 위치 Excel 특징: location, zone, rack
             location_keywords = ['location', 'zone', 'rack', 'position', 'area']
-            location_score = sum(1 for kw in location_keywords
+            location_score = sum(1 for kw in location_keywords 
                                 if any(kw in c for c in columns_lower))
-
+            
             scores = {
                 'inbound': inbound_score,
                 'outbound': outbound_score,
                 'location': location_score
             }
-
+            
             max_type = max(scores, key=scores.get)
             if scores[max_type] >= 2:
                 return max_type
-
+            
             return 'unknown'
-
+            
         except (FileNotFoundError, OSError, PermissionError) as e:
             logger.error(f"Excel 타입 감지 오류: {e}")
             return 'unknown'
-
+    
     def _is_manual_inbound_template(self, df) -> bool:
         """수동 입고 템플릿 여부: 2행이 DB필드명(lot_no, net_weight, mxbg_pallet)인 경우"""
         cols = [str(c).strip().lower() for c in df.columns]
@@ -297,19 +291,17 @@ class ImportHandlersMixin:
         - 그 외 레거시는 add_inventory_from_dict
         - 동일 이름 파일 열림 시 순번 붙여서 읽기 제안
         """
-        from ..utils.constants import HAS_COLUMN_ALIASES, HAS_PANDAS, ColumnMapper, pd
+        from ..utils.constants import pd, HAS_PANDAS, HAS_COLUMN_ALIASES, ColumnMapper
+        from ..utils.safe_utils import safe_str, safe_float, safe_date
         from ..utils.excel_file_helper import (
-            _MSG_CLOSE_RETRY,
-            _MSG_SAME_OPEN,
-            _get_path_with_sequence,
-            _try_copy_open_file,
+            _get_path_with_sequence, _try_copy_open_file,
+            _MSG_SAME_OPEN, _MSG_CLOSE_RETRY,
         )
-        from ..utils.safe_utils import safe_date, safe_float, safe_str
-
+        
         if not HAS_PANDAS:
             CustomMessageBox.showerror(self.root, "오류", "pandas가 설치되지 않았습니다.")
             return
-
+        
         path_to_read = file_path
         while True:
             try:
@@ -318,7 +310,7 @@ class ImportHandlersMixin:
                 if not df_header1.empty and self._is_manual_inbound_template(df_header1):
                     self._import_inbound_manual_template(path_to_read, df_header1)
                     return
-
+                
                 # 재고리스트/톤백리스트 내보내기 형식(header=2) 또는 일반(header=0) 자동 감지
                 df = self._read_inbound_excel_with_header(path_to_read)
                 break
@@ -332,14 +324,14 @@ class ImportHandlersMixin:
                     CustomMessageBox.showwarning(self.root, "파일 읽기", _MSG_CLOSE_RETRY)
                     return
                 path_to_read = copy_path
-
+        
         # break 후 — 루프 밖에서 처리
         if df.empty:
             CustomMessageBox.showwarning(self.root, "경고", "빈 Excel 파일입니다.")
             return
-
+        
         self._log(f"📥 입고 Excel 로드: {len(df)}행")
-
+        
         # 컬럼 매핑 (Column Alias 시스템 사용)
         if HAS_COLUMN_ALIASES and ColumnMapper:
             mapper = ColumnMapper()
@@ -351,9 +343,9 @@ class ImportHandlersMixin:
         else:
             # 기본 매핑
             col_map = self._get_basic_column_mapping(df.columns)
-
+        
         self._log(f"   컬럼 매핑: {col_map}")
-
+        
         # 필수 컬럼 확인 → 누락 시 매핑 다이얼로그
         required = ['lot_no']
         missing = [r for r in required if r not in col_map]
@@ -373,20 +365,20 @@ class ImportHandlersMixin:
                 logger.debug(f"매핑 다이얼로그 오류: {e}")
                 CustomMessageBox.showerror(self.root, "오류", f"필수 컬럼 누락: {missing}")
                 return
-
+        
         # 데이터 변환 및 저장
         added_lots = 0
         added_tonbags = 0
         skipped = 0
         errors = []
-
+        
         for idx, row in df.iterrows():
             try:
                 lot_no = safe_str(row.get(col_map.get('lot_no', 'lot_no')))
                 if not lot_no:
                     skipped += 1
                     continue
-
+                
                 # 데이터 준비 (v3.8.8: 18열 전체 매핑)
                 # 중량: net_weight 우선, 없으면 qty_mt * 1000
                 _net_raw = row.get(col_map.get('net_weight', ''), None)
@@ -394,10 +386,10 @@ class ImportHandlersMixin:
                     _net_kg = safe_float(_net_raw)
                 else:
                     _net_kg = safe_float(row.get(col_map.get('qty_mt', 'weight'), 0)) * 1000
-
+                
                 _gross_raw = row.get(col_map.get('gross_weight', ''), None)
                 _gross_kg = safe_float(_gross_raw) if _gross_raw is not None and safe_float(_gross_raw) > 0 else _net_kg
-
+                
                 data = {
                     'lot_no': lot_no,
                     'sap_no': safe_str(row.get(col_map.get('sap_no', 'sap_no'), '')),
@@ -421,7 +413,7 @@ class ImportHandlersMixin:
                     'remark': safe_str(row.get(col_map.get('remark', ''), '')),
                     'status': 'AVAILABLE',
                 }
-
+                
                 # DB 저장
                 result = self.engine.add_inventory_from_dict(data)
                 if result.get('success'):
@@ -429,22 +421,22 @@ class ImportHandlersMixin:
                     added_tonbags += result.get('tonbags', 0)
                 else:
                     errors.append(f"행 {idx+2}: {result.get('message', '알 수 없는 오류')}")
-
+                
             except (ValueError, TypeError, AttributeError) as e:
                 errors.append(f"행 {idx+2}: {str(e)}")
-
+        
         # 결과 보고
         self._log(f"✅ 입고 완료: {added_lots}개 LOT, {added_tonbags}개 톤백")
-
+        
         # v3.8.4: 처리 완료 파일 아카이브
         if added_lots > 0 and hasattr(self, '_archive_processed_file'):
             self._archive_processed_file(file_path, 'inbound')
-
+        
         if errors:
             error_msg = '\n'.join(errors[:10])
             if len(errors) > 10:
                 error_msg += f"\n... 외 {len(errors)-10}개 오류"
-            CustomMessageBox.showwarning(self.root, "일부 오류",
+            CustomMessageBox.showwarning(self.root, "일부 오류", 
                 f"입고 완료: {added_lots}개 LOT\n\n오류:\n{error_msg}")
         else:
             # 완료 알림
@@ -453,13 +445,13 @@ class ImportHandlersMixin:
                 winsound.MessageBeep(winsound.MB_ICONASTERISK)
             except (ImportError, RuntimeError) as e:
                 logger.debug(f"{type(e).__name__}: {e}")
-
+            
             CustomMessageBox.showinfo(self.root, "✅ 입고 완료",
                 f"입고 처리가 완료되었습니다!\n\n"
                 f"📦 추가된 LOT: {added_lots:,}개\n"
                 f"📦 생성된 톤백: {added_tonbags:,}개\n"
                 f"⏭️ 스킵: {skipped:,}개")
-
+        
         # UI 새로고침 (상위 메뉴 → 하단 4개 탭 반영)
         if hasattr(self, '_deferred_refresh_main_tabs'):
             self._deferred_refresh_main_tabs(delay_ms=50)
@@ -468,21 +460,22 @@ class ImportHandlersMixin:
         else:
             self._refresh_inventory()
             self._refresh_tonbag()
-
+    
     def _import_inbound_manual_template(self, file_path: str, df) -> None:
         """수동 입고 템플릿 → process_inbound 호출 (1 LOT = N톤백+1샘플)."""
-        from ..utils.safe_utils import safe_date, safe_float, safe_str
-
+        from ..utils.constants import pd, HAS_PANDAS
+        from ..utils.safe_utils import safe_str, safe_float, safe_date
+        
         df = df.copy()
         df.columns = [str(c).strip().lower().replace(' ', '_').rstrip('*').strip('_') for c in df.columns]
-
+        
         def _get(row, *keys):
             for k in keys:
                 for c in df.columns:
                     if c == k or (c and c.replace('_', '') == k.replace('_', '')):
                         return row.get(c)
             return None
-
+        
         def _row_to_packing(row) -> dict:
             net_kg = safe_float(_get(row, 'net_weight', 'netweight'), 0)
             gross_kg = safe_float(_get(row, 'gross_weight', 'grossweight')) or net_kg
@@ -504,7 +497,7 @@ class ImportHandlersMixin:
                 'free_time': int(safe_float(_get(row, 'free_time') or 0) or 0),
                 'warehouse': safe_str(_get(row, 'warehouse') or '') or '광양',
             }
-
+        
         rows_valid = []
         missing_rows = []  # 필수 누락 행 번호 (데이터 입력했는데 LOT/순중량 비어 있는 행)
         for idx, row in df.iterrows():
@@ -517,7 +510,7 @@ class ImportHandlersMixin:
             if not packing['lot_no'] or (packing['net_weight'] or 0) <= 0:
                 continue
             rows_valid.append((excel_row, packing))
-
+        
         if missing_rows:
             CustomMessageBox.showerror(
                 self.root, "필수 항목 누락",
@@ -530,7 +523,7 @@ class ImportHandlersMixin:
         if not rows_valid:
             CustomMessageBox.showwarning(self.root, "경고", "유효한 입고 데이터가 없습니다.\nLOT 번호와 순중량(NET Kg)을 확인하세요.")
             return
-
+        
         preview_lines = []
         for i, (rnum, p) in enumerate(rows_valid[:5]):
             preview_lines.append(f"  {i+1}. 행{rnum}: LOT {p['lot_no']} | SAP {p['sap_no']} | {p['net_weight']:.0f}kg | 톤백 {p['mxbg_pallet']}개")
@@ -539,7 +532,7 @@ class ImportHandlersMixin:
         msg = f"수동 입고 템플릿 인식: 총 {len(rows_valid)}건\n\n미리보기:\n" + "\n".join(preview_lines) + "\n\nDB에 반영(process_inbound) 하시겠습니까?"
         if not CustomMessageBox.askyesno(self.root, "입고 확인", msg):
             return
-
+        
         self._log(f"📥 수동 입고 템플릿: {len(rows_valid)}건 → process_inbound")
         added_lots = 0
         added_tonbags = 0
@@ -551,7 +544,7 @@ class ImportHandlersMixin:
                 added_tonbags += result.get('created_tonbags', 0)
             else:
                 errors.append(f"행{rnum} {packing.get('lot_no')}: {result.get('message', '')}; {result.get('errors', [])}")
-
+        
         if hasattr(self, '_deferred_refresh_main_tabs'):
             self._deferred_refresh_main_tabs(delay_ms=50)
         elif hasattr(self, '_refresh_main_tabs'):
@@ -561,7 +554,7 @@ class ImportHandlersMixin:
                 self._refresh_inventory()
             if hasattr(self, '_refresh_tonbag'):
                 self._refresh_tonbag()
-
+        
         result_msg = f"✅ 입고 완료: {added_lots}개 LOT, {added_tonbags}개 톤백 생성"
         if errors:
             result_msg += f"\n\n❌ 실패 {len(errors)}건:\n" + "\n".join(errors[:5])
@@ -569,8 +562,8 @@ class ImportHandlersMixin:
 
     def _import_inbound_from_dataframe(self, df) -> None:
         """붙여넣기 테이블에서 받은 DataFrame으로 입고 처리 (파일 없이). 수동 입고 템플릿 형식이면 process_inbound, 아니면 add_inventory_from_dict."""
-        from ..utils.constants import HAS_PANDAS
-        from ..utils.safe_utils import safe_date, safe_float, safe_str
+        from ..utils.constants import pd, HAS_PANDAS
+        from ..utils.safe_utils import safe_str, safe_float, safe_date
 
         if not HAS_PANDAS or df.empty:
             CustomMessageBox.showwarning(self.root, "경고", "유효한 데이터가 없습니다.")
@@ -654,7 +647,7 @@ class ImportHandlersMixin:
         """기본 컬럼 매핑 (Column Alias 없을 때)"""
         col_map = {}
         columns_lower = {str(c).lower().strip(): c for c in columns}
-
+        
         mappings = {
             'lot_no': ['lot_no', 'lot no', 'lot', 'lotno'],
             'sap_no': ['sap_no', 'sap no', 'sap', 'sapno'],
@@ -666,24 +659,24 @@ class ImportHandlersMixin:
             'stock_date': ['stock_date', 'inbound_date', '입고일'],
             'warehouse': ['warehouse', 'wh', '창고'],
         }
-
+        
         for std_key, candidates in mappings.items():
             for candidate in candidates:
                 if candidate in columns_lower:
                     col_map[std_key] = columns_lower[candidate]
                     break
-
+        
         return col_map
-
+    
     def _import_outbound_excel_auto(self, file_path: str) -> None:
         """출고 Excel 자동 처리. 톤백 수 컬럼 있으면 FIFO N개 합산→weight_kg, 없으면 LOT 전량."""
-        from ..utils.constants import HAS_PANDAS, pd
-        from ..utils.safe_utils import safe_float, safe_str
-
+        from ..utils.constants import pd, HAS_PANDAS
+        from ..utils.safe_utils import safe_str, safe_float
+        
         if not HAS_PANDAS:
             CustomMessageBox.showerror(self.root, "오류", "pandas가 설치되지 않았습니다.")
             return
-
+        
         try:
             df = pd.read_excel(file_path)
             if df.empty:
@@ -695,7 +688,7 @@ class ImportHandlersMixin:
             col_customer = next((c for c in cols if c in ('customer', '고객', 'sold_to', 'destination') or (c and 'customer' in c)), None)
             col_sale_ref = next((c for c in cols if c in ('sale_ref', 'saleref', 'sales_ref', 'reference', 'ref') or (c and 'sale' in c and 'ref' in c)), None)
             col_tonbag = next((c for c in cols if c and ('tonbag' in c or '톤백' in c) and ('count' in c or '수' in c)), None)
-
+            
             # 필수 항목 사전 검증: 데이터가 있는데 LOT 또는 톤백 수가 비어 있으면 에러
             missing_outbound_rows = []
             for idx, row in df.iterrows():
@@ -714,11 +707,11 @@ class ImportHandlersMixin:
                     + "\n\n확인한 뒤 다시 업로드하세요."
                 )
                 return
-
+            
             self._log(f"📤 출고 Excel 로드: {len(df)}행 (톤백수모드={bool(col_tonbag)})")
             processed = 0
             errors = []
-
+            
             for idx, row in df.iterrows():
                 try:
                     lot_no = safe_str(row.get(col_lot, '')).strip()
@@ -726,7 +719,7 @@ class ImportHandlersMixin:
                         continue
                     customer = safe_str(row.get(col_customer, '')).strip() if col_customer else ''
                     sale_ref = safe_str(row.get(col_sale_ref, '')).strip() if col_sale_ref else ''
-
+                    
                     if col_tonbag and col_tonbag in row.index:
                         n = int(safe_float(row.get(col_tonbag, 0)) or 0)
                         if n <= 0:
@@ -753,7 +746,7 @@ class ImportHandlersMixin:
                         if weight_kg <= 0:
                             errors.append(f"행 {idx+2}: 판매가능 재고 0 — {lot_no}")
                             continue
-
+                    
                     result = self.engine.process_outbound([{
                         'lot_no': lot_no,
                         'weight_kg': weight_kg,
@@ -768,7 +761,7 @@ class ImportHandlersMixin:
                         errors.append(f"행 {idx+2}: {result.get('message')}")
                 except (ValueError, TypeError, AttributeError) as e:
                     errors.append(f"행 {idx+2}: {str(e)}")
-
+            
             self._log(f"✅ 출고 완료: {processed}건")
             if errors:
                 error_msg = '\n'.join(errors[:10])
@@ -792,12 +785,12 @@ class ImportHandlersMixin:
     # ═══════════════════════════════════════════════════════
     # v5.8.9: 출고 템플릿(톤백 수) 다운로드
     # ═══════════════════════════════════════════════════════
-
+    
     def _write_outbound_tonbag_template_to(self, file_path: str) -> bool:
         """출고 템플릿 = 톤백(언로케이션) 리스트와 동일 형식. 필수(lot_no, tonbag_count, customer)만 색상 표시."""
         try:
             import openpyxl
-            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "출고 데이터"
@@ -842,116 +835,20 @@ class ImportHandlersMixin:
             logger.error(f"출고 템플릿 생성 오류: {e}")
             CustomMessageBox.showerror(self.root, "오류", f"템플릿 저장 실패:\n{e}")
             return False
-
-    def _download_outbound_tonbag_template(self) -> None:
-        """간편 출고 템플릿(톤백 수) 생성 — lot_no, tonbag_count, customer. 업로드 시 process_outbound."""
-        from ..utils.constants import filedialog
-        file_path = filedialog.asksaveasfilename(
-            title="간편 출고 템플릿 저장",
-            defaultextension=".xlsx",
-            initialfile="출고_톤백수_템플릿.xlsx",
-            filetypes=[("Excel files", "*.xlsx")]
-        )
-        if not file_path:
-            return
-        if self._write_outbound_tonbag_template_to(file_path):
-            CustomMessageBox.showinfo(self.root, "완료",
-                f"간편 출고 템플릿이 저장되었습니다.\n\n파일: {file_path}\n\n"
-                "LOT 번호, 출고 톤백 수, 고객명을 채운 뒤\n메뉴 > Excel 입고에서 해당 파일을 선택하면 출고로 처리됩니다.")
-
-    # ═══════════════════════════════════════════════════════
-    # v5.8.9: 템플릿 열기 vs 파일 업로드 선택 (입고/출고)
-    # ═══════════════════════════════════════════════════════
-
-    def _on_outbound_tonbag_choice(self) -> None:
-        """빠른 출고(톤백 수): [템플릿 열기] vs [파일 업로드] 선택 후 진행."""
-        from ..utils.constants import filedialog
-        choice = self._show_template_or_upload_choice("빠른 출고 (톤백 수)", "outbound_tonbag")
-        if choice is None:
-            return
-        if choice == 'template':
-            self._create_and_open_template('outbound_tonbag')
-            return
-        file_path = filedialog.askopenfilename(
-            title="출고 Excel 파일 선택",
-            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
-        )
-        if file_path:
-            self._import_outbound_excel_auto(file_path)
-
-    # ═══════════════════════════════════════════════════════
-    # v3.8.4: 입고 샘플 Excel 템플릿 다운로드
-    # ═══════════════════════════════════════════════════════
-
-    # 재고 리스트(inventory_tab.INVENTORY_COLUMNS)와 동일한 컬럼·순서 (입고/반품 템플릿 공통)
-    # No. 포함 시 업로드에서 무시됨. 필수 여부는 케이스별로 다름.
-    INVENTORY_TEMPLATE_COLUMNS = [
-        ('row_num', 'No.', 50, False),      # 재고리스트와 동일 순서(업로드 시 미사용)
-        ('lot_no', 'LOT NO', 120, True),   # 입고 필수
-        ('sap_no', 'SAP NO', 120, False),
-        ('bl_no', 'BL NO', 140, False),
-        ('product', 'PRODUCT', 160, True),  # 입고 필수
-        ('status', 'STATUS', 90, False),
-        ('current_weight', 'Balance(Kg)', 100, False),
-        ('net_weight', 'NET(Kg)', 100, True),  # 입고 필수
-        ('container_no', 'CONTAINER', 130, False),
-        ('mxbg_pallet', 'MXBG', 70, True),  # 입고 필수
-        ('avail_bags', 'Avail', 60, False),
-        ('salar_invoice_no', 'INVOICE NO', 100, False),
-        ('ship_date', 'SHIP DATE', 95, False),
-        ('arrival_date', 'ARRIVAL', 95, False),
-        ('con_return', 'CON RETURN', 95, False),
-        ('free_time', 'FREE TIME', 80, False),
-        ('warehouse', 'WH', 80, False),
-        ('customs', 'CUSTOMS', 90, False),
-        ('initial_weight', 'Inbound(Kg)', 100, False),
-        ('outbound_weight', 'Outbound(Kg)', 100, False),
-    ]
-    # 반품 입고 = 입고 형식과 동일 + PICKING NO, 반품사유 (v6.0)
-    RETURN_TEMPLATE_COLUMNS = list(INVENTORY_TEMPLATE_COLUMNS) + [
-        ('picking_no', 'PICKING NO', 120, True),
-        ('return_reason', '반품사유', 100, True),
-    ]
-    # 톤백 리스트(tonbag_tab._tonbag_columns)와 동일한 컬럼·순서. No. 포함 시 업로드에서 무시.
-    TONBAG_TEMPLATE_COLUMNS = [
-        ('row_num', 'No.', 50, False, False),
-        ('lot_no', 'LOT NO', 120, True, True),
-        ('tonbag_no', 'TONBAG NO', 90, False, True),
-        ('sap_no', 'SAP NO', 120, False, False),
-        ('bl_no', 'BL NO', 140, False, False),
-        ('product', 'PRODUCT', 160, False, False),
-        ('tonbag_status', 'STATUS', 90, False, False),
-        ('current_weight', 'Balance(Kg)', 100, False, False),
-        ('tonbag_uid', 'UID', 150, False, False),
-        ('container_no', 'CONTAINER', 130, False, False),
-        ('location', 'LOCATION', 90, False, True),
-        ('net_weight', 'NET(Kg)', 100, False, False),
-        ('salar_invoice_no', 'INVOICE NO', 100, False, False),
-        ('ship_date', 'SHIP DATE', 95, False, False),
-        ('arrival_date', 'ARRIVAL', 95, False, False),
-        ('con_return', 'CON RETURN', 95, False, False),
-        ('free_time', 'FREE TIME', 80, False, False),
-        ('warehouse', 'WH', 80, False, False),
-        ('customs', 'CUSTOMS', 90, False, False),
-        ('initial_weight', 'Inbound(Kg)', 100, False, False),
-        ('outbound_weight', 'Outbound(Kg)', 100, False, False),
-        ('tonbag_count', '출고 톤백 수', 14, True, False),
-        ('customer', '고객명', 20, True, False),
-    ]
-    # (db_field, display, width, required_outbound, required_location)
+    
 
     def _write_inbound_template_to(self, file_path: str) -> bool:
         """입고 템플릿 = 재고 리스트와 동일 형식. 필수(lot_no, product, mxbg_pallet, net_weight)만 색상 표시."""
         try:
             import openpyxl
-            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-
+            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "입고 데이터"
             headers = self.INVENTORY_TEMPLATE_COLUMNS
             required_inbound = {'lot_no', 'product', 'mxbg_pallet', 'net_weight'}
-
+            
             header_font = Font(bold=True, color="FFFFFF", size=11)
             required_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
             optional_fill = PatternFill(start_color="7F8C8D", end_color="7F8C8D", fill_type="solid")
@@ -960,13 +857,13 @@ class ImportHandlersMixin:
                 left=Side(style='thin'), right=Side(style='thin'),
                 top=Side(style='thin'), bottom=Side(style='thin')
             )
-
+            
             ncols = len(headers)
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols)
             ws['A1'] = "입고 템플릿 v5.8.9 — 재고 리스트와 동일 형식. 진한색 컬럼은 필수 입력. 2행=DB필드명. 채운 뒤 Excel 입고로 업로드하세요."
             ws['A1'].font = Font(bold=True, size=11, color="2C3E50")
             ws.row_dimensions[1].height = 28
-
+            
             for col, (db_field, display, width, _) in enumerate(headers, 1):
                 ws.cell(row=2, column=col, value=db_field)
                 ws.cell(row=2, column=col).font = Font(size=8, color="999999")
@@ -1001,7 +898,7 @@ class ImportHandlersMixin:
             ws2.cell(row=1, column=2).border = thin_border
             ws2.column_dimensions['A'].width = 20
             ws2.column_dimensions['B'].width = 24
-
+            
             try:
                 from gui_app_modular.utils.report_footer import add_gy_logistics_footer
                 add_gy_logistics_footer(ws)
@@ -1017,26 +914,7 @@ class ImportHandlersMixin:
             logger.error(f"입고 템플릿 생성 오류: {e}")
             CustomMessageBox.showerror(self.root, "오류", f"템플릿 생성 실패:\n{e}")
             return False
-
-    def _download_inbound_template(self) -> None:
-        """입고용 샘플 Excel 템플릿 생성 및 다운로드 (저장 위치 선택 후 저장)"""
-        from ..utils.constants import filedialog
-        file_path = filedialog.asksaveasfilename(
-            title="샘플 Excel 템플릿 저장",
-            defaultextension=".xlsx",
-            initialfile="입고_샘플_템플릿.xlsx",
-            filetypes=[("Excel files", "*.xlsx")]
-        )
-        if not file_path:
-            return
-        if self._write_inbound_template_to(file_path):
-            CustomMessageBox.showinfo(self.root, "완료",
-                f"입고 템플릿이 저장되었습니다.\n\n파일: {file_path}\n\n"
-                "재고 리스트와 동일 형식. 진한색 컬럼은 필수 입력입니다.\n2행은 DB 필드명(자동 매핑용)입니다.")
-
-    # ═══════════════════════════════════════════════════════
-    # v3.8.4 A4: Excel 자동 아카이브
-    # ═══════════════════════════════════════════════════════
+    
 
     def _archive_processed_file(self, file_path: str, category: str = 'inbound') -> str:
         """
@@ -1052,25 +930,25 @@ class ImportHandlersMixin:
         import os
         import shutil
         from datetime import datetime
-
+        
         try:
             db_dir = os.path.dirname(getattr(self, 'db_path', '') or '')
             if not db_dir:
                 db_dir = os.path.dirname(file_path)
-
+            
             archive_dir = os.path.join(db_dir, 'archive', category)
             os.makedirs(archive_dir, exist_ok=True)
-
+            
             base_name = os.path.basename(file_path)
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             name, ext = os.path.splitext(base_name)
             archive_name = f"{name}_{timestamp}{ext}"
             archive_path = os.path.join(archive_dir, archive_name)
-
+            
             shutil.copy2(file_path, archive_path)
             self._log(f"📁 아카이브: {archive_name}")
             return archive_path
-
+            
         except (OSError, IOError, PermissionError) as e:
             logger.debug(f"아카이브 실패 (무시): {e}")
             return ''

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM Inventory - Status Import Handlers
 ======================================
@@ -7,11 +8,10 @@ v2.9.91 - Extracted from gui_app.py
 Import outbound status and location mapping from Excel
 """
 
-import logging
 import os
-from datetime import date, datetime
-
+import logging
 from ..utils.ui_constants import CustomMessageBox
+from datetime import date, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -22,13 +22,12 @@ class StatusImportHandlersMixin:
     
     Mixed into SQMInventoryApp class
     """
-
+    
     def _import_outbound_excel(self) -> None:
         """출고 결과 Excel 불러오기 — 파일 선택 후 상세 요약 다이얼로그 표시, 사용자 확인 후 DB 반영."""
+        from ..utils.constants import filedialog
         import tkinter as tk
         from tkinter import ttk
-
-        from ..utils.constants import filedialog
 
         file_path = getattr(self, '_pending_file', None)
         if file_path:
@@ -257,14 +256,12 @@ class StatusImportHandlersMixin:
             self._log(f"X Outbound import error: {e}")
             CustomMessageBox.showerror(self.root, "오류", f"출고 결과 불러오기 실패:\n{e}")
         self._set_status("Ready")
-
+    
     def _import_location_excel(self) -> None:
         """v7.0.1: tonbag_location_uploader로 통합 — 3단계 매칭 + 미리보기 + 이력 기록 지원."""
         try:
-            from ..dialogs.tonbag_location_upload import (
-                show_tonbag_location_upload_dialog,
-            )
-
+            from ..dialogs.tonbag_location_upload import show_tonbag_location_upload_dialog
+            
             def _after_upload():
                 """업로드 완료 후 탭 새로고침"""
                 if hasattr(self, '_refresh_main_tabs'):
@@ -274,7 +271,7 @@ class StatusImportHandlersMixin:
                         self._refresh_inventory()
                     if hasattr(self, '_refresh_tonbag'):
                         self._refresh_tonbag()
-
+            
             show_tonbag_location_upload_dialog(self.root, self.engine, callback=_after_upload)
         except (ImportError, RuntimeError) as e:
             logger.error(f"Location upload dialog 호출 실패: {e}")
@@ -283,11 +280,11 @@ class StatusImportHandlersMixin:
     def _generate_outbound_report(self, source_file: str, count: int) -> str:
         """Generate outbound report after import"""
         import pandas as pd
-
+        
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         report_path = f"output/outbound_report_{timestamp}.xlsx"
         os.makedirs("output", exist_ok=True)
-
+        
         # Get recent outbound tonbags
         recent = self.engine.db.fetchall("""
             SELECT
@@ -300,79 +297,23 @@ class StatusImportHandlersMixin:
             ORDER BY t.updated_at DESC
             LIMIT ?
         """, (count + 50,))
-
+        
         # Summary
         summary_data = {
             'Item': ['Source File', 'Process Time', 'Processed Count'],
-            'Value': [os.path.basename(source_file),
-                     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'Value': [os.path.basename(source_file), 
+                     datetime.now().strftime('%Y-%m-%d %H:%M:%S'), 
                      str(count)]
         }
-
+        
         with pd.ExcelWriter(report_path, engine='openpyxl') as writer:
             pd.DataFrame(summary_data).to_excel(writer, sheet_name='Summary', index=False)
-
+            
             if recent:
                 pd.DataFrame(recent).to_excel(writer, sheet_name='Outbound Details', index=False)
-
+        
         return report_path
-
-    def _generate_inbound_report(self, source_file: str, lot_count: int, tonbag_count: int) -> str:
-        """Generate inbound report after import"""
-        import pandas as pd
-
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        report_path = f"output/inbound_report_{timestamp}.xlsx"
-        os.makedirs("output", exist_ok=True)
-
-        # Get recent tonbags
-        recent_tonbags = self.engine.db.fetchall("""
-            SELECT
-                t.sap_no as SAP_NO, t.bl_no as BL_NO, t.lot_no as LOT_NO,
-                t.sub_lt as Tonbag, t.weight as Weight_kg,
-                t.inbound_date as Inbound_Date, t.location as Location,
-                i.product_code as Product, i.container_no as Container
-            FROM inventory_tonbag t
-            LEFT JOIN inventory i ON t.lot_no = i.lot_no
-            WHERE t.status = 'AVAILABLE'
-            ORDER BY t.created_at DESC
-            LIMIT ?
-        """, (tonbag_count + 100,))
-
-        # LOT summary
-        lot_summary = self.engine.db.fetchall("""
-            SELECT
-                lot_no as LOT_NO, product_code as Product, sap_no as SAP_NO,
-                COUNT(*) as Tonbags,
-                ROUND(initial_weight, 1) as Initial_kg,
-                ROUND(current_weight, 1) as Current_kg,
-                inbound_date as Inbound_Date, status as Status
-            FROM inventory
-            WHERE status = 'AVAILABLE'
-            GROUP BY lot_no
-            ORDER BY inbound_date DESC, lot_no
-            LIMIT ?
-        """, (lot_count + 50,))
-
-        # Summary
-        summary_data = {
-            'Item': ['Source File', 'Process Time', 'LOT Count', 'Tonbag Count'],
-            'Value': [os.path.basename(source_file),
-                     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                     str(lot_count),
-                     str(tonbag_count)]
-        }
-
-        with pd.ExcelWriter(report_path, engine='openpyxl') as writer:
-            pd.DataFrame(summary_data).to_excel(writer, sheet_name='Summary', index=False)
-
-            if lot_summary:
-                pd.DataFrame(lot_summary).to_excel(writer, sheet_name='LOT Summary', index=False)
-
-            if recent_tonbags:
-                pd.DataFrame(recent_tonbags).to_excel(writer, sheet_name='Tonbag Details', index=False)
-
-        return report_path
+    
 
     def _safe_int(self, val, default: int = 0) -> int:
         """Safe integer conversion"""
@@ -380,11 +321,11 @@ class StatusImportHandlersMixin:
             return int(float(val))
         except (ValueError, TypeError):
             return default
-
+    
     def _safe_date(self, val) -> date:
         """Safe date conversion"""
         import pandas as pd
-
+        
         if pd.isna(val):
             return date.today()
         if isinstance(val, str):
@@ -395,18 +336,4 @@ class StatusImportHandlersMixin:
         if hasattr(val, 'date'):
             return val.date()
         return date.today()
-
-    def _open_file_in_explorer(self, file_path: str) -> None:
-        """Open file with system default application"""
-        import platform
-        import subprocess
-
-        try:
-            if platform.system() == 'Windows':
-                os.startfile(file_path)
-            elif platform.system() == 'Darwin':  # macOS
-                subprocess.call(['open', file_path])
-            else:  # Linux
-                subprocess.call(['xdg-open', file_path])
-        except (FileNotFoundError, OSError, PermissionError) as e:
-            self._log(f"WARNING Could not open file: {e}")
+    

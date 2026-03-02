@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM Inventory - Refresh and Filter Mixin
 ========================================
@@ -8,7 +9,6 @@ Data refresh, filtering, and sorting functions
 """
 
 import logging
-
 from ..utils.custom_messagebox import CustomMessageBox
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class RefreshMixin:
     
     Mixed into SQMInventoryApp class
     """
-
+    
     # ★ S2-1: 레거시 함수 4개 삭제됨 (호출처 0건 확인)
     # 삭제: _on_search_legacy, _on_status_filter_legacy,
     #        _on_tonbag_search_legacy, _on_tonbag_filter_legacy
@@ -101,7 +101,7 @@ class RefreshMixin:
                 target = parent if parent is not None else getattr(self, "root", None)
                 CustomMessageBox.showerror(target, "작업 실패", f"{action_name}\n\n{e}")
             return {"success": False, "errors": [str(e)]}
-
+    
     def _focus_search_legacy(self) -> None:
         """Focus on search entry (Ctrl+F)"""
         if hasattr(self, 'search_var'):
@@ -111,61 +111,44 @@ class RefreshMixin:
                     widget.focus_set()
                     widget.select_range(0, 'end')
                     break
-
+    
     def _update_recent_files_menu(self) -> None:
         """Update recent files menu"""
         if not hasattr(self, 'recent_menu'):
             return
-
+        
         # Clear existing items
         self.recent_menu.delete(0, 'end')
-
+        
         # Get recent files (from config or history)
         recent_files = getattr(self, 'recent_files', [])
-
+        
         if not recent_files:
             self.recent_menu.add_command(label="(No recent files)", state='disabled')
             return
-
+        
         for file_path in recent_files[:10]:  # Max 10 files
             filename = file_path.split('/')[-1].split('\\')[-1]
             self.recent_menu.add_command(
                 label=filename,
                 command=lambda p=file_path: self._open_recent_file(p)
             )
-
+    
     def _open_recent_file(self, file_path: str) -> None:
         """Open recent file"""
         import os
-
+        
         if not os.path.exists(file_path):
 
             CustomMessageBox.showwarning(self.root, "File Not Found", f"File not found:\n{file_path}")
             return
-
+        
         ext = os.path.splitext(file_path)[1].lower()
-
+        
         if ext == '.pdf':
             self._process_inbound(file_path)
         elif ext in ('.xlsx', '.xls'):
             self._process_excel_inbound(file_path)
         else:
             self._log(f"WARNING Unsupported file type: {ext}")
-
-    def _add_recent_file(self, file_path: str) -> None:
-        """Add file to recent files list"""
-        if not hasattr(self, 'recent_files'):
-            self.recent_files = []
-
-        # Remove if already exists
-        if file_path in self.recent_files:
-            self.recent_files.remove(file_path)
-
-        # Add to front
-        self.recent_files.insert(0, file_path)
-
-        # Keep max 20
-        self.recent_files = self.recent_files[:20]
-
-        # Update menu
-        self._update_recent_files_menu()
+    

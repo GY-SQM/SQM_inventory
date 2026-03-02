@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 SQM v3.9.1 — 재고 현황 탭 (18열 + 체크박스 열선택)
 ===================================================
@@ -10,20 +11,13 @@ SQM v3.9.1 — 재고 현황 탭 (18열 + 체크박스 열선택)
   필터/표시 컬럼/버튼/통계 바 순서·스타일을 바꿀 때는 tonbag_tab도 함께 수정할 것.
 """
 
-import logging
 import sqlite3
 import tkinter as tk
-from datetime import datetime, timedelta
 from tkinter import ttk
-
-from ..utils.ui_constants import (
-    DialogSize,
-    Spacing,
-    ThemeColors,
-    apply_modal_window_options,
-    center_dialog,
-    get_status_display,
-)
+from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options, get_status_display
+from ..utils.constants import BOTH, YES, X, Y, LEFT, RIGHT, VERTICAL
+import logging
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +56,7 @@ class InventoryTabMixin:
 
     def _setup_inventory_tab(self) -> None:
         """재고 현황 탭 설정"""
-        from ..utils.constants import BOTH, LEFT, RIGHT, VERTICAL, YES, X, Y, tk, ttk
+        from ..utils.constants import ttk, tk, VERTICAL, BOTH, YES, LEFT, RIGHT, X, Y
 
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         _inv_bg = ThemeColors.get('bg_secondary', _is_dark)
@@ -109,11 +103,8 @@ class InventoryTabMixin:
         # ═══════════════════════════════════════════════════════
         # v4.0.6: 헤더 필터 바
         # ═══════════════════════════════════════════════════════
-        from ..utils.tree_enhancements import (
-            HeaderFilterBar,
-            TreeviewTotalFooter,
-        )
-
+        from ..utils.tree_enhancements import HeaderFilterBar, apply_striped_rows, TreeviewTotalFooter
+        
         _is_dark_filter = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         inv_filter_cols = [
             ('lot_no',       'LOT NO',     120),
@@ -148,7 +139,7 @@ class InventoryTabMixin:
         except (ImportError, Exception) as e:
             logger.debug(f"컬럼 토글바 생성 실패: {e}")
             self._inv_toggle_bar = None
-
+        
         # 재고 탭 Excel 내보내기 + v7.0 2단계: [전체 톤백 펼치기] 버튼
         try:
             from ..utils.ui_constants import apply_tooltip
@@ -188,22 +179,22 @@ class InventoryTabMixin:
 
         # 모든 18열로 생성
         all_col_ids = [c[0] for c in INVENTORY_COLUMNS]
-
+        
         # v3.8.9: 트리뷰 스타일 — 테마 인식 (글자 흐림 수정) | v5.7.5: 가독성 위해 폰트 14로 확대
         import tkinter.font as tkfont
         _style = ttk.Style()
         _inv_font = tkfont.Font(family='맑은 고딕', size=11)
         _inv_head_font = tkfont.Font(family='맑은 고딕', size=11, weight='bold')
         _row_h = _inv_font.metrics('linespace') + 6
-
+        
         _is_dark_tv = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         _tv_bg = ThemeColors.get('bg_card', _is_dark_tv)
         _tv_fg = ThemeColors.get('text_primary', _is_dark_tv)
         _tv_field = _tv_bg
         _tv_head_bg = ThemeColors.get('bg_secondary', _is_dark_tv)
         _tv_head_fg = ThemeColors.get('text_primary', _is_dark_tv)
-
-        _style.configure('Inv.Treeview',
+        
+        _style.configure('Inv.Treeview', 
                          font=_inv_font,
                          rowheight=_row_h,
                          background=_tv_bg,
@@ -213,7 +204,7 @@ class InventoryTabMixin:
                          font=_inv_head_font,
                          background=_tv_head_bg,
                          foreground=_tv_head_fg)
-
+        
         # v6.1.1: 선택/비선택 행 foreground 명시 (테마 가시성)
         _style.map('Inv.Treeview',
                    background=[('selected', ThemeColors.get('tree_select_bg', _is_dark_tv))],
@@ -221,7 +212,7 @@ class InventoryTabMixin:
                        ('selected', ThemeColors.get('tree_select_fg', _is_dark_tv)),
                        ('!selected', _tv_fg),
                    ])
-
+        
         self.tree_inventory = ttk.Treeview(
             tree_frame, columns=all_col_ids, show="headings", height=20,
             selectmode='extended', style='Inv.Treeview'
@@ -240,7 +231,7 @@ class InventoryTabMixin:
                 self.tree_inventory.column(col_id, width=width, anchor=anchor, stretch=True)
             else:
                 self.tree_inventory.column(col_id, width=0, minwidth=0, stretch=False)
-
+        
         # v4.2.2: 테이블 스타일 적용 (v5.6.9: 다크 테마 시 글씨 가시성)
         try:
             from ..utils.table_styler import apply_table_style
@@ -279,7 +270,7 @@ class InventoryTabMixin:
 
         # v4.0.6: 필터바에 treeview 연결
         self._inv_filter_bar.tree = self.tree_inventory
-
+        
         # v5.0.2: 컬럼 토글바에 treeview 연결 (v8.7.0: 초기 displaycolumns 적용)
         if hasattr(self, '_inv_toggle_bar') and self._inv_toggle_bar:
             self._inv_toggle_bar.tree = self.tree_inventory
@@ -410,7 +401,7 @@ class InventoryTabMixin:
 
     def _setup_inv_tonbag_detail_panel(self) -> None:
         """재고 탭 상세 패널: 톤백 테이블"""
-        from ..utils.constants import BOTH, LEFT, VERTICAL, ttk
+        from ..utils.constants import ttk, VERTICAL, BOTH, LEFT
         detail_container = self._inv_split_panel.get_detail_container()
         cols = ('sub_lt', 'weight', 'status', 'location', 'picked_to', 'outbound_date')
         self._inv_tonbag_detail_tree = ttk.Treeview(
@@ -480,17 +471,17 @@ class InventoryTabMixin:
             for col_id, label, width, anchor, _ in INVENTORY_COLUMNS:
                 if self._inv_col_visible.get(col_id, True):
                     visible_columns.append(col_id)
-
+            
             # displaycolumns 설정으로 컬럼 표시/숨김
             self.tree_inventory.configure(displaycolumns=visible_columns)
-
+            
             # 표시되는 컬럼의 너비 재설정
             for col_id, label, width, anchor, _ in INVENTORY_COLUMNS:
                 if col_id in visible_columns:
                     self.tree_inventory.column(col_id, width=width, minwidth=40, stretch=True)
-
+            
             logger.debug(f"✅ 컬럼 표시 적용: {len(visible_columns)}개 표시")
-
+            
         except (ValueError, TypeError, KeyError, AttributeError) as e:
             logger.error(f"컬럼 표시/숨김 실패: {e}")
 
@@ -498,30 +489,6 @@ class InventoryTabMixin:
     # 테마 / 검색 / 필터
     # ═══════════════════════════════════════════════════════
 
-    def _load_inv_search_combos(self) -> None:
-        """재고리스트 검색 콤보에 DB 고유값 로드 (오름차순)"""
-        try:
-            # v5.6.0: 화이트리스트 검증
-            ALLOWED_SEARCH_FIELDS = {'sap_no', 'bl_no', 'lot_no'}
-            for field in ['sap_no', 'bl_no', 'lot_no']:
-                if field not in self._inv_search_combos:
-                    continue
-                if field not in ALLOWED_SEARCH_FIELDS:
-                    continue
-                var, cb = self._inv_search_combos[field]
-                try:
-                    rows = self.engine.db.fetchall(
-                        f"SELECT DISTINCT {field} FROM inventory WHERE {field} IS NOT NULL AND {field} != '' ORDER BY {field} ASC")
-                    vals = ['전체']
-                    for r in rows:
-                        v = r[0] if isinstance(r, (list, tuple)) else r.get(field, '')
-                        if v:
-                            vals.append(str(v))
-                    cb['values'] = vals
-                except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
-                    logger.debug(f"콤보 로드 [{field}]: {e}")
-        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
-            logger.error(f"콤보 초기화: {e}")
 
     def _execute_inv_combo_search(self) -> None:
         """콤보 검색 실행"""
@@ -540,77 +507,77 @@ class InventoryTabMixin:
     # ═══════════════════════════════════════════════════════
     # U5: 우클릭 컨텍스트 메뉴
     # ═══════════════════════════════════════════════════════
-
+    
     def _on_inventory_right_click(self, event) -> None:
         """재고리스트 우클릭 컨텍스트 메뉴"""
         import tkinter as tk
-
+        
         item_id = self.tree_inventory.identify_row(event.y)
         if not item_id:
             return
-
+        
         self.tree_inventory.selection_set(item_id)
         values = self.tree_inventory.item(item_id)['values']
         if not values:
             return
-
+        
         lot_no = str(values[0]).strip()
-
+        
         menu = tk.Menu(self.root, tearoff=0)
-        menu.add_command(label=f"📋 LOT 복사: {lot_no}",
+        menu.add_command(label=f"📋 LOT 복사: {lot_no}", 
                         command=lambda: self._copy_to_clipboard(lot_no))
         menu.add_separator()
-        menu.add_command(label="🔍 톤백 상세 보기",
+        menu.add_command(label="🔍 톤백 상세 보기", 
                         command=lambda: self._show_lot_tonbag_detail(lot_no))
-        menu.add_command(label="📤 빠른 출고",
+        menu.add_command(label="📤 빠른 출고", 
                         command=lambda: self._quick_outbound_from_context(lot_no))
-        menu.add_command(label="🔄 반품 (재입고)",
+        menu.add_command(label="🔄 반품 (재입고)", 
                         command=lambda: self._return_from_context(lot_no))
         menu.add_separator()
-        menu.add_command(label="📊 LOT 이력 조회",
+        menu.add_command(label="📊 LOT 이력 조회", 
                         command=lambda: self._show_lot_history(lot_no))
         menu.add_separator()
-        menu.add_command(label="📝 전체 행 복사",
+        menu.add_command(label="📝 전체 행 복사", 
                         command=lambda: self._copy_row_to_clipboard(values))
-
+        
         try:
             menu.tk_popup(event.x_root, event.y_root)
         finally:
             menu.grab_release()
-
+    
     def _copy_to_clipboard(self, text: str) -> None:
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
         self._log(f"📋 클립보드 복사: {text}")
-
+    
     def _copy_row_to_clipboard(self, values) -> None:
         text = '\t'.join(str(v) for v in values)
         self.root.clipboard_clear()
         self.root.clipboard_append(text)
         self._log("📋 행 데이터 클립보드 복사")
-
+    
     def _show_lot_tonbag_detail(self, lot_no: str) -> None:
         """LOT 톤백 상세 팝업"""
         import tkinter as tk
         from tkinter import ttk as _ttk
-
+        
         tonbags = self.engine.db.fetchall(
             """SELECT sub_lt, weight, status, location, picked_to, 
                       outbound_date, updated_at
                FROM inventory_tonbag WHERE lot_no = ? ORDER BY sub_lt""",
             (lot_no,)
         )
-
+        
         dlg = tk.Toplevel(self.root)
         dlg.title(f"🎒 톤백 상세 — {lot_no}")
         dlg.geometry(DialogSize.get_geometry(self.root, 'medium'))
         apply_modal_window_options(dlg)
         dlg.transient(self.root)
         center_dialog(dlg, self.root)
-
+        
         cols = ('sub_lt', 'weight', 'status', 'location', 'picked_to', 'outbound_date')
         tree = _ttk.Treeview(dlg, columns=cols, show='headings', height=15)
-
+        
         for col, text, w in [
             ('sub_lt', '톤백#', 60), ('weight', '중량(kg)', 100),
             ('status', '상태', 100), ('location', '위치', 80),
@@ -618,7 +585,7 @@ class InventoryTabMixin:
         ]:
             tree.heading(col, text=text)
             tree.column(col, width=w, anchor='center')
-
+        
         for i, tb in enumerate(tonbags):
             _s = tb.get('status', 'AVAILABLE')
             status_text = get_status_display(_s) or _s
@@ -628,33 +595,33 @@ class InventoryTabMixin:
                 status_text, tb['location'] or '',
                 tb['picked_to'] or '', str(tb['outbound_date'] or '')[:10]
             ), tags=tags)
-
+        
         _stripe_bg = ThemeColors.get('tree_stripe', getattr(self, '_is_dark', False))
         tree.tag_configure('stripe', background=_stripe_bg)
-
+        
         scroll = _ttk.Scrollbar(dlg, orient='vertical', command=tree.yview)
         tree.configure(yscrollcommand=scroll.set)
         tree.pack(side='left', fill='both', expand=True, padx=Spacing.XS, pady=Spacing.XS)
         scroll.pack(side='right', fill='y', pady=Spacing.XS)
-
+        
         total = sum((tb['weight'] or 0) for tb in tonbags)
         avail = sum((tb['weight'] or 0) for tb in tonbags if tb['status'] == 'AVAILABLE')
         _ttk.Label(dlg, text=f"합계: {len(tonbags)}개 / {total:,.0f}kg (판매가능: {avail:,.0f}kg)",
                   font=('', 13, 'bold')).pack(side='bottom', pady=Spacing.XS)
-
+    
     def _quick_outbound_from_context(self, lot_no: str) -> None:
         if hasattr(self, '_on_simple_outbound'):
             self._on_simple_outbound()
-
+    
     def _return_from_context(self, lot_no: str) -> None:
         if hasattr(self, '_on_return_process'):
             self._on_return_process()
-
+    
     def _show_lot_history(self, lot_no: str) -> None:
         """LOT 이력 조회"""
         import tkinter as tk
         from tkinter import ttk as _ttk
-
+        
         # customer, movement_date 컬럼 없어도 동작 (base 스키마: movement_type, qty_kg, created_at)
         movements = self.engine.db.fetchall(
             """SELECT movement_type, qty_kg,
@@ -662,29 +629,29 @@ class InventoryTabMixin:
                FROM stock_movement WHERE lot_no = ? ORDER BY created_at DESC""",
             (lot_no,)
         )
-
+        
         dlg = tk.Toplevel(self.root)
         dlg.title(f"📊 LOT 이력 — {lot_no}")
         dlg.geometry(DialogSize.get_geometry(self.root, 'medium'))
         apply_modal_window_options(dlg)
         dlg.transient(self.root)
         center_dialog(dlg, self.root)
-
+        
         cols = ('type', 'qty', 'customer', 'date', 'created')
         tree = _ttk.Treeview(dlg, columns=cols, show='headings', height=12)
-
+        
         type_icons = {
             'OUTBOUND': '📤 출고', 'INBOUND': '📥 입고',
             'CANCEL_OUTBOUND': '↩️ 취소', 'RETURN': '🔄 반품'
         }
-
+        
         for col, text, w in [
             ('type', '유형', 100), ('qty', '수량(kg)', 100),
             ('customer', '고객', 120), ('date', '날짜', 100), ('created', '등록일', 120)
         ]:
             tree.heading(col, text=text)
             tree.column(col, width=w, anchor='e' if col == 'qty' else 'center')
-
+        
         for i, mv in enumerate(movements):
             tree.insert('', 'end', values=(
                 type_icons.get(mv['movement_type'], mv['movement_type']),
@@ -693,11 +660,11 @@ class InventoryTabMixin:
                 str(mv['movement_date'] or '')[:10],
                 str(mv['created_at'] or '')[:16]
             ), tags=('stripe',) if i % 2 == 1 else ())
-
+        
         _stripe_bg = ThemeColors.get('tree_stripe', getattr(self, '_is_dark', False))
         tree.tag_configure('stripe', background=_stripe_bg)
         tree.pack(fill='both', expand=True, padx=Spacing.XS, pady=Spacing.XS)
-
+        
         if not movements:
             _ttk.Label(dlg, text="이력이 없습니다.", foreground='gray').pack(pady=Spacing.LG)
 
@@ -801,10 +768,10 @@ class InventoryTabMixin:
         """재고 목록 새로고침 (18열 + 콤보 검색 + Date 기간)"""
         if not hasattr(self, 'tree_inventory'):
             return
-
+        
         # v4.19.1: 필터 드롭다운 채우기 (추가)
         self._populate_filter_dropdowns()
-
+        
         for item in self.tree_inventory.get_children():
             self.tree_inventory.delete(item)
 
@@ -824,7 +791,7 @@ class InventoryTabMixin:
             for k, v in self._inv_filter_bar.get_filters().items():
                 if k != 'status':
                     combo_filters[k] = v
-
+        
         # Date 기간 조건
         date_from = ''
         date_to = ''
@@ -876,7 +843,7 @@ class InventoryTabMixin:
                 status = item.get('status', 'AVAILABLE')
                 if status_filter_normalized and status != status_filter_normalized:
                     continue
-
+                
                 # 콤보 검색 필터 + 헤더 필터바
                 skip = False
                 for field, val in combo_filters.items():
@@ -886,7 +853,7 @@ class InventoryTabMixin:
                         break
                 if skip:
                     continue
-
+                
                 # Date 기간 필터 (arrival_date 기준)
                 if date_from or date_to:
                     arrival = str(item.get('arrival_date', '')).replace('-', '')
@@ -919,7 +886,7 @@ class InventoryTabMixin:
                         # Avail = 판매가능(샘플 제외) 톤백 수. 값이 없으면 0을 표시.
                         vals.append(str(avail_map.get(lot_no, 0)))
                         continue
-
+                    
                     v = item.get(col_id, '')
                     if v is None:
                         v = ''
@@ -949,8 +916,8 @@ class InventoryTabMixin:
                                     arr_dt = datetime.strptime(arr, '%Y-%m-%d')
                                     ret_dt = arr_dt + timedelta(days=int(ft))
                                     v = ret_dt.strftime('%Y-%m-%d')
-                                except (ValueError, TypeError) as e:
-                                    logger.warning(f"[_refresh_inventory] Suppressed: {e}")
+                                except (ValueError, TypeError):
+                                    pass
                     # U2: 화물 상태 표시 (전체/판매가능/판매배정/판매화물 결정/출고)
                     elif col_id == 'status':
                         v = get_status_display(str(v)) or str(v)
@@ -991,14 +958,14 @@ class InventoryTabMixin:
 
             # v3.9.9: 빈 상태 안내 — 비표시 (사용자 요청)
             self._hide_empty_state_hint()
-
+            
             # v3.8.7: 재고 탭 하단 통계 갱신
             self._refresh_inv_stats()
-
+            
             # U4: 상태바 실시간 재고 요약 갱신
             if hasattr(self, '_update_statusbar_summary'):
                 self._update_statusbar_summary()
-
+            
             # v4.2.2: 테이블 스타일 줄무늬 새로고침
             try:
                 from ..utils.table_styler import TableStyler
@@ -1012,39 +979,17 @@ class InventoryTabMixin:
                     apply_striped_rows(self.tree_inventory, is_dark=_dk2)
                 except (ImportError, Exception) as _e2:
                     logger.debug(f"기존 방식 줄무늬도 실패: {_e2}")
-
+            
             # v4.0.6: 필터 드롭다운 값 업데이트
             self._update_inv_filter_values(inventory)
-
+            
             # v5.6.1: FooterTotalBar 제거 (stats_frame 1줄로 통합)
             # self._update_inv_footer()
 
         except (ValueError, TypeError, KeyError) as e:
             logger.error(f"재고 조회 오류: {e}")
             self._log(f"⚠️ 재고 조회 오류: {e}")
-
-    def _update_style_toolbar_tree(self, tree: 'ttk.Treeview') -> None:
-        """
-        v4.2.2: 스타일 툴바의 Treeview 참조 업데이트
-        
-        Args:
-            tree: 연결할 Treeview 객체
-        """
-        if not hasattr(self, '_inv_style_toolbar') or not self._inv_style_toolbar:
-            return
-
-        try:
-
-            # 툴바 내부의 모든 위젯 순회
-            for widget in self._inv_style_toolbar.winfo_children():
-                # Checkbutton인 경우 command 재설정
-                if isinstance(widget, tk.Checkbutton):
-                    # widget의 변수를 가져와서 새로운 command 설정
-                    # (기존 코드 구조상 동적으로 재설정하기 어려우므로 스킵)
-                    pass
-                # v5.7.5: 표시 모드 제거로 Radiobutton 없음 — 스킵
-        except (ValueError, TypeError, KeyError, AttributeError) as e:
-            logger.debug(f"스타일 툴바 업데이트 실패: {e}")
+    
 
     def _refresh_inv_stats(self) -> None:
         """v3.8.7: 재고 탭 하단 통계. v7.0 2단계: 판매가능 탭 — 판매가능(LOT/톤백/무게)만 표시."""
@@ -1078,7 +1023,7 @@ class InventoryTabMixin:
     # ═══════════════════════════════════════════════════════
     # v4.0.6: 필터바 / 합계바 메서드
     # ═══════════════════════════════════════════════════════
-
+    
     def _on_inv_filter_apply(self) -> None:
         """v4.0.6: 재고 필터 적용 시 새로고침"""
         if hasattr(self, '_deferred_refresh_main_tabs'):
@@ -1087,7 +1032,7 @@ class InventoryTabMixin:
             self._refresh_main_tabs()
         else:
             self._refresh_inventory()
-
+    
     def _update_inv_filter_values(self, inventory) -> None:
         """v4.0.6: 필터 드롭다운에 실제 데이터 값 채우기. STATUS는 전체/판매가능/판매배정/판매화물 결정/출고 5종 + 개수."""
         if not hasattr(self, '_inv_filter_bar'):
@@ -1127,7 +1072,7 @@ class InventoryTabMixin:
                     self._inv_filter_bar.update_filter_values(col, vals)
         except (ValueError, TypeError) as e:
             logger.debug(f"필터 값 업데이트 오류: {e}")
-
+    
     def _update_inv_footer(self) -> None:
         """v4.0.6: 하단 합계 바 — 트리뷰 표시 행 기준"""
         if not hasattr(self, '_inv_footer'):
@@ -1136,7 +1081,7 @@ class InventoryTabMixin:
             net_total = 0.0
             balance_total = 0.0
             rows = 0
-
+            
             for item_id in self.tree_inventory.get_children(''):
                 vals = self.tree_inventory.item(item_id, 'values')
                 rows += 1
@@ -1149,7 +1094,7 @@ class InventoryTabMixin:
                     balance_total += float(str(vals[15]).replace(',', ''))
                 except (ValueError, TypeError, IndexError) as _e:
                     logger.debug(f"Suppressed: {_e}")
-
+            
             self._inv_footer.update({
                 'rows': rows,
                 'net_kg': net_total,
@@ -1170,20 +1115,20 @@ class InventoryTabMixin:
         selection = self.tree_inventory.selection()
         if not selection:
             return
-
+        
         item_id = selection[0]
         item = self.tree_inventory.item(item_id)
         values = item.get('values', [])
         tags = item.get('tags', ())
-
+        
         if not values or len(values) < 2:
             return
-
+        
         # values[0] = row_num, values[1] = lot_no (INVENTORY_COLUMNS 기준)
         lot_no = str(values[1]).strip()
         if not lot_no:
             return
-
+        
         # v4.1.0: 상세 추적 팝업 표시
         if hasattr(self, '_show_lot_detail_popup'):
             self._show_lot_detail_popup(lot_no)
@@ -1222,45 +1167,7 @@ class InventoryTabMixin:
                 tree.heading(c_id, text=f"{c_label}{arrow}")
             else:
                 tree.heading(c_id, text=c_label)
-
-    def _show_empty_state_hint(self) -> None:
-        """v3.9.9: 재고 데이터 없을 때 안내 표시 (v8.7.0 Phase2: ThemeColors)"""
-        from ..utils.constants import tk
-
-        if hasattr(self, '_empty_hint') and self._empty_hint:
-            return
-
-        try:
-            _ed = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
-            _bg = ThemeColors.get('bg_secondary', _ed)
-            _fg = ThemeColors.get('text_secondary', _ed)
-            _fg_muted = ThemeColors.get('text_muted', _ed)
-            self._empty_hint = tk.Frame(self._inv_tree_frame, bg=_bg)
-            self._empty_hint.place(relx=0.5, rely=0.4, anchor='center')
-
-            tk.Label(self._empty_hint, text="📦", bg=_bg,
-                     font=('', 36)).pack(pady=(0, Spacing.XS))
-            tk.Label(self._empty_hint, text="재고 데이터가 없습니다", bg=_bg,
-                     fg=_fg, font=('맑은 고딕', 14, 'bold')).pack()
-            tk.Label(self._empty_hint,
-                     text="Ctrl+O: 파일 열기 | Ctrl+N: 입고 | 파일 드래그앤드롭",
-                     bg=_bg, fg=_fg_muted, font=('맑은 고딕', 10)).pack(pady=Spacing.XS)
-
-            btn_frame = tk.Frame(self._empty_hint, bg=_bg)
-            btn_frame.pack(pady=Spacing.SM)
-
-            from ..utils.constants import ttk
-            from ..utils.ui_constants import apply_tooltip
-            _btn_file = ttk.Button(btn_frame, text="📁 파일 선택 입고",
-                                   command=lambda: (self._hide_empty_state_hint(), self._on_open_file()))
-            _btn_file.pack(side='left', padx=Spacing.XS)
-            apply_tooltip(_btn_file, "데이터베이스 파일(.db)을 선택하여 열거나, 입고용 PDF/엑셀 파일을 선택합니다.")
-            _btn_manual = ttk.Button(btn_frame, text="📝 수동 입고",
-                                    command=lambda: (self._hide_empty_state_hint(), self._on_new_inbound()))
-            _btn_manual.pack(side='left', padx=Spacing.XS)
-            apply_tooltip(_btn_manual, "입고 메뉴의 원스톱 입고 또는 수동 입력으로 새 LOT/톤백을 등록합니다.")
-        except (ImportError, ModuleNotFoundError) as _e:
-            logger.debug(f"empty_hint: {_e}")
+    
 
     def _hide_empty_state_hint(self) -> None:
         """v3.9.9: 빈 상태 안내 숨김"""
@@ -1270,7 +1177,7 @@ class InventoryTabMixin:
             except (ValueError, TypeError, KeyError) as _e:
                 logger.debug(f'Suppressed: {_e}')
             self._empty_hint = None
-
+    
     def _populate_filter_dropdowns(self) -> None:
         """
         v4.19.1: 필터 드롭다운 목록 자동 채우기
@@ -1287,7 +1194,7 @@ class InventoryTabMixin:
                 )
                 lot_values = ['전체'] + [dict(row)['lot_no'] for row in lots if row]
                 self._inv_filter_bar.lot_combo['values'] = lot_values
-
+            
             # SAP NO 목록
             if hasattr(self, '_inv_filter_bar') and hasattr(self._inv_filter_bar, 'sap_combo'):
                 saps = self.engine.db.fetchall(
@@ -1297,7 +1204,7 @@ class InventoryTabMixin:
                 )
                 sap_values = ['전체'] + [dict(row)['sap_no'] for row in saps if row]
                 self._inv_filter_bar.sap_combo['values'] = sap_values
-
+            
             # BL NO 목록
             if hasattr(self, '_inv_filter_bar') and hasattr(self._inv_filter_bar, 'bl_combo'):
                 bls = self.engine.db.fetchall(
@@ -1307,7 +1214,7 @@ class InventoryTabMixin:
                 )
                 bl_values = ['전체'] + [dict(row)['bl_no'] for row in bls if row]
                 self._inv_filter_bar.bl_combo['values'] = bl_values
-
+            
             # CONTAINER 목록
             if hasattr(self, '_inv_filter_bar') and hasattr(self._inv_filter_bar, 'container_combo'):
                 containers = self.engine.db.fetchall(
@@ -1317,7 +1224,7 @@ class InventoryTabMixin:
                 )
                 container_values = ['전체'] + [dict(row)['container_no'] for row in containers if row]
                 self._inv_filter_bar.container_combo['values'] = container_values
-
+            
             # PRODUCT 목록
             if hasattr(self, '_inv_filter_bar') and hasattr(self._inv_filter_bar, 'product_combo'):
                 products = self.engine.db.fetchall(
@@ -1327,11 +1234,11 @@ class InventoryTabMixin:
                 )
                 product_values = ['전체'] + [dict(row)['product'] for row in products if row]
                 self._inv_filter_bar.product_combo['values'] = product_values
-
+            
             # STATUS 목록은 _update_inv_filter_values에서 전체/판매가능/판매배정/판매화물 결정/출고(개수)로 설정
 
             logger.debug("✅ 필터 드롭다운 채우기 완료")
-
+        
         except (ValueError, TypeError, KeyError, AttributeError) as e:
             logger.error(f"필터 드롭다운 채우기 실패: {e}")
 

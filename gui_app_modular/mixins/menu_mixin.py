@@ -347,28 +347,7 @@ class MenuMixin:
         help_menu.add_separator()
         help_menu.add_command(label="ℹ️ 정보", command=self._show_about)
     
-    def _setup_keyboard_shortcuts(self) -> None:
-        """단축키 설정"""
-        shortcuts = [
-            ('<Control-i>', self._on_pdf_inbound),
-            ('<Control-I>', self._on_pdf_inbound),
-            ('<Control-o>', self._on_allocation_input_unified),
-            ('<Control-O>', self._on_allocation_input_unified),
-            ('<Control-e>', lambda: self._on_export_click(6)),
-            ('<Control-E>', lambda: self._on_export_click(6)),
-            ('<Control-b>', self._on_backup_click),
-            ('<Control-B>', self._on_backup_click),
-            ('<Control-f>', self._focus_search),
-            ('<Control-F>', self._focus_search),
-            ('<F5>', self._refresh_inventory),
-        ]
-        
-        for key, command in shortcuts:
-            try:
-                self.root.bind(key, lambda e, cmd=command: cmd())
-            except (AttributeError, RuntimeError) as ex:
-                logger.warning(f"단축키 바인딩 실패 {key}: {ex}")
-    
+
     def _show_shortcuts(self) -> None:
         """단축키 안내"""
 

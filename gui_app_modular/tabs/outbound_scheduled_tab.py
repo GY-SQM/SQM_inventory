@@ -43,7 +43,7 @@ class OutboundScheduledTabMixin:
         """출고 예정 탭 설정"""
         from ..utils.constants import ttk, VERTICAL, BOTH, YES, LEFT, X
 
-        _ = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
 
         # 버튼 바
         btn_frame = ttk.Frame(self.tab_outbound_scheduled)
@@ -207,7 +207,7 @@ class OutboundScheduledTabMixin:
         fg = ThemeColors.get('text_primary', is_dark)
         popup.configure(bg=bg)
         header = tk.Frame(popup, bg=bg, padx=15, pady=10)
-        header.pack(fill='x')
+        header.pack(fill=X)
         tk.Label(header, text=f"전체 LOT 톤백 예정/이력 — {len(rows)}건",
                  font=('맑은 고딕', 12, 'bold'), bg=bg, fg=fg).pack(anchor='w')
         tk.Label(header, text="판매배정·판매화물 결정·출고·선적 상태 톤백 (LOT별 정렬)",
@@ -382,7 +382,7 @@ class OutboundScheduledTabMixin:
 
         # 헤더
         header = tk.Frame(popup, bg=bg, padx=15, pady=10)
-        header.pack(fill='x')
+        header.pack(fill=X)
         tk.Label(header, text=f"📦 {lot_no}  |  {product}",
                  font=('맑은 고딕', 14, 'bold'), bg=bg, fg=fg).pack(anchor='w')
         tk.Label(header, text="출고된 톤백·샘플 이력 (여러 번에 걸친 출고 포함)",
@@ -420,7 +420,7 @@ class OutboundScheduledTabMixin:
 
         # 버튼: Excel, PDF, 닫기
         btn_bar = tk.Frame(popup, bg=bg, pady=8)
-        btn_bar.pack(fill='x', padx=10)
+        btn_bar.pack(fill=X, padx=10)
 
         def _export_excel():
             from ..utils.excel_file_helper import get_unique_excel_path
