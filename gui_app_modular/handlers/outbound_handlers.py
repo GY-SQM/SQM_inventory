@@ -13,7 +13,9 @@ import sqlite3
 import csv
 import os
 import hashlib
-from datetime import datetime
+import json
+import shutil
+from datetime import datetime, date, timedelta
 
 from ..utils.ui_constants import CustomMessageBox, ThemeColors, apply_tooltip
 from utils.path_utils import get_app_base_dir
@@ -56,6 +58,202 @@ class OutboundHandlersMixin:
             self._refresh_sold()
         if hasattr(self, '_refresh_dashboard'):
             self._refresh_dashboard()
+
+    def _s1_get_proof_base_dir(self) -> str:
+        """S1 근거문서 저장 폴더(일자별) 경로를 반환한다."""
+        day_dir = os.path.join(
+            get_app_base_dir(),
+            "data",
+            "proof_docs",
+            date.today().isoformat(),
+        )
+        os.makedirs(day_dir, exist_ok=True)
+        return day_dir
+
+    def _s1_cleanup_old_proof_docs(self, retention_days: int = 90) -> dict:
+        """보관기간 초과 근거문서 폴더를 정리한다."""
+        base_dir = os.path.join(get_app_base_dir(), "data", "proof_docs")
+        result = {"removed_dirs": 0, "removed_files": 0}
+        if not os.path.isdir(base_dir):
+            return result
+
+        cutoff = date.today() - timedelta(days=retention_days)
+        for name in os.listdir(base_dir):
+            target_dir = os.path.join(base_dir, name)
+            if not os.path.isdir(target_dir):
+                continue
+            try:
+                folder_day = date.fromisoformat(name)
+            except ValueError:
+                continue
+            if folder_day >= cutoff:
+                continue
+            file_count = 0
+            for _, _, files in os.walk(target_dir):
+                file_count += len(files)
+            shutil.rmtree(target_dir, ignore_errors=True)
+            result["removed_dirs"] += 1
+            result["removed_files"] += file_count
+        return result
+
+    def _s1_get_audit_columns(self) -> set:
+        """audit_log 테이블 컬럼 목록을 안전하게 조회한다."""
+        try:
+            rows = self.engine.db.fetchall("PRAGMA table_info(audit_log)")
+            cols = set()
+            for row in rows or []:
+                if isinstance(row, dict):
+                    name = row.get("name")
+                else:
+                    name = row[1] if len(row) > 1 else None
+                if name:
+                    cols.add(str(name))
+            return cols
+        except Exception:
+            return set()
+
+    def _s1_write_audit(self, event_type: str, payload=None, **meta) -> None:
+        """환경별 audit_log 스키마 차이를 흡수해 이벤트를 기록한다."""
+        cols = self._s1_get_audit_columns()
+        if not cols:
+            return
+        if "event_type" not in cols or "created_at" not in cols:
+            return
+        payload_json = json.dumps(payload or {}, ensure_ascii=False)
+        record = {
+            "event_type": event_type,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        if "payload" in cols:
+            record["payload"] = payload_json
+        if "event_data" in cols:
+            record["event_data"] = payload_json
+        for key, value in meta.items():
+            if key in cols:
+                record[key] = value
+        col_names = list(record.keys())
+        placeholders = ", ".join(["?"] * len(col_names))
+        sql = f"INSERT INTO audit_log ({', '.join(col_names)}) VALUES ({placeholders})"
+        try:
+            self.engine.db.execute(sql, tuple(record[c] for c in col_names))
+            if hasattr(self.engine.db, "conn") and self.engine.db.conn:
+                self.engine.db.conn.commit()
+        except Exception as e:
+            logger.debug(f"[S1] audit 기록 스킵: {e}")
+
+    def _s1_open_audit_viewer(self) -> None:
+        """S1 감사 로그 뷰어를 연다."""
+        from ..utils.constants import tk, ttk, BOTH, LEFT, RIGHT, X, END, filedialog
+
+        cols = self._s1_get_audit_columns()
+        if not cols:
+            CustomMessageBox.showwarning(self.root, "안내", "audit_log 테이블을 찾지 못했습니다.")
+            return
+
+        note_col = "user_note" if "user_note" in cols else ("event_data" if "event_data" in cols else "payload")
+        dialog = tk.Toplevel(self.root)
+        dialog.title("감사 로그")
+        dialog.geometry("920x520")
+        dialog.transient(self.root)
+
+        top = ttk.Frame(dialog)
+        top.pack(fill=X, padx=8, pady=6)
+        ttk.Label(top, text="이벤트").pack(side=LEFT, padx=4)
+        event_var = tk.StringVar(value="전체")
+        ttk.Entry(top, textvariable=event_var, width=24).pack(side=LEFT, padx=4)
+        ttk.Label(top, text="시작일").pack(side=LEFT, padx=4)
+        from_var = tk.StringVar(value=date.today().isoformat())
+        ttk.Entry(top, textvariable=from_var, width=12).pack(side=LEFT, padx=2)
+        ttk.Label(top, text="종료일").pack(side=LEFT, padx=4)
+        to_var = tk.StringVar(value=date.today().isoformat())
+        ttk.Entry(top, textvariable=to_var, width=12).pack(side=LEFT, padx=2)
+
+        tree = ttk.Treeview(dialog, columns=("id", "event_type", "note", "created_at"), show="headings", height=18)
+        tree.heading("id", text="ID")
+        tree.heading("event_type", text="EVENT")
+        tree.heading("note", text="NOTE")
+        tree.heading("created_at", text="TIME")
+        tree.column("id", width=60, anchor="center")
+        tree.column("event_type", width=220, anchor="w")
+        tree.column("note", width=430, anchor="w")
+        tree.column("created_at", width=180, anchor="center")
+        tree.pack(fill=BOTH, expand=True, padx=8, pady=4)
+        status_var = tk.StringVar(value="")
+        ttk.Label(dialog, textvariable=status_var).pack(fill=X, padx=8, pady=(0, 6))
+
+        cache_rows = {"rows": []}
+
+        def _search():
+            tree.delete(*tree.get_children())
+            sql = (
+                f"SELECT id, event_type, {note_col} AS note, created_at "
+                f"FROM audit_log WHERE 1=1"
+            )
+            params = []
+            event_text = event_var.get().strip()
+            if event_text and event_text != "전체":
+                sql += " AND event_type = ?"
+                params.append(event_text)
+            if "created_at" in cols and from_var.get().strip():
+                sql += " AND created_at >= ?"
+                params.append(f"{from_var.get().strip()} 00:00:00")
+            if "created_at" in cols and to_var.get().strip():
+                sql += " AND created_at <= ?"
+                params.append(f"{to_var.get().strip()} 23:59:59")
+            sql += " ORDER BY id DESC LIMIT 500"
+            rows = self.engine.db.fetchall(sql, tuple(params))
+            cache_rows["rows"] = rows
+            for row in rows:
+                note = (row.get("note") or "") if isinstance(row, dict) else ""
+                tree.insert(
+                    "",
+                    END,
+                    values=(
+                        row.get("id", ""),
+                        row.get("event_type", ""),
+                        str(note)[:90],
+                        row.get("created_at", ""),
+                    ),
+                )
+            status_var.set(f"조회 {len(rows)}건")
+
+        def _export_csv():
+            rows = cache_rows["rows"]
+            if not rows:
+                CustomMessageBox.showwarning(dialog, "안내", "내보낼 데이터가 없습니다.")
+                return
+            out_path = filedialog.asksaveasfilename(
+                parent=dialog,
+                title="감사 로그 CSV 저장",
+                defaultextension=".csv",
+                initialfile=f"audit_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                filetypes=[("CSV 파일", "*.csv"), ("모든 파일", "*.*")],
+            )
+            if not out_path:
+                return
+            with open(out_path, "w", encoding="utf-8-sig", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["ID", "EVENT", "NOTE", "TIME"])
+                for row in rows:
+                    writer.writerow([
+                        row.get("id", ""),
+                        row.get("event_type", ""),
+                        row.get("note", ""),
+                        row.get("created_at", ""),
+                    ])
+            status_var.set(f"CSV 저장 완료: {os.path.basename(out_path)}")
+            self._s1_write_audit(
+                "AUDIT_EXPORT",
+                {"count": len(rows), "file": os.path.basename(out_path)},
+                user_note=f"감사 로그 CSV 내보내기 {len(rows)}건",
+            )
+
+        btn = ttk.Frame(dialog)
+        btn.pack(fill=X, padx=8, pady=6)
+        ttk.Button(top, text="조회", command=_search).pack(side=LEFT, padx=6)
+        ttk.Button(btn, text="CSV 저장", command=_export_csv).pack(side=LEFT, padx=4)
+        ttk.Button(btn, text="닫기", command=dialog.destroy).pack(side=RIGHT, padx=4)
+        _search()
     
     def _on_simple_outbound(self) -> None:
         """Simple outbound dialog - enter LOT and quantity (v4.0.3: UI 분리)"""
@@ -75,6 +273,14 @@ class OutboundHandlersMixin:
         proof_status_var = tk.StringVar(value="첨부 없음")
         out_scan_status_var = tk.StringVar(value="파일 미선택")
         unmatched_var = tk.StringVar(value="")
+        proof_base_dir = self._s1_get_proof_base_dir()
+        cleanup_result = self._s1_cleanup_old_proof_docs(retention_days=90)
+        if cleanup_result.get("removed_dirs", 0) > 0:
+            self._s1_write_audit(
+                "PROOF_CLEANUP",
+                cleanup_result,
+                user_note=f"근거문서 자동정리 {cleanup_result['removed_dirs']}개 폴더",
+            )
 
         def _normalize_tonbag_key(raw):
             if raw is None:
@@ -107,15 +313,31 @@ class OutboundHandlersMixin:
                         CustomMessageBox.showwarning(dialog, "중복 파일",
                                                      f"{os.path.basename(fpath)}\n이미 첨부된 문서입니다.")
                         continue
+                    fname = os.path.basename(fpath)
+                    stored_name = f"{fhash[:8]}_{fname}"
+                    stored_path = os.path.join(proof_base_dir, stored_name)
+                    if not os.path.exists(stored_path):
+                        shutil.copy2(fpath, stored_path)
                     proof_hashes.add(fhash)
                     proof_docs.append({
                         "id": fhash[:16],
-                        "name": os.path.basename(fpath),
-                        "path": fpath,
+                        "name": fname,
+                        "path": stored_path,
+                        "original_path": fpath,
                         "size": os.path.getsize(fpath),
                         "hash": fhash,
                         "added_at": datetime.now().strftime("%H:%M:%S"),
                     })
+                    self._s1_write_audit(
+                        "PROOF_ATTACH",
+                        {
+                            "name": fname,
+                            "hash": fhash,
+                            "size": os.path.getsize(fpath),
+                            "stored_path": stored_path,
+                        },
+                        user_note=f"근거문서 첨부: {fname}",
+                    )
                 except Exception as e:
                     logger.error(f"[SimpleOutbound] 근거문서 첨부 실패: {fpath} -> {e}")
                     CustomMessageBox.showerror(dialog, "첨부 오류", str(e))
@@ -263,6 +485,15 @@ class OutboundHandlersMixin:
                 preview_ids = ", ".join(r["raw_key"] for r in unmatched[:5])
                 more = f" 외 {len(unmatched)-5}건" if len(unmatched) > 5 else ""
                 unmatched_var.set(f"⛔ 미매칭 {len(unmatched)}건 (무단 출고 의심): {preview_ids}{more}")
+                self._s1_write_audit(
+                    "UNMATCHED_SCAN",
+                    {
+                        "file": os.path.basename(path),
+                        "count": len(unmatched),
+                        "sample": [r.get("raw_key", "") for r in unmatched[:20]],
+                    },
+                    user_note=f"OUT 스캔 미매칭 {len(unmatched)}건",
+                )
             else:
                 unmatched_var.set("")
         
@@ -388,12 +619,14 @@ class OutboundHandlersMixin:
                 # 선택된 톤백에서 LOT별 수량 집계
                 lot_weights = {}
                 selected_keys = set()
+                selected_count = 0
                 for item_id in selected:
                     values = preview_tree.item(item_id)['values']
                     tags = preview_tree.item(item_id).get('tags', ())
                     
                     if 'lot_header' in tags:
                         continue  # LOT 헤더는 건너뜀
+                    selected_count += 1
                     meta = tonbag_meta_by_item.get(item_id, {})
                     lot_no = str(meta.get("lot_no") or str(values[0]).replace('└', '').strip())
                     weight = float(meta.get("weight") or 0)
@@ -404,6 +637,14 @@ class OutboundHandlersMixin:
                             continue
                     if meta.get("key"):
                         selected_keys.add(meta["key"])
+                if selected_count > 0 and len(selected_keys) < selected_count:
+                    CustomMessageBox.showerror(
+                        self.root,
+                        "출고 중단",
+                        "선택 톤백 키가 중복되어 출고를 중단합니다.\n"
+                        "톤백 선택을 해제 후 다시 선택해 주세요.",
+                    )
+                    return
                     
                     if lot_no not in lot_weights:
                         lot_weights[lot_no] = 0
@@ -533,6 +774,18 @@ class OutboundHandlersMixin:
                     
                     CustomMessageBox.showinfo(self.root, "완료", msg)
                     self._log(f"✅ 빠른 출고: {processed}건, {picked:.3f} MT")
+                    self._s1_write_audit(
+                        "OUTBOUND_EXECUTE",
+                        {
+                            "customer": customer,
+                            "sale_ref": sale_ref,
+                            "lots": len(allocation_items),
+                            "picked_mt": picked,
+                            "proof_docs": len(proof_docs),
+                            "out_scan_loaded": bool(out_scan_state.get("loaded")),
+                        },
+                        user_note=f"빠른 출고 실행: {customer}, {picked:.3f} MT",
+                    )
                     
                     dialog.destroy()
                     self._refresh_after_outbound_action("SIMPLE_OUTBOUND_EXECUTE")
@@ -564,6 +817,7 @@ class OutboundHandlersMixin:
         out_btn_row = ttk.Frame(out_frame)
         out_btn_row.pack(fill=X, padx=6, pady=4)
         ttk.Button(out_btn_row, text="📂 파일 불러오기 (csv/xlsx)", command=_load_out_scan_file).pack(side=LEFT, padx=2)
+        ttk.Button(out_btn_row, text="📋 감사 로그", command=self._s1_open_audit_viewer).pack(side=LEFT, padx=2)
         ttk.Label(out_btn_row, textvariable=out_scan_status_var).pack(side=LEFT, padx=8)
         ttk.Label(out_frame, textvariable=unmatched_var, foreground="#dc2626").pack(fill=X, padx=6, pady=(0, 6))
         
