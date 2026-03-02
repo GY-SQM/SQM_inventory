@@ -1,5 +1,5 @@
-import sqlite3
 import os
+import sqlite3
 
 db_path = "sqm_inventory.db"
 if not os.path.exists(db_path):

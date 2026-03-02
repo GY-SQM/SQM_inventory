@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v5.5.5 — 공용 유틸리티 (Single Source of Truth)
 =====================================================
@@ -9,9 +8,8 @@ safe_float, safe_str, normalize_column_name, normalize_lot, norm_* 정규화 함
     from utils.common import safe_float, normalize_lot, norm_tonbag_no_std, norm_bl_no
 """
 
-import re
-import math
 import logging
+import re
 from datetime import datetime
 from typing import Any, Optional, Tuple
 

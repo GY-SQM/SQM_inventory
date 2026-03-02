@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 원본: D:\\프로그램\\Sqm 재고관리\\SQM-Inventory-2026_02_21.xlsx (또는 동일 이름의 재고리스트 엑셀)
 → Allocation - GY - PT LBM 300MT (2)-1.xlsx 형식으로 3개 생성
@@ -10,8 +9,8 @@
 - QTY (MT): 5 = 500kg 톤백 10개. 톤백 N개 → N*0.5 MT. 절대 행당 10 MT(20개) 금지.
 - 출력: generated_allocation/ 또는 인자로 지정한 폴더
 """
-import sys
 import random
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -123,7 +122,7 @@ def _create_allocation_excel(
     file_index: int,
 ) -> None:
     import openpyxl
-    from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
     wb = openpyxl.Workbook()

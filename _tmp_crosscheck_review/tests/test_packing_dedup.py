@@ -1,17 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 Packing List 중복 행 파싱 제거 테스트
 v6.2.1 — gemini_parser.py append_lot fingerprint 검증
 """
 
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from features.ai.gemini_parser import parse_euro_weight
 
 # append_lot 로직을 독립 시뮬레이션
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Set
+
 
 @dataclass
 class FakeLOT:
@@ -115,7 +116,7 @@ def test_gemini_hallucination_pattern():
     # 마지막 2개를 앞의 행과 동일하게 복제 (Gemini 환각)
     data.append({"lot_no": "1125081401", "container_no": "FFAU5355001", "net_weight_kg": 5001.5})
     data.append({"lot_no": "1125081402", "container_no": "FFAU5355002", "net_weight_kg": 5001.5})
-    
+
     accepted, skipped = simulate_append_lot(data)
     assert len(accepted) == 20, f"20건만 추가되어야 함, got {len(accepted)}"
     assert skipped == 2
@@ -135,7 +136,7 @@ def test_cross_page_dedup():
     ]
     for i in range(11, 18):
         page2_flat.append({"lot_no": f"11250814{i:02d}", "container_no": f"FFAU53550{i:02d}", "net_weight_kg": 5001.5})
-    
+
     all_lots = page1 + page2_flat
     accepted, skipped = simulate_append_lot(all_lots)
     assert len(accepted) == 17, f"17건이어야 함, got {len(accepted)}"
@@ -160,7 +161,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print("🔍 Packing List 중복 행 제거 테스트 (v6.2.1)")
     print("=" * 60)
-    
+
     test_no_duplicates()
     test_exact_duplicate_row()
     test_multiple_duplicates()
@@ -168,7 +169,7 @@ if __name__ == "__main__":
     test_gemini_hallucination_pattern()
     test_cross_page_dedup()
     test_empty_lotno_different_data()
-    
+
     print("\n" + "=" * 60)
     print("✅ 전체 7개 테스트 통과!")
     print("=" * 60)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 엔진 모듈 패키지
 v3.8.5: 모듈화 + PreflightMixin 통합

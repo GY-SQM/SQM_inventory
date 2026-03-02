@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - 파서 기본 클래스
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional, Any
 from pathlib import Path
+from typing import Any, Optional
 
 
 class BaseParser(ABC):

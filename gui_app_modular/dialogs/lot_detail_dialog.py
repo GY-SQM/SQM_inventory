@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v4.1.0 — LOT 상세 추적 다이얼로그 (품목별 상세)
 ===================================================
@@ -11,7 +10,14 @@ LOT 더블클릭/우클릭 시:
 
 import logging
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors, DialogSize, center_dialog, apply_tooltip, apply_modal_window_options, get_status_display
+from ..utils.ui_constants import (
+    CustomMessageBox,
+    DialogSize,
+    apply_modal_window_options,
+    apply_tooltip,
+    center_dialog,
+    get_status_display,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +27,7 @@ class LotDetailDialogMixin:
 
     def _show_lot_detail_popup(self, lot_no: str, source_tab: str = None) -> None:
         """v4.1.0 / v7.0: LOT 상세 추적 팝업. source_tab: inventory|allocation|picked|sold 에 따라 톤백 소스 변경."""
-        from ..utils.constants import tk, ttk, VERTICAL, BOTH, LEFT, RIGHT, X, Y, END
+        from ..utils.constants import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y, tk, ttk
         from ..utils.ui_constants import ThemeColors
 
         # ── LOT 정보 조회 (inventory에 없어도 톤백만 보여줄 수 있음) ──

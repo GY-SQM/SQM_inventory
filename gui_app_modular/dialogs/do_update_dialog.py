@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - D/O 후속 연결 다이얼로그 (v5.6.6)
 ==================================================
@@ -13,18 +12,18 @@ SQM 재고관리 - D/O 후속 연결 다이얼로그 (v5.6.6)
   4. 미리보기 → 확인 → UPDATE
 """
 
+import logging
 import os
 import sqlite3
-import logging
 import threading
 from datetime import datetime as _dt
-from typing import Optional, List, Dict, Tuple
+from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
 from core.constants import DEFAULT_WAREHOUSE
-from engine_modules.constants import MOVEMENT_DO_UPDATE
 from core.types import norm_bl_no, norm_container_no
+from engine_modules.constants import MOVEMENT_DO_UPDATE
 
 
 class DOUpdateDialog:
@@ -54,8 +53,22 @@ class DOUpdateDialog:
 
     def _create_dialog(self) -> None:
         """UI 구성"""
-        from ..utils.constants import tk, ttk, BOTH, X, Y, LEFT, RIGHT, TOP, BOTTOM, W, E
-        from ..utils.ui_constants import ThemeColors, CustomMessageBox, DialogSize, center_dialog, apply_modal_window_options
+        from ..utils.constants import (
+            BOTH,
+            LEFT,
+            RIGHT,
+            W,
+            X,
+            Y,
+            tk,
+            ttk,
+        )
+        from ..utils.ui_constants import (
+            DialogSize,
+            ThemeColors,
+            apply_modal_window_options,
+            center_dialog,
+        )
 
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📋 D/O 후속 연결 — SQM v6.2.3")
@@ -106,7 +119,7 @@ class DOUpdateDialog:
                              ('status', '상태', 80), ('arrival_before', '기존 입항일', 100)]:
             self.tree.heading(col, text=hdr)
             self.tree.column(col, width=w, anchor='center')
-        sb_y = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree.yview)
+        sb_y = ttk.Scrollbar(tree_frame, orient='vertical', command=self.tree.yview)
         sb_x = ttk.Scrollbar(tree_frame, orient='horizontal', command=self.tree.xview)
         self.tree.configure(yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
         self.tree.pack(side=LEFT, fill=BOTH, expand=True)
@@ -150,7 +163,7 @@ class DOUpdateDialog:
     def _parse_thread(self) -> None:
         """백그라운드 파싱"""
         try:
-            from ..utils.constants import HAS_GEMINI, GEMINI_API_KEY
+            from ..utils.constants import GEMINI_API_KEY, HAS_GEMINI
             if not HAS_GEMINI or not GEMINI_API_KEY:
                 self._update_ui(lambda: self.status_label.configure(
                     text="❌ Gemini API Key 필요"))
@@ -295,8 +308,8 @@ class DOUpdateDialog:
             f"(기존값 동일로 스킵: {skipped_same}건)\n"
             f"매칭 방식: {self._match_method or 'unknown'}\n\n"
             f"[변경 Diff 미리보기]\n" + "\n".join(preview_lines) + "\n\n"
-            f"진행 전 DB 백업 스냅샷을 자동 생성합니다.\n"
-            f"진행하시겠습니까?"
+            "진행 전 DB 백업 스냅샷을 자동 생성합니다.\n"
+            "진행하시겠습니까?"
         )
         if not CustomMessageBox.askyesno(self.dialog, "D/O 적용 확인 (Diff 검토)", confirm_text):
             return

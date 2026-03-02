@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 톤백 위치 업로드 유틸리티
 ===============================================
@@ -9,16 +8,17 @@ v5.9.8: 로케이션 4파트 지원 — 약식 A-01-01-10 (구역-열-층-칸)
 작성자: Ruby
 """
 
-import pandas as pd
 import logging
-from typing import List, Dict, Tuple, Optional
+from typing import Dict, List, Tuple
+
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
 class TonbagLocationUploader:
     """톤백 위치 Excel 업로드 처리"""
-    
+
     def __init__(self, db_engine):
         """
         Args:
@@ -28,7 +28,7 @@ class TonbagLocationUploader:
         self.db = getattr(db_engine, 'db', db_engine)
         if self.db is None:
             raise ValueError("db_engine에 DB가 없습니다 (engine.db가 None)")
-    
+
     def parse_excel(self, file_path: str) -> Tuple[bool, str, List[Dict]]:
         """
         Excel 파일 파싱
@@ -96,7 +96,7 @@ class TonbagLocationUploader:
             has_lot = any(c in df.columns for c in ('lot_no', 'lot', 'lotno'))
             has_tb = any(c in df.columns for c in ('tonbag_no', 'tonbag', 'tb_no', 'sub_lt'))
             has_loc = any(c in df.columns for c in ('location', '위치'))
-            
+
             if has_lot and has_tb and has_loc:
                 # 양식 2: lot_no + tonbag_no + location (입고일, BL No 선택 컬럼 무시)
                 ok, msg, data = self._parse_lot_tonbag_format(df)
@@ -118,7 +118,7 @@ class TonbagLocationUploader:
                     "양식2: lot_no + tonbag_no + location\n\n"
                     f"발견된 컬럼: {list(df.columns)}"
                 ), []
-            
+
         except (ValueError, TypeError, KeyError, OSError) as e:
             logger.error(f"Excel 파싱 실패: {e}")
             return False, f"❌ Excel 파싱 실패: {e}", []
@@ -198,17 +198,17 @@ class TonbagLocationUploader:
                 df.rename(columns={'tonbag_uid': 'uid'}, inplace=True)
             else:
                 return False, "❌ 'UID' 컬럼을 찾을 수 없습니다", []
-        
+
         if '위치' not in df.columns:
             if 'location' in df.columns:
                 df.rename(columns={'location': '위치'}, inplace=True)
             else:
                 return False, "❌ '위치' 컬럼을 찾을 수 없습니다", []
-        
+
         df = df.dropna(subset=['uid', '위치'])
         if len(df) == 0:
             return False, "❌ 유효한 데이터가 없습니다", []
-        
+
         data = []
         for idx, row in df.iterrows():
             uid = str(row['uid']).strip()
@@ -222,11 +222,11 @@ class TonbagLocationUploader:
                 'location': location,
                 'row_num': idx + 2
             })
-        
+
         if len(data) == 0:
             return False, "❌ 유효한 데이터가 없습니다", []
         return True, f"✅ {len(data)}개 데이터 파싱 완료 (UID 양식)", data
-    
+
     def _parse_lot_tonbag_format(self, df) -> Tuple[bool, str, List[Dict]]:
         """양식 2: (LOT 번호, 톤백 번호) 한 쌍 + location. 현장 업로드 = 이 쌍으로 재고와 일치시킨 뒤 로케이션 반영."""
         # 컬럼명 정규화 (입고일, BL No, uid 등 선택 컬럼 포함)
@@ -242,19 +242,19 @@ class TonbagLocationUploader:
                 col_map['location'] = c
             elif c_lower in ('uid', 'tonbag_uid'):
                 col_map['uid'] = c
-        
+
         lot_col = col_map.get('lot_no')
         tb_col = col_map.get('tonbag_no')
         loc_col = col_map.get('location')
         uid_col = col_map.get('uid')
-        
+
         if not lot_col or not tb_col or not loc_col:
             return False, "❌ 필수 컬럼 필요: lot_no, tonbag_no, location", []
-        
+
         df = df.dropna(subset=[lot_col, tb_col, loc_col])
         if len(df) == 0:
             return False, "❌ 유효한 데이터가 없습니다", []
-        
+
         def _norm_lot(s):
             s = str(s).strip()
             if s.lower() == 'nan' or not s:
@@ -278,7 +278,7 @@ class TonbagLocationUploader:
                     excel_uid = str(v).strip()
             if excel_uid and excel_uid.lower() == 'nan':
                 excel_uid = ''
-            
+
             if not lot_no or lot_no.lower() == 'nan':
                 continue
             if not location or location.lower() == 'nan':
@@ -287,7 +287,7 @@ class TonbagLocationUploader:
             valid, msg = validate_location_format(location)
             if not valid:
                 logger.warning(f"행 {idx + 2}: location '{location}' — {msg}")
-            
+
             # UID: 엑셀에 uid(또는 tonbag_uid) 값이 있으면 사용, 없으면 lot_no+tonbag_no로 조회/생성
             if excel_uid:
                 uid = excel_uid
@@ -304,7 +304,7 @@ class TonbagLocationUploader:
                         logger.warning(f"톤백 미발견: {lot_no}/sub_lt={tb_num}, UID 추정: {uid}")
                 except (ValueError, TypeError):
                     uid = f"{lot_no}-{tonbag_no}"
-            
+
             data.append({
                 'uid': uid,
                 'location': location,
@@ -312,7 +312,7 @@ class TonbagLocationUploader:
                 'tonbag_no': tonbag_no,
                 'row_num': idx + 2
             })
-        
+
         if len(data) == 0:
             return False, "❌ 유효한 데이터가 없습니다", []
         # 3행=헤더인데 첫 행이 헤더 문자열로 들어온 경우 한 행만 제거 (헤더가 데이터로 포함된 경우)
@@ -326,7 +326,7 @@ class TonbagLocationUploader:
         if len(data) == 0:
             return False, "❌ 유효한 데이터가 없습니다 (헤더만 있음)", []
         return True, f"✅ {len(data)}개 데이터 파싱 완료 (LOT+톤백 양식)", data
-    
+
     def validate_and_match(self, data: List[Dict]) -> Dict:
         """
         톤백 리스트(inventory_tonbag) 전용. 재고 리스트(LOT 리스트) DB는 사용하지 않음.
@@ -343,7 +343,7 @@ class TonbagLocationUploader:
             'success_count': 0,
             'fail_count': 0
         }
-        
+
         def _norm_lot_no(val):
             if val is None:
                 return ''
@@ -426,7 +426,7 @@ class TonbagLocationUploader:
                 })
                 result['fail_count'] += 1
                 continue
-            
+
             result['matched'].append({
                 'uid': tonbag.get('tonbag_uid') or uid,
                 'location': location,
@@ -439,9 +439,9 @@ class TonbagLocationUploader:
                 'location_changed': (tonbag['current_location'] or '') != location
             })
             result['success_count'] += 1
-        
+
         return result
-    
+
     def update_locations(self, matched_data: List[Dict]) -> Tuple[bool, str]:
         """
         매칭된 톤백의 위치 업데이트 (v7.0.1: stock_movement 이력 기록)
@@ -454,13 +454,13 @@ class TonbagLocationUploader:
         """
         if not matched_data:
             return False, "❌ 업데이트할 데이터가 없습니다"
-        
+
         try:
             from datetime import datetime
             updated = 0
             relocated = 0
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            
+
             with self.db.transaction():
                 for item in matched_data:
                     tonbag_id = item['tonbag_id']
@@ -468,7 +468,7 @@ class TonbagLocationUploader:
                     from_loc = item.get('current_location') or ''
                     lot_no = item.get('lot_no', '')
                     sub_lt = item.get('sub_lt', 0)
-                    
+
                     # 톤백 리스트(inventory_tonbag)만 갱신 — 재고 리스트(inventory)는 건드리지 않음
                     # location_updated_at, updated_at 함께 갱신 (v4.2.3 마이그레이션 컬럼)
                     self.db.execute("""
@@ -478,9 +478,9 @@ class TonbagLocationUploader:
                             updated_at = ?
                         WHERE id = ?
                     """, (location, now, now, tonbag_id))
-                    
+
                     updated += 1
-                    
+
                     # v7.0.1: 위치가 실제로 변경된 경우 stock_movement에 RELOCATE 이력 기록
                     if from_loc != location:
                         # 톤백 weight 조회
@@ -488,7 +488,7 @@ class TonbagLocationUploader:
                             "SELECT weight FROM inventory_tonbag WHERE id = ?", (tonbag_id,)
                         )
                         tb_weight = (tb_row.get('weight') or 0) if tb_row else 0
-                        
+
                         self.db.execute("""
                             INSERT INTO stock_movement 
                             (lot_no, movement_type, qty_kg, from_location, to_location, remarks, created_at)
@@ -496,17 +496,17 @@ class TonbagLocationUploader:
                         """, (lot_no, tb_weight, from_loc, location,
                               f"sub_lt={sub_lt}, source=EXCEL_UPLOAD", now))
                         relocated += 1
-            
+
             msg = f"✅ {updated}개 톤백 위치 업데이트 완료"
             if relocated > 0:
                 msg += f" (이동 이력 {relocated}건 기록)"
             return True, msg
-            
+
         except (ValueError, TypeError, KeyError, OSError) as e:
             # with 블록에서 자동 롤백 완료
             logger.error(f"위치 업데이트 실패: {e}")
             return False, f"❌ 업데이트 실패: {e}"
-    
+
     def get_location_summary(self) -> Dict:
         """
         위치별 톤백 통계
@@ -531,16 +531,16 @@ class TonbagLocationUploader:
                 GROUP BY location
                 ORDER BY location
             """)
-            
+
             summary = {}
             for row in rows:
                 summary[row['location']] = {
                     'count': row['count'],
                     'total_weight': row['total_weight'] or 0
                 }
-            
+
             return summary
-            
+
         except (ValueError, TypeError, KeyError, OSError) as e:
             logger.error(f"위치 통계 조회 실패: {e}")
             return {}
@@ -562,18 +562,18 @@ def validate_location_format(location: str) -> Tuple[bool, str]:
     """
     if not location or not isinstance(location, str):
         return False, "위치가 비어있습니다"
-    
+
     location = location.strip()
-    
+
     if len(location) > 50:
         return False, "위치가 너무 깁니다 (최대 50자)"
-    
+
     parts = location.split('-')
     if len(parts) not in (3, 4):
         return False, "형식이 올바르지 않습니다 (예: A-01-01 또는 A-01-01-10)"
-    
+
     zone, row, level = parts[0], parts[1], parts[2]
-    
+
     # 구역: 영문 1자
     if not zone.isalpha() or len(zone) != 1:
         return False, "구역은 영문 1자여야 합니다 (예: A)"
@@ -587,7 +587,7 @@ def validate_location_format(location: str) -> Tuple[bool, str]:
     if len(parts) == 4:
         if not parts[3].isdigit():
             return False, "칸(4번째)은 숫자여야 합니다 (예: A-01-01-10)"
-    
+
     return True, "OK"
 
 

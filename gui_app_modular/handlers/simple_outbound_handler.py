@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM Inventory - Simple Outbound Handler
 =======================================
@@ -10,7 +9,6 @@ Simple outbound dialog for quick quantity-based outbound
 
 import logging
 
-from ..utils.ui_constants import CustomMessageBox
 logger = logging.getLogger(__name__)
 
 

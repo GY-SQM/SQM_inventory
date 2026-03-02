@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 P5-9: core.validators 단위 테스트
 ==================================
@@ -9,7 +8,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
 from engine_modules.validators import validate_lot_no, validate_sap_no
 
 

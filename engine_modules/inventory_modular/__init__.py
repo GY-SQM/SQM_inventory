@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM Inventory Engine - Modular Package
 ======================================
@@ -39,22 +38,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from .engine import SQMInventoryEngineV3, SQMInventoryEngine
+from .engine import SQMInventoryEngine, SQMInventoryEngineV3
 
 # Export all mixins
 try:
-    from .inbound_mixin import InboundMixin
-    from .outbound_mixin import OutboundMixin
-    from .query_mixin import QueryMixin
+    from .crud_mixin import CRUDMixin
     from .export_mixin import ExportMixin
+    from .import_mixin import ImportMixin
+    from .inbound_mixin import InboundMixin
+    from .integrity_mixin import IntegrityMixin
+    from .outbound_mixin import OutboundMixin
+    from .preflight_mixin import PreflightMixin
+    from .query_mixin import QueryMixin
+    from .return_mixin import ReturnMixin
+
     # v5.5.3 P6: export_extended_mixin 제거 (export_mixin으로 통합)
     from .shipment_mixin import ShipmentMixin
     from .tonbag_mixin import TonbagMixin
-    from .return_mixin import ReturnMixin
-    from .import_mixin import ImportMixin
-    from .preflight_mixin import PreflightMixin
-    from .crud_mixin import CRUDMixin
-    from .integrity_mixin import IntegrityMixin
     # v5.5.3 P8: outbound_extended_mixin 제거 (죽은 코드)
     # v5.6.7: lot_management_mixin 제거 (빈 placeholder)
 except ImportError as e:
@@ -63,14 +63,14 @@ except ImportError as e:
 # Export utilities
 try:
     from .utils import (
-        safe_parse_date,
-        safe_parse_float,
-        safe_parse_int,
-        dict_to_packing_data,
         PackingDataAdapter,
+        dict_to_packing_data,
         format_lot_no,
         format_weight,
         normalize_column_name,
+        safe_parse_date,
+        safe_parse_float,
+        safe_parse_int,
     )
 except ImportError as _e:
     logger.debug(f"__init__: {_e}")

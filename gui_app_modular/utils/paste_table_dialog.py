@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM - 스프레드시트형 붙여넣기 테이블 다이얼로그
 ==============================================
@@ -6,12 +5,13 @@ SQM - 스프레드시트형 붙여넣기 테이블 다이얼로그
 데이터 영역은 Entry 그리드로 구현해 가로·세로 셀 경계선이 보이도록 함.
 """
 
-import tkinter as tk
-from tkinter import ttk
 import logging
-from typing import List, Tuple, Callable, Optional
+import tkinter as tk
+from collections.abc import Callable
+from tkinter import ttk
+from typing import List, Optional, Tuple
 
-from .ui_constants import apply_modal_window_options, center_dialog, ThemeColors
+from .ui_constants import ThemeColors, apply_modal_window_options, center_dialog
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +100,8 @@ def _paste_into_grid(entries: List[List[tk.Entry]], ncols: int,
             try:
                 entries[row_idx][col_idx].delete(0, tk.END)
                 entries[row_idx][col_idx].insert(0, val)
-            except (tk.TclError, IndexError):
-                pass
+            except (tk.TclError, IndexError) as e:
+                logger.debug(f"[_paste_into_grid] Suppressed: {e}")
         filled += 1
 
     return filled
@@ -268,5 +268,5 @@ def show_paste_table_dialog(
     try:
         if entries and entries[0]:
             entries[0][0].focus_set()
-    except tk.TclError:
-        pass
+    except tk.TclError as e:
+        logger.debug(f"[_on_cancel] Suppressed: {e}")

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 UI 운영 편의 모듈 (v3.0)
 ========================
@@ -8,25 +7,27 @@ UI 운영 편의 모듈 (v3.0)
 3. 공유폴더에서 진행률 더 부드럽게
 """
 
-import os
 import json
-import time
-import threading
-import subprocess
-import platform
-import traceback
 import logging
-from gui_app_modular.utils.custom_messagebox import CustomMessageBox
+import os
+import platform
+import subprocess
+import threading
+import time
+import traceback
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Optional, Callable, Dict, Any, List
-from dataclasses import dataclass, asdict
+from typing import Any, Dict, Optional
+
+from gui_app_modular.utils.custom_messagebox import CustomMessageBox
 
 logger = logging.getLogger(__name__)
 
 # Tkinter 임포트
 try:
     import tkinter as tk
-    from tkinter import ttk, scrolledtext
+    from tkinter import scrolledtext, ttk
     HAS_TK = True
 except ImportError:
     HAS_TK = False
@@ -43,9 +44,9 @@ class ErrorDialog:
     사용:
         ErrorDialog.show(root, "오류 발생", exception=e, log_file="app.log")
     """
-    
+
     @staticmethod
-    def show(parent, message: str, details: str = None, 
+    def show(parent, message: str, details: str = None,
              exception: Exception = None, log_file: str = None,
              on_retry: Callable = None):
         """
@@ -62,64 +63,64 @@ class ErrorDialog:
         if not HAS_TK:
             logger.error(f"Error: {message}")
             return
-        
+
         # 예외에서 상세 정보 추출
         if exception and not details:
             details = ''.join(traceback.format_exception(
                 type(exception), exception, exception.__traceback__
             ))
-        
+
         dialog = tk.Toplevel(parent)
         dialog.title("⚠️ 오류 발생")
         dialog.geometry("550x380")
         dialog.transient(parent)
         dialog.grab_set()
-        
+
         # 메인 프레임
         main_frame = ttk.Frame(dialog, padding=15)
         main_frame.pack(fill='both', expand=True)
-        
+
         # 헤더
         header = ttk.Frame(main_frame)
         header.pack(fill='x', pady=(0, 10))
-        
+
         ttk.Label(header, text="⚠️", font=('', 28)).pack(side='left')
-        
+
         msg_frame = ttk.Frame(header)
         msg_frame.pack(side='left', fill='x', expand=True, padx=10)
-        ttk.Label(msg_frame, text="오류가 발생했습니다", 
+        ttk.Label(msg_frame, text="오류가 발생했습니다",
                   font=('', 11, 'bold')).pack(anchor='w')
         ttk.Label(msg_frame, text=message, wraplength=400).pack(anchor='w')
-        
+
         # 상세 정보
         if details:
             detail_frame = ttk.LabelFrame(main_frame, text="상세 정보 (개발자용)")
             detail_frame.pack(fill='both', expand=True, pady=10)
-            
+
             text_widget = scrolledtext.ScrolledText(
                 detail_frame, height=10, font=('Consolas', 9), wrap='word'
             )
             text_widget.pack(fill='both', expand=True, padx=5, pady=5)
             text_widget.insert('1.0', details)
             text_widget.config(state='disabled')
-        
+
         # 버튼 프레임
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill='x', pady=(10, 0))
-        
+
         # 왼쪽 버튼 (로그 관련)
         left_btns = ttk.Frame(btn_frame)
         left_btns.pack(side='left')
-        
+
         if details:
             def copy_log():
                 parent.clipboard_clear()
                 parent.clipboard_append(details)
                 CustomMessageBox.showinfo(dialog, "복사 완료", "로그가 클립보드에 복사되었습니다.")
-            
-            ttk.Button(left_btns, text="📋 로그 복사", 
+
+            ttk.Button(left_btns, text="📋 로그 복사",
                        command=copy_log).pack(side='left', padx=(0, 5))
-        
+
         if log_file and os.path.exists(log_file):
             def open_log():
                 try:
@@ -132,24 +133,24 @@ class ErrorDialog:
                         subprocess.run(['xdg-open', log_file])
                 except (OSError, IOError, PermissionError) as e:
                     CustomMessageBox.show_detailed_error(parent, "오류", str(e), exception=e)
-            
+
             ttk.Button(left_btns, text="📂 로그 열기",
                        command=open_log).pack(side='left', padx=(0, 5))
-        
+
         # 오른쪽 버튼
         right_btns = ttk.Frame(btn_frame)
         right_btns.pack(side='right')
-        
+
         if on_retry:
             def do_retry():
                 dialog.destroy()
                 on_retry()
             ttk.Button(right_btns, text="🔄 재시도",
                        command=do_retry).pack(side='left', padx=(0, 5))
-        
+
         ttk.Button(right_btns, text="닫기",
                    command=dialog.destroy).pack(side='left')
-        
+
         # 중앙 정렬
         dialog.update_idletasks()
         x = parent.winfo_x() + (parent.winfo_width() - dialog.winfo_width()) // 2
@@ -160,7 +161,7 @@ class ErrorDialog:
 def show_error(parent, message: str, exception: Exception = None,
                log_file: str = None, on_retry: Callable = None):
     """간편 에러 표시 함수"""
-    ErrorDialog.show(parent, message, exception=exception, 
+    ErrorDialog.show(parent, message, exception=exception,
                      log_file=log_file, on_retry=on_retry)
 
 
@@ -200,9 +201,9 @@ class WorkRecovery:
         if recovery.has_unfinished_work():
             recovery.show_recovery_dialog(root, on_recover=...)
     """
-    
+
     STATE_FILE = "work_recovery_state.json"
-    
+
     def __init__(self, data_dir: str = None):
         self.data_dir = data_dir or os.path.join(
             os.path.dirname(__file__), 'data'
@@ -211,7 +212,7 @@ class WorkRecovery:
         self.state_path = os.path.join(self.data_dir, self.STATE_FILE)
         self._current: Optional[WorkState] = None
         self._lock = threading.Lock()
-    
+
     def start_work(self, work_type: str, data: Dict[str, Any]) -> str:
         """작업 시작"""
         with self._lock:
@@ -227,7 +228,7 @@ class WorkRecovery:
             self._save()
             logger.info(f"[복구] 작업 시작: {work_type}")
             return now
-    
+
     def update_progress(self, progress: float, data_update: Dict = None):
         """진행률 업데이트"""
         with self._lock:
@@ -237,7 +238,7 @@ class WorkRecovery:
                 if data_update:
                     self._current.data.update(data_update)
                 self._save()
-    
+
     def complete_work(self, result: Dict = None):
         """작업 완료"""
         with self._lock:
@@ -249,7 +250,7 @@ class WorkRecovery:
                 logger.info(f"[복구] 작업 완료: {self._current.work_type}")
                 self._current = None
                 self._clear()
-    
+
     def fail_work(self, error: str):
         """작업 실패"""
         with self._lock:
@@ -258,50 +259,50 @@ class WorkRecovery:
                 self._current.error = error
                 self._save()
                 logger.error(f"[복구] 작업 실패: {self._current.work_type} - {error}")
-    
+
     def has_unfinished_work(self) -> bool:
         """미완료 작업 존재 여부"""
         work = self._load()
         return work is not None and work.status in ('in_progress', 'failed')
-    
+
     def get_unfinished_work(self) -> Optional[WorkState]:
         """미완료 작업 가져오기"""
         work = self._load()
         if work and work.status in ('in_progress', 'failed'):
             return work
         return None
-    
-    def show_recovery_dialog(self, parent, 
+
+    def show_recovery_dialog(self, parent,
                               on_recover: Callable[[WorkState], None],
                               on_discard: Callable = None) -> bool:
         """복구 다이얼로그 표시"""
         if not HAS_TK:
             return False
-        
+
         work = self.get_unfinished_work()
         if not work:
             return False
-        
+
         dialog = tk.Toplevel(parent)
         dialog.title("미완료 작업 발견")
         dialog.geometry("420x280")
         dialog.transient(parent)
         dialog.grab_set()
-        
+
         result = {'recover': False}
-        
+
         # 내용
         main = ttk.Frame(dialog, padding=20)
         main.pack(fill='both', expand=True)
-        
+
         ttk.Label(main, text="🔄", font=('', 32)).pack()
         ttk.Label(main, text="미완료 작업이 있습니다",
                   font=('', 12, 'bold')).pack(pady=(10, 15))
-        
+
         # 작업 정보
         info = ttk.Frame(main)
         info.pack()
-        
+
         work_names = {
             'inbound': '입고 처리',
             'outbound': '출고 처리',
@@ -309,46 +310,46 @@ class WorkRecovery:
             'excel_import': 'Excel 가져오기'
         }
         work_name = work_names.get(work.work_type, work.work_type)
-        
+
         ttk.Label(info, text=f"작업: {work_name}").pack(anchor='w')
         ttk.Label(info, text=f"진행률: {work.progress:.0%}").pack(anchor='w')
         ttk.Label(info, text=f"시작: {work.started_at[:19]}").pack(anchor='w')
-        
+
         if work.error:
             ttk.Label(info, text=f"오류: {work.error[:40]}...",
                       foreground='red').pack(anchor='w')
-        
+
         ttk.Label(main, text="\n이어서 진행하시겠습니까?").pack()
-        
+
         # 버튼
         btns = ttk.Frame(main)
         btns.pack(pady=15)
-        
+
         def do_recover():
             result['recover'] = True
             dialog.destroy()
             on_recover(work)
-        
+
         def do_discard():
             dialog.destroy()
             self._clear()
             if on_discard:
                 on_discard()
-        
+
         ttk.Button(btns, text="✅ 이어서 진행",
                    command=do_recover).pack(side='left', padx=5)
         ttk.Button(btns, text="❌ 무시",
                    command=do_discard).pack(side='left', padx=5)
-        
+
         # 중앙
         dialog.update_idletasks()
         x = parent.winfo_x() + (parent.winfo_width() - dialog.winfo_width()) // 2
         y = parent.winfo_y() + (parent.winfo_height() - dialog.winfo_height()) // 2
         dialog.geometry(f"+{max(0,x)}+{max(0,y)}")
-        
+
         parent.wait_window(dialog)
         return result['recover']
-    
+
     def _save(self):
         """상태 저장"""
         if self._current:
@@ -357,7 +358,7 @@ class WorkRecovery:
                     json.dump(asdict(self._current), f, ensure_ascii=False)
             except (OSError, IOError, PermissionError) as e:
                 logger.warning(f"[복구] 저장 실패: {e}")
-    
+
     def _load(self) -> Optional[WorkState]:
         """상태 로드"""
         if not os.path.exists(self.state_path):
@@ -369,7 +370,7 @@ class WorkRecovery:
         except (OSError, IOError, PermissionError) as e:
             logger.warning(f"[복구] 로드 실패: {e}")
             return None
-    
+
     def _clear(self):
         """상태 파일 삭제"""
         try:
@@ -398,8 +399,8 @@ class SmoothProgress:
         
         progress.complete("완료!")
     """
-    
-    def __init__(self, progressbar: 'ttk.Progressbar', 
+
+    def __init__(self, progressbar: 'ttk.Progressbar',
                  label: 'ttk.Label' = None,
                  smoothing: float = 0.15):
         """
@@ -411,17 +412,17 @@ class SmoothProgress:
         self.progressbar = progressbar
         self.label = label
         self.smoothing = smoothing
-        
+
         self._target = 0.0
         self._current = 0.0
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._stall_time = 0.0
         self._last_target_change = time.time()
-        
+
         # 초기화
         self.progressbar.configure(mode='determinate', maximum=100, value=0)
-    
+
     def start(self):
         """애니메이션 시작"""
         self._running = True
@@ -429,13 +430,13 @@ class SmoothProgress:
         self._target = 0.0
         self._thread = threading.Thread(target=self._animate, daemon=True)
         self._thread.start()
-    
+
     def stop(self):
         """애니메이션 중지"""
         self._running = False
         if self._thread:
             self._thread.join(timeout=0.5)
-    
+
     def set_progress(self, value: float, status: str = None):
         """
         진행률 설정
@@ -446,27 +447,27 @@ class SmoothProgress:
         """
         self._target = max(0.0, min(1.0, value)) * 100
         self._last_target_change = time.time()
-        
+
         if status and self.label:
             self._safe_update_label(status)
-    
+
     def set_indeterminate(self, message: str = "처리 중..."):
         """불확정 모드"""
         self.progressbar.configure(mode='indeterminate')
         self.progressbar.start(15)
         if self.label:
             self._safe_update_label(message)
-    
+
     def complete(self, message: str = "완료"):
         """완료"""
         self._target = 100
         self._current = 100
         self._running = False
-        
+
         self._safe_update_bar(100)
         if self.label:
             self._safe_update_label(message)
-    
+
     def _animate(self):
         """애니메이션 루프"""
         while self._running:
@@ -477,33 +478,33 @@ class SmoothProgress:
                     self._current += diff * self.smoothing
                 else:
                     self._current = self._target
-                
+
                 # 정체 감지 (5초 이상 같은 값)
                 stall_duration = time.time() - self._last_target_change
                 if stall_duration > 5 and self._target < 95:
                     # 정체 시 미세하게 진행 (살아있음 표시)
                     if self._current < self._target + 3:
                         self._current += 0.05
-                    
+
                     if self.label and stall_duration > 3:
                         self._safe_update_label(f"처리 중... ({self._current:.0f}%)")
-                
+
                 # UI 업데이트
                 self._safe_update_bar(self._current)
-                
+
                 time.sleep(0.05)  # 20 FPS
-                
+
             except (ValueError, TypeError, AttributeError) as e:
                 logger.debug(f"[진행률] 애니메이션 오류: {e}")
                 time.sleep(0.1)
-    
+
     def _safe_update_bar(self, value: float):
         """스레드 안전 진행률 업데이트"""
         try:
             self.progressbar.after(0, lambda: self.progressbar.configure(value=value))
         except (ValueError, TypeError, AttributeError) as _e:
             logger.debug(f"Suppressed: {_e}")
-    
+
     def _safe_update_label(self, text: str):
         """스레드 안전 레이블 업데이트"""
         try:
@@ -537,72 +538,72 @@ class UIOperationsHelper:
         helper.update_progress(0.5, "50% 완료")
         helper.complete_work()
     """
-    
+
     def __init__(self, parent: 'tk.Tk',
                  progressbar: 'ttk.Progressbar' = None,
                  progress_label: 'ttk.Label' = None,
                  log_dir: str = None):
         self.parent = parent
         self.log_dir = log_dir or os.path.join(os.path.dirname(__file__), 'logs')
-        
+
         # 복구 관리자
         self.recovery = WorkRecovery()
-        
+
         # 진행률 관리자
         self.progress: Optional[SmoothProgress] = None
         if progressbar:
             self.progress = SmoothProgress(progressbar, progress_label)
-    
+
     def show_error(self, message: str, exception: Exception = None,
                    on_retry: Callable = None):
         """에러 표시"""
         log_file = self._find_latest_log()
         ErrorDialog.show(self.parent, message, exception=exception,
                         log_file=log_file, on_retry=on_retry)
-    
+
     def check_recovery(self, on_recover: Callable[[WorkState], None],
                        on_discard: Callable = None) -> bool:
         """미완료 작업 확인"""
         return self.recovery.show_recovery_dialog(
             self.parent, on_recover, on_discard
         )
-    
+
     def start_work(self, work_type: str, data: Dict = None):
         """작업 시작"""
         self.recovery.start_work(work_type, data or {})
         if self.progress:
             self.progress.start()
-    
+
     def update_progress(self, progress: float, status: str = None):
         """진행률 업데이트"""
         self.recovery.update_progress(progress)
         if self.progress:
             self.progress.set_progress(progress, status)
-    
+
     def complete_work(self, result: Dict = None, message: str = "완료"):
         """작업 완료"""
         self.recovery.complete_work(result)
         if self.progress:
             self.progress.complete(message)
-    
+
     def fail_work(self, error: str, exception: Exception = None):
         """작업 실패"""
         self.recovery.fail_work(error)
         if self.progress:
             self.progress.stop()
         self.show_error(error, exception)
-    
+
     def _find_latest_log(self) -> Optional[str]:
         """최신 로그 파일 찾기"""
         if not os.path.exists(self.log_dir):
             return None
-        
-        logs = [os.path.join(self.log_dir, f) 
+
+        logs = [os.path.join(self.log_dir, f)
                 for f in os.listdir(self.log_dir) if f.endswith('.log')]
-        
+
         if not logs:
             return None
-        
+
         return max(logs, key=os.path.getmtime)
 
 
@@ -612,39 +613,39 @@ if __name__ == '__main__':
         root = tk.Tk()
         root.title("UI Helper 테스트")
         root.geometry("400x200")
-        
+
         # 진행률 바
         frame = ttk.Frame(root, padding=20)
         frame.pack(fill='both', expand=True)
-        
+
         label = ttk.Label(frame, text="대기 중...")
         label.pack()
-        
+
         bar = ttk.Progressbar(frame, length=300)
         bar.pack(pady=10)
-        
+
         helper = UIOperationsHelper(root, bar, label)
-        
+
         def test_error():
             try:
                 raise ValueError("테스트 에러")
             except (RuntimeError, ValueError) as e:
                 helper.show_error("테스트 실패", exception=e)
-        
+
         def test_progress():
             helper.start_work('test', {})
-            
+
             def run():
                 for i in range(101):
                     helper.update_progress(i/100, f"처리 중... {i}%")
                     time.sleep(0.05)
                 helper.complete_work(message="완료!")
-            
+
             threading.Thread(target=run, daemon=True).start()
-        
+
         ttk.Button(frame, text="에러 테스트", command=test_error).pack(side='left', padx=5)
         ttk.Button(frame, text="진행률 테스트", command=test_progress).pack(side='left', padx=5)
-        
+
         root.mainloop()
     else:
         logger.debug("Tkinter 없음")

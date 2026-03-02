@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.2.7 — 출고 상태전이 엣지케이스 테스트
 ================================================
@@ -16,15 +15,16 @@ SQM v6.2.7 — 출고 상태전이 엣지케이스 테스트
 실행: python -m pytest tests/test_outbound_edge_cases.py -v
 """
 
+import logging
 import os
 import sys
+
 import pytest
-import logging
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # conftest.py에서 engine, lot_500kg, lot_1000kg, lot_small 자동 로드
-from tests.conftest import inbound_lot, outbound_lot, get_lot, get_tonbags
+from tests.conftest import get_lot, get_tonbags, inbound_lot, outbound_lot
 
 logger = logging.getLogger(__name__)
 

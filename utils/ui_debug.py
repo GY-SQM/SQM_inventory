@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
 """UI debug utilities (v5.3.6)
 
 Writes lightweight UI anomaly logs (menu bg resets etc.) into REPORTS directory.
 """
 
-import os
 import json
 import logging
+import os
 from datetime import datetime
+
 from utils.path_utils import resolve_reports_dir
 
 logger = logging.getLogger(__name__)

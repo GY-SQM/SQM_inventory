@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM Inventory v3.5 - 단축키 가이드 및 도움말
 UI/UX 개선: 사용자 친화적인 도움말 시스템
@@ -10,19 +9,29 @@ v3.6.0 - UI 통일성 적용
 - 중앙 배치 (center_dialog)
 """
 
-import tkinter as tk
-from ..utils.custom_messagebox import CustomMessageBox
-from tkinter import ttk
-import ttkbootstrap as ttkb
-from typing import Dict, List, Tuple, Optional
-import webbrowser
 import logging
+import tkinter as tk
+import webbrowser
+from tkinter import ttk
+from typing import Dict, List, Optional, Tuple
+
+import ttkbootstrap as ttkb
+
+from ..utils.custom_messagebox import CustomMessageBox
 
 logger = logging.getLogger(__name__)
 
 # UI 통일성 모듈 임포트
 try:
-    from ..utils.ui_constants import DialogSize, Spacing, FontScale, ThemeColors, center_dialog, apply_tooltip, apply_modal_window_options
+    from ..utils.ui_constants import (
+        DialogSize,
+        FontScale,
+        Spacing,
+        ThemeColors,
+        apply_modal_window_options,
+        apply_tooltip,
+        center_dialog,
+    )
 except ImportError:
     # 독립 실행 시 폴백
     DialogSize = None
@@ -41,7 +50,7 @@ class ShortcutGuideDialog:
         dialog = ShortcutGuideDialog(parent_window)
         dialog.show()
     """
-    
+
     # 단축키 정의
     SHORTCUTS: Dict[str, List[Tuple[str, str]]] = {
         "일반": [
@@ -88,65 +97,65 @@ class ShortcutGuideDialog:
             ("드래그", "파일 업로드 (Drag & Drop)"),
         ],
     }
-    
+
     def __init__(self, parent: tk.Tk, style: str = "flatly"):
         self.parent = parent
         self.style = style
         self.dialog: Optional[tk.Toplevel] = None
-    
+
     def show(self) -> None:
         """대화상자 표시"""
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.lift()
             self.dialog.focus_set()
             return
-        
+
         # === UI 통일성: 폰트 스케일 ===
         try:
             dpi = self.parent.winfo_fpixels('1i')
         except (RuntimeError, ValueError):
             dpi = 96
-        
+
         if FontScale:
             fonts = FontScale(dpi)
         else:
             fonts = None
-        
+
         # 대화상자 생성
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("⌨️ 단축키 가이드")
-        
+
         # === UI 통일성: 다이얼로그 크기 표준화 (Phase4) ===
         if DialogSize:
             self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
         else:
             self.dialog.geometry("750x700")
-        
+
         apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
-        
+
         # 아이콘 (있으면)
         try:
             self.dialog.iconbitmap("assets/icon.ico")
         except (ValueError, TypeError, AttributeError) as _e:
             logger.debug(f"Suppressed: {_e}")
-        
+
         # 컨텐츠 구성
         self._create_widgets(fonts)
-        
+
         # === UI 통일성: 중앙 배치 ===
         if center_dialog:
             center_dialog(self.dialog, self.parent)
         else:
             self._center_dialog_window()
-        
+
         # ESC로 닫기
         self.dialog.bind("<Escape>", lambda e: self.dialog.destroy())
         self.dialog.bind("<F1>", lambda e: self.dialog.destroy())
-        
+
         # 포커스
         self.dialog.focus_set()
-    
+
     def _center_dialog_window(self) -> None:
         """창 중앙 정렬 (폴백)"""
         self.dialog.update_idletasks()
@@ -155,43 +164,43 @@ class ShortcutGuideDialog:
         x = (self.dialog.winfo_screenwidth() // 2) - (w // 2)
         y = (self.dialog.winfo_screenheight() // 2) - (h // 2)
         self.dialog.geometry(f"+{x}+{y}")
-    
+
     def _create_widgets(self, fonts=None) -> None:
         """위젯 생성"""
         # === UI 통일성: 간격 표준화 ===
         main_frame = ttk.Frame(self.dialog, padding=Spacing.SM)
         main_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         # 제목
         title_frame = ttk.Frame(main_frame)
         title_frame.pack(fill=tk.X, pady=(0, Spacing.SM))
-        
+
         title_font = fonts.heading(bold=True) if fonts else ("맑은 고딕", 16, "bold")
         body_font = fonts.body() if fonts else ("맑은 고딕", 10)
         small_font = fonts.small() if fonts else ("맑은 고딕", 9)
-        
+
         ttk.Label(
             title_frame,
             text="⌨️ 단축키 가이드",
             font=title_font
         ).pack(side=tk.LEFT)
-        
+
         ttk.Label(
             title_frame,
             text="SQM Inventory v3.5",
             font=body_font,
             foreground="gray"
         ).pack(side=tk.RIGHT)
-        
+
         # 노트북 (탭)
         notebook = ttk.Notebook(main_frame)
         notebook.pack(fill=tk.BOTH, expand=True)
-        
+
         # 각 카테고리별 탭 생성
         for category, shortcuts in self.SHORTCUTS.items():
             frame = ttk.Frame(notebook, padding=Spacing.SM)
             notebook.add(frame, text=f" {category} ")
-            
+
             # Treeview로 단축키 목록
             tree = ttk.Treeview(
                 frame,
@@ -203,24 +212,24 @@ class ShortcutGuideDialog:
             tree.heading("description", text="기능")
             tree.column("shortcut", width=120, anchor="center")
             tree.column("description", width=400, anchor="center")
-            
+
             # 스크롤바
             scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
             scrollbar_x = ttk.Scrollbar(frame, orient='horizontal', command=tree.xview)
             tree.configure(yscrollcommand=scrollbar.set, xscrollcommand=scrollbar_x.set)
-            
+
             tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
             scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
             scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
-            
+
             # 데이터 추가
             for shortcut, description in shortcuts:
                 tree.insert("", tk.END, values=(shortcut, description))
-        
+
         # 하단 버튼
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, pady=(Spacing.SM, 0))
-        
+
         _btn_manual = ttk.Button(
             button_frame,
             text="📖 전체 매뉴얼 보기",
@@ -229,7 +238,7 @@ class ShortcutGuideDialog:
         )
         _btn_manual.pack(side=tk.LEFT)
         apply_tooltip(_btn_manual, "사용자 매뉴얼 문서를 엽니다. 입고·출고·보고서 등 기능별 사용법이 안내됩니다.")
-        
+
         _btn_close_shortcut = ttk.Button(
             button_frame,
             text="닫기",
@@ -238,7 +247,7 @@ class ShortcutGuideDialog:
         )
         _btn_close_shortcut.pack(side=tk.RIGHT)
         apply_tooltip(_btn_close_shortcut, "단축키 가이드 창을 닫습니다. Esc 키로도 닫을 수 있습니다.")
-        
+
         # 팁
         tip_label = ttk.Label(
             button_frame,
@@ -247,7 +256,7 @@ class ShortcutGuideDialog:
             foreground="gray"
         )
         tip_label.pack(side=tk.RIGHT, padx=Spacing.MD)
-    
+
     def _open_manual(self) -> None:
         """매뉴얼 열기"""
         import os
@@ -267,7 +276,7 @@ class QuickTipOverlay:
     
     프로그램 시작 시 또는 특정 액션 후 팁 표시
     """
-    
+
     TIPS = [
         ("💡 빠른 검색", "Ctrl+F를 눌러 현재 탭에서 빠르게 검색하세요"),
         ("📊 대시보드", "대시보드 탭에서 오늘의 입출고 현황을 한눈에 확인하세요"),
@@ -278,34 +287,34 @@ class QuickTipOverlay:
         ("🎨 테마 변경", "Ctrl+T로 테마를 변경할 수 있습니다"),
         ("📤 Excel 내보내기", "Ctrl+Shift+E로 현재 데이터를 Excel로 내보내세요"),
     ]
-    
+
     def __init__(self, parent: tk.Tk, show_on_start: bool = True):
         self.parent = parent
         self.tip_index = 0
         self.overlay: Optional[tk.Toplevel] = None
-        
+
         if show_on_start:
             self.parent.after(1500, self.show_tip)
-    
+
     def show_tip(self, tip_index: Optional[int] = None) -> None:
         """팁 표시"""
         if tip_index is not None:
             self.tip_index = tip_index
-        
+
         if self.tip_index >= len(self.TIPS):
             self.tip_index = 0
-        
+
         title, content = self.TIPS[self.tip_index]
-        
+
         # 기존 오버레이 제거
         if self.overlay and self.overlay.winfo_exists():
             self.overlay.destroy()
-        
+
         # 오버레이 생성
         self.overlay = tk.Toplevel(self.parent)
         self.overlay.overrideredirect(True)
         self.overlay.attributes("-topmost", True)
-        
+
         _tip_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
         _tip_bg = ThemeColors.get('info', _tip_dark)
         _tip_fg = ThemeColors.get('badge_text', _tip_dark)
@@ -314,17 +323,17 @@ class QuickTipOverlay:
         frame.pack(fill=tk.BOTH, expand=True)
         self.overlay.configure(bg=_tip_bg)
         frame.configure(style="info.TFrame")
-        
+
         ttk.Label(frame, text=title, font=("맑은 고딕", 11, "bold"),
                   foreground=_tip_fg, background=_tip_bg).pack(anchor="center")
         ttk.Label(frame, text=content, font=("맑은 고딕", 13),
                   foreground=_tip_fg, background=_tip_bg, wraplength=300).pack(anchor="center", pady=(Spacing.XS, 0))
-        
+
         close_btn = ttk.Label(frame, text="✕", font=("맑은 고딕", 12),
                               foreground=_tip_fg, background=_tip_bg, cursor="hand2")
         close_btn.place(relx=1.0, rely=0, anchor="ne")
         close_btn.bind("<Button-1>", lambda e: self._close())
-        
+
         # 위치 (우하단)
         self.overlay.update_idletasks()
         w = self.overlay.winfo_width()
@@ -332,15 +341,15 @@ class QuickTipOverlay:
         x = self.parent.winfo_screenwidth() - w - 20
         y = self.parent.winfo_screenheight() - h - 60
         self.overlay.geometry(f"+{x}+{y}")
-        
+
         # 클릭으로 닫기
         self.overlay.bind("<Button-1>", lambda e: self._close())
-        
+
         # 5초 후 자동 닫기
         self.overlay.after(5000, self._close)
-        
+
         self.tip_index += 1
-    
+
     def _close(self) -> None:
         """오버레이 닫기"""
         if self.overlay and self.overlay.winfo_exists():
@@ -354,7 +363,7 @@ class WelcomeWizard:
     
     프로그램 기본 사용법 안내
     """
-    
+
     STEPS = [
         {
             "title": "👋 SQM 재고관리 시스템에 오신 것을 환영합니다!",
@@ -430,13 +439,13 @@ LIFO 방식으로 자동 출고됩니다.
             "image": None
         },
     ]
-    
+
     def __init__(self, parent: tk.Tk, on_complete: Optional[callable] = None):
         self.parent = parent
         self.on_complete = on_complete
         self.current_step = 0
         self.dialog: Optional[tk.Toplevel] = None
-    
+
     def show(self) -> None:
         """마법사 표시"""
         self.dialog = tk.Toplevel(self.parent)
@@ -456,26 +465,26 @@ LIFO 방식으로 자동 출고됩니다.
             x = (self.dialog.winfo_screenwidth() // 2) - 275
             y = (self.dialog.winfo_screenheight() // 2) - 200
             self.dialog.geometry(f"+{x}+{y}")
-        
+
         # 컨텐츠 프레임
         self.content_frame = ttk.Frame(self.dialog, padding=20)
         self.content_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         # 첫 단계 표시
         self._show_step()
-    
+
     def _show_step(self) -> None:
         """현재 단계 표시"""
         # 기존 위젯 제거
         for widget in self.content_frame.winfo_children():
             widget.destroy()
-        
+
         step = self.STEPS[self.current_step]
-        
+
         # 진행률 표시
         progress_frame = ttk.Frame(self.content_frame)
         progress_frame.pack(fill=tk.X, pady=(0, 15))
-        
+
         for i in range(len(self.STEPS)):
             color = "primary" if i <= self.current_step else "secondary"
             dot = ttk.Label(
@@ -485,21 +494,21 @@ LIFO 방식으로 자동 출고됩니다.
                 bootstyle=color
             )
             dot.pack(side=tk.LEFT, padx=3)
-        
+
         ttk.Label(
             progress_frame,
             text=f"{self.current_step + 1} / {len(self.STEPS)}",
             font=("맑은 고딕", 12),
             foreground="gray"
         ).pack(side=tk.RIGHT)
-        
+
         # 제목
         ttk.Label(
             self.content_frame,
             text=step["title"],
             font=("맑은 고딕", 14, "bold")
         ).pack(anchor="center", pady=(0, 10))
-        
+
         # 내용
         content_label = ttk.Label(
             self.content_frame,
@@ -509,11 +518,11 @@ LIFO 방식으로 자동 출고됩니다.
             justify=tk.LEFT
         )
         content_label.pack(anchor="center", fill=tk.X, expand=True)
-        
+
         # 버튼
         button_frame = ttk.Frame(self.content_frame)
         button_frame.pack(fill=tk.X, pady=(20, 0))
-        
+
         # 건너뛰기
         if self.current_step < len(self.STEPS) - 1:
             ttk.Button(
@@ -522,7 +531,7 @@ LIFO 방식으로 자동 출고됩니다.
                 command=self._skip,
                 bootstyle="secondary-link"
             ).pack(side=tk.LEFT)
-        
+
         # 이전
         if self.current_step > 0:
             ttk.Button(
@@ -531,7 +540,7 @@ LIFO 방식으로 자동 출고됩니다.
                 command=self._prev,
                 bootstyle="secondary"
             ).pack(side=tk.RIGHT, padx=(5, 0))
-        
+
         # 다음/완료
         if self.current_step < len(self.STEPS) - 1:
             ttk.Button(
@@ -547,23 +556,23 @@ LIFO 방식으로 자동 출고됩니다.
                 command=self._complete,
                 bootstyle="success"
             ).pack(side=tk.RIGHT)
-    
+
     def _next(self) -> None:
         """다음 단계"""
         if self.current_step < len(self.STEPS) - 1:
             self.current_step += 1
             self._show_step()
-    
+
     def _prev(self) -> None:
         """이전 단계"""
         if self.current_step > 0:
             self.current_step -= 1
             self._show_step()
-    
+
     def _skip(self) -> None:
         """건너뛰기"""
         self._complete()
-    
+
     def _complete(self) -> None:
         """완료"""
         self.dialog.destroy()
@@ -575,11 +584,11 @@ class FeedbackDialog:
     """
     피드백/문제 신고 대화상자
     """
-    
+
     def __init__(self, parent: tk.Tk):
         self.parent = parent
         self.dialog: Optional[tk.Toplevel] = None
-    
+
     def show(self) -> None:
         """대화상자 표시"""
         self.dialog = tk.Toplevel(self.parent)
@@ -597,17 +606,17 @@ class FeedbackDialog:
             x = (self.dialog.winfo_screenwidth() // 2) - 250
             y = (self.dialog.winfo_screenheight() // 2) - 200
             self.dialog.geometry(f"+{x}+{y}")
-        
+
         main_frame = ttk.Frame(self.dialog, padding=20)
         main_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         # 유형 선택
         ttk.Label(main_frame, text="피드백 유형:", font=("맑은 고딕", 13, "bold")).pack(anchor="w")
-        
+
         self.feedback_type = tk.StringVar(value="bug")
         types_frame = ttk.Frame(main_frame)
         types_frame.pack(fill=tk.X, pady=(5, 15))
-        
+
         for value, text in [("bug", "🐛 버그 신고"), ("feature", "💡 기능 제안"), ("other", "📝 기타")]:
             ttk.Radiobutton(
                 types_frame,
@@ -615,62 +624,62 @@ class FeedbackDialog:
                 variable=self.feedback_type,
                 value=value
             ).pack(side=tk.LEFT, padx=(0, 15))
-        
+
         # 제목
         ttk.Label(main_frame, text="제목:", font=("맑은 고딕", 13, "bold")).pack(anchor="w")
         self.title_entry = ttk.Entry(main_frame, width=60)
         self.title_entry.pack(fill=tk.X, pady=(5, 15))
-        
+
         # 내용
         ttk.Label(main_frame, text="상세 내용:", font=("맑은 고딕", 13, "bold")).pack(anchor="w")
         self.content_text = tk.Text(main_frame, height=8, width=60, font=("맑은 고딕", 13))
         self.content_text.pack(fill=tk.BOTH, expand=True, pady=(5, 15))
-        
+
         # 버튼
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X)
-        
+
         ttk.Button(
             button_frame,
             text="취소",
             command=self.dialog.destroy,
             bootstyle="secondary"
         ).pack(side=tk.RIGHT, padx=(5, 0))
-        
+
         ttk.Button(
             button_frame,
             text="제출",
             command=self._submit,
             bootstyle="primary"
         ).pack(side=tk.RIGHT)
-    
+
     def _submit(self) -> None:
         """피드백 제출"""
         feedback_type = self.feedback_type.get()
         title = self.title_entry.get().strip()
         content = self.content_text.get("1.0", tk.END).strip()
-        
+
         if not title or not content:
             CustomMessageBox.showwarning(self.parent, "입력 필요", "제목과 내용을 모두 입력해주세요.")
             return
-        
+
         # 로컬 파일로 저장
         import os
         from datetime import datetime
-        
+
         feedback_dir = os.path.join(os.path.dirname(__file__), "feedback")
         os.makedirs(feedback_dir, exist_ok=True)
-        
+
         filename = f"feedback_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         filepath = os.path.join(feedback_dir, filename)
-        
+
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(f"유형: {feedback_type}\n")
             f.write(f"제목: {title}\n")
             f.write(f"날짜: {datetime.now().isoformat()}\n")
             f.write(f"\n내용:\n{content}\n")
-        
-        CustomMessageBox.showinfo(self.parent, 
+
+        CustomMessageBox.showinfo(self.parent,
             "감사합니다",
             "피드백이 저장되었습니다.\n관리자가 검토 후 조치하겠습니다."
         )
@@ -680,39 +689,39 @@ class FeedbackDialog:
 # === 테스트 ===
 if __name__ == "__main__":
     import ttkbootstrap as ttkb
-    
+
     root = ttkb.Window(title="UI 테스트", themename="flatly")
     root.geometry("800x600")
-    
+
     # 버튼들
     frame = ttk.Frame(root, padding=20)
     frame.pack(fill=tk.BOTH, expand=True)
-    
+
     ttk.Button(
         frame,
         text="단축키 가이드 (F1)",
         command=lambda: ShortcutGuideDialog(root).show(),
         bootstyle="primary"
     ).pack(pady=10)
-    
+
     ttk.Button(
         frame,
         text="환영 마법사",
         command=lambda: WelcomeWizard(root).show(),
         bootstyle="info"
     ).pack(pady=10)
-    
+
     ttk.Button(
         frame,
         text="피드백 대화상자",
         command=lambda: FeedbackDialog(root).show(),
         bootstyle="secondary"
     ).pack(pady=10)
-    
+
     # 팁 오버레이
     QuickTipOverlay(root, show_on_start=True)
-    
+
     # F1 바인딩
     root.bind("<F1>", lambda e: ShortcutGuideDialog(root).show())
-    
+
     root.mainloop()

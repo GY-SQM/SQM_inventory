@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.0.0 Migration 테스트 스크립트
 =====================================
@@ -17,9 +16,9 @@ SQM v6.0.0 Migration 테스트 스크립트
     임시 DB는 테스트 후 자동 삭제
 """
 
+import logging
 import os
 import sys
-import logging
 import tempfile
 from datetime import datetime
 

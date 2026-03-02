@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - B/L (Bill of Lading) 파서 Mixin
 ======================================================
@@ -9,13 +8,12 @@ v5.8.6.B: Ship Date 하이브리드 추출 (Gemini 우선 + 정규식 폴백)
 버전: v5.8.6.B
 """
 
-import re
 import logging
+import re
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
-from ..document_models import BLData, ContainerInfo
-from core.types import safe_float
+from ..document_models import BLData
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +45,7 @@ class BLMixin:
     ]
     SHIPPED_PATTERN = re.compile(r"\bSHIPPED\b.*\bBOARD\b(?:.*\bDATE\b)?", re.IGNORECASE)
     URL_PATTERN = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
-    
+
     def parse_bl(self, pdf_path: str) -> Optional[BLData]:
         """
         B/L PDF 파싱 (기존 Gemini/OpenAI 로직 비활성화, 좌표 기반 단독).

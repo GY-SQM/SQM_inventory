@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - Gemini API 공통 유틸리티 (v3.6.9)
 ==================================================
@@ -10,11 +9,11 @@ SQM 재고관리 - Gemini API 공통 유틸리티 (v3.6.9)
 - 모델명 중앙 관리
 """
 
-import os
-import logging
-import threading
 import concurrent.futures
-from typing import Optional, Any
+import logging
+import os
+import threading
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +40,17 @@ def get_gemini_client(api_key: str = None):
         genai.Client 또는 None
     """
     global _client_instance, _client_api_key
-    
+
     if not api_key:
         api_key = _get_api_key()
-    
+
     if not api_key:
         return None
-    
+
     with _client_lock:
         if _client_instance is not None and _client_api_key == api_key:
             return _client_instance
-        
+
         try:
             from google import genai
             _client_instance = genai.Client(api_key=api_key)
@@ -81,7 +80,7 @@ def _get_api_key() -> str:
     key = os.environ.get('GEMINI_API_KEY', '')
     if key and not key.startswith('your-'):
         return key
-    
+
     # 2. config.py
     try:
         from core.config import GEMINI_API_KEY
@@ -89,7 +88,7 @@ def _get_api_key() -> str:
             return GEMINI_API_KEY
     except ImportError as _e:
         logger.debug(f"Suppressed: {_e}")
-    
+
     return ''
 
 
@@ -142,13 +141,13 @@ def call_gemini_safe(
     """
     if not client:
         raise ValueError("Gemini Client가 None입니다")
-    
+
     def _api_call():
         return client.models.generate_content(
             model=model_name,
             contents=contents
         )
-    
+
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(_api_call)
@@ -165,7 +164,7 @@ def call_gemini_safe(
         raise  # 그대로 전파
     except (ValueError, TypeError, AttributeError) as e:
         error_msg = str(e).lower()
-        
+
         # 에러별 구체적 안내
         if '401' in error_msg or 'unauthorized' in error_msg or 'invalid api key' in error_msg:
             raise PermissionError(
@@ -203,28 +202,28 @@ PRODUCT_MAPPING = {
     "탄산리튬": "LITHIUM CARBONATE",
     "lithium carbonate": "LITHIUM CARBONATE",
     "lc": "LITHIUM CARBONATE",
-    
+
     # 리튬하이드록사이드
     "리튬하이드록사이드": "LITHIUM HYDROXIDE",
     "리튬 하이드록사이드": "LITHIUM HYDROXIDE",
     "수산화리튬": "LITHIUM HYDROXIDE",
     "lithium hydroxide": "LITHIUM HYDROXIDE",
     "lh": "LITHIUM HYDROXIDE",
-    
+
     # 리튬클로라이드
     "리튬클로라이드": "LITHIUM CHLORIDE",
     "리튬 클로라이드": "LITHIUM CHLORIDE",
     "염화리튬": "LITHIUM CHLORIDE",
     "lithium chloride": "LITHIUM CHLORIDE",
     "lcl": "LITHIUM CHLORIDE",
-    
+
     # 포타슘클로라이드
     "포타슘클로라이드": "POTASSIUM CHLORIDE",
     "포타슘 클로라이드": "POTASSIUM CHLORIDE",
     "염화칼륨": "POTASSIUM CHLORIDE",
     "potassium chloride": "POTASSIUM CHLORIDE",
     "kcl": "POTASSIUM CHLORIDE",
-    
+
     # 소듐나이트레이트
     "소듐나이트레이트": "SODIUM NITRATE",
     "소듐 나이트레이트": "SODIUM NITRATE",

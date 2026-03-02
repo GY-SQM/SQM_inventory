@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
 """
 v7.0 3단계: ALLOCATION 탭 — allocation_plan(RESERVED) 기반 LOT 리스트 + 전체 배정 보기
 """
 import logging
-from datetime import datetime
 import tkinter as tk
+from datetime import datetime
 from tkinter import ttk
-from ..utils.ui_constants import ThemeColors, Spacing, apply_tooltip, CustomMessageBox
-from ..utils.constants import BOTH, YES, X, LEFT, VERTICAL, RIGHT
+
+from ..utils.constants import BOTH, LEFT, VERTICAL, YES, X
+from ..utils.ui_constants import CustomMessageBox, Spacing, ThemeColors, apply_tooltip
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class AllocationTabMixin:
 
     def _setup_allocation_tab(self) -> None:
         """ALLOCATION 탭 UI (LOT 리스트 + [전체 배정 보기] + 복귀)"""
-        from ..utils.tree_enhancements import apply_striped_rows, TreeviewTotalFooter
+        from ..utils.tree_enhancements import TreeviewTotalFooter, apply_striped_rows
 
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         frame = self.tab_allocation
@@ -53,11 +53,11 @@ class AllocationTabMixin:
         btn_show_all = ttk.Button(btn_frame, text="📋 전체 배정 보기", command=self._on_show_all_allocation)
         btn_show_all.pack(side=tk.RIGHT, padx=Spacing.XS)
         apply_tooltip(btn_show_all, "판매 배정 톤백 전체 목록. [← LOT 리스트로]로 복귀.")
-        
+
         btn_alloc_export = ttk.Button(btn_frame, text="📥 Excel 내보내기", command=self._on_allocation_export_excel)
         btn_alloc_export.pack(side=tk.RIGHT, padx=Spacing.XS)
         apply_tooltip(btn_alloc_export, "현재 판매배정 목록을 Excel로 내보내기")
-        
+
         self._alloc_btn_cancel = btn_cancel
         self._alloc_btn_show_all = btn_show_all
 
@@ -132,9 +132,10 @@ class AllocationTabMixin:
     def _on_allocation_export_excel(self) -> None:
         """판매배정(Allocation) 데이터 Excel 내보내기"""
         try:
-            import pandas as pd
             from tkinter import filedialog
-            
+
+            import pandas as pd
+
             # allocation_plan 데이터 조회
             sql = """
                 SELECT ap.id, ap.lot_no, ap.sub_lt, ap.customer, ap.qty_mt, ap.outbound_date, ap.created_at
@@ -144,7 +145,7 @@ class AllocationTabMixin:
                 ORDER BY ap.lot_no, ap.sub_lt
             """
             rows = self.engine.db.fetchall(sql) if hasattr(self.engine, 'db') and self.engine.db else []
-            
+
             # fallback: inventory_tonbag에서 RESERVED 조회
             if not rows and getattr(self, '_alloc_fallback', False):
                 sql_fb = """
@@ -179,7 +180,7 @@ class AllocationTabMixin:
                 'weight': '중량(kg)'
             }
             df.rename(columns=col_map, inplace=True)
-            
+
             path = filedialog.asksaveasfilename(
                 defaultextension='.xlsx',
                 filetypes=[('Excel', '*.xlsx'), ('All', '*.*')],
@@ -427,8 +428,8 @@ class AllocationTabMixin:
             if isinstance(iid, str) and iid.startswith("plan_"):
                 try:
                     plan_ids.append(int(iid.replace("plan_", "")))
-                except ValueError:
-                    pass
+                except ValueError as e:
+                    logger.warning(f"[_on_allocation_detail_cancel_selected] Suppressed: {e}")
         if not plan_ids:
             CustomMessageBox.showwarning(root, "선택 필요", "취소할 배정 행을 선택하세요.")
             return

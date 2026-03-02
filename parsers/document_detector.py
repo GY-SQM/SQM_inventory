@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM Inventory - 점수 기반 문서 감지 모듈
 DocumentDetector: 파일명, 헤더, 패턴, 키워드 점수를 합산하여 문서 유형 판별
@@ -6,12 +5,12 @@ DocumentDetector: 파일명, 헤더, 패턴, 키워드 점수를 합산하여 �
 버전: 2.5.4
 """
 
-import re
 import logging
-from pathlib import Path
+import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
 from enum import Enum
+from pathlib import Path
+from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +41,7 @@ class DetectionResult:
     scores: Dict[DocumentType, int] = field(default_factory=dict)
     score_details: List[ScoreEntry] = field(default_factory=list)
     text_sample: str = ""
-    
+
     def generate_report(self) -> str:
         """감지 리포트 생성"""
         lines = [
@@ -53,26 +52,26 @@ class DetectionResult:
             "",
             "📊 타입별 점수:",
         ]
-        
+
         # 점수 내림차순 정렬
         sorted_scores = sorted(self.scores.items(), key=lambda x: x[1], reverse=True)
         for doc_type, score in sorted_scores:
             marker = "  ★" if doc_type == self.document_type else "   "
             lines.append(f"{marker} {doc_type.value}: {score}점")
-        
+
         lines.append("")
         lines.append("📋 점수 근거 (Top 10):")
-        
+
         # 점수 근거 상위 10개
         sorted_details = sorted(self.score_details, key=lambda x: x.points, reverse=True)[:10]
         for i, entry in enumerate(sorted_details, 1):
             lines.append(f"  {i}. [{entry.source}] +{entry.points}점: {entry.reason}")
-        
+
         if self.text_sample:
             lines.append("")
             lines.append("📝 텍스트 샘플 (첫 200자):")
             lines.append(f"  {self.text_sample[:200]}...")
-        
+
         lines.append("═" * 56)
         return "\n".join(lines)
 
@@ -87,7 +86,7 @@ class DocumentDetector:
     - 필드 패턴: +15점
     - 공통 키워드: +5점
     """
-    
+
     # 파일명 패턴 (+50점)
     FILENAME_PATTERNS: Dict[DocumentType, List[str]] = {
         DocumentType.INVOICE: [
@@ -107,7 +106,7 @@ class DocumentDetector:
             r"_COA\b", r"CERTIFICATE[_\s]?OF[_\s]?ANALYSIS", r"ANALYSIS[_\s]?CERT",
         ],
     }
-    
+
     # 헤더 고유 문구 (+30점) - 문서 상단에서만 나타나는 고유 문구
     HEADER_PATTERNS: Dict[DocumentType, List[str]] = {
         DocumentType.INVOICE: [
@@ -142,7 +141,7 @@ class DocumentDetector:
             r"TEST\s+REPORT",
         ],
     }
-    
+
     # 필드 패턴 (+15점) - 특정 문서에서 자주 나타나는 필드
     FIELD_PATTERNS: Dict[DocumentType, List[str]] = {
         DocumentType.INVOICE: [
@@ -189,7 +188,7 @@ class DocumentDetector:
             r"MOISTURE",
         ],
     }
-    
+
     # 공통 키워드 (+5점)
     COMMON_KEYWORDS: Dict[DocumentType, List[str]] = {
         DocumentType.INVOICE: [
@@ -208,14 +207,14 @@ class DocumentDetector:
             "ANALYSIS", "QUALITY", "SPECIFICATION", "TEST", "PURITY", "RESULT",
         ],
     }
-    
+
     def __init__(self, min_confidence_gap: int = 10):
         """
         Args:
             min_confidence_gap: 1위와 2위 점수 차이가 이 값 미만이면 UNKNOWN 반환
         """
         self.min_confidence_gap = min_confidence_gap
-    
+
     def detect(self, text: str, filename: str = "") -> DetectionResult:
         """
         문서 유형 감지
@@ -229,11 +228,11 @@ class DocumentDetector:
         """
         scores: Dict[DocumentType, int] = {dt: 0 for dt in DocumentType if dt != DocumentType.UNKNOWN}
         details: List[ScoreEntry] = []
-        
+
         # 텍스트 정규화
         text_upper = text.upper()
         text_normalized = re.sub(r'\s+', ' ', text_upper)
-        
+
         # 1. 파일명 패턴 검사 (+50점)
         if filename:
             filename_upper = filename.upper()
@@ -247,7 +246,7 @@ class DocumentDetector:
                             reason=f"파일명 패턴 매칭: {pattern}"
                         ))
                         break  # 파일명당 하나의 패턴만 적용
-        
+
         # 2. 헤더 고유 문구 검사 (+30점) - 상단 1000자에서만 검색
         header_text = text_normalized[:1000]
         for doc_type, patterns in self.HEADER_PATTERNS.items():
@@ -259,7 +258,7 @@ class DocumentDetector:
                         points=30,
                         reason=f"헤더 고유 문구: {pattern}"
                     ))
-        
+
         # 3. 필드 패턴 검사 (+15점)
         for doc_type, patterns in self.FIELD_PATTERNS.items():
             matched_count = 0
@@ -273,7 +272,7 @@ class DocumentDetector:
                             points=15,
                             reason=f"필드 패턴: {pattern}"
                         ))
-        
+
         # 4. 공통 키워드 검사 (+5점)
         for doc_type, keywords in self.COMMON_KEYWORDS.items():
             for keyword in keywords:
@@ -284,23 +283,23 @@ class DocumentDetector:
                         points=5,
                         reason=f"키워드: {keyword}"
                     ))
-        
+
         # 결과 판정
         sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         top_type, top_score = sorted_scores[0]
         second_score = sorted_scores[1][1] if len(sorted_scores) > 1 else 0
-        
+
         # 신뢰도 계산
         total_score = sum(scores.values())
         confidence = top_score / total_score if total_score > 0 else 0.0
-        
+
         # 점수 차이가 너무 작으면 UNKNOWN
         if top_score == 0 or (top_score - second_score) < self.min_confidence_gap:
             final_type = DocumentType.UNKNOWN
             confidence = 0.0
         else:
             final_type = top_type
-        
+
         return DetectionResult(
             document_type=final_type,
             confidence=confidence,
@@ -308,7 +307,7 @@ class DocumentDetector:
             score_details=details,
             text_sample=text[:200] if text else ""
         )
-    
+
     def detect_from_file(self, filepath: str, text: str = "") -> DetectionResult:
         """
         파일 경로에서 문서 유형 감지
@@ -374,9 +373,9 @@ if __name__ == "__main__":
             "text": "BILL OF LADING\nSHIPPER: SQM CHILE\nCONSIGNEE: TO ORDER\nVESSEL: EVER GIVEN"
         },
     ]
-    
+
     detector = DocumentDetector()
-    
+
     for case in test_cases:
         result = detector.detect(case["text"], case["filename"])
         logger.debug(f"{result.generate_report()}")

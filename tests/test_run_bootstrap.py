@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 P5-13: run_bootstrap 단위 테스트
 =================================
@@ -9,8 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
-from run_bootstrap import run_self_check, check_dependencies, print_self_check_report
+from run_bootstrap import check_dependencies, print_self_check_report, run_self_check
 
 
 class TestRunSelfCheck:

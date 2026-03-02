@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - 단위 테스트 러너 다이얼로그
 ==========================================
@@ -73,7 +72,12 @@ class TestRunnerDialog:
             return
         try:
             from ..utils.constants import tk, ttk
-            from ..utils.ui_constants import Spacing, FontScale, DialogSize, center_dialog
+            from ..utils.ui_constants import (
+                DialogSize,
+                FontScale,
+                Spacing,
+                center_dialog,
+            )
         except ImportError:
             import tkinter as tk
             from tkinter import ttk
@@ -146,6 +150,9 @@ class TestRunnerDialog:
 
     def _show_result(self, returncode: int, out: str) -> None:
         if self._text is None:
+            return
+        tk = self._tk
+        if tk is None:
             return
         self._text.config(state=tk.NORMAL)
         self._text.delete(1.0, tk.END)

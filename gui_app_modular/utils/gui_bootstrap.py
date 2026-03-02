@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 GUI 부트스트랩 (P2 단일 소스)
 ============================
@@ -18,27 +17,28 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════
 
 try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox
+
     import ttkbootstrap as ttk
-    from ttkbootstrap import Window, Style
+    from ttkbootstrap import Style, Window
     from ttkbootstrap.scrolled import ScrolledFrame
     from ttkbootstrap.tableview import Tableview
     from ttkbootstrap.tooltip import ToolTip
-    import tkinter as tk
-    from tkinter import filedialog, messagebox
-    
+
     # v3.6.5: ttkbootstrap 전용 위젯 (안전 import)
     try:
-        from ttkbootstrap.widgets import Meter, DateEntry, Floodgauge
+        from ttkbootstrap.widgets import DateEntry, Floodgauge, Meter
     except ImportError:
         Meter = None
         DateEntry = None
         Floodgauge = None
-    
+
     # ttkbootstrap에 LabelFrame이 없으면 tkinter.ttk에서 가져옴
     if not hasattr(ttk, 'LabelFrame'):
         from tkinter.ttk import LabelFrame
         ttk.LabelFrame = LabelFrame
-    
+
     # tkinter 상수 (ttkbootstrap에서 재정의되지 않으므로 직접 정의)
     LEFT = tk.LEFT
     RIGHT = tk.RIGHT
@@ -70,7 +70,7 @@ try:
     SE = tk.SE
     CENTER = tk.CENTER
     Menu = tk.Menu
-    
+
     HAS_TTKBOOTSTRAP = True
     HAS_TOOLTIP = True
     HAS_METER = Meter is not None
@@ -80,7 +80,6 @@ try:
 except ImportError:
     import tkinter as tk
     from tkinter import ttk
-    from tkinter import filedialog, messagebox
     HAS_TTKBOOTSTRAP = False
     HAS_TOOLTIP = False
     HAS_METER = False
@@ -92,7 +91,7 @@ except ImportError:
     Floodgauge = None
     ScrolledFrame = None
     Tableview = None
-    
+
     # ttkbootstrap 상수 폴백 정의
     LEFT = tk.LEFT
     RIGHT = tk.RIGHT
@@ -124,12 +123,12 @@ except ImportError:
     SE = tk.SE
     CENTER = tk.CENTER
     Menu = tk.Menu
-    
+
     Window = tk.Tk
     Style = None
     ScrolledFrame = None
     Tableview = None
-    
+
     logger.warning("⚠️ ttkbootstrap 미설치 - 기본 UI 사용")
 
 # ═══════════════════════════════════════════════════════════════
@@ -158,7 +157,7 @@ RECENT_FILES_FILE = BASE_DIR / "recent_files.json"
 # ═══════════════════════════════════════════════════════════════
 
 try:
-    from version import __version__, APP_NAME
+    from version import APP_NAME, __version__
 except ImportError:
     __version__ = "0.0.0"  # S2-3: version.py 누락 시 fallback
     import logging as _vlog
@@ -171,7 +170,7 @@ except ImportError:
 
 # Column Aliases
 try:
-    from column_aliases import ColumnMapper, COLUMN_ALIASES
+    from column_aliases import COLUMN_ALIASES, ColumnMapper
     HAS_COLUMN_ALIASES = True
 except ImportError:
     ColumnMapper = None
@@ -188,7 +187,7 @@ except ImportError:
 
 # DB Protection
 try:
-    from db_protection import DBProtection, ActionLogger
+    from db_protection import ActionLogger, DBProtection
     HAS_DB_PROTECTION = True
 except ImportError:
     HAS_DB_PROTECTION = False
@@ -197,10 +196,7 @@ except ImportError:
 
 # Error Handler
 try:
-    from error_handler import (
-        ErrorDialog, safe_execute,
-        add_tooltip
-    )
+    from error_handler import ErrorDialog, add_tooltip, safe_execute
     HAS_ERROR_HANDLER = True
 except ImportError:
     HAS_ERROR_HANDLER = False
@@ -210,7 +206,7 @@ except ImportError:
 
 # Preflight
 try:
-    from engine_modules.preflight import PreflightValidator, PreflightError
+    from engine_modules.preflight import PreflightError, PreflightValidator
     HAS_PREFLIGHT = True
 except ImportError:
     HAS_PREFLIGHT = False
@@ -235,9 +231,7 @@ except ImportError:
 
 # Comprehensive Backup
 try:
-    from comprehensive_backup import (
-        ComprehensiveBackupSystem
-    )
+    from comprehensive_backup import ComprehensiveBackupSystem
     HAS_COMPREHENSIVE_BACKUP = True
 except ImportError:
     HAS_COMPREHENSIVE_BACKUP = False
@@ -279,7 +273,7 @@ except ImportError:
 
 # Progress Dialog
 try:
-    from improvements import TkProgressDialog, ProgressInfo
+    from improvements import ProgressInfo, TkProgressDialog
     HAS_PROGRESS = True
 except ImportError:
     HAS_PROGRESS = False
@@ -325,6 +319,5 @@ CACHE_EXPIRE_SECONDS = 300
 # ═══════════════════════════════════════════════════════════════
 # SQM 비즈니스 기본값 — core.constants 단일 소스 (re-export만, 로컬 정의 없음)
 # ═══════════════════════════════════════════════════════════════
-from core.constants import DEFAULT_WAREHOUSE, DEFAULT_TONBAG_COUNT
 DEFAULT_PRODUCT = 'LITHIUM CARBONATE'
 WEIGHT_TOLERANCE_KG = 0.5  # 무게 허용 오차 (kg)

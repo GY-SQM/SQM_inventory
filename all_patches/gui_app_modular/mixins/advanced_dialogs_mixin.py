@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - 고급 다이얼로그 Mixin
 ======================================
@@ -13,9 +12,10 @@ v3.8.4 - advanced_features_mixin에서 분리
 - 출고 인보이스 생성
 """
 
+import logging
 import os
 import sqlite3
-import logging
+
 from ..utils.ui_constants import CustomMessageBox, apply_modal_window_options
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,9 @@ class AdvancedDialogsMixin:
 
     def _on_return_inbound_paste_confirm(self, rows: list) -> None:
         """반품 입고 붙여넣기 확인 시 파싱 후 DB 반영."""
-        from features.parsers.return_inbound_parser import parse_return_inbound_from_rows
+        from features.parsers.return_inbound_parser import (
+            parse_return_inbound_from_rows,
+        )
         parse_result = parse_return_inbound_from_rows(rows)
         if not parse_result.get("parse_ok") or parse_result.get("errors"):
             err_msg = "\n".join(parse_result.get("errors", ["파싱 실패"]))
@@ -73,7 +75,9 @@ class AdvancedDialogsMixin:
         if isinstance(parse_result_or_path, str):
             path = parse_result_or_path
             try:
-                from features.parsers.return_inbound_parser import parse_return_inbound_excel
+                from features.parsers.return_inbound_parser import (
+                    parse_return_inbound_excel,
+                )
                 parse_result = parse_return_inbound_excel(path)
             except ImportError:
                 CustomMessageBox.showerror(
@@ -143,7 +147,9 @@ class AdvancedDialogsMixin:
                 ):
                     return
         try:
-            from features.parsers.return_inbound_engine import apply_return_inbound_to_db
+            from features.parsers.return_inbound_engine import (
+                apply_return_inbound_to_db,
+            )
             r = apply_return_inbound_to_db(self.engine, parse_result, source_file)
             self._log(f"✅ 반품 입고 완료: {r.get('returned', 0)}건")
             CustomMessageBox.showinfo(
@@ -170,7 +176,7 @@ class AdvancedDialogsMixin:
 
     def _show_return_dialog(self, initial_tab: int = 0) -> None:
         """v4.1.4: 반품 처리 다이얼로그 — initial_tab: 0=소량(단건), 1=다량(Excel)."""
-        from ..utils.constants import tk, ttk, BOTH
+        from ..utils.constants import BOTH, tk, ttk
 
         dialog = tk.Toplevel(self.root)
         dialog.title("🔄 반품 처리")
@@ -196,14 +202,14 @@ class AdvancedDialogsMixin:
 
     def _build_return_single_tab(self, nb, dialog) -> None:
         """반품 다이얼로그 — TAB 1: 단건 입력"""
-        from ..utils.constants import tk, ttk, X, LEFT, W, END
+        from ..utils.constants import X, tk, ttk
         from ..utils.custom_messagebox import CustomMessageBox
         tab_single = ttk.Frame(nb)
         nb.add(tab_single, text="  📝 단건 입력  ")
-        
+
         frame = ttk.LabelFrame(tab_single, text="반품 정보")
         frame.pack(fill=X, padx=15, pady=10)
-        
+
         ttk.Label(frame, text="LOT 번호:").grid(row=0, column=0, sticky='e', padx=5, pady=5)
         lot_combo = ttk.Combobox(frame, width=27, state='readonly')
         lot_combo.grid(row=0, column=1, padx=5, pady=5)
@@ -221,12 +227,12 @@ class AdvancedDialogsMixin:
             except (ValueError, TypeError, AttributeError) as e:
                 logger.debug(f"LOT 목록 조회 오류: {e}")
         _load_lot_list()
-        
+
         ttk.Label(frame, text="Tonbag No:").grid(row=1, column=0, sticky='e', padx=5, pady=5)
         tonbag_combo = ttk.Combobox(frame, width=27, state='readonly')
         tonbag_combo.grid(row=1, column=1, padx=5, pady=5)
         tonbag_combo.set("← LOT 번호 선택 후 자동 조회")
-        
+
         def _on_lot_change(event=None):
             lot_no = (lot_combo.get() or '').strip()
             if not lot_no or not hasattr(self, 'engine') or lot_no == "(등록된 LOT 없음)":
@@ -252,11 +258,11 @@ class AdvancedDialogsMixin:
                     tonbag_combo.set("톤백 없음")
             except (ValueError, TypeError, AttributeError) as e:
                 logger.debug(f"톤백 조회 오류: {e}")
-        
+
         lot_combo.bind('<<ComboboxSelected>>', _on_lot_change)
         lot_combo.bind('<FocusOut>', _on_lot_change)
         lot_combo.bind('<Return>', _on_lot_change)
-        
+
         def _on_tonbag_select(event=None):
             sel = tonbag_combo.get()
             if '(' in sel and 'kg' in sel:
@@ -266,13 +272,13 @@ class AdvancedDialogsMixin:
                     qty_entry.insert(0, w)
                 except (ValueError, TypeError, KeyError) as _e:
                     logger.debug(f"Suppressed: {_e}")
-        
+
         tonbag_combo.bind('<<ComboboxSelected>>', _on_tonbag_select)
-        
+
         ttk.Label(frame, text="반품 수량 (kg):").grid(row=2, column=0, sticky='e', padx=5, pady=5)
         qty_entry = ttk.Entry(frame, width=30)
         qty_entry.grid(row=2, column=1, padx=5, pady=5)
-        
+
         ttk.Label(frame, text="반품 사유:").grid(row=3, column=0, sticky='e', padx=5, pady=5)
         # v6.12.1: 표준 사유 드롭다운 + 직접 입력 가능 (Combobox)
         _reason_codes = [
@@ -281,11 +287,11 @@ class AdvancedDialogsMixin:
         reason_combo = ttk.Combobox(frame, width=27, values=_reason_codes)
         reason_combo.grid(row=3, column=1, padx=5, pady=5)
         reason_combo.set("품질 불량")
-        
+
         ttk.Label(frame, text="비고:").grid(row=4, column=0, sticky='ne', padx=5, pady=5)
         note_text = tk.Text(frame, width=30, height=3)
         note_text.grid(row=4, column=1, padx=5, pady=5)
-        
+
         def _process_single_return():
             lot_no = (lot_combo.get() or '').strip()
             tonbag_sel = tonbag_combo.get().strip()
@@ -379,7 +385,7 @@ class AdvancedDialogsMixin:
             else:
                 errs = '\n'.join(result.get('errors', ['알 수 없는 오류']))
                 CustomMessageBox.showerror(dialog, "오류", f"반품 실패:\n{errs}")
-        
+
         s_btn = ttk.Frame(tab_single)
         s_btn.pack(pady=15)
         try:
@@ -391,19 +397,20 @@ class AdvancedDialogsMixin:
 
     def _build_return_excel_tab(self, nb, dialog) -> None:
         """반품 다이얼로그 — TAB 2: Excel 일괄 반품"""
-        from ..utils.constants import tk, ttk, BOTH, X, Y, LEFT, RIGHT, END, VERTICAL
+        from ..utils.constants import BOTH, LEFT, RIGHT, VERTICAL, X, Y, tk, ttk
         from ..utils.custom_messagebox import CustomMessageBox
         tab_excel = ttk.Frame(nb)
         nb.add(tab_excel, text="  📂 Excel 일괄 반품  ")
-        
+
         top_bar = ttk.Frame(tab_excel)
         top_bar.pack(fill=X, padx=10, pady=8)
-        
+
         def _download_return_template():
             """반품 템플릿 = 재고 리스트와 동일 형식 + return_qty_kg, return_reason. 필수(lot_no, return_qty_kg, return_reason)만 색상."""
-            from ..utils.constants import filedialog
             import openpyxl
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+            from ..utils.constants import filedialog
             file_path = filedialog.asksaveasfilename(
                 title="반품 양식 저장", defaultextension=".xlsx",
                 initialfile="반품_양식_템플릿.xlsx",
@@ -460,16 +467,16 @@ class AdvancedDialogsMixin:
                 self._log(f"📥 반품 양식 다운로드: {file_path}")
             except (FileNotFoundError, OSError, PermissionError) as e:
                 CustomMessageBox.showerror(dialog, "오류", f"파일 저장 실패: {e}")
-        
+
         try:
             ttk.Button(top_bar, text="📥 반품 양식 다운로드", command=_download_return_template,
                        bootstyle="info").pack(side='left', padx=5)
         except TypeError:
             ttk.Button(top_bar, text="📥 반품 양식 다운로드", command=_download_return_template).pack(side='left', padx=5)
-        
+
         file_var = tk.StringVar(value="파일을 선택하세요...")
         ttk.Label(top_bar, textvariable=file_var, foreground='gray').pack(side='left', padx=10, fill=X, expand=True)
-        
+
         # 미리보기 Treeview — 필수 4열: Lot No, BL NO, 톤백중량, 반품수량(갯수)
         pv_frame = ttk.LabelFrame(tab_excel, text="반품 미리보기 (DB 자동 조회)")
         pv_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
@@ -488,20 +495,25 @@ class AdvancedDialogsMixin:
         pv_tree.configure(yscrollcommand=pv_sb.set)
         pv_tree.pack(side=LEFT, fill=BOTH, expand=True)
         pv_sb.pack(side=RIGHT, fill=Y)
-        
+
         summary_var = tk.StringVar(value="데이터 붙여넣기 또는 파일 업로드하세요")
         ttk.Label(tab_excel, textvariable=summary_var, font=('맑은 고딕', 11, 'bold')).pack(pady=3)
-        
+
         # 파싱된 반품 데이터 저장
         parsed_returns = []
-        
+
         def _show_bulk_return_input_choice():
             """Excel/데이터 입력 원칙: 데이터 붙여넣기 vs 파일 업로드 선택 후 진행"""
             from ..utils.ui_constants import (
-                UPLOAD_CHOICE_HEADER, UPLOAD_CHOICE_PASTE, UPLOAD_CHOICE_UPLOAD,
-                UPLOAD_CHOICE_BTN_PASTE, UPLOAD_CHOICE_BTN_UPLOAD,
+                UPLOAD_CHOICE_BTN_PASTE,
+                UPLOAD_CHOICE_BTN_UPLOAD,
+                UPLOAD_CHOICE_HEADER,
+                UPLOAD_CHOICE_PASTE,
+                UPLOAD_CHOICE_UPLOAD,
+                DialogSize,
+                apply_modal_window_options,
+                center_dialog,
             )
-            from ..utils.ui_constants import center_dialog, DialogSize, apply_modal_window_options
             result = [None]
             win = tk.Toplevel(dialog)
             win.title("다량 반품 데이터 입력")
@@ -529,12 +541,13 @@ class AdvancedDialogsMixin:
             win.protocol("WM_DELETE_WINDOW", win.destroy)
             win.wait_window(win)
             return result[0]
-        
+
         def _upload_return_excel():
             """Excel/데이터 입력 원칙: 선택 후 파일 업로드 또는 붙여넣기 → DB 조회 → 미리보기"""
-            from ..utils.constants import filedialog
             import pandas as pd
-            
+
+            from ..utils.constants import filedialog
+
             choice = _show_bulk_return_input_choice()
             if not choice:
                 return
@@ -550,7 +563,7 @@ class AdvancedDialogsMixin:
             if not fp:
                 return
             file_var.set(os.path.basename(fp))
-            
+
             try:
                 df = pd.read_excel(fp, header=None)
                 # 헤더 행 찾기 (lot_no 또는 LOT NO 포함 행)
@@ -562,11 +575,11 @@ class AdvancedDialogsMixin:
                         break
                 if header_row is None:
                     header_row = 2  # 기본: 3행 (0-indexed 2)
-                
+
                 df.columns = df.iloc[header_row].astype(str).str.strip().str.lower()
                 df = df.iloc[header_row+1:].reset_index(drop=True)
                 df = df.dropna(how='all')
-                
+
                 # 컬럼 매핑
                 col_map = {}
                 for c in df.columns:
@@ -585,13 +598,13 @@ class AdvancedDialogsMixin:
                         col_map['reason'] = c
                     elif 'remark' in cl:
                         col_map['remark'] = c
-                
+
                 if 'lot_no' not in col_map:
                     CustomMessageBox.showerror(dialog, "오류", "LOT NO 컬럼을 찾을 수 없습니다.")
                     return
                 if 'return_qty' not in col_map and 'reason' not in col_map:
                     CustomMessageBox.showwarning(dialog, "안내", "RETURN QTY (KG) 또는 RETURN REASON 컬럼을 권장합니다.")
-                
+
                 # 미리보기 구성 + 필수 4열 검증 (Lot No, BL NO, 톤백중량, 반품수량(갯수))
                 pv_tree.delete(*pv_tree.get_children())
                 parsed_returns.clear()
@@ -727,10 +740,10 @@ class AdvancedDialogsMixin:
                             'reason': reason, 'remark': remark,
                             'status': status, 'valid': is_ok,
                         })
-                
+
                 pv_tree.tag_configure('ok', foreground='#27ae60')
                 pv_tree.tag_configure('err', foreground='#e74c3c')
-                
+
                 if required_missing_rows:
                     lines = [f"  행 {r}: {', '.join(m)}" for r, m in required_missing_rows[:20]]
                     if len(required_missing_rows) > 20:
@@ -738,12 +751,12 @@ class AdvancedDialogsMixin:
                     CustomMessageBox.showerror(dialog, "필수 항목 누락",
                         "반품 업로드 시 Lot No, BL NO, 톤백중량, 반품수량(갯수) 네 열은 필수입니다.\n\n"
                         "다음 행에 필수 항목이 비어 있습니다:\n\n" + "\n".join(lines) + "\n\n수정 후 다시 업로드하세요.")
-                
+
                 summary_var.set(f"✅ 반품 가능: {ok_count}건  |  ❌ 불가: {err_count}건  |  총: {ok_count + err_count}건")
-                
+
             except (FileNotFoundError, OSError, PermissionError) as e:
                 CustomMessageBox.showerror(dialog, "오류", f"파일 읽기 실패: {e}")
-        
+
         def _execute_bulk_return():
             """일괄 반품 실행 — v6.12.2: 자동승인/관리자확인 워크플로우."""
             valid_items = [r for r in parsed_returns if r.get('valid')]
@@ -781,7 +794,7 @@ class AdvancedDialogsMixin:
                 if not CustomMessageBox.askyesno(dialog, "일괄 반품 확인",
                     f"총 {total_tonbags}건을 반품 처리합니다.\n\n계속하시겠습니까?"):
                     return
-            
+
             if hasattr(self.engine, 'process_return'):
                 try:
                     result = self.engine.process_return(valid_items,
@@ -811,13 +824,13 @@ class AdvancedDialogsMixin:
                     CustomMessageBox.showerror(dialog, "오류", f"반품 처리 오류:\n{errs}")
             else:
                 CustomMessageBox.showwarning(dialog, "안내", "반품 엔진을 찾을 수 없습니다.")
-        
+
         try:
             ttk.Button(top_bar, text="📂 데이터 입력", command=_upload_return_excel,
                        bootstyle="warning").pack(side='left', padx=5)
         except TypeError:
             ttk.Button(top_bar, text="📂 데이터 입력", command=_upload_return_excel).pack(side='left', padx=5)
-        
+
         ex_btn = ttk.Frame(tab_excel)
         ex_btn.pack(pady=8)
         try:
@@ -826,59 +839,59 @@ class AdvancedDialogsMixin:
         except TypeError:
             ttk.Button(ex_btn, text="🔄 일괄 반품 실행", command=_execute_bulk_return).pack(side='left', padx=10)
         ttk.Button(ex_btn, text="취소", command=dialog.destroy).pack(side='left', padx=10)
-    
+
     # =========================================================================
     # v3.8.4: 수동 입고 입력 다이얼로그
     # =========================================================================
-    
+
     # =========================================================================
     # v3.8.4: 문서 변환 (OCR/PDF)
     # =========================================================================
-    
+
     def _show_document_convert_dialog(self) -> None:
         """v3.8.4: 문서 변환 (OCR 스캔 / PDF → Excel/Word)"""
-        from ..utils.constants import tk, ttk, BOTH, X
+        from ..utils.constants import X, tk, ttk
         from ..utils.custom_messagebox import CustomMessageBox
-        
+
         dialog = tk.Toplevel(self.root)
         dialog.title("📄 문서 변환 (OCR/PDF)")
         dialog.geometry("500x400")
         apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
-        
+
         ttk.Label(dialog, text="문서 변환", font=('맑은 고딕', 16, 'bold')).pack(pady=10)
-        
+
         # 변환 모드 선택
         mode_frame = ttk.LabelFrame(dialog, text="변환 모드 선택")
         mode_frame.pack(fill=X, padx=20, pady=5)
-        
+
         mode_var = tk.StringVar(value='ocr_scan')
         modes = [
             ('ocr_scan', '📷 OCR 스캔 (이미지/스캔 PDF → 텍스트 추출)'),
             ('pdf_convert', '📄 PDF → Excel/Word 변환'),
         ]
         for val, text in modes:
-            ttk.Radiobutton(mode_frame, text=text, variable=mode_var, 
+            ttk.Radiobutton(mode_frame, text=text, variable=mode_var,
                            value=val).pack(anchor='w', padx=10, pady=3)
-        
+
         # 출력 형식
         out_frame = ttk.LabelFrame(dialog, text="출력 형식")
         out_frame.pack(fill=X, padx=20, pady=5)
-        
+
         out_var = tk.StringVar(value='excel')
-        ttk.Radiobutton(out_frame, text='📊 Excel (.xlsx)', variable=out_var, 
+        ttk.Radiobutton(out_frame, text='📊 Excel (.xlsx)', variable=out_var,
                         value='excel').pack(anchor='w', padx=10, pady=3)
-        ttk.Radiobutton(out_frame, text='📝 Word (.docx)', variable=out_var, 
+        ttk.Radiobutton(out_frame, text='📝 Word (.docx)', variable=out_var,
                         value='word').pack(anchor='w', padx=10, pady=3)
-        
+
         # 파일 선택
         file_frame = ttk.LabelFrame(dialog, text="파일 선택")
         file_frame.pack(fill=X, padx=20, pady=5)
-        
+
         file_path_var = tk.StringVar()
         ttk.Entry(file_frame, textvariable=file_path_var, width=45).pack(side='left', padx=5, pady=5)
-        
+
         def browse_file():
             from tkinter import filedialog
             filetypes = [
@@ -889,18 +902,18 @@ class AdvancedDialogsMixin:
             path = filedialog.askopenfilename(parent=dialog, filetypes=filetypes)
             if path:
                 file_path_var.set(path)
-        
+
         ttk.Button(file_frame, text="찾아보기", command=browse_file).pack(side='left', padx=5, pady=5)
-        
+
         def process_convert():
             filepath = file_path_var.get().strip()
             if not filepath or not os.path.exists(filepath):
                 CustomMessageBox.showwarning(dialog, "파일 선택", "변환할 파일을 선택하세요.")
                 return
-            
+
             mode = mode_var.get()
             out_fmt = out_var.get()
-            
+
             api_ok = getattr(self, '_api_connected', False)
             if mode == 'ocr_scan' and not api_ok:
                 CustomMessageBox.showwarning(dialog, "API 필요",
@@ -908,14 +921,14 @@ class AdvancedDialogsMixin:
                     "도구 > Gemini API 설정에서 API Key를 설정하세요.\n"
                     "https://aistudio.google.com에서 무료 발급 가능합니다.")
                 return
-            
+
             CustomMessageBox.showinfo(dialog, "변환 시작",
                 f"변환 모드: {'OCR 스캔' if mode == 'ocr_scan' else 'PDF 변환'}\n"
                 f"출력 형식: {'Excel' if out_fmt == 'excel' else 'Word'}\n"
                 f"파일: {os.path.basename(filepath)}\n\n"
                 f"변환 기능은 다음 업데이트에서 구현됩니다.\n"
                 f"(Gemini Vision API 연동 예정)")
-        
+
         btn_frame = ttk.Frame(dialog)
         btn_frame.pack(pady=15)
         try:
@@ -928,39 +941,38 @@ class AdvancedDialogsMixin:
     # ═══════════════════════════════════════════════════════
     # v3.8.4: 출고 이력 조회
     # ═══════════════════════════════════════════════════════
-    
+
     def _show_outbound_history(self) -> None:
         """출고 이력(stock_movement) 조회 팝업"""
-        from ..utils.constants import tk, ttk, BOTH, X, Y, LEFT, RIGHT, END
-        from ..utils.custom_messagebox import CustomMessageBox
-        
+        from ..utils.constants import BOTH, END, LEFT, RIGHT, X, Y, tk, ttk
+
         dialog = tk.Toplevel(self.root)
         dialog.title("📋 출고 이력 조회")
         dialog.geometry("900x500")
         apply_modal_window_options(dialog)
         dialog.transient(self.root)
-        
+
         # 필터
         filter_frame = ttk.Frame(dialog)
         filter_frame.pack(fill=X, padx=10, pady=5)
-        
+
         ttk.Label(filter_frame, text="유형:").pack(side=LEFT, padx=5)
         type_var = tk.StringVar(value='전체')
         type_cb = ttk.Combobox(filter_frame, textvariable=type_var, state='readonly', width=15,
                                values=['전체', 'OUTBOUND', 'CANCEL_OUTBOUND', 'INBOUND', 'RETURN'])
         type_cb.pack(side=LEFT, padx=5)
-        
+
         ttk.Label(filter_frame, text="LOT:").pack(side=LEFT, padx=(15, 5))
         lot_var = tk.StringVar()
         ttk.Entry(filter_frame, textvariable=lot_var, width=15).pack(side=LEFT, padx=5)
-        
+
         # 트리뷰
         tree_frame = ttk.Frame(dialog)
         tree_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
-        
+
         cols = ('id', 'lot_no', 'type', 'qty_kg', 'customer', 'date', 'created')
         tree = ttk.Treeview(tree_frame, columns=cols, show='headings', height=15)
-        
+
         for col, text, w in [
             ('id', 'ID', 50), ('lot_no', 'LOT NO', 120), ('type', '유형', 120),
             ('qty_kg', '수량(kg)', 100), ('customer', '고객', 120),
@@ -968,34 +980,34 @@ class AdvancedDialogsMixin:
         ]:
             tree.heading(col, text=text)
             tree.column(col, width=w, anchor='e' if col == 'qty_kg' else 'w')
-        
+
         scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
         tree.pack(side=LEFT, fill=BOTH, expand=True)
         scrollbar.pack(side=RIGHT, fill=Y)
-        
+
         # 합계
         summary_var = tk.StringVar(value="조회 버튼을 클릭하세요")
         ttk.Label(dialog, textvariable=summary_var, font=('', 13, 'bold')).pack(pady=5)
-        
+
         def do_search():
             tree.delete(*tree.get_children())
             try:
                 query = "SELECT id, lot_no, movement_type, qty_kg, '' AS customer, created_at AS movement_date, created_at FROM stock_movement WHERE 1=1"
                 params = []
-                
+
                 mv_type = type_var.get()
                 if mv_type != '전체':
                     query += " AND movement_type = ?"
                     params.append(mv_type)
-                
+
                 lot_filter = lot_var.get().strip()
                 if lot_filter:
                     query += " AND lot_no LIKE ?"
                     params.append(f"%{lot_filter}%")
-                
+
                 query += " ORDER BY created_at DESC LIMIT 500"
-                
+
                 rows = self.engine.db.fetchall(query, tuple(params))
                 total_kg = 0
                 for r in rows:
@@ -1006,35 +1018,35 @@ class AdvancedDialogsMixin:
                     cust = r['customer'] if isinstance(r, dict) else r[4]
                     mdate = r['movement_date'] if isinstance(r, dict) else r[5]
                     created = r['created_at'] if isinstance(r, dict) else r[6]
-                    
+
                     qty_val = float(qty) if qty else 0
                     total_kg += qty_val
-                    
+
                     tree.insert('', END, values=(
                         row_id, lot, mtype, f"{qty_val:,.0f}",
                         cust or '', str(mdate or '')[:10], str(created or '')[:19]
                     ))
-                
+
                 summary_var.set(f"조회: {len(rows)}건 | 총 수량: {total_kg:,.0f} kg")
-                
+
             except (ValueError, TypeError, KeyError) as e:
                 summary_var.set(f"오류: {e}")
-        
+
         ttk.Button(filter_frame, text="🔍 조회", command=do_search).pack(side=LEFT, padx=15)
         ttk.Button(filter_frame, text="❌ 닫기", command=dialog.destroy).pack(side=RIGHT, padx=5)
-        
+
         # 초기 로드
         do_search()
 
     # ═══════════════════════════════════════════════════════
     # v3.8.4 A6: 재고 추이 차트
     # ═══════════════════════════════════════════════════════
-    
+
     def _show_snapshot_chart(self) -> None:
         """재고 스냅샷 추이 차트"""
-        from ..utils.constants import tk, ttk, BOTH, X, LEFT, END
+        from ..utils.constants import BOTH, END, tk, ttk
         from ..utils.custom_messagebox import CustomMessageBox
-        
+
         try:
             rows = self.engine.db.fetchall("""
                 SELECT snapshot_date, total_lots, total_weight_kg, 
@@ -1042,30 +1054,30 @@ class AdvancedDialogsMixin:
                 FROM inventory_snapshot 
                 ORDER BY snapshot_date DESC LIMIT 30
             """)
-            
+
             if not rows:
                 CustomMessageBox.showinfo(self.root, "재고 추이",
                     "스냅샷 데이터가 아직 없습니다.\n\n프로그램을 매일 실행하면 자동으로 축적됩니다.")
                 return
-            
+
             rows = list(reversed(rows))
-            
+
             dialog = tk.Toplevel(self.root)
             dialog.title("📊 재고 추이 (최근 30일)")
             dialog.geometry("800x400")
             apply_modal_window_options(dialog)
             dialog.transient(self.root)
-            
+
             # 표 형태
             tree = ttk.Treeview(dialog, columns=('date', 'lots', 'total', 'avail', 'picked'),
                                show='headings', height=15)
-            
+
             for col, text, w in [('date','날짜',100), ('lots','LOT수',60),
                                  ('total','총재고(MT)',100), ('avail','판매가능(MT)',100),
                                  ('picked','출고(MT)',100)]:
                 tree.heading(col, text=text)
                 tree.column(col, width=w, anchor='e' if col != 'date' else 'w')
-            
+
             for r in rows:
                 tree.insert('', END, values=(
                     r['snapshot_date'],
@@ -1074,22 +1086,22 @@ class AdvancedDialogsMixin:
                     f"{(r['available_weight_kg'] or 0)/1000:,.1f}",
                     f"{(r['picked_weight_kg'] or 0)/1000:,.1f}",
                 ))
-            
+
             tree.pack(fill=BOTH, expand=True, padx=10, pady=10)
             ttk.Button(dialog, text="닫기", command=dialog.destroy).pack(pady=5)
-            
+
         except (RuntimeError, ValueError) as e:
             CustomMessageBox.showerror(self.root, "오류", f"스냅샷 조회 오류:\n{e}")
 
     # ═══════════════════════════════════════════════════════
     # v3.8.4 A7: 출고 거래명세서 PDF/Excel
     # ═══════════════════════════════════════════════════════
-    
+
     def _generate_outbound_invoice(self) -> None:
         """출고 거래명세서 Excel 생성"""
-        from ..utils.constants import tk, ttk, filedialog, BOTH, X, LEFT, W, END
+        from ..utils.constants import BOTH, W, filedialog, tk, ttk
         from ..utils.custom_messagebox import CustomMessageBox
-        
+
         # 고객 + 기간 선택 다이얼로그
         dialog = tk.Toplevel(self.root)
         dialog.title("📄 거래명세서 생성")
@@ -1097,13 +1109,13 @@ class AdvancedDialogsMixin:
         apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
-        
+
         frame = ttk.Frame(dialog, padding=15)
         frame.pack(fill=BOTH, expand=True)
-        
+
         ttk.Label(frame, text="고객명:").grid(row=0, column=0, sticky=W, pady=5)
         cust_var = tk.StringVar()
-        
+
         # 고객 목록 조회
         try:
             customers = self.engine.db.fetchall(
@@ -1111,28 +1123,28 @@ class AdvancedDialogsMixin:
             cust_list = [c['customer'] for c in customers if c['customer']]
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError):
             cust_list = []
-        
+
         ttk.Combobox(frame, textvariable=cust_var, values=cust_list, width=30).grid(
             row=0, column=1, sticky=W, pady=5)
-        
+
         ttk.Label(frame, text="시작일:").grid(row=1, column=0, sticky=W, pady=5)
         from_var = tk.StringVar(value="2025-01-01")
         ttk.Entry(frame, textvariable=from_var, width=15).grid(row=1, column=1, sticky=W, pady=5)
-        
+
         ttk.Label(frame, text="종료일:").grid(row=2, column=0, sticky=W, pady=5)
         from datetime import date
         to_var = tk.StringVar(value=date.today().isoformat())
         ttk.Entry(frame, textvariable=to_var, width=15).grid(row=2, column=1, sticky=W, pady=5)
-        
+
         def do_generate():
             customer = cust_var.get().strip()
             date_from = from_var.get().strip()
             date_to = to_var.get().strip()
-            
+
             if not customer:
                 CustomMessageBox.showwarning(dialog, "입력 필요", "고객명을 선택하세요.")
                 return
-            
+
             # 출고 데이터 조회 (customer 컬럼 없어도 동작)
             try:
                 for q, p in [
@@ -1160,11 +1172,11 @@ class AdvancedDialogsMixin:
                         raise
                 else:
                     movements = []
-                
+
                 if not movements:
                     CustomMessageBox.showinfo(dialog, "결과 없음", "해당 기간 출고 이력이 없습니다.")
                     return
-                
+
                 # Excel 저장
                 save_path = filedialog.asksaveasfilename(
                     title="거래명세서 저장",
@@ -1172,7 +1184,7 @@ class AdvancedDialogsMixin:
                     initialfile=f"거래명세서_{customer}_{date_from}_{date_to}.xlsx",
                     filetypes=[("Excel files", "*.xlsx")]
                 )
-                
+
                 if not save_path:
                     return
                 try:
@@ -1180,14 +1192,14 @@ class AdvancedDialogsMixin:
                     save_path = get_unique_excel_path(save_path)
                 except ImportError:
                     pass
-                
+
                 import openpyxl
-                from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-                
+                from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
                 wb = openpyxl.Workbook()
                 ws = wb.active
                 ws.title = "거래명세서"
-                
+
                 # 스타일
                 title_font = Font(bold=True, size=16)
                 header_font = Font(bold=True, color="FFFFFF", size=10)
@@ -1195,15 +1207,15 @@ class AdvancedDialogsMixin:
                 border = Border(
                     left=Side(style='thin'), right=Side(style='thin'),
                     top=Side(style='thin'), bottom=Side(style='thin'))
-                
+
                 # 타이틀
                 ws.merge_cells('A1:F1')
                 ws['A1'] = f"거래명세서 — {customer}"
                 ws['A1'].font = title_font
-                
+
                 ws['A2'] = f"기간: {date_from} ~ {date_to}"
                 ws['A2'].font = Font(size=10, color='666666')
-                
+
                 # 헤더
                 headers = ['No', 'LOT NO', '수량(kg)', '수량(MT)', '출고일', '비고']
                 for col, h in enumerate(headers, 1):
@@ -1212,13 +1224,13 @@ class AdvancedDialogsMixin:
                     cell.fill = header_fill
                     cell.border = border
                     cell.alignment = Alignment(horizontal='center')
-                
+
                 # 데이터
                 total_kg = 0
                 for i, mv in enumerate(movements, 1):
                     qty = mv['qty_kg'] or 0
                     total_kg += qty
-                    
+
                     row_data = [
                         i,
                         mv['lot_no'],
@@ -1232,22 +1244,22 @@ class AdvancedDialogsMixin:
                         cell.border = border
                         if col in (3, 4):
                             cell.alignment = Alignment(horizontal='right')
-                
+
                 # 합계
                 sum_row = 5 + len(movements)
                 ws.cell(row=sum_row, column=1, value="합계").font = Font(bold=True)
                 ws.cell(row=sum_row, column=3, value=f"{total_kg:,.0f}").font = Font(bold=True)
                 ws.cell(row=sum_row, column=4, value=f"{total_kg/1000:.3f}").font = Font(bold=True)
-                
+
                 ws.column_dimensions['A'].width = 6
                 ws.column_dimensions['B'].width = 16
                 ws.column_dimensions['C'].width = 14
                 ws.column_dimensions['D'].width = 12
                 ws.column_dimensions['E'].width = 14
                 ws.column_dimensions['F'].width = 15
-                
+
                 wb.save(save_path)
-                
+
                 dialog.destroy()
                 self._log(f"✅ 거래명세서 저장: {save_path}")
                 CustomMessageBox.showinfo(self.root, "완료",
@@ -1256,12 +1268,12 @@ class AdvancedDialogsMixin:
                     f"건수: {len(movements)}건\n"
                     f"총량: {total_kg/1000:.3f} MT\n\n"
                     f"파일: {save_path}")
-                    
+
             except ImportError:
                 CustomMessageBox.showerror(dialog, "오류", "openpyxl이 필요합니다.")
             except (RuntimeError, ValueError) as e:
                 CustomMessageBox.showerror(dialog, "오류", f"거래명세서 생성 오류:\n{e}")
-        
+
         ttk.Button(frame, text="📄 생성", command=do_generate).grid(row=3, column=1, sticky=W, pady=15)
         ttk.Button(frame, text="취소", command=dialog.destroy).grid(row=3, column=0, sticky=W, pady=15)
 
@@ -1279,8 +1291,10 @@ class AdvancedDialogsMixin:
         """v6.12.2: 반품 경고 이메일 수동 발송."""
         try:
             from features.notifications.return_alert_email import (
-                send_return_alert_email, check_return_alerts, load_email_config,
-                create_default_email_config
+                check_return_alerts,
+                create_default_email_config,
+                load_email_config,
+                send_return_alert_email,
             )
         except ImportError as e:
             CustomMessageBox.showerror(self.root, "오류", f"알림 모듈 로드 실패:\n{e}")
@@ -1331,11 +1345,12 @@ class AdvancedDialogsMixin:
 
     def _on_integrity_report(self) -> None:
         """v7.0.1: 정합성 검증 리포트 생성 (PDF + Excel)"""
-        from ..utils.constants import filedialog
         from datetime import datetime
-        
+
+        from ..utils.constants import filedialog
+
         today = datetime.now().strftime('%Y%m%d')
-        
+
         file_path = filedialog.asksaveasfilename(
             title="정합성 검증 리포트 저장",
             defaultextension=".xlsx",
@@ -1346,25 +1361,30 @@ class AdvancedDialogsMixin:
                 ("All files", "*.*")
             ]
         )
-        
+
         if not file_path:
             return
-        
+
         try:
             if file_path.lower().endswith('.pdf'):
-                from features.reports.integrity_report import generate_integrity_report_pdf
+                from features.reports.integrity_report import (
+                    generate_integrity_report_pdf,
+                )
                 result = generate_integrity_report_pdf(self.engine, file_path)
             else:
-                from features.reports.integrity_report import generate_integrity_report_excel
+                from features.reports.integrity_report import (
+                    generate_integrity_report_excel,
+                )
                 result = generate_integrity_report_excel(self.engine, file_path)
-            
+
             if result:
                 CustomMessageBox.showinfo(
                     self.root, "완료",
                     f"정합성 검증 리포트 생성 완료\n\n{os.path.basename(file_path)}"
                 )
                 # 탐색기에서 열기
-                import subprocess, platform
+                import platform
+                import subprocess
                 if platform.system() == 'Windows':
                     subprocess.Popen(['explorer', '/select,', file_path])
             else:

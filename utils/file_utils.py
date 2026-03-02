@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM - 파일/경로 유틸 (P2 config 분할)
 =====================================
@@ -9,7 +8,7 @@ smart_path_recovery, get_recent_files, safe_file_backup.
 import shutil
 import time
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import List, Optional, Tuple
 
 
 def smart_path_recovery(

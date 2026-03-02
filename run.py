@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 메인 실행 파일 (★ 유일한 엔트리 포인트 ★)
 
@@ -17,9 +16,9 @@ SQM 재고관리 시스템 - 메인 실행 파일 (★ 유일한 엔트리 포�
 P3: 진단·백업·GUI/CLI 로직은 run_bootstrap.py 로 분리.
 """
 
+import logging
 import os
 import sys
-import logging
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -33,7 +32,7 @@ if sys.platform == 'win32':
         logger.debug(f"Suppressed: {e}")
 
 try:
-    from version import __version__, APP_NAME
+    from version import APP_NAME, __version__
 except ImportError:
     __version__ = "0.0.0"  # S2-3: version.py 누락 시 유일한 fallback
     logger.warning("[버전] version.py 로드 실패 → fallback 0.0.0")
@@ -43,13 +42,13 @@ except ImportError:
 def main():
     """메인 함수 — run_bootstrap 위임"""
     from run_bootstrap import (
-        run_self_diagnostic,
-        run_self_check,
-        print_self_check_report,
         check_dependencies,
-        run_cli,
+        print_self_check_report,
         run_backup_only,
+        run_cli,
         run_gui,
+        run_self_check,
+        run_self_diagnostic,
     )
 
     if "--version" in sys.argv:

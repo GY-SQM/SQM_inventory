@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - GUI 모듈화 패키지
 ================================
@@ -32,20 +31,18 @@ v2.9.99 - SQMInventoryApp export 추가 (실제 사용 전환)
 # ★★★ v2.9.99: 메인 앱 클래스 export ★★★
 # v3.6.0: SQMInventoryAppFull (모든 mixin 포함) 사용
 from .main_app import SQMInventoryAppFull as SQMInventoryApp
-
 from .utils.constants import (
-    __version__,
     APP_NAME,
-    HAS_TTKBOOTSTRAP,
     HAS_PANDAS,
+    HAS_TTKBOOTSTRAP,
+    __version__,
 )
-
 from .utils.safe_utils import (
-    safe_str,
+    find_column,
+    safe_date,
     safe_float,
     safe_int,
-    safe_date,
-    find_column,
+    safe_str,
 )
 
 __all__ = [

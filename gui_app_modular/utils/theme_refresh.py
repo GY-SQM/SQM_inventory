@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.1.1 - 테마 변경 시 전체 위젯 자동 갱신 엔진
 ====================================================
@@ -32,8 +31,8 @@ def _walk_widgets(root_widget):
         try:
             children = w.winfo_children()
             stack.extend(children)
-        except (tk.TclError, RuntimeError):
-            pass
+        except (tk.TclError, RuntimeError) as e:
+            logger.debug(f"[_walk_widgets] Suppressed: {e}")
 
 
 def _safe_lookup(style: ttk.Style, widget_class: str, option: str, fallback: str) -> str:
@@ -113,8 +112,8 @@ def _refresh_single_treeview(tree: ttk.Treeview, colors: dict, style: ttk.Style)
             existing = tree.tag_configure(tag_name)
             if existing:
                 tree.tag_configure(tag_name, foreground=fg)
-        except (tk.TclError, ValueError):
-            pass
+        except (tk.TclError, ValueError) as e:
+            logger.debug(f"[_refresh_single_treeview] Suppressed: {e}")
     try:
         from gui_app_modular.utils.ui_constants import ThemeColors
         ThemeColors.configure_tags(tree, is_dark)
@@ -123,8 +122,8 @@ def _refresh_single_treeview(tree: ttk.Treeview, colors: dict, style: ttk.Style)
         for tag_name in ('available', 'picked', 'reserved', 'shipped', 'depleted'):
             try:
                 tree.tag_configure(tag_name, foreground=fg)
-            except (tk.TclError, ValueError):
-                pass
+            except (tk.TclError, ValueError) as e:
+                logger.debug(f"[_refresh_single_treeview] Suppressed: {e}")
     try:
         style_name = tree.cget('style') or 'Treeview'
         style.configure(style_name, foreground=fg, background=bg, fieldbackground=colors['field_bg'])
@@ -138,8 +137,8 @@ def _refresh_single_treeview(tree: ttk.Treeview, colors: dict, style: ttk.Style)
     try:
         from gui_app_modular.utils.table_styler import TableStyler
         TableStyler.update_grid_style_for_theme(tree, is_dark)
-    except (ImportError, Exception):
-        pass
+    except (ImportError, Exception) as e:
+        logger.debug(f"[_refresh_single_treeview] Suppressed: {e}")
 
 
 def _refresh_native_widget(widget, colors: dict) -> None:
@@ -188,8 +187,8 @@ def _refresh_native_widget(widget, colors: dict) -> None:
                 widget.configure(selectbackground=sel_bg, selectforeground=sel_fg)
             if isinstance(widget, tk.Text):
                 widget.configure(insertbackground=theme_fg)
-        except (tk.TclError, RuntimeError):
-            pass
+        except (tk.TclError, RuntimeError) as e:
+            logger.debug(f"[_brightness_of] Suppressed: {e}")
 
 
 def refresh_all_widgets_for_theme(app) -> dict:

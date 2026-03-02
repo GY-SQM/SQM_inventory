@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 P5-14: utils.file_utils 단위 테스트
 ====================================
@@ -10,8 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
-from utils.file_utils import smart_path_recovery, get_recent_files, safe_file_backup
+from utils.file_utils import get_recent_files, safe_file_backup, smart_path_recovery
 
 
 class TestSmartPathRecovery:

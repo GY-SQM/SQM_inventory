@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM Inventory - Performance Monitor
 ====================================
@@ -9,24 +8,25 @@ v4.19.0 - Phase 5
 작성자: Ruby
 """
 
-import time
-import logging
-from functools import wraps
-from typing import Dict, List, Callable
-from datetime import datetime
 import json
+import logging
+import time
+from collections.abc import Callable
+from datetime import datetime
+from functools import wraps
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
 
 class PerformanceMonitor:
     """성능 모니터링 클래스"""
-    
+
     def __init__(self):
         self.metrics: Dict[str, List[float]] = {}
         self.slow_queries: List[Dict] = []
         self.slow_threshold = 1.0  # 1초 이상이면 느림
-    
+
     def measure(self, operation_name: str):
         """
         작업 시간 측정 데코레이터
@@ -48,14 +48,14 @@ class PerformanceMonitor:
                     self._record(operation_name, elapsed, func.__name__)
             return wrapper
         return decorator
-    
+
     def _record(self, operation: str, elapsed: float, func_name: str):
         """측정 결과 기록"""
         if operation not in self.metrics:
             self.metrics[operation] = []
-        
+
         self.metrics[operation].append(elapsed)
-        
+
         # 느린 작업 기록
         if elapsed > self.slow_threshold:
             self.slow_queries.append({
@@ -65,7 +65,7 @@ class PerformanceMonitor:
                 'timestamp': datetime.now().isoformat()
             })
             logger.warning(f"⚠️ 느린 작업: {operation} ({elapsed:.3f}초)")
-    
+
     def get_stats(self, operation: str = None) -> Dict:
         """
         통계 조회
@@ -78,13 +78,13 @@ class PerformanceMonitor:
         """
         if operation:
             return self._calc_stats(operation)
-        
+
         # 전체 통계
         stats = {}
         for op in self.metrics:
             stats[op] = self._calc_stats(op)
         return stats
-    
+
     def _calc_stats(self, operation: str) -> Dict:
         """작업별 통계 계산"""
         times = self.metrics.get(operation, [])
@@ -96,7 +96,7 @@ class PerformanceMonitor:
                 'max': 0,
                 'total': 0
             }
-        
+
         return {
             'count': len(times),
             'avg': round(sum(times) / len(times), 3),
@@ -104,7 +104,7 @@ class PerformanceMonitor:
             'max': round(max(times), 3),
             'total': round(sum(times), 3)
         }
-    
+
     def get_slow_queries(self, limit: int = 10) -> List[Dict]:
         """
         느린 작업 조회
@@ -122,13 +122,13 @@ class PerformanceMonitor:
             reverse=True
         )
         return sorted_queries[:limit]
-    
+
     def reset(self):
         """통계 초기화"""
         self.metrics.clear()
         self.slow_queries.clear()
         logger.info("성능 통계 초기화됨")
-    
+
     def export_report(self, filepath: str):
         """
         성능 보고서 내보내기
@@ -142,24 +142,24 @@ class PerformanceMonitor:
             'slow_queries': self.get_slow_queries(50),
             'summary': self._generate_summary()
         }
-        
+
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(report, f, ensure_ascii=False, indent=2)
-        
+
         logger.info(f"성능 보고서 저장: {filepath}")
-    
+
     def _generate_summary(self) -> Dict:
         """요약 통계"""
         total_ops = sum(len(times) for times in self.metrics.values())
         total_time = sum(sum(times) for times in self.metrics.values())
-        
+
         # 가장 느린 작업 Top 3
         avg_times = {
             op: self._calc_stats(op)['avg']
             for op in self.metrics
         }
         slowest = sorted(avg_times.items(), key=lambda x: x[1], reverse=True)[:3]
-        
+
         return {
             'total_operations': total_ops,
             'total_time': round(total_time, 3),

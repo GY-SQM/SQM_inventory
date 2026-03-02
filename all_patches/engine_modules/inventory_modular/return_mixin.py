@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM Inventory Engine - Return Mixin
 ===================================
@@ -10,7 +9,7 @@ Return (반품) processing functions
 
 import logging
 from datetime import date, datetime
-from typing import List, Dict
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ class ReturnMixin:
     
     Methods for processing returns (PICKED -> AVAILABLE)
     """
-    
+
     def get_returnable_tonbags(self, lot_no: str = None) -> List[Dict]:
         """
         Get tonbags that can be returned (status = PICKED)
@@ -42,15 +41,15 @@ class ReturnMixin:
             WHERE t.status = 'PICKED'
         """
         params = []
-        
+
         if lot_no:
             query += " AND t.lot_no = ?"
             params.append(lot_no)
-        
+
         query += " ORDER BY t.lot_no, t.sub_lt"
-        
+
         return self.db.fetchall(query, tuple(params))
-    
+
     def get_return_history(self, lot_no: str = None, limit: int = 100) -> List[Dict]:
         """
         Get return history
@@ -73,15 +72,15 @@ class ReturnMixin:
             WHERE 1=1
         """
         params = []
-        
+
         if lot_no:
             query += " AND r.lot_no = ?"
             params.append(lot_no)
-        
+
         query += f" ORDER BY r.created_at DESC LIMIT {limit}"
-        
+
         return self.db.fetchall(query, tuple(params))
-    
+
     def process_return(self, return_data: list,
                        source_type: str = '', source_file: str = '') -> Dict:
         """
@@ -104,11 +103,11 @@ class ReturnMixin:
             'details': [],
             'integrity': {},  # v5.1.5: LOT별 정합성 결과
         }
-        
+
         if not return_data:
             result['errors'].append("No return data provided")
             return result
-        
+
         try:
             with self.db.transaction("IMMEDIATE"):
                 for item in return_data:
@@ -116,37 +115,37 @@ class ReturnMixin:
                     sub_lt = item.get('sub_lt')
                     reason = item.get('reason', '')
                     remark = item.get('remark', '')
-                    
+
                     if not lot_no or sub_lt is None:
                         result['errors'].append(f"Invalid item: {item}")
                         result['skipped'] += 1
                         continue
-                    
+
                     # Get current tonbag info
                     tonbag = self.db.fetchone("""
                         SELECT lot_no, sub_lt, weight, status, picked_to, sale_ref, is_sample 
                         FROM inventory_tonbag 
                         WHERE lot_no = ? AND sub_lt = ?
                     """, (lot_no, sub_lt))
-                    
+
                     if not tonbag:
                         result['errors'].append(f"Tonbag not found: {lot_no}-{sub_lt}")
                         result['skipped'] += 1
                         continue
-                    
+
                     # v6.12.1: sqlite3.Row → dict 변환 (.get() 호환)
                     if not isinstance(tonbag, dict):
                         tonbag = dict(tonbag)
-                    
+
                     if tonbag['status'] not in ('PICKED', 'CONFIRMED', 'SHIPPED', 'SOLD', 'RESERVED'):
                         result['errors'].append(
                             f"Cannot return tonbag with status {tonbag['status']}: {lot_no}-{sub_lt}"
                         )
                         result['skipped'] += 1
                         continue
-                    
+
                     tb_weight = float(tonbag['weight'] or 0)
-                    
+
                     # Save return history
                     self.db.execute("""
                         INSERT INTO return_history 
@@ -158,7 +157,7 @@ class ReturnMixin:
                         tonbag['picked_to'], tonbag.get('sale_ref', ''),
                         reason, remark
                     ))
-                    
+
                     # v5.1.5: stock_movement 이력 추가 (반품)
                     # v6.12.1: source_type, source_file 추가
                     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -170,7 +169,7 @@ class ReturnMixin:
                     """, (lot_no, tb_weight,
                           f"sub_lt={sub_lt}, customer={tonbag.get('picked_to','')}, reason={reason}",
                           _src, source_file or '', now))
-                    
+
                     was_reserved = tonbag['status'] == 'RESERVED'
                     was_status = tonbag['status']  # v6.0.1: 반품 전 상태 보존
 
@@ -204,7 +203,7 @@ class ReturnMixin:
                                 updated_at = ?
                             WHERE lot_no = ?
                         """, (tb_weight, tb_weight, now, lot_no))
-                    
+
                     # v6.0.1 패치: picking_table RETURNED
                     if was_status in ('PICKED', 'SOLD'):
                         try:
@@ -232,15 +231,15 @@ class ReturnMixin:
                         'weight': tb_weight,
                         'original_customer': tonbag.get('picked_to', '')
                     })
-                    
+
                     logger.info(f"Returned: {lot_no}-{sub_lt} ({tb_weight:.0f}kg)")
-                
+
                 # v5.2.0: 반품된 모든 LOT의 status 재계산 (래퍼 제거 → 직접 호출)
                 returned_lots = set(d['lot_no'] for d in result['details'])
                 for rlt in returned_lots:
                     self._recalc_lot_status(rlt)
                     logger.info(f"LOT status 재계산(반품): {rlt}")
-                
+
                 # v5.1.5: 정합성 검증 (트랜잭션 안에서)
                 if hasattr(self, 'verify_lot_integrity') and returned_lots:
                     for rlt in returned_lots:
@@ -250,15 +249,15 @@ class ReturnMixin:
                             raise ValueError(
                                 f"반품 후 정합성 실패 ({rlt}): {integrity.get('errors', [])}"
                             )
-                
+
                 result['success'] = result['returned'] > 0
-                
+
         except (ValueError, TypeError, AttributeError) as e:
             result['errors'].append(f"Return processing error: {e}")
             logger.exception("Return processing error")
-        
+
         return result
-    
+
     def return_single_tonbag(self, lot_no: str, sub_lt: int,
                              reason: str = None, remark: str = None) -> Dict:
         """
@@ -279,7 +278,7 @@ class ReturnMixin:
             'reason': reason or '',
             'remark': remark or ''
         }])
-    
+
     def bulk_return_by_lot(self, lot_no: str, reason: str = None) -> Dict:
         """
         Return all PICKED tonbags for a LOT
@@ -296,19 +295,19 @@ class ReturnMixin:
             SELECT lot_no, sub_lt FROM inventory_tonbag
             WHERE lot_no = ? AND status = 'PICKED'
         """, (lot_no,))
-        
+
         if not picked:
             return {
                 'success': False,
                 'returned': 0,
                 'errors': [f"No picked tonbags found for LOT: {lot_no}"]
             }
-        
+
         return_data = [
             {'lot_no': row['lot_no'], 'sub_lt': row['sub_lt'], 'reason': reason or ''}
             for row in picked
         ]
-        
+
         return self.process_return(return_data)
 
     def _recalc_lot_status_return(self, lot_no: str):

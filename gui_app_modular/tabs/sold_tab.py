@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
 """
 v7.0 5단계: SOLD 탭 — sold_table(SOLD) 기반 LOT 리스트 + 전체 판매 보기 + 기간 필터 + Excel 내보내기
 """
 import logging
-from datetime import datetime, timedelta
 import tkinter as tk
+from datetime import datetime, timedelta
 from tkinter import ttk
-from ..utils.ui_constants import ThemeColors, Spacing, apply_tooltip
-from ..utils.constants import BOTH, YES, X, LEFT, VERTICAL, RIGHT
+
+from ..utils.constants import BOTH, LEFT, VERTICAL, YES, X
+from ..utils.ui_constants import Spacing, ThemeColors, apply_tooltip
 
 logger = logging.getLogger(__name__)
 
@@ -240,8 +240,9 @@ class SoldTabMixin:
     def _on_sold_export_excel(self) -> None:
         """SOLD 데이터 Excel 내보내기 (정산/보고용)"""
         try:
-            import pandas as pd
             from tkinter import filedialog
+
+            import pandas as pd
             date_from, date_to = self._get_sold_date_range()
             sql = """
                 SELECT s.lot_no, s.sales_order_no, s.customer, s.sub_lt, s.sold_qty_kg, s.sold_date, s.created_at

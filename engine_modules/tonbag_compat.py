@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 톤백 용어 통일 호환 레이어 (v5.1.0)
 ============================================================
@@ -24,7 +23,7 @@ SQM 재고관리 시스템 - 톤백 용어 통일 호환 레이어 (v5.1.0)
   rows = normalize_rows(db_result)
 """
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +55,9 @@ def normalize_tonbag_keys(row: Dict) -> Dict:
     """
     if not row or not isinstance(row, dict):
         return row
-    
+
     result = dict(row)
-    
+
     # v5.2.0: tonbag_no TEXT 컬럼이 DB에 존재하면 그것을 우선
     if 'tonbag_no' in result and result['tonbag_no'] is not None:
         # DB의 tonbag_no TEXT를 그대로 사용
@@ -71,7 +70,7 @@ def normalize_tonbag_keys(row: Dict) -> Dict:
             result['tonbag_no'] = 'S00'
         elif sub_lt_val is not None:
             result['tonbag_no'] = f"{int(sub_lt_val):03d}"
-    
+
     # 역방향: tonbag_no → sub_lt 추가 (새 코드에서 tonbag_no만 쓴 경우)
     if 'tonbag_no' in result and 'sub_lt' not in result:
         tn = result['tonbag_no']
@@ -80,7 +79,7 @@ def normalize_tonbag_keys(row: Dict) -> Dict:
             result['sub_lt'] = 0
         elif tn_str and tn_str.isdigit():
             result['sub_lt'] = int(tn_str)
-    
+
     return result
 
 
@@ -111,12 +110,12 @@ def is_sample_tonbag(row: Dict) -> bool:
     is_sample = row.get('is_sample')
     if is_sample is not None:
         return bool(int(is_sample))
-    
+
     # 2. 제품명에 sample 포함
     product = str(row.get('product', '')).lower()
     if 'sample' in product:
         return True
-    
+
     # 3. sub_lt == 0 (DB 규칙)
     tonbag_no = row.get('tonbag_no') or row.get('sub_lt')
     if tonbag_no is not None:
@@ -125,7 +124,7 @@ def is_sample_tonbag(row: Dict) -> bool:
                 return True
         except (ValueError, TypeError) as _e:
             logger.debug(f"Suppressed: {_e}")
-    
+
     # 4. 무게 기준 (qty_mt 또는 weight)
     qty_mt = row.get('qty_mt')
     if qty_mt is not None:
@@ -134,7 +133,7 @@ def is_sample_tonbag(row: Dict) -> bool:
                 return True
         except (ValueError, TypeError) as _e:
             logger.debug(f"Suppressed: {_e}")
-    
+
     weight_kg = row.get('weight')
     if weight_kg is not None:
         try:
@@ -142,7 +141,7 @@ def is_sample_tonbag(row: Dict) -> bool:
                 return True
         except (ValueError, TypeError) as _e:
             logger.debug(f"Suppressed: {_e}")
-    
+
     return False
 
 
@@ -158,7 +157,7 @@ def get_tonbag_display_no(row: Dict) -> str:
     """
     if is_sample_tonbag(row):
         return '0'
-    
+
     tonbag_no = row.get('tonbag_no') or row.get('sub_lt') or row.get('tonbag_no_print', '?')
     return str(tonbag_no)
 
@@ -173,11 +172,11 @@ def get_tonbag_uid(row: Dict) -> str:
     uid = row.get('tonbag_uid')
     if uid:
         return uid
-    
+
     lot_no = row.get('lot_no', '')
     if is_sample_tonbag(row):
         return f"{lot_no}-S0"
-    
+
     tonbag_no = row.get('tonbag_no') or row.get('sub_lt', '?')
     return f"{lot_no}-{tonbag_no}"
 
@@ -231,9 +230,9 @@ def normalize_customer_keys(row: Dict) -> Dict:
     """
     if not row or not isinstance(row, dict):
         return row
-    
+
     result = dict(row)
-    
+
     # customer 키가 이미 있으면 그대로 유지
     if 'customer' in result and result['customer']:
         # sold_to, picked_to에도 복제 (역방향 호환)
@@ -242,7 +241,7 @@ def normalize_customer_keys(row: Dict) -> Dict:
         if 'picked_to' not in result:
             result['picked_to'] = result['customer']
         return result
-    
+
     # customer 없으면 다른 키에서 가져오기
     for alias in CUSTOMER_ALIASES:
         val = result.get(alias)
@@ -253,7 +252,7 @@ def normalize_customer_keys(row: Dict) -> Dict:
                 if other not in result:
                     result[other] = val
             return result
-    
+
     return result
 
 
@@ -280,14 +279,14 @@ def normalize_tonbag_count_keys(row: Dict) -> Dict:
     """
     if not row or not isinstance(row, dict):
         return row
-    
+
     result = dict(row)
-    
+
     if 'tonbag_count' in result and result['tonbag_count'] is not None:
         if 'mxbg_pallet' not in result:
             result['mxbg_pallet'] = result['tonbag_count']
         return result
-    
+
     for alias in TONBAG_COUNT_ALIASES:
         val = result.get(alias)
         if val is not None:
@@ -296,7 +295,7 @@ def normalize_tonbag_count_keys(row: Dict) -> Dict:
                 if other not in result:
                     result[other] = val
             return result
-    
+
     return result
 
 

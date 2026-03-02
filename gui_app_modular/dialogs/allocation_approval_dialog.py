@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Allocation 승인 워크플로우 다이얼로그.
 
@@ -73,7 +72,7 @@ class AllocationApprovalDialog:
             CustomMessageBox.showwarning(self.root, "확인", "allocation_plan 테이블이 없습니다.")
             return
 
-        from ..utils.constants import tk, ttk, BOTH, LEFT, RIGHT, Y, X, END, VERTICAL
+        from ..utils.constants import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y, tk, ttk
 
         win = tk.Toplevel(self.root)
         win.title("✅ Allocation 승인 대기")
@@ -297,7 +296,7 @@ class AllocationApprovalDialog:
             CustomMessageBox.showwarning(self.root, "확인", "엔진이 초기화되지 않았습니다.")
             return
 
-        from ..utils.constants import tk, ttk, BOTH, LEFT, RIGHT, Y, X, END, VERTICAL
+        from ..utils.constants import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y, tk, ttk
 
         win = tk.Toplevel(self.root)
         win.title("📜 Allocation 승인 이력")

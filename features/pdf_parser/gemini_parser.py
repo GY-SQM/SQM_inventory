@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - Gemini AI 파서 Compatibility Shim
 

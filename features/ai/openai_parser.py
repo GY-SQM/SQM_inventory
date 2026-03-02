@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM - OpenAI 문서 파서 (Gemini 실패 시 폴백)
 
@@ -121,7 +120,7 @@ def try_parse_packing_list(pdf_path: str, api_key: Optional[str] = None, model: 
         except (ValueError, TypeError, KeyError, IndexError):
             model = "gpt-4o"
 
-    from features.ai.gemini_parser import PackingListResult, LOTItem
+    from features.ai.gemini_parser import LOTItem, PackingListResult
 
     png_bytes = _pdf_first_page_png(pdf_path)
     if not png_bytes:
@@ -423,7 +422,7 @@ def try_parse_do(pdf_path: str, api_key: Optional[str] = None, model: Optional[s
         except (ValueError, TypeError, KeyError, IndexError):
             model = "gpt-4o"
 
-    from features.ai.gemini_parser import DOResult, ContainerDetail
+    from features.ai.gemini_parser import ContainerDetail, DOResult
 
     png_bytes = _pdf_first_page_png(pdf_path)
     if not png_bytes:

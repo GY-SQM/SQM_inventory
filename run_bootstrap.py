@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM - 실행 부트스트랩 (P3: run.py 슬림화)
 ==========================================
@@ -6,9 +5,9 @@ SQM - 실행 부트스트랩 (P3: run.py 슬림화)
 run.py는 이 모듈을 import하여 main()만 유지.
 """
 
+import logging
 import os
 import sys
-import logging
 from builtins import print as _builtin_print
 
 logger = logging.getLogger(__name__)
@@ -24,7 +23,7 @@ def _cli_log(*args, **kwargs):
 print = _cli_log
 
 try:
-    from version import __version__, APP_NAME
+    from version import APP_NAME, __version__
 except ImportError:
     __version__ = "0.0.0"
     APP_NAME = "SQM 재고관리 시스템"
@@ -84,7 +83,7 @@ def run_self_diagnostic():
 
     print("\n3️⃣ 설정 파일 확인...")
     try:
-        from core.config import SETTINGS_FILE, DB_PATH, GEMINI_API_KEY, API_KEY_SOURCE
+        from core.config import API_KEY_SOURCE, DB_PATH, GEMINI_API_KEY, SETTINGS_FILE
         if SETTINGS_FILE.exists():
             print("   ✅ settings.ini 존재")
         else:
@@ -103,7 +102,7 @@ def run_self_diagnostic():
 
     print("\n4️⃣ 데이터베이스 확인...")
     try:
-        from core.config import DB_PATH, DB_DIR
+        from core.config import DB_DIR, DB_PATH
         if DB_DIR.exists():
             print(f"   ✅ DB 디렉토리 존재: {DB_DIR}")
         else:
@@ -262,7 +261,7 @@ def run_self_check():
     from pathlib import Path
     results = {'passed': True, 'checks': [], 'warnings': [], 'errors': []}
     try:
-        from core.config import DB_PATH, BACKUP_DIR, OUTPUT_DIR
+        from core.config import BACKUP_DIR, DB_PATH, OUTPUT_DIR
     except ImportError:
         results['errors'].append("config.py를 찾을 수 없습니다")
         results['passed'] = False

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v5.9.4 — 원스톱 입고: DB 업로드 + Excel 내보내기 Mixin
 ==========================================================
@@ -7,8 +6,8 @@ onestop_inbound.py에서 분리 (1869줄 → ~1300 + ~500).
 DB 저장 로직(_save_to_db), 업로드 스레드(_upload_thread),
 중복 체크(_on_upload), Excel 내보내기(_export_to_excel)를 담당.
 """
-import sqlite3
 import logging
+import sqlite3
 import threading
 from datetime import datetime
 from tkinter import filedialog
@@ -58,8 +57,8 @@ class InboundUploadMixin:
                     cr_d = datetime.strptime(cr[:10], '%Y-%m-%d').date()
                     if cr_d < arr_d:
                         errors.append(f"{idx}행: CON RETURN은 ARRIVAL 이상이어야 함")
-                except ValueError:
-                    pass
+                except ValueError as e:
+                    logger.warning(f"[_preflight_validate_preview_data] Suppressed: {e}")
             if lot_no:
                 if lot_no in seen_lots:
                     errors.append(f"{idx}행: LOT 중복({lot_no}) - {seen_lots[lot_no]}행과 중복")
@@ -94,7 +93,7 @@ class InboundUploadMixin:
             return
 
         preflight_errors = self._preflight_validate_preview_data()
-        
+
         # v6.2.1: 크로스 체크 CRITICAL 항목 차단(사용자 최종 확인 포함)
         xc = getattr(self, '_cross_check_result', None)
         if xc and xc.has_critical:
@@ -486,7 +485,7 @@ class InboundUploadMixin:
             return
         try:
             import openpyxl
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
             save_path = filedialog.asksaveasfilename(
                 parent=self.dialog, title="Excel 내보내기",
@@ -499,8 +498,8 @@ class InboundUploadMixin:
             try:
                 from ..utils.excel_file_helper import get_unique_excel_path
                 save_path = get_unique_excel_path(save_path)
-            except ImportError:
-                pass
+            except ImportError as e:
+                logger.warning(f"[_export_to_excel] Suppressed: {e}")
 
             wb = openpyxl.Workbook()
             ws = wb.active

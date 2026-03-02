@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 입고 처리 Mixin
 ======================================
@@ -9,23 +8,26 @@ v3.6.6: SQLAlchemy → SQMDatabase API 전환 (self.db 기반)
 버전: v3.6.6
 """
 
-import sqlite3
 import logging
+import re  # v5.3.0
+import sqlite3
 from datetime import date, datetime
 from typing import Dict, List
 
-from .base import InventoryBaseMixin, PackingData
-import re  # v5.3.0
-from utils.common import normalize_lot, norm_tonbag_no_std, norm_bl_no, norm_sap_no, norm_container_no
+from utils.common import (
+    norm_bl_no,
+    norm_container_no,
+    norm_sap_no,
+    norm_tonbag_no_std,
+    normalize_lot,
+)
+
+from .base import InventoryBaseMixin
 
 logger = logging.getLogger(__name__)
 
 # 비즈니스 기본값
 from core.constants import DEFAULT_WAREHOUSE, SAMPLE_WEIGHT_KG, STATUS_AVAILABLE
-
-
-
-
 
 
 # --- v5.3.0 helpers: alias + normalization + audit raw capture ---
@@ -54,8 +56,8 @@ def _normalize_tonbag_no_from_raw_v530(raw, fallback_seq: int, is_sample: bool):
     return str(fallback_seq).zfill(3)
 class InboundMixin(InventoryBaseMixin):
     """입고 처리 Mixin (v3.6.6: SQMDatabase API 기반)"""
-    
-    def process_inbound(self, packing_data, invoice_data=None, 
+
+    def process_inbound(self, packing_data, invoice_data=None,
                         bl_data=None, do_data=None,
                         source_type: str = '', source_file: str = '') -> Dict:
         """
@@ -81,7 +83,7 @@ class InboundMixin(InventoryBaseMixin):
             'errors': [],
             'warnings': [],
         }
-        
+
         try:
             # v3.8.8: 항상 dict로 정규화 (PackingData wrapping 제거)
             if isinstance(packing_data, dict):
@@ -100,14 +102,14 @@ class InboundMixin(InventoryBaseMixin):
                 ] if packing_data.get(k) is not None}
             else:
                 packing = vars(packing_data) if hasattr(packing_data, '__dict__') else {}
-            
+
             logger.info(f"[process_inbound] lot_no={packing.get('lot_no')!r}, keys_count={len(packing)}")
-            
+
             # 필수 필드 검증
             if not packing.get('lot_no'):
                 result['errors'].append(f"LOT 번호가 없습니다 (type={type(packing_data).__name__}, keys={list(packing.keys())[:5]})")
                 return result
-            
+
             lot_no = normalize_lot(packing.get('lot_no')) or str(packing.get('lot_no') or '').strip()
             if not lot_no:
                 result['errors'].append("LOT 번호가 비어 있습니다.")
@@ -117,12 +119,12 @@ class InboundMixin(InventoryBaseMixin):
             if len(lot_no) > 30:
                 result['errors'].append(f"LOT 번호가 너무 깁니다: {len(lot_no)}자 (최대 30자)")
                 return result
-            
+
             # PC-1: LOT 번호 형식 검증 (SQM: 10자리 숫자, 경고만)
             if lot_no and not re.match(r'^\d{10}$', lot_no):
                 result['warnings'].append(
                     f"LOT 번호 형식 주의: '{lot_no}' (SQM 표준: 10자리 숫자)")
-            
+
             # 중량 검증
             weight = self._safe_parse_float(
                 packing.get('net_weight')
@@ -130,12 +132,12 @@ class InboundMixin(InventoryBaseMixin):
             if weight <= 0:
                 result['errors'].append(f"유효하지 않은 중량: {weight}")
                 return result
-            
+
             # 중복 확인
             if self._check_lot_exists(lot_no):
                 result['errors'].append(f"이미 존재하는 LOT: {lot_no}")
                 return result
-            
+
             # v6.12.1: SAP 번호 중복 검증 (경고 — 동일 SAP로 다중 LOT 입고 감지)
             sap_no_raw = packing.get('sap_no', '')
             if sap_no_raw:
@@ -163,19 +165,19 @@ class InboundMixin(InventoryBaseMixin):
                     result['warnings'].append(
                         f"B/L 번호 형식 주의: '{bl_str}' (표준: 영문4자리+숫자7자리 이상)"
                     )
-            
+
             # 트랜잭션으로 원자적 처리
             with self.db.transaction():
                 # LOT 생성
                 lot_data = self._prepare_lot_data(packing, bl_data, do_data)
                 self._insert_lot(lot_data)
-                
+
                 # v3.8.4: 생성된 LOT의 inventory_id 조회
                 inv_row = self.db.fetchone(
                     "SELECT id FROM inventory WHERE lot_no = ?", (lot_no,))
                 inventory_id = inv_row['id'] if inv_row and isinstance(inv_row, dict) else (
                     inv_row[0] if inv_row else None)
-                
+
                 # 톤백 생성 (명시적 tonbags 또는 bag_count 기반 자동 생성)
                 tonbags = packing.get('tonbags') or []
                 if not tonbags:
@@ -195,7 +197,7 @@ class InboundMixin(InventoryBaseMixin):
                             {'sub_lt': i + 1, 'weight_kg': per_bag}
                             for i in range(bag_count)
                         ]
-                
+
                 # v3.8.4: inventory_id 전달하여 FK 연결
                 sap_std = norm_sap_no(packing.get('sap_no')) or ''
                 bl_std = norm_bl_no(packing.get('bl_no')) or ''
@@ -214,7 +216,7 @@ class InboundMixin(InventoryBaseMixin):
                             (lot_data['con_return'], lot_no))
                     except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
                         logger.debug(f"톤백 con_return 업데이트 스킵(컬럼 없을 수 있음): {_e}")
-                
+
                 # v3.8.4: 톤백 합계 = LOT 중량 검증
                 if tonbag_count > 0:
                     tb_sum_row = self.db.fetchone(
@@ -226,14 +228,14 @@ class InboundMixin(InventoryBaseMixin):
                     if lot_weight > 0 and abs(tb_sum - lot_weight) > 0.5:
                         result['warnings'].append(
                             f"톤백 합계({tb_sum:.1f}kg) ≠ LOT 중량({lot_weight:.1f}kg) 차이: {abs(tb_sum - lot_weight):.1f}kg")
-                
+
                 # v5.1.4: 입고 후 즉시 정합성 검증 (트랜잭션 안)
                 if hasattr(self, 'verify_lot_integrity'):
                     integrity = self.verify_lot_integrity(lot_no)
                     if not integrity.get('valid', True):
                         result['warnings'].extend(integrity.get('errors', []))
                         logger.warning(f"입고 후 정합성 경고 ({lot_no}): {integrity.get('errors')}")
-                
+
                 # v6.12 Addon-A: 입고 stock_movement 이력 기록 (감사 추적)
                 # v6.12.1: source_type, source_file 추가
                 try:
@@ -250,24 +252,24 @@ class InboundMixin(InventoryBaseMixin):
                     logger.info(f"[stock_movement] INBOUND 기록: {lot_no}, {weight}kg, source={_src_type}")
                 except Exception as _sm_e:
                     logger.debug(f"[stock_movement] INBOUND 기록 스킵: {_sm_e}")
-                
+
                 result['success'] = True
                 result['message'] = f"입고 완료: {lot_no}"
                 result['lot_no'] = lot_no
                 result['created_lots'].append(lot_no)
                 result['created_tonbags'] = tonbag_count
-            
+
             self._log_operation("입고", {
-                'lot_no': lot_no, 
+                'lot_no': lot_no,
                 'tonbags': tonbag_count
             })
-            
+
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"입고 처리 오류: {e}", exc_info=True)
             result['errors'].append(str(e))
-        
+
         return result
-    
+
     def _check_lot_exists(self, lot_no: str) -> bool:
         """LOT 존재 여부 확인"""
         try:
@@ -277,8 +279,8 @@ class InboundMixin(InventoryBaseMixin):
             return row is not None
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError):
             return False
-    
-    def _prepare_lot_data(self, packing, bl_data=None, 
+
+    def _prepare_lot_data(self, packing, bl_data=None,
                           do_data=None) -> Dict:
         """LOT 데이터 준비 (v3.8.8: dict/PackingData/dataclass 모두 지원).
         
@@ -298,10 +300,10 @@ class InboundMixin(InventoryBaseMixin):
                     packing = asdict(packing)
                 except (TypeError, ImportError):
                     packing = vars(packing) if hasattr(packing, '__dict__') else {}
-        
+
         # 디버깅: lot_no 값 확인
         logger.info(f"[_prepare_lot_data] type={orig_type}, lot_no={packing.get('lot_no')!r}, keys={list(packing.keys())[:5]}")
-        
+
         weight = self._safe_parse_float(
             packing.get('net_weight')
         )
@@ -311,7 +313,7 @@ class InboundMixin(InventoryBaseMixin):
         bag_count = self._safe_parse_int(
             packing.get('mxbg_pallet')
         )
-        
+
         lot_no_std = normalize_lot(packing.get('lot_no')) or str(packing.get('lot_no') or '').strip()
         bl_std = norm_bl_no(packing.get('bl_no')) or str(packing.get('bl_no') or '').strip()
         sap_std = norm_sap_no(packing.get('sap_no')) or str(packing.get('sap_no') or '').strip()
@@ -337,17 +339,17 @@ class InboundMixin(InventoryBaseMixin):
             'status': STATUS_AVAILABLE,
             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
-        
+
         # v3.8.7: Invoice 데이터 보완
         if packing.get('salar_invoice_no'):
             lot_data['salar_invoice_no'] = packing['salar_invoice_no']
         # v5.6.6: invoice_no fallback 제거 (salar_invoice_no 단일)
-        
+
         # ship_date: 파싱 가능할 때만 설정. B/L·Invoice에서 채워져야 함.
         if packing.get('ship_date'):
             sd = self._safe_parse_date(packing['ship_date'])
             lot_data['ship_date'] = sd.strftime('%Y-%m-%d') if sd else ''
-        
+
         # 입항일(arrival_date): 파싱된 값만 사용. 모를 때는 반드시 비움 — warehouse('광양')와 혼동 금지
         arrival_date = None
         if do_data and do_data.get('arrival_date'):
@@ -355,7 +357,7 @@ class InboundMixin(InventoryBaseMixin):
         if not arrival_date and packing.get('arrival_date'):
             arrival_date = self._safe_parse_date(packing.get('arrival_date'))
         lot_data['arrival_date'] = arrival_date.strftime('%Y-%m-%d') if arrival_date else ''
-        
+
         # con_return = 컨테이너 반납일 (D/O의 Free_Time 컬럼 = 반납일). free_time = (con_return - arrival_date) 일수
         # con_return / free_time_date 혼용 대응: 둘 다 확인
         con_return_str = (
@@ -365,7 +367,7 @@ class InboundMixin(InventoryBaseMixin):
         )
         con_return_date = self._safe_parse_date(con_return_str) if con_return_str else None
         lot_data['con_return'] = con_return_date.strftime('%Y-%m-%d') if con_return_date else ''
-        
+
         free_time = 0
         if not con_return_str and (do_data or packing.get('free_time_date') is not None):
             logger.debug(f"[_prepare_lot_data] FREE TIME 0: con_return_date 미제공 lot_no={packing.get('lot_no')!r}")
@@ -373,36 +375,36 @@ class InboundMixin(InventoryBaseMixin):
             free_time = (con_return_date - arrival_date).days
             if free_time < 0:
                 free_time = 0
-        
+
         # packing에서 이미 계산된 free_time(일수)이 있으면 우선 사용
         if packing.get('free_time'):
             try:
                 free_time = int(float(packing['free_time']))
             except (ValueError, TypeError) as _e:
                 logger.debug(f"free_time 변환 실패: {packing.get('free_time')!r} → {_e}")
-        
+
         lot_data['free_time'] = free_time
-        
+
         return lot_data
-    
+
     def _insert_lot(self, lot_data: Dict) -> None:
         """LOT 삽입"""
         columns = ', '.join(lot_data.keys())
         placeholders = ', '.join(['?'] * len(lot_data))
-        
+
         sql = f"INSERT INTO inventory ({columns}) VALUES ({placeholders})"
         self.db.execute(sql, tuple(lot_data.values()))
-    
+
     def _insert_tonbags(self, lot_no: str, sap_no: str, bl_no: str,
                         tonbags: List[Dict], inventory_id: int = None) -> int:
         """톤백 삽입 (v5.2.0: tonbag_no TEXT + 샘플 하드스톱)"""
         if not tonbags:
             return 0
-        
+
         count = 0
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         today = date.today().strftime('%Y-%m-%d')
-        
+
         for tb in tonbags:
             weight = self._safe_parse_float(tb.get('weight_kg') or tb.get('weight'))
             raw_sub_lt, raw_key = _get_sub_lt_raw(tb)
@@ -424,7 +426,7 @@ class InboundMixin(InventoryBaseMixin):
             self.db.execute(sql, (inventory_id, lot_no, sap_no, bl_no,
                                   sub_lt_int, tonbag_no, weight, today, now))
             count += 1
-        
+
         # v5.5.3: 샘플 톤백 자동 생성 (sub_lt=0, tonbag_no="S00", 1kg, is_sample=1)
         # ★ 샘플 생성 실패 = 하드스톱 (All-or-Nothing)
         self.db.execute("""
@@ -435,7 +437,7 @@ class InboundMixin(InventoryBaseMixin):
         """, (inventory_id, lot_no, sap_no, bl_no, today, now))
         count += 1
         logger.info(f"[_insert_tonbags] 샘플 톤백 생성: {lot_no}/S00 (1kg)")
-        
+
         # v5.2.0: 샘플 존재 검증 (하드스톱)
         sample_check = self.db.fetchone(
             "SELECT COUNT(*) as cnt FROM inventory_tonbag WHERE lot_no = ? AND is_sample = 1",
@@ -443,7 +445,7 @@ class InboundMixin(InventoryBaseMixin):
         sample_cnt = (sample_check['cnt'] if isinstance(sample_check, dict) else sample_check[0]) if sample_check else 0
         if sample_cnt != 1:
             raise ValueError(f"샘플 정책 위반: LOT {lot_no}에 샘플 {sample_cnt}개 (필수 정확히 1개)")
-        
+
         # v6.12 Addon-B: tonbag_uid 명시적 백필 보장
         # SQLite TRIGGER(trg_tonbag_uid_insert)가 정상 동작하면 이미 UID가 있지만,
         # 트리거 미생성/마이그레이션 누락 시에도 UID를 보장합니다.
@@ -470,9 +472,9 @@ class InboundMixin(InventoryBaseMixin):
                 logger.info(f"[_insert_tonbags] tonbag_uid 백필: {lot_no} ({null_cnt}건)")
         except Exception as _uid_e:
             logger.debug(f"[_insert_tonbags] tonbag_uid 백필 스킵: {_uid_e}")
-        
+
         return count
-    
+
 
     # NOTE: process_inbound_safe, preflight_check_inbound
     #   → PreflightMixin으로 이관 완료 (v3.8.4 데드코드 정리)

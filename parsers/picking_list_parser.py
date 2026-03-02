@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - Picking List 파서 (LBM 스타일)
 
@@ -21,12 +20,11 @@ AGENTS.md 준수: snake_case, except Exception + logging, _validate_ 접두어.
 """
 from __future__ import annotations
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +125,8 @@ def _parse_date_candidate(s: str) -> Optional[str]:
                     d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
                     if y > 1000 and 1 <= m <= 12 and 1 <= d <= 31:
                         return f"{y:04d}-{m:02d}-{d:02d}"
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"[_parse_date_candidate] Suppressed: {e}")
     return s if re.match(r"^\d{4}-\d{2}-\d{2}$", s) else None
 
 

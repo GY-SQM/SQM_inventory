@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 core.column_registry — 엑셀 헤더 ↔ DB 컬럼 매핑 레지스트리 (v5.9.4)
 ====================================================================
@@ -16,7 +15,6 @@ core.column_registry — 엑셀 헤더 ↔ DB 컬럼 매핑 레지스트리 (v5.
     excel_h = db_to_excel_header("lot_no")  # → "LOT NO"
 """
 import re
-from typing import Optional
 
 COLUMN_REGISTRY = {
     # db_column: (excel_header, aliases...)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 톤백 위치 업로드 다이얼로그
 =================================================
@@ -9,19 +8,20 @@ v5.9.x: 데이터 붙여넣기 / 파일 열기 선택 후 진행
 작성자: Ruby
 """
 
-import tkinter as tk
-from tkinter import filedialog, ttk
 import logging
-from typing import Optional, Callable
+import tkinter as tk
+from collections.abc import Callable
+from tkinter import filedialog, ttk
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
 def _run_with_data(parent, engine, data, callback: Optional[Callable] = None):
     """파싱된 데이터로 매칭 → 미리보기 → 업로드 실행."""
+    from ..utils.custom_messagebox import CustomMessageBox
     from ..utils.tonbag_location_uploader import TonbagLocationUploader
     from .location_upload_preview import LocationUploadPreviewDialog
-    from ..utils.custom_messagebox import CustomMessageBox
 
     uploader = TonbagLocationUploader(engine)
     result = uploader.validate_and_match(data)
@@ -40,8 +40,8 @@ def _run_with_data(parent, engine, data, callback: Optional[Callable] = None):
 
 def run_location_upload_with_file(parent, engine, file_path: str, callback: Optional[Callable] = None):
     """지정한 Excel 파일로 로케이션 업로드 플로우 실행 (드래그앤드롭 등에서 호출)."""
-    from ..utils.tonbag_location_uploader import TonbagLocationUploader
     from ..utils.custom_messagebox import CustomMessageBox
+    from ..utils.tonbag_location_uploader import TonbagLocationUploader
 
     uploader = TonbagLocationUploader(engine)
     success, message, data = uploader.parse_excel(file_path)
@@ -59,14 +59,17 @@ def show_tonbag_location_upload_dialog(
     """
     톤백 위치 업로드: [데이터 붙여넣기] vs [파일 열기] 선택 후 미리보기 → 업로드
     """
-    from ..utils.tonbag_location_uploader import TonbagLocationUploader
-    from .location_upload_preview import LocationUploadPreviewDialog
     from ..utils.custom_messagebox import CustomMessageBox
+    from ..utils.tonbag_location_uploader import TonbagLocationUploader
 
     # 1) 선택 다이얼로그 — Excel/데이터 입력 원칙 통일 (데이터 붙여넣기 / 파일 업로드)
     from ..utils.ui_constants import (
-        UPLOAD_CHOICE_HEADER, UPLOAD_CHOICE_PASTE, UPLOAD_CHOICE_UPLOAD,
-        UPLOAD_CHOICE_BTN_PASTE, UPLOAD_CHOICE_BTN_UPLOAD, apply_modal_window_options,
+        UPLOAD_CHOICE_BTN_PASTE,
+        UPLOAD_CHOICE_BTN_UPLOAD,
+        UPLOAD_CHOICE_HEADER,
+        UPLOAD_CHOICE_PASTE,
+        UPLOAD_CHOICE_UPLOAD,
+        apply_modal_window_options,
     )
     choice_win = tk.Toplevel(parent)
     choice_win.title("📍 톤백 위치 매핑")

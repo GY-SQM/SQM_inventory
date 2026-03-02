@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from features.ai.gemini_parser import _make_lot_fingerprint
 
 

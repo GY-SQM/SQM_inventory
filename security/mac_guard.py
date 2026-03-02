@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - PC 잠금 (MAC + MachineGuid 2중 인증)
 ==========================================================
@@ -11,13 +10,12 @@ v5.6.0: MAC 주소 + Windows MachineGuid 2중 검증
 
 import json
 import logging
-import re
-import uuid
-import sys
-import os
 import platform
+import re
+import sys
+import uuid
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -78,40 +76,41 @@ def verify_pc(show_gui_error: bool = True) -> bool:
         False: 차단
     """
     allowed_pcs = load_allowed_pcs()
-    
+
     # 허용 목록 비어있으면 잠금 비활성화
     if not allowed_pcs:
         logger.info("[PC Guard] 허용 목록 없음 → 잠금 비활성화")
         return True
-    
+
     current_mac = _normalize_mac(get_current_mac())
     current_guid = get_machine_guid().lower()
-    
+
     logger.info(f"[PC Guard] 현재 MAC: {current_mac}")
     logger.info(f"[PC Guard] 현재 GUID: {current_guid}")
-    
+
     for pc in allowed_pcs:
         allowed_macs = [_normalize_mac(m) for m in pc.get('macs', [])]
         allowed_guid = pc.get('machine_guid', '').lower().strip()
         pc_name = pc.get('name', '알 수 없음')
-        
+
         mac_match = current_mac in allowed_macs if allowed_macs else False
         guid_match = (current_guid == allowed_guid) if allowed_guid else False
-        
+
         # 둘 다 일치 → 실행
         if mac_match and guid_match:
             logger.info(f"[PC Guard] ✅ 인증 완료: {pc_name} (MAC+GUID)")
             return True
-        
+
         # 하나만 일치 → 경고 후 실행
         if mac_match or guid_match:
             matched = "MAC" if mac_match else "GUID"
             missing = "GUID" if mac_match else "MAC"
             logger.warning(f"[PC Guard] ⚠️ 부분 인증: {pc_name} ({matched} 일치, {missing} 불일치)")
-            
+
             if show_gui_error:
                 try:
                     import tkinter as tk
+
                     from gui_app_modular.utils.custom_messagebox import CustomMessageBox
                     root = tk.Tk()
                     root.withdraw()
@@ -126,13 +125,14 @@ def verify_pc(show_gui_error: bool = True) -> bool:
                 except Exception as e:
                     logger.debug(f"Suppressed: {e}")
             return True
-    
+
     # 둘 다 불일치 → 차단
     logger.warning(f"[PC Guard] ❌ 차단: MAC={current_mac}, GUID={current_guid}")
-    
+
     if show_gui_error:
         try:
             import tkinter as tk
+
             from gui_app_modular.utils.custom_messagebox import CustomMessageBox
             root = tk.Tk()
             root.withdraw()
@@ -146,7 +146,7 @@ def verify_pc(show_gui_error: bool = True) -> bool:
             root.destroy()
         except Exception as e:
             logger.debug(f"Suppressed: {e}")
-    
+
     return False
 
 

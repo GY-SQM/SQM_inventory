@@ -1,27 +1,26 @@
-# -*- coding: utf-8 -*-
 """GUI mixins module"""
 
-from .menu_mixin import MenuMixin
-from .refresh_mixin import RefreshMixin
-from .features_v2_mixin import FeaturesV2Mixin
-from .window_mixin import WindowMixin
-from .validation_mixin import ValidationMixin
-from .keybindings_mixin import KeyBindingsMixin
-from .context_menu_mixin import ContextMenuMixin
-from .toolbar_mixin import ToolbarMixin
-from .statusbar_mixin import StatusBarMixin
-from .database_mixin import DatabaseMixin
-from .drag_drop_mixin import DragDropMixin
-from .theme_mixin import ThemeMixin
+from .advanced_dialogs_mixin import AdvancedDialogsMixin
 from .advanced_features_mixin import AdvancedFeaturesMixin
 from .bulk_import_mixin import BulkImportMixin
+from .context_menu_mixin import ContextMenuMixin
+from .database_mixin import DatabaseMixin
 from .diagnostics_mixin import DiagnosticsMixin
-from .advanced_dialogs_mixin import AdvancedDialogsMixin
+from .drag_drop_mixin import DragDropMixin
+from .features_v2_mixin import FeaturesV2Mixin
+from .keybindings_mixin import KeyBindingsMixin
+from .menu_mixin import MenuMixin
+from .refresh_mixin import RefreshMixin
+from .statusbar_mixin import StatusBarMixin
+from .theme_mixin import ThemeMixin
+from .toolbar_mixin import ToolbarMixin
+from .validation_mixin import ValidationMixin
+from .window_mixin import WindowMixin
 
 __all__ = [
-    'MenuMixin', 
-    'RefreshMixin', 
-    'FeaturesV2Mixin', 
+    'MenuMixin',
+    'RefreshMixin',
+    'FeaturesV2Mixin',
     'WindowMixin',
     'ValidationMixin',
     'KeyBindingsMixin',

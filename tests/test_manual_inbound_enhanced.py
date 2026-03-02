@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.12.1 — 수동입고 강화 테스트
 ===================================
@@ -6,7 +5,10 @@ SQM v6.12.1 — 수동입고 강화 테스트
 2. B/L 형식 검증
 3. source_type 이력 기록
 """
-import sys, os, sqlite3
+import os
+import sqlite3
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest

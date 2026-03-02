@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.0 — 반품 입고 엔진
 ==========================
@@ -13,7 +12,7 @@ SQM v6.0 — 반품 입고 엔진
 import logging
 import sqlite3
 from datetime import date, datetime
-from typing import Any, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - 메뉴 설정 Mixin
 ==============================
@@ -9,12 +8,13 @@ v2.9.91 - gui_app.py에서 분리
 메뉴바 구성, 단축키 설정
 """
 
+import configparser
 import logging
 import os
-import configparser
 import sqlite3
 
 from ..utils.ui_constants import CustomMessageBox
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +25,7 @@ class MenuMixin:
     SQMInventoryApp 클래스에 mix-in 됩니다.
     v3.0: ttkbootstrap 기반 커스텀 메뉴바 사용
     """
-    
+
     # 메뉴바 스타일: 'custom' (ttkbootstrap) 또는 'native' (tk.Menu)
     MENUBAR_STYLE = 'custom'
 
@@ -86,58 +86,61 @@ class MenuMixin:
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
             logger.error(f"개발자 모드 설정 저장 실패: {e}", exc_info=True)
             return False
-    
+
     def _setup_menu(self) -> None:
         """메뉴 구성"""
         if self.MENUBAR_STYLE == 'custom':
             self._setup_custom_menu()
         else:
             self._setup_native_menu()
-    
+
     def _setup_custom_menu(self) -> None:
         """v3.0: ttkbootstrap 커스텀 메뉴바"""
         try:
             from .custom_menubar import CustomMenuBar
-            
+
             self.custom_menubar = CustomMenuBar(self.root, self)
             self.recent_menu = self.custom_menubar.get_recent_menu()
-            
+
             self._log("✅ 커스텀 메뉴바 적용")
             logger.info("커스텀 메뉴바 생성 완료")
-            
+
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(f"커스텀 메뉴바 생성 실패: {e}, 네이티브 메뉴바 사용")
             self._setup_native_menu()
-    
+
     def _setup_native_menu(self) -> None:
         """기존 네이티브 메뉴바 (fallback)"""
-        from ..utils.constants import tk
         from ..utils.constants import (
-            HAS_GEMINI, HAS_DB_PROTECTION, HAS_FEATURES, HAS_FEATURES_V2
+            HAS_DB_PROTECTION,
+            HAS_FEATURES,
+            HAS_FEATURES_V2,
+            HAS_GEMINI,
+            tk,
         )
-        
+
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
-        
+
         # =====================================================
         # 파일 메뉴
         # =====================================================
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="파일", menu=file_menu)
-        
+
         from ..menu_registry import (
+            FILE_MENU_BACKUP_ITEMS,
+            FILE_MENU_EXPORT_ITEMS,
             FILE_MENU_INBOUND_ITEMS,
             FILE_MENU_INBOUND_RETURN_SUB_ITEMS,
             FILE_MENU_OUTBOUND_ITEMS,
-            FILE_MENU_EXPORT_ITEMS,
-            FILE_MENU_BACKUP_ITEMS,
         )
-        
+
         file_menu.add_command(
             label="📥 PDF 입고  (Ctrl+I)",
             command=self._on_pdf_inbound
         )
-        
+
         # 출고 서브메뉴 — menu_registry 단일 소스 (Picking List 등 누락 방지)
         outbound_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="📤 출고", menu=outbound_menu)
@@ -152,15 +155,15 @@ class MenuMixin:
             cmd = getattr(self, method_name, None)
             if callable(cmd):
                 outbound_menu.add_command(label=label, command=cmd)
-        
+
         file_menu.add_separator()
-        
+
         self.recent_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="📂 최근 파일", menu=self.recent_menu)
         self._update_recent_files_menu()
-        
+
         file_menu.add_separator()
-        
+
         # 업로드 메뉴 — menu_registry 기반 (입고 + 출고 동일 목록)
         _font = ('맑은 고딕', 14)
         upload_menu = tk.Menu(file_menu, tearoff=0, font=_font)
@@ -202,21 +205,21 @@ class MenuMixin:
                 command=lambda: CustomMessageBox.showinfo(self.root, "반품", "반품 기능 필요"),
                 font=_font
             )
-        
+
         export_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="💾 내보내기  (Ctrl+E)", menu=export_menu)
         for label, option in FILE_MENU_EXPORT_ITEMS:
             export_menu.add_command(label=label, command=lambda op=option: self._on_export_click(op))
-        
+
         file_menu.add_separator()
-        
+
         backup_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="🔐 백업  (Ctrl+B)", menu=backup_menu)
         for label, method_name in FILE_MENU_BACKUP_ITEMS:
             cmd = getattr(self, method_name, None)
             if callable(cmd):
                 backup_menu.add_command(label=label, command=cmd)
-        
+
         file_menu.add_separator()
         file_menu.add_command(label="종료", command=self.root.quit)
 
@@ -229,19 +232,19 @@ class MenuMixin:
         report_top_menu.add_command(label="📦 재고 현황", command=self._generate_inventory_pdf)
         report_top_menu.add_command(label="📈 입출고 내역", command=self._generate_transaction_pdf)
         report_top_menu.add_command(label="🔖 LOT 상세", command=self._generate_lot_detail_pdf)
-        
+
         # =====================================================
         # 도구 메뉴
         # =====================================================
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="도구", menu=tools_menu)
-        
+
         # v5.9.0: 컨테이너 구분 → 필터바 초기화 옆으로 이동 (변수만 초기화)
         if not hasattr(self, '_container_suffix_var'):
             self._container_suffix_var = tk.BooleanVar(value=True)
         tools_menu.add_command(label="📋 D/O 후속 연결", command=self._on_do_update)
         tools_menu.add_separator()
-        
+
         pdf_menu = tk.Menu(tools_menu, tearoff=0)
         tools_menu.add_cascade(label="📄 PDF/이미지 변환", menu=pdf_menu)
         pdf_menu.add_command(label="→ Excel", command=self._convert_pdf_to_excel)
@@ -250,14 +253,14 @@ class MenuMixin:
         pdf_menu.add_command(label="📁 일괄 변환", command=self._batch_convert_pdf_excel)
         pdf_menu.add_command(label="🔍 분석", command=self._analyze_pdf)
         tools_menu.add_separator()
-        
+
         report_menu = tk.Menu(tools_menu, tearoff=0)
         tools_menu.add_cascade(label="📋 PDF 보고서", menu=report_menu)
         report_menu.add_command(label="📦 재고 현황", command=self._generate_inventory_pdf)
         report_menu.add_command(label="📈 입출고 내역", command=self._generate_transaction_pdf)
         report_menu.add_command(label="🔖 LOT 상세", command=self._generate_lot_detail_pdf)
         tools_menu.add_separator()
-        
+
         if HAS_GEMINI:
             api_menu = tk.Menu(tools_menu, tearoff=0)
             tools_menu.add_cascade(label="🤖 Gemini", menu=api_menu)
@@ -268,7 +271,7 @@ class MenuMixin:
             api_menu.add_command(label="⚙️ 설정", command=self._show_api_settings)
             api_menu.add_command(label="🔬 테스트", command=self._test_gemini_api)
             tools_menu.add_separator()
-        
+
         if HAS_DB_PROTECTION:
             db_menu = tk.Menu(tools_menu, tearoff=0)
             tools_menu.add_cascade(label="🛡️ DB 보호", menu=db_menu)
@@ -278,7 +281,7 @@ class MenuMixin:
             db_menu.add_separator()
             db_menu.add_command(label="🔄 체크섬 갱신", command=self._update_checksum)
             tools_menu.add_separator()
-        
+
         tools_menu.add_command(label="🔍 DB 검사", command=self._on_integrity_check)
         tools_menu.add_command(label="🔧 DB 최적화", command=self._on_optimize_db)
         tools_menu.add_separator()
@@ -287,7 +290,7 @@ class MenuMixin:
         tools_menu.add_separator()
         if self._is_developer_mode_enabled():
             tools_menu.add_command(label="🗑️ 테스트 DB 초기화 (데이터 삭제)", command=self._show_test_db_reset_popup)
-        
+
         if HAS_FEATURES:
             tools_menu.add_separator()
             adv_menu = tk.Menu(tools_menu, tearoff=0)
@@ -297,7 +300,7 @@ class MenuMixin:
             adv_menu.add_separator()
             adv_menu.add_command(label="🩺 전체 진단", command=self._run_self_test)
             adv_menu.add_command(label="🧪 단위 테스트", command=self._open_test_runner)
-        
+
         # =====================================================
         # 보기 메뉴 — v6.0.9: 7탭 한글 (custom_menubar와 동일 인덱스)
         # =====================================================
@@ -314,7 +317,7 @@ class MenuMixin:
         view_menu.add_command(label="📝 로그", command=lambda: self.notebook.select(6))
         view_menu.add_separator()
         view_menu.add_command(label="🎨 테마 선택", command=self._show_theme_selector)
-        
+
         # =====================================================
         # v2.7 메뉴
         # =====================================================
@@ -331,7 +334,7 @@ class MenuMixin:
             v2_menu.add_command(label="📂 필터 불러오기", command=self._load_filter_preset)
             v2_menu.add_separator()
             v2_menu.add_command(label="📊 일일 리포트", command=self._generate_daily_report)
-        
+
         # =====================================================
         # 도움말 메뉴
         # =====================================================
@@ -343,7 +346,7 @@ class MenuMixin:
         help_menu.add_command(label="🔬 API 테스트", command=self._test_gemini_api_connection)
         help_menu.add_separator()
         help_menu.add_command(label="ℹ️ 정보", command=self._show_about)
-    
+
     def _setup_keyboard_shortcuts(self) -> None:
         """단축키 설정"""
         shortcuts = [
@@ -359,17 +362,17 @@ class MenuMixin:
             ('<Control-F>', self._focus_search),
             ('<F5>', self._refresh_inventory),
         ]
-        
+
         for key, command in shortcuts:
             try:
                 self.root.bind(key, lambda e, cmd=command: cmd())
             except (AttributeError, RuntimeError) as ex:
                 logger.warning(f"단축키 바인딩 실패 {key}: {ex}")
-    
+
     def _show_shortcuts(self) -> None:
         """단축키 안내"""
 
-        
+
         shortcuts_text = """
 📌 SQM 재고관리 단축키
 
@@ -386,11 +389,11 @@ F5        새로고침
 드래그      파일 업로드
         """
         CustomMessageBox.showinfo(self.root, "⌨️ 단축키", shortcuts_text)
-    
+
     def _show_about(self) -> None:
         """프로그램 정보"""
-        from ..utils.constants import __version__, APP_NAME
-        
+        from ..utils.constants import APP_NAME, __version__
+
         about_text = f"""
 {APP_NAME}
 버전: {__version__}
@@ -407,15 +410,15 @@ GY Logistics 재고 관리 시스템
 개발: Ruby
         """
         CustomMessageBox.showinfo(self.root, "ℹ️ 프로그램 정보", about_text)
-    
+
     def _show_manual(self) -> None:
         """사용 설명서 표시"""
         import os
-        import subprocess
         import platform
-        
+        import subprocess
+
         manual_path = os.path.join(os.path.dirname(__file__), '..', '..', 'docs', 'USER_MANUAL_KR.md')
-        
+
         if os.path.exists(manual_path):
             if platform.system() == 'Windows':
                 os.startfile(manual_path)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 통합 문서 파서 V3 (모듈화 버전)
 =====================================================
@@ -36,15 +35,14 @@ v3.6.0: document_parser_v2.py 모듈화
 """
 
 import logging
-from typing import Optional, Any, List
-
-from .base import DocumentParserBase
-from .invoice_mixin import InvoiceMixin
-from .packing_mixin import PackingMixin
-from .bl_mixin import BLMixin
-from .do_mixin import DOMixin
+from typing import Any, Optional
 
 from ..document_models import ShipmentDocuments
+from .base import DocumentParserBase
+from .bl_mixin import BLMixin
+from .do_mixin import DOMixin
+from .invoice_mixin import InvoiceMixin
+from .packing_mixin import PackingMixin
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +73,7 @@ class DocumentParserV3(
         >>> invoice = parser.parse_invoice('invoice.pdf')
         >>> print(f"SAP NO: {invoice.sap_no}")
     """
-    
+
     def __init__(self, gemini_api_key: str = None):
         """
         Args:
@@ -99,9 +97,9 @@ class DocumentParserV3(
         if doc_type is None:
             diagnosis = self.diagnose_pdf(pdf_path)
             doc_type = diagnosis.get('detected_type', 'UNKNOWN')
-        
+
         doc_type = doc_type.upper()
-        
+
         if doc_type == 'INVOICE':
             return self.parse_invoice(pdf_path)
         elif doc_type == 'PACKING_LIST':
@@ -134,23 +132,23 @@ class DocumentParserV3(
             ShipmentDocuments: 파싱된 모든 문서 데이터
         """
         result = ShipmentDocuments()
-        
+
         if invoice_path:
             logger.info(f"Invoice 파싱: {invoice_path}")
             result.invoice = self.parse_invoice(invoice_path)
-        
+
         if packing_path:
             logger.info(f"Packing List 파싱: {packing_path}")
             result.packing_list = self.parse_packing_list(packing_path)
-        
+
         if bl_path:
             logger.info(f"B/L 파싱: {bl_path}")
             result.bl = self.parse_bl(bl_path)
-        
+
         if do_path:
             logger.info(f"D/O 파싱: {do_path}")
             result.do = self.parse_do(do_path)
-        
+
         # 문서 간 교차 검증 (기존 빈 값 보완)
         result = self._validate_shipment_documents(result)
 
@@ -171,7 +169,7 @@ class DocumentParserV3(
                         result.validation_errors.append(str(item))
         except (ImportError, Exception) as e:
             logger.debug(f"[CrossCheck] 크로스 체크 스킵: {e}")
-        
+
         return result
 
     def _validate_shipment_documents(self, docs: ShipmentDocuments) -> ShipmentDocuments:
@@ -194,12 +192,12 @@ class DocumentParserV3(
             sap_numbers.append(docs.bl.sap_no)
         if docs.do and docs.do.sap_no:
             sap_numbers.append(docs.do.sap_no)
-        
+
         # 가장 많이 나온 SAP NO로 통일
         if sap_numbers:
             from collections import Counter
             most_common = Counter(sap_numbers).most_common(1)[0][0]
-            
+
             if docs.invoice and not docs.invoice.sap_no:
                 docs.invoice.sap_no = most_common
             if docs.packing_list and not docs.packing_list.sap_no:
@@ -208,7 +206,7 @@ class DocumentParserV3(
                 docs.bl.sap_no = most_common
             if docs.do and not docs.do.sap_no:
                 docs.do.sap_no = most_common
-        
+
         # B/L No 교차 검증
         bl_numbers = []
         if docs.invoice and docs.invoice.bl_no:
@@ -217,17 +215,17 @@ class DocumentParserV3(
             bl_numbers.append(docs.bl.bl_no)
         if docs.do and docs.do.bl_no:
             bl_numbers.append(docs.do.bl_no)
-        
+
         if bl_numbers:
             most_common_bl = Counter(bl_numbers).most_common(1)[0][0]
-            
+
             if docs.invoice and not docs.invoice.bl_no:
                 docs.invoice.bl_no = most_common_bl
             if docs.bl and not docs.bl.bl_no:
                 docs.bl.bl_no = most_common_bl
             if docs.do and not docs.do.bl_no:
                 docs.do.bl_no = most_common_bl
-        
+
         return docs
 
 

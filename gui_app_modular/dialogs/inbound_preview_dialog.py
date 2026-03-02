@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.12.1 — 수동입고 미리보기 편집 다이얼로그
 ================================================
@@ -9,15 +8,17 @@ Addon-C(PDF 입고 미리보기 편집)와 동일한 인라인 편집 패턴.
 import logging
 import tkinter as tk
 from tkinter import ttk
-from tkinter.constants import BOTH, LEFT, RIGHT, X, Y, END, VERTICAL
+from tkinter.constants import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y
 
 logger = logging.getLogger(__name__)
 
 try:
-    from gui_app_modular.utils.gui_bootstrap import (
-        DialogSize, center_dialog, apply_modal_window_options
-    )
     from gui_app_modular.utils.custom_messagebox import CustomMessageBox
+    from gui_app_modular.utils.gui_bootstrap import (
+        DialogSize,
+        apply_modal_window_options,
+        center_dialog,
+    )
 except ImportError:
     DialogSize = None
     center_dialog = None

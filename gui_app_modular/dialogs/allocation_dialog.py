@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v5.9.5 — Allocation 출고 예약 다이얼로그
 =============================================
@@ -9,12 +8,14 @@ import logging
 import threading
 import time
 import tkinter as tk
-from tkinter import ttk, filedialog, BOTH, X, Y, LEFT, RIGHT, END, VERTICAL
+from tkinter import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y, filedialog, ttk
 
 from ..utils.ui_constants import (
-    ThemeColors, DialogSize, center_dialog, CustomMessageBox, apply_modal_window_options,
+    CustomMessageBox,
+    ThemeColors,
     setup_dialog_geometry_persistence,
 )
+
 try:
     from ..utils.gui_bootstrap import ScrolledFrame as _ScrolledFrame
 except ImportError:
@@ -344,14 +345,14 @@ class AllocationDialog:
             try:
                 st_idx = cols.index("status")
                 vals[st_idx] = "PENDING"
-            except ValueError:
-                pass
+            except ValueError as e:
+                logger.warning(f"[_paste_rows_from_clipboard] Suppressed: {e}")
             try:
                 q_idx = cols.index("qty_mt")
                 q_raw = str(vals[q_idx]).replace(",", "").strip()
                 vals[q_idx] = f"{float(q_raw):.4f}" if q_raw else "0.0000"
-            except (ValueError, TypeError):
-                pass
+            except (ValueError, TypeError) as e:
+                logger.warning(f"[_paste_rows_from_clipboard] Suppressed: {e}")
             self.tree.insert("", END, values=vals)
 
         self._after_tree_data_changed()
@@ -636,7 +637,7 @@ class AllocationDialog:
                     )
                 CustomMessageBox.showerror(
                     self.dialog, "예약 실패",
-                    f"예약 실패:\n" + "\n".join(errors[:10]) + report_msg
+                    "예약 실패:\n" + "\n".join(errors[:10]) + report_msg
                 )
                 self._show_lot_status_popup()
         except (ValueError, TypeError, AttributeError) as e:
@@ -1152,8 +1153,8 @@ class AllocationDialog:
         """grab 해제 후 50ms 지연으로 리프레시 — 모달 안에서의 무거운 Treeview 갱신 블로킹 방지."""
         try:
             self.dialog.grab_release()
-        except (tk.TclError, RuntimeError):
-            pass
+        except (tk.TclError, RuntimeError) as e:
+            logger.warning(f"[_deferred_refresh_after_action] Suppressed: {e}")
         if hasattr(self.app, 'refresh_bus_deferred'):
             self.app.refresh_bus_deferred(reason="ALLOCATION_DIALOG_ACTION", delay_ms=50)
         elif hasattr(self.app, '_deferred_refresh_main_tabs'):

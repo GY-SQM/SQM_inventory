@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
 """
 총괄 화물 리스트 탭 — 상태별 화물만 표시 (전체/판매가능/판매배정/판매화물 결정/출고)
 - 판매배정 = 고객 Allocation(RESERVED) 테이블에 있는 LOT만
 - 판매가능 = RESERVED/PICKED/SOLD 없는 LOT만
 """
 import logging
-from ..utils.ui_constants import ThemeColors, Spacing, get_status_display
-from ..utils.constants import ttk, BOTH, YES, LEFT, X
+
+from ..utils.constants import BOTH, LEFT, YES, X, ttk
+from ..utils.ui_constants import Spacing, ThemeColors, get_status_display
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +88,11 @@ class CargoOverviewTabMixin:
     """총괄 화물 리스트 탭 — 상태 필터로 해당 화물만 표시"""
 
     def _setup_cargo_overview_tab(self) -> None:
-        from ..utils.constants import VERTICAL
-        from ..utils.tree_enhancements import apply_striped_rows, TreeviewTotalFooter
-        from ..utils.ui_constants import apply_tooltip
         import tkinter as tk
+
+        from ..utils.constants import VERTICAL
+        from ..utils.tree_enhancements import TreeviewTotalFooter, apply_striped_rows
+        from ..utils.ui_constants import apply_tooltip
 
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         frame = self.tab_cargo_overview
@@ -245,14 +246,14 @@ class CargoOverviewTabMixin:
             if hasattr(self, '_show_lot_detail_popup'):
                 menu.add_command(label="📊 LOT 상세", command=lambda: self._show_lot_detail_popup(lot_no))
                 menu.add_separator()
-        
+
         # v7.0: 공통 기능 추가 (선택 영역 복사/저장)
         if hasattr(self, '_copy_selection_to_clipboard'):
             menu.add_command(label="📋 선택 영역 복사 (Copy)", command=lambda: self._copy_selection_to_clipboard(self.tree_cargo_overview))
         if hasattr(self, '_export_selection_to_excel'):
             menu.add_command(label="📥 선택 영역 Excel 저장", command=lambda: self._export_selection_to_excel(self.tree_cargo_overview))
         menu.add_separator()
-        
+
         menu.add_command(label="🔄 새로고침", command=self._refresh_cargo_overview)
         try:
             menu.tk_popup(event.x_root, event.y_root)

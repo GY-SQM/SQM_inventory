@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 from ..utils.custom_messagebox import CustomMessageBox
+
 """
 SQM v3.8.4 — 통합 메뉴바
 =========================
@@ -8,12 +8,23 @@ SQM v3.8.4 — 통합 메뉴바
 + 탭 전환 버튼 (균등 배치)
 + 자동 2줄 전환
 """
-import sqlite3
 import logging
+import sqlite3
 import tkinter as tk
 from tkinter import ttk
-from ..utils.ui_constants import ThemeColors, Spacing, FontScale, FontStyle, get_font_scale, DialogSize, center_dialog, apply_modal_window_options
+
 from utils.ui_debug import log_ui_event, safe_widget_bg  # v5.3.6
+
+from ..utils.ui_constants import (
+    DialogSize,
+    FontScale,
+    FontStyle,
+    Spacing,
+    ThemeColors,
+    apply_modal_window_options,
+    center_dialog,
+    get_font_scale,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +115,7 @@ class ToolbarMixin:
         # Row1: 메뉴 버튼 (Phase3: Spacing 8px 그리드)
         self._row1 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=Spacing.XS)
         self._row1.pack(fill='x')
-        
+
         # Row1: 오른쪽 액션(새로고침/버전 배지)
         self._right_actions = tk.Frame(self._row1, bg=self._tb_bg)
         self._right_actions.pack(side='right', padx=Spacing.MD)
@@ -112,7 +123,7 @@ class ToolbarMixin:
 
         # v4.0.0: 오른쪽 버전 배지 (Phase3: FontScale body/heading)
         try:
-            from version import __version__, APP_NAME
+            from version import APP_NAME, __version__
             ver_frame = tk.Frame(self._right_actions, bg=self._tb_bg)
             ver_frame.pack(side='left', padx=(Spacing.SM, 0))
             _vf = self._tb_font_scale
@@ -353,7 +364,10 @@ class ToolbarMixin:
         """v6.0.6 3단계: 입고 드롭다운 — menu_registry 기반 (custom_menubar·네이티브 메뉴와 동일 항목)"""
         m = self._create_menu()
         try:
-            from ..menu_registry import FILE_MENU_INBOUND_ITEMS, FILE_MENU_INBOUND_RETURN_SUB_ITEMS
+            from ..menu_registry import (
+                FILE_MENU_INBOUND_ITEMS,
+                FILE_MENU_INBOUND_RETURN_SUB_ITEMS,
+            )
             for entry in FILE_MENU_INBOUND_ITEMS:
                 if entry is None:
                     m.add_separator()
@@ -440,7 +454,7 @@ class ToolbarMixin:
 
     def _build_file_menu(self) -> 'tk.Menu':
         m = self._create_menu()
-        from ..menu_registry import FILE_MENU_EXPORT_ITEMS, FILE_MENU_BACKUP_ITEMS
+        from ..menu_registry import FILE_MENU_BACKUP_ITEMS, FILE_MENU_EXPORT_ITEMS
         exp = self._create_menu(m)
         for label, option in FILE_MENU_EXPORT_ITEMS:
             exp.add_command(label=f"  {label}", command=lambda op=option: self._on_export_click(option=op))
@@ -728,7 +742,7 @@ class ToolbarMixin:
                 'date_from': tk.StringVar(self.root, value=''),
                 'date_to': tk.StringVar(self.root, value=''),
             }
-        
+
         svars = self._search_filter_vars
         _lab_font = self._tb_font_scale.heading()
         _body_font = self._tb_font_scale.body()
@@ -744,7 +758,7 @@ class ToolbarMixin:
                               state='readonly', width=28, font=_body_font)
             cb.grid(row=row_idx, column=1, sticky='ew', padx=(Spacing.SM, 0), pady=Spacing.SM)
             combos[field] = cb
-            
+
             # v3.8.9: DB에서 값 로드
             # v5.6.0: SQL 인젝션 방지 — 화이트리스트 검증
             ALLOWED_FIELDS = {'sap_no', 'bl_no', 'lot_no', 'status', 'product', 'warehouse'}
@@ -801,7 +815,7 @@ class ToolbarMixin:
             self._inv_search_combos = {}
             for field in ('sap_no', 'bl_no', 'lot_no'):
                 self._inv_search_combos[field] = (svars[field], None)
-            
+
             # Date, Status 반영
             if hasattr(self, '_date_from_var'):
                 self._date_from_var.set(svars['date_from'].get())
@@ -809,7 +823,7 @@ class ToolbarMixin:
                 self._date_to_var.set(svars['date_to'].get())
             if hasattr(self, 'status_var'):
                 self.status_var.set(svars['status'].get())
-            
+
             # AVAILABLE(LOT 리스트) 탭으로 이동 + 새로고침
             try:
                 self.notebook.select(self.tab_inventory)
@@ -880,7 +894,7 @@ class ToolbarMixin:
         self._log(f"🔄 자동 갱신: {'ON (30초)' if enabled else 'OFF'}")
         if enabled:
             self._schedule_auto_refresh()
-        
+
     def _schedule_auto_refresh(self) -> None:
         """30초 타이머로 대시보드 갱신 + DB 변경 감지 (v3.8.4)"""
         if not getattr(self, '_auto_refresh_var', None):
@@ -896,7 +910,7 @@ class ToolbarMixin:
                 if hasattr(self, '_refresh_tonbag'):
                     self._refresh_tonbag()
                 self._log("🔄 DB 변경 감지 → 자동 새로고침")
-            
+
             if hasattr(self, '_refresh_dashboard'):
                 self._refresh_dashboard()
         except (AttributeError, RuntimeError) as e:
@@ -912,10 +926,10 @@ class ToolbarMixin:
             db_path = getattr(self, 'db_path', None)
             if not db_path or not os.path.exists(db_path):
                 return False
-            
+
             mtime = os.path.getmtime(db_path)
             last = getattr(self, '_last_db_mtime', 0)
-            
+
             if mtime > last:
                 self._last_db_mtime = mtime
                 return last > 0  # 최초 실행 시는 False
@@ -929,7 +943,7 @@ class ToolbarMixin:
         try:
             from core.validators import InventoryValidator
             validator = InventoryValidator(db=self.engine.db)
-            
+
             # 1. 기존 정합성 검사
             result = validator.check_data_integrity()
             issues = []
@@ -939,11 +953,11 @@ class ToolbarMixin:
             if result.warnings:
                 for w in result.warnings:
                     issues.append(f"🟡 {w}")
-            
+
             # 2. v3.8.7: 18열 데이터 누락 진단
             total_cnt = self.engine.db.fetchone("SELECT COUNT(*) AS cnt FROM inventory")
             total = (total_cnt['cnt'] if total_cnt else 0) if total_cnt else 0
-            
+
             if total > 0:
                 key_cols = [
                     ('lot_no', 'LOT NO'), ('sap_no', 'SAP NO'), ('bl_no', 'BL NO'),
@@ -956,10 +970,10 @@ class ToolbarMixin:
                     ('status', 'STATUS'), ('current_weight', 'Balance'),
                     ('initial_weight', '입고량'),
                 ]
-                
+
                 issues.append("")
                 issues.append("━━━ 18열 데이터 완성도 ━━━")
-                
+
                 for col_db, col_label in key_cols:
                     # v5.6.0: 화이트리스트 검증 (key_cols는 하드코딩이지만 안전장치)
                     ALLOWED_COLS = {k for k, _ in key_cols}
@@ -973,7 +987,7 @@ class ToolbarMixin:
                         filled = (filled_row['cnt'] if filled_row else 0) if filled_row else 0
                         empty = total - filled
                         pct = filled / total * 100
-                        
+
                         if empty > 0:
                             icon = '🔴' if pct < 50 else ('🟡' if pct < 80 else '🟢')
                             issues.append(f"{icon} {col_label:12s}: {filled}/{total} ({pct:.0f}%) — {empty}개 누락")
@@ -981,20 +995,20 @@ class ToolbarMixin:
                             issues.append(f"✅ {col_label:12s}: {total}/{total} (100%)")
                     except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError):
                         issues.append(f"⚪ {col_label:12s}: 확인 불가")
-            
+
             if not issues:
                 CustomMessageBox.showinfo(self.root, "✅ 정합성 검사", "모든 데이터가 정상입니다.")
                 return
-            
+
             msg = "\n".join(issues[:30])
             if len(issues) > 30:
                 msg += f"\n... 외 {len(issues) - 30}건"
-            
+
             # 복구 질문
             if result.errors or result.warnings:
                 if CustomMessageBox.askyesno(self.root, "⚠️ 정합성 검사 + 18열 진단",
                     f"{msg}\n\n자동 복구를 실행할까요?"):
-                    
+
                     fix_result = validator.fix_data_integrity(dry_run=False)
                     fixes = fix_result.get('fixes', [])
                     if fixes:
@@ -1006,7 +1020,7 @@ class ToolbarMixin:
                         CustomMessageBox.showinfo(self.root, "복구", "복구할 항목이 없습니다.")
             else:
                 CustomMessageBox.showinfo(self.root, "📊 18열 데이터 진단", msg)
-                
+
         except (RuntimeError, ValueError) as e:
             CustomMessageBox.showerror(self.root, "오류", f"정합성 검사 오류:\n{e}")
 
@@ -1087,7 +1101,7 @@ class ToolbarMixin:
 
 
 
-    
+
     def _refresh_toolbar_theme(self) -> None:
         """v5.4.0: Apply current ThemeColors palette to existing toolbar widgets.
         Fix: light theme switching leaving toolbar colors stale or mismatched.
@@ -1193,10 +1207,10 @@ class ToolbarMixin:
         btn.config(fg=self._tb_fg_active)
         if hasattr(btn, '_underline'):
             btn._underline.place(relx=0, rely=1.0, relwidth=1.0, anchor='sw')
-        
+
         x = btn.winfo_rootx()
         y = btn.winfo_rooty() + btn.winfo_height()
-        
+
         def _restore_all_buttons():
             """모든 버튼 + 부모 프레임 색상 강제 복구"""
             self._hide_active_menu_tooltip()
@@ -1217,7 +1231,7 @@ class ToolbarMixin:
                     self._row1.config(bg=self._tb_bg)
             except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
                 logger.debug(f"[toolbar_mixin] 무시: {_e}")
-            
+
             for b in self._all_menu_btns:
                 b._menu_active = False
                 try:
@@ -1233,7 +1247,7 @@ class ToolbarMixin:
                         b._underline.pack_forget()
                 except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
                     logger.debug(f"Suppressed: {_e}")
-            
+
             # 강제 화면 갱신 (White 테마에서 필수)
             try:
                 self.root.update_idletasks()
@@ -1255,7 +1269,7 @@ class ToolbarMixin:
                     logger.debug(f"Suppressed: {_e}")
             except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
                 logger.debug(f"[toolbar_mixin] 무시: {_e}")
-        
+
         try:
             self._prepare_menu_tooltip_bindings(menu)
             menu.tk_popup(x, y)
@@ -1265,9 +1279,9 @@ class ToolbarMixin:
                 menu.grab_release()
             except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
                 logger.debug(f"[toolbar_mixin] 무시: {_e}")
-            
+
             btn._menu_active = False
-            
+
             # v5.3.5: after_idle 1회 + after()로 지연 복구 (50/200/500/1000ms)
             # White 테마에서 tkinter 내부 갱신이 느릴 수 있으므로 4회 보장
             try:
@@ -1278,7 +1292,7 @@ class ToolbarMixin:
                 self.root.after(1000, _restore_all_buttons)
             except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
                 _restore_all_buttons()
-    
+
     def _safe_call(self, method_name: str):
         """메서드 안전 호출 (존재하지 않으면 경고 메시지)"""
         fn = getattr(self, method_name, None)
@@ -1558,15 +1572,15 @@ class ToolbarMixin:
             return f"예: '{label or '하위 메뉴'}'를 눌러 세부 작업을 선택합니다."
 
         if any(k in label for k in ('삭제', '초기화', '복원', '취소')):
-            return f"예: 실행 전 대상 행/기간을 먼저 확인한 뒤 진행하세요."
+            return "예: 실행 전 대상 행/기간을 먼저 확인한 뒤 진행하세요."
         if any(k in label.lower() for k in ('pdf', 'excel', '내보내기', '저장', '보고서', '리포트')):
-            return f"예: 조건 입력 후 파일 경로를 선택하면 결과 파일이 생성됩니다."
+            return "예: 조건 입력 후 파일 경로를 선택하면 결과 파일이 생성됩니다."
         if any(k in label for k in ('조회', '열기', '설정', '정보', '도움말')):
-            return f"예: 클릭하면 관련 화면이 열리고 옵션을 바로 바꿀 수 있습니다."
+            return "예: 클릭하면 관련 화면이 열리고 옵션을 바로 바꿀 수 있습니다."
         if '새로고침' in label:
-            return f"예: 최신 DB 상태를 다시 읽어 목록과 통계를 즉시 갱신합니다."
+            return "예: 최신 DB 상태를 다시 읽어 목록과 통계를 즉시 갱신합니다."
         if '검사' in label or '검증' in label:
-            return f"예: 점검 결과의 경고/오류를 확인한 뒤 필요한 조치를 진행합니다."
+            return "예: 점검 결과의 경고/오류를 확인한 뒤 필요한 조치를 진행합니다."
         return f"예: 클릭하면 '{label or '선택한'}' 작업이 실행됩니다."
 
     def _build_tooltip_filler(self, label: str, item_type: str) -> str:
@@ -1632,8 +1646,8 @@ class ToolbarMixin:
             try:
                 if tip_win.winfo_exists():
                     tip_win.destroy()
-            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
-                pass
+            except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as e:
+                logger.warning(f"[_hide_active_menu_tooltip] Suppressed: {e}")
         self._active_menu_tooltip_win = None
 
     def _refresh_all_data(self) -> None:

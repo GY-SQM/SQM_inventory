@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 """
 SQM GUI - 포맷/컬럼 유틸 단일 소스 (P1)
 =========================================
 format_number, format_weight, format_weight_mt, format_weight_kg, find_column
 """
 
-from typing import List, Optional
+from typing import Optional
 
 
 def format_number(value: float, decimals: int = 2, use_comma: bool = True) -> str:

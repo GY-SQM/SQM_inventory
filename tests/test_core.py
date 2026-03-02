@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 핵심 로직 테스트 (v5.6.8)
 ===============================
@@ -6,11 +5,12 @@ SQM 핵심 로직 테스트 (v5.6.8)
 실행: python -m pytest tests/test_core.py -v
 """
 
-import os
-import sys
-import sqlite3
 import logging
+import os
+import sqlite3
+import sys
 import tempfile
+
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -59,8 +59,10 @@ def sample_packing():
 class TestConstants:
     def test_constants_import(self):
         from engine_modules.constants import (
-            STATUS_AVAILABLE, STATUS_PICKED, STATUS_SOLD,
-            DEFAULT_WAREHOUSE, SAMPLE_WEIGHT_KG, BL_PREFIXES,
+            BL_PREFIXES,
+            DEFAULT_WAREHOUSE,
+            SAMPLE_WEIGHT_KG,
+            STATUS_AVAILABLE,
         )
         assert STATUS_AVAILABLE == 'AVAILABLE'
         assert SAMPLE_WEIGHT_KG == 1.0
@@ -106,16 +108,16 @@ class TestInbound:
         """대원칙: 톤백 수 = mxbg_pallet + 샘플 1개"""
         result = engine.process_inbound(sample_packing)
         assert result['success']
-        
+
         tonbags = engine.db.fetchall(
             "SELECT * FROM inventory_tonbag WHERE lot_no = ?",
             (sample_packing['lot_no'],))
-        
+
         total_count = len(tonbags)
-        sample_count = sum(1 for t in tonbags 
+        sample_count = sum(1 for t in tonbags
                           if (t['is_sample'] if isinstance(t, dict) else t[7]) == 1)
         regular_count = total_count - sample_count
-        
+
         assert sample_count == 1, f"샘플 {sample_count}개 (기대: 1개)"
         assert regular_count == sample_packing['mxbg_pallet'], \
             f"톤백 {regular_count}개 (기대: {sample_packing['mxbg_pallet']}개)"
@@ -124,12 +126,12 @@ class TestInbound:
         """대원칙: 톤백합계 = LOT 중량"""
         result = engine.process_inbound(sample_packing)
         assert result['success']
-        
+
         row = engine.db.fetchone(
             "SELECT SUM(weight) as total FROM inventory_tonbag WHERE lot_no = ?",
             (sample_packing['lot_no'],))
         tb_sum = row['total'] if isinstance(row, dict) else row[0]
-        
+
         assert abs(tb_sum - sample_packing['net_weight']) < 0.5, \
             f"톤백합계({tb_sum}) ≠ LOT중량({sample_packing['net_weight']})"
 
@@ -137,7 +139,7 @@ class TestInbound:
         """중복 LOT 입고 거부"""
         result1 = engine.process_inbound(sample_packing)
         assert result1['success']
-        
+
         result2 = engine.process_inbound(sample_packing)
         assert not result2['success']
         assert any('이미 존재' in e for e in result2['errors'])
@@ -164,11 +166,11 @@ class TestWeightFields:
             "SELECT net_weight, initial_weight, current_weight, picked_weight "
             "FROM inventory WHERE lot_no = ?",
             (sample_packing['lot_no'],))
-        
+
         inv = dict(inv) if hasattr(inv, 'keys') else {
             'net_weight': inv[0], 'initial_weight': inv[1],
             'current_weight': inv[2], 'picked_weight': inv[3]}
-        
+
         w = sample_packing['net_weight']
         assert inv['net_weight'] == w
         assert inv['initial_weight'] == w
@@ -210,7 +212,7 @@ class TestStockMovement:
             "INSERT INTO stock_movement (movement_type, lot_no, qty_kg, remarks) "
             "VALUES (?, ?, ?, ?)",
             ('INBOUND', 'IMMUT-LOT', 5001, 'immutable test'))
-        
+
         row = engine.db.fetchone(
             "SELECT movement_type, lot_no, qty_kg FROM stock_movement WHERE lot_no = ?",
             ('IMMUT-LOT',))

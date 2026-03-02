@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - Sphinx 문서 설정
 """
@@ -70,8 +69,8 @@ todo_include_todos = True
 
 # 모듈 모킹 (tkinter 등 GUI 모듈)
 autodoc_mock_imports = [
-    'tkinter', 
-    'ttkbootstrap', 
+    'tkinter',
+    'ttkbootstrap',
     'PIL',
     'pdfplumber',
     'fitz',

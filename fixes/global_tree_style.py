@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,9 +28,9 @@ def apply_global_tree_style():
     """
     v5.5.3: 전역 Treeview 스타일 적용 (다크/라이트 자동 대응)
     """
-    
+
     style = ttk.Style()
-    
+
     # ═══════════════════════════════════════════
     # 다크 테마 감지
     # ═══════════════════════════════════════════
@@ -42,7 +41,7 @@ def apply_global_tree_style():
         is_dark = any(d in theme_name.lower() for d in dark_themes)
     except (ValueError, TypeError, AttributeError, tk.TclError) as _e:
         logger.debug(f"[global_tree_style] 무시: {_e}")
-    
+
     if is_dark:
         bg_color = '#2b2b2b'
         fg_color = '#e0e0e0'
@@ -65,7 +64,7 @@ def apply_global_tree_style():
         head_bg = '#34495E'
         head_fg = 'white'
         head_hover = '#2C3E50'
-    
+
     # ═══════════════════════════════════════════
     # Treeview 기본 스타일
     # ═══════════════════════════════════════════
@@ -79,7 +78,7 @@ def apply_global_tree_style():
         background=bg_color,
         foreground=fg_color
     )
-    
+
     # ═══════════════════════════════════════════
     # 헤더 스타일
     # ═══════════════════════════════════════════
@@ -92,7 +91,7 @@ def apply_global_tree_style():
         foreground=head_fg,
         padding=6
     )
-    
+
     # ═══════════════════════════════════════════
     # 선택 및 포커스 색상
     # ═══════════════════════════════════════════
@@ -107,7 +106,7 @@ def apply_global_tree_style():
             ('focus', 'black' if not is_dark else 'white')
         ]
     )
-    
+
     # ═══════════════════════════════════════════
     # 헤더 hover 효과
     # ═══════════════════════════════════════════
@@ -116,13 +115,13 @@ def apply_global_tree_style():
         background=[('active', head_hover)],
         foreground=[('active', 'white')]
     )
-    
+
     # 전역 변수로 저장 (tag_configure에서 사용)
     apply_global_tree_style._is_dark = is_dark
     apply_global_tree_style._odd_bg = odd_bg
     apply_global_tree_style._even_bg = even_bg
     apply_global_tree_style._fg_color = fg_color
-    
+
     logger.debug(f"✅ v5.5.3 Treeview style ({'dark' if is_dark else 'light'})")
 
 
@@ -134,10 +133,10 @@ def configure_tree_grid(tree, columns):
     odd_bg = getattr(apply_global_tree_style, '_odd_bg', '#F8F9FA')
     even_bg = getattr(apply_global_tree_style, '_even_bg', '#FFFFFF')
     fg_color = getattr(apply_global_tree_style, '_fg_color', 'black')
-    
+
     tree.tag_configure('odd', background=odd_bg, foreground=fg_color)
     tree.tag_configure('even', background=even_bg, foreground=fg_color)
-    
+
     # 모든 컬럼 가운데 정렬
     for col in columns:
         tree.column(col, anchor='center')
@@ -164,7 +163,7 @@ def capitalize_headers(headers):
     result = []
     for h in headers:
         h_lower = str(h).lower()
-        
+
         # ═══════════════════════════════════════════
         # 특수 케이스 (고유 명사, 약어)
         # ═══════════════════════════════════════════
@@ -180,7 +179,7 @@ def capitalize_headers(headers):
             result.append('Lot_No')
         elif h_lower in ['kg', 'mt', 'ton']:
             result.append(h_lower.upper())
-        
+
         # ═══════════════════════════════════════════
         # 일반 케이스 (단어별 첫글자 대문자)
         # ═══════════════════════════════════════════
@@ -188,7 +187,7 @@ def capitalize_headers(headers):
             words = h_lower.split('_')
             capitalized = [w.capitalize() for w in words]
             result.append('_'.join(capitalized))
-    
+
     return result
 
 
@@ -204,9 +203,9 @@ def apply_to_tree_immediately(tree, columns=None):
     """
     if columns is None:
         columns = tree['columns']
-    
+
     configure_tree_grid(tree, columns)
-    
+
     # 기존 데이터에 줄무늬 적용
     for i, item in enumerate(tree.get_children()):
         tag = 'odd' if i % 2 else 'even'
@@ -218,7 +217,7 @@ def apply_to_tree_immediately(tree, columns=None):
 # ═══════════════════════════════════════════
 if __name__ == '__main__':
     apply_global_tree_style()
-    
+
     # 테스트
     headers = ['id', 'lot_no', 'sap_no', 'bl_no', 'product', 'status', 'uid', 'weight_kg']
     logger.debug("Before:", headers)

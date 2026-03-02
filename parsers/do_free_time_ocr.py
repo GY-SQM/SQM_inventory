@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 D/O Free Time OCR 폴백 — "절대 안 죽는" 설계 (루비 추천)
 
@@ -12,10 +11,10 @@ Gemini가 con_return/프리타임을 못 채웠을 때:
 (미설치 시 ok=False, errors에 메시지)
 """
 
+import logging
 import os
 import re
-import logging
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 _RE_DATE = re.compile(r"(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{4})")
 
@@ -31,11 +30,11 @@ def _safe_run(fn, *args, **kwargs):
 
 def _has_ocr_deps() -> Tuple[bool, str]:
     try:
-        import numpy
         import cv2
-        from PIL import Image
         import fitz
+        import numpy
         import pytesseract
+        from PIL import Image
         return True, ""
     except ImportError as e:
         return False, f"OCR 의존성 미설치: {e}"
@@ -98,8 +97,8 @@ def _render_pdf_page_to_image(pdf_path: str, page_index: int = 0, zoom: float = 
 
 
 def _preprocess_for_ocr(pil_img, scale: float = 2.0):
-    import numpy as np
     import cv2
+    import numpy as np
     img = np.array(pil_img.convert("RGB"))
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     if scale != 1.0:

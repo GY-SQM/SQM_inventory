@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 from .utils.custom_messagebox import CustomMessageBox
+
 """
 SQM Inventory - Main Application Class
 ======================================
@@ -9,13 +9,13 @@ v2.9.91 - Modular GUI Application
 This module combines all mixins and tabs to create the main application.
 """
 
+import configparser  # v5.3.3
+import logging
 import os
 import sqlite3
 import sys
-import logging
 from pathlib import Path
 from typing import Optional
-import configparser  # v5.3.3
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class SQMInventoryApp:
     - ContextMenuMixin: Right-click menus
     - FeaturesV2Mixin: Extended features (v2.7+)
     """
-    
+
     def __init__(self, root=None, db_path: Optional[str] = None):
         """
         Initialize application
@@ -48,8 +48,8 @@ class SQMInventoryApp:
             db_path: Database path (uses default if None)
         """
         # Import GUI libraries
-        from .utils.constants import tk, ttk, HAS_TTKBOOTSTRAP
-        
+        from .utils.constants import HAS_TTKBOOTSTRAP, tk, ttk
+
         # Create or use provided root
         if root is None:
             if HAS_TTKBOOTSTRAP:
@@ -60,22 +60,22 @@ class SQMInventoryApp:
                 self.root = tk.Tk()
         else:
             self.root = root
-        
+
         # v4.0.0 Q10: 창 제목에 버전 + 회사명
         try:
-            from version import __version__, APP_NAME
+            from version import APP_NAME, __version__
             self.root.title(f"(주)지와이로지스 — {APP_NAME} v{__version__}")
         except ImportError:
             self.root.title("(주)지와이로지스 — SQM 재고관리 v4.0.0")
-        
+
         # Store references
         self.tk = tk
         self.ttk = ttk
         self.db_path = db_path
-        
+
         # Initialize state variables
         self._init_state()
-        
+
         # v3.6.5: 가독성 스타일 적용 (테마 인식)
         try:
             from .utils.ui_constants import ReadableStyle, init_ui_system
@@ -83,7 +83,7 @@ class SQMInventoryApp:
             ReadableStyle.apply(self.root, self.current_theme)
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             logger.debug(f"ReadableStyle init: {e}")
-        
+
         # v4.19.1: 전역 Treeview 스타일 적용
         try:
             import sys
@@ -96,19 +96,19 @@ class SQMInventoryApp:
             logger.debug(f"전역 스타일 로딩 실패 (무시): {e}")
         except (ValueError, TypeError, KeyError, AttributeError, OSError) as e:
             logger.warning(f"전역 스타일 적용 실패: {e}")
-        
+
         # Initialize engine
         self._init_engine()
-        
+
         # v5.0.3: 시작 시 DB 검증 및 자동 복구
         try:
             from utils.backup_validator import AutoRecovery
-            
+
             backup_dir = os.path.join('data', 'db', 'backups')
             auto_recovery = AutoRecovery(self.db_path or 'data/db/sqm_inventory.db', backup_dir)
-            
+
             recovered, message = auto_recovery.check_and_recover()
-            
+
             if recovered:
                 logger.warning(f"🔧 자동 복구 실행됨: {message}")
                 # 복구 후 엔진 재초기화
@@ -117,7 +117,7 @@ class SQMInventoryApp:
             logger.debug("자동 복구 모듈 없음 (무시)")
         except (ValueError, TypeError, KeyError, AttributeError, OSError) as e:
             logger.error(f"자동 복구 오류: {e}")
-        
+
         # Setup UI
         self._setup_ui()
 
@@ -130,10 +130,10 @@ class SQMInventoryApp:
             logger.debug(f"전역 Editable Treeview 로딩 실패 (무시): {e}")
         except (ValueError, TypeError, KeyError, AttributeError, OSError) as e:
             logger.warning(f"전역 Editable Treeview 적용 실패: {e}")
-        
+
         # Load data
         self._load_initial_data()
-        
+
         # v5.0.0: 모든 Treeview에 통일 스타일 자동 적용
         try:
             from fixes.auto_style_applier import apply_styles_to_all_trees
@@ -144,44 +144,44 @@ class SQMInventoryApp:
             logger.debug(f"자동 스타일 적용기 로딩 실패 (무시): {e}")
         except (ValueError, TypeError, KeyError, AttributeError, OSError) as e:
             logger.warning(f"자동 스타일 적용 예약 실패: {e}")
-        
+
         logger.info("SQM Inventory App initialized")
-    
+
     def _init_state(self) -> None:
         """Initialize application state variables"""
         # Selection state
         self.selected_tonbags = set()
         self.selected_search_items = set()
-        
+
         # Sort state
         self._sort_column = None
         self._sort_reverse = False
-        
+
         # Feature flags
         self.use_gemini = False
         self.gemini_required_warning_shown = False
         self._is_fullscreen = False
-        
+
         # Filter presets
         self.filter_presets = {}
-        
+
         # Recent files
         self.recent_files = []
-        
+
         # Theme
         self.current_theme = 'flatly'  # v3.0: 고급스러운 기본 테마
-        
+
         # v3.0: UI 운영 헬퍼 초기화
         self.ui_helper = None  # _setup_ui에서 초기화
-    
+
     def _init_engine(self) -> None:
         """Initialize database engine"""
         try:
             from engine_modules.inventory import SQMInventoryEngine
-            
+
             self.engine = SQMInventoryEngine(db_path=self.db_path)
             logger.info("Engine initialized")
-            
+
         except ImportError as e:
             logger.warning(f"Engine import failed: {e}")
             # Try alternate import
@@ -191,14 +191,14 @@ class SQMInventoryApp:
             except ImportError:
                 logger.error("No engine module found")
                 self.engine = None
-    
+
     def _setup_ui(self) -> None:
         """Setup main UI components"""
-        from .utils.constants import ttk, BOTH, YES, X
-        
+        from .utils.constants import BOTH, YES, ttk
+
         # Load window configuration
         self._load_window_config()
-        
+
         # v3.8.4: 통합 메뉴바 (메인메뉴+액션+탭을 1줄로)
         self._setup_toolbar()
         # v5.4.1: 시작 직후 1회 툴바/드롭다운 팔레트 재동기화(화이트 모드 변색 방지)
@@ -206,24 +206,22 @@ class SQMInventoryApp:
             self._refresh_toolbar_theme()
         except (ValueError, TypeError, KeyError, AttributeError, OSError) as _e:
             logger.debug(f"Suppressed: {_e}")
-        
+
         # v5.0.6: main_frame 생성 (StatusBar를 위해 필요)
         self.main_frame = ttk.Frame(self.root)
         self.main_frame.pack(fill=BOTH, expand=YES, padx=5, pady=5)
-        
+
         # Setup main notebook (tabs)
         self.notebook = ttk.Notebook(self.main_frame)  # ✅ main_frame 안에 배치
         self.notebook.pack(fill=BOTH, expand=YES)
-        
+
         # v3.8.4: notebook 탭 헤더 숨김 (toolbar에 탭 버튼 있음)
         try:
             style = ttk.Style()
             style.layout('TNotebook.Tab', [])
         except (RuntimeError, ValueError) as _e:
             logger.debug(f"{type(_e).__name__}: {_e}")
-        except (RuntimeError, ValueError) as _e:
-            logger.debug(f"main_app: {_e}")
-        
+
         # Create tab frames (v7.0 1단계: 4개 메인 + 대시보드 + 로그)
         self.tab_dashboard = ttk.Frame(self.notebook)
         self.tab_cargo_overview = ttk.Frame(self.notebook)  # 6단계까지 유지(참조용)
@@ -235,13 +233,13 @@ class SQMInventoryApp:
         self.tab_allocation = ttk.Frame(self.notebook)
         self.tab_picked = ttk.Frame(self.notebook)
         self.tab_sold = ttk.Frame(self.notebook)
-        
+
         # 호환성: tab_inventory = AVAILABLE
         self.tab_available = self.tab_inventory
         self.tab_search = self.tab_inventory  # 검색은 재고 탭에 통합
         self.tab_summary = self.tab_dashboard  # 통계는 대시보드에 통합
         self.tab_pivot = ttk.Frame(self.notebook)  # 호환성 (사용 안 함)
-        
+
         # v7.0: 4개 메인(한글) + 총괄 재고 리스트 + 통계 + 로그
         self.notebook.add(self.tab_inventory, text="  📦 판매가능  ")
         self.notebook.add(self.tab_allocation, text="  📋 판매배정  ")
@@ -250,7 +248,7 @@ class SQMInventoryApp:
         self.notebook.add(self.tab_cargo_overview, text="  📋 총괄 재고 리스트  ")
         self.notebook.add(self.tab_dashboard, text="  📊 통계  ")
         self.notebook.add(self.tab_log, text="  📝 로그  ")
-        
+
         # Setup individual tabs (4개 메인 + 총괄 + 대시보드 + 로그)
         for tab_name, setup_fn in [
             ('Inventory', self._setup_inventory_tab),
@@ -267,11 +265,11 @@ class SQMInventoryApp:
                 logger.error(f"탭 초기화 실패 [{tab_name}]: {e}")
                 import traceback
                 traceback.print_exc()
-        
+
         # v3.8.8: 검색 탭 삭제 (팝업 검색으로 통일)
         if hasattr(self, '_setup_summary_tab_content'):
             self._setup_summary_tab_content()
-        
+
         # v7.0: 시작 시 첫 탭 (0번 = AVAILABLE)
         try:
             self.notebook.select(0)  # index 0 = AVAILABLE (LOT 리스트)
@@ -279,7 +277,7 @@ class SQMInventoryApp:
             logger.debug(f"{type(_e).__name__}: {_e}")
         except (ValueError, TypeError, AttributeError) as _e:
             logger.debug(f"main_app: {_e}")
-        
+
         # v3.8.4: notebook 탭 변경 시 툴바 탭 버튼 연동
         def _on_notebook_tab_changed(event):
             try:
@@ -290,7 +288,7 @@ class SQMInventoryApp:
                 if key and hasattr(self, '_active_tab_key'):
                     self._active_tab_key = key
                     self._highlight_active_tab()
-                
+
                 # 탭 전환 시 자동 새로고침
                 if key == 'inventory' and hasattr(self, '_refresh_inventory'):
                     self._refresh_inventory()
@@ -307,20 +305,20 @@ class SQMInventoryApp:
                         self._refresh_dashboard()
                     elif hasattr(self, '_refresh_summary'):
                         self._refresh_summary()
-                
+
                 # v3.9.4: 탭 전환 시 상태바 + 하단 통계 갱신
                 if hasattr(self, '_update_statusbar_summary'):
                     self._update_statusbar_summary()
-                
+
                 # v3.8.8: 탭 전환 시 전용 툴바 활성화/비활성화
                 self._toggle_tab_toolbars(key)
             except (AttributeError, RuntimeError) as _e:
                 logger.debug(f"{type(_e).__name__}: {_e}")
             except (ValueError, TypeError, AttributeError) as _e:
                 logger.debug(f"main_app: {_e}")
-        
+
         self.notebook.bind('<<NotebookTabChanged>>', _on_notebook_tab_changed)
-        
+
         # v3.6.5: 인프라 초기화 개별 예외 처리
         for infra_name, infra_fn in [
             ('StatusBar', self._setup_status_bar),
@@ -334,43 +332,43 @@ class SQMInventoryApp:
                 infra_fn()
             except (ValueError, TypeError, AttributeError) as e:
                 logger.error(f"초기화 실패 [{infra_name}]: {e}")
-    
+
     def _setup_ui_helper(self) -> None:
         """v3.0: UI 운영 헬퍼 초기화"""
         try:
             from .utils.ui_ops_helper import UIOperationsHelper
-            
+
             # 상태바에서 진행률 바와 레이블 가져오기
             progressbar = getattr(self, 'progress_bar', None)
             progress_label = getattr(self, 'status_label', None)
-            
+
             # UI 헬퍼 초기화
             self.ui_helper = UIOperationsHelper(
-                self.root, 
+                self.root,
                 progressbar=progressbar,
                 progress_label=progress_label
             )
-            
+
             # 미완료 작업 확인 (앱 시작 시)
             self.root.after(1000, self._check_work_recovery)
-            
+
             # v3.9.4: 앱 시작 시 상태바 + 하단 통계 자동 갱신
             self.root.after(1500, self._startup_stats_refresh)
-            
+
             # v3.8.4: 자동 백업 스케줄러 시작
             self.root.after(2000, self._start_auto_backup_safe)
-            
+
             logger.info("[v3.0] UI 운영 헬퍼 초기화 완료")
-            
+
         except ImportError as e:
             logger.warning(f"[v3.0] UI 헬퍼 로드 실패: {e}")
             self.ui_helper = None
-    
+
     def _check_work_recovery(self) -> None:
         """미완료 작업 복구 확인"""
         if not self.ui_helper:
             return
-    
+
     def _startup_stats_refresh(self) -> None:
         """v3.9.4: 앱 시작 시 통계 자동 갱신 (하단바 + 상태바)"""
         try:
@@ -383,7 +381,7 @@ class SQMInventoryApp:
             logger.info("[v3.9.4] 시작 시 통계 자동 갱신 완료")
         except (AttributeError, RuntimeError) as e:
             logger.debug(f"startup_stats_refresh: {e}")
-    
+
     def _start_auto_backup_safe(self) -> None:
         """v3.8.4: 자동 백업 안전 시작"""
         try:
@@ -391,7 +389,7 @@ class SQMInventoryApp:
                 self._start_auto_backup()
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"자동 백업 시작 오류: {e}")
-        
+
         def on_recover(work):
             """복구 콜백"""
             self._log(f"작업 복구: {work.work_type} (진행률: {work.progress:.0%})")
@@ -402,25 +400,25 @@ class SQMInventoryApp:
                 self._log("출고 작업 복구 시도")
             else:
                 self._log(f"기타 작업 복구: {work.work_type}")
-        
+
         def on_discard():
             """무시 콜백"""
             self._log("미완료 작업 무시됨")
-        
+
         try:
             self.ui_helper.check_recovery(on_recover, on_discard)
         except (ValueError, TypeError, AttributeError) as e:
             logger.warning(f"작업 복구 확인 실패: {e}")
-    
+
     def _load_initial_data(self) -> None:
         """Load initial data into UI"""
         try:
             # v3.8.4: 시작 시 정합성 검사
             self._startup_integrity_check()
-            
+
             # v3.8.4 A6: 일별 스냅샷 저장
             self._save_startup_snapshot()
-            
+
             self._refresh_inventory()
             self._refresh_tonbag()
             if hasattr(self, '_refresh_summary'):
@@ -479,12 +477,12 @@ class SQMInventoryApp:
 
         except (ImportError, ModuleNotFoundError) as e:
             logger.debug(f"정합성 검사 스킵: {e}")
-    
+
     def run(self) -> None:
         """Start the application main loop"""
         self._log("Application started")
         self.root.mainloop()
-    
+
     def _toggle_tab_toolbars(self, active_tab: str) -> None:
         """v3.8.8: 탭 전환 시 해당 탭 전용 툴바만 표시
         
@@ -495,7 +493,7 @@ class SQMInventoryApp:
         """
         if not hasattr(self, '_tab_toolbars'):
             return
-        
+
         try:
             for tab_key, widgets in self._tab_toolbars.items():
                 for w in widgets:
@@ -514,20 +512,20 @@ class SQMInventoryApp:
             logger.debug(f"{type(_e).__name__}: {_e}")
         except (RuntimeError, ValueError) as _e:
             logger.debug(f"_toggle_tab_toolbars: {_e}")
-    
+
     # =========================================================================
     # Placeholder methods - These are implemented by mixins
     # =========================================================================
-    
+
     def _log_fallback(self, message: str, level: str = 'info') -> None:
         """Log message - fallback when LogTabMixin not available"""
         logger.debug(f"[{level.upper()}] {message}")
-    
+
     def _set_status_fallback(self, message: str) -> None:
         """Set status bar - fallback when StatusBarMixin not available"""
         if hasattr(self, 'status_label'):
             self.status_label.config(text=message)
-    
+
     def _run_background(self, work_fn, on_success=None, on_error=None) -> None:
         """v3.6.5: Background task runner (동기 fallback)
         
@@ -544,65 +542,63 @@ class SQMInventoryApp:
                 on_error(e)
             elif hasattr(self, '_log'):
                 self._log(f"❌ 작업 오류: {e}")
-    
+
     # v3.6.5: _load_theme_preference 제거 (theme_mixin.py에서 정의)
     # MRO 충돌 방지
 
 
 # Import and mix in all mixin classes
+from .dialogs import (
+    InfoDialogsMixin,
+    LotDetailDialogMixin,
+    OutboundPreviewDialogMixin,
+    SettingsDialogMixin,
+)
+from .handlers import (
+    BackupHandlersMixin,
+    ExportHandlersMixin,
+    ImportHandlersMixin,
+    InboundProcessorMixin,
+    OutboundHandlersMixin,
+    PDFHandlersMixin,
+    SimpleOutboundHandlerMixin,
+    StatusImportHandlersMixin,
+)
+from .handlers.inbound_update_mixin import InboundUpdateMixin
+from .handlers.outbound_template_mixin import OutboundTemplateMixin
+from .handlers.pdf_report_handler import PDFReportMixin
+from .handlers.product_handlers import ProductManagementMixin
+from .handlers.simple_excel_outbound import SimpleExcelOutboundMixin
 from .mixins import (
-    MenuMixin,
-    RefreshMixin,
-    FeaturesV2Mixin,
-    WindowMixin,
-    ValidationMixin,
-    KeyBindingsMixin,
+    AdvancedFeaturesMixin,
     ContextMenuMixin,
-    ToolbarMixin,
-    StatusBarMixin,
     DatabaseMixin,
     DragDropMixin,
+    FeaturesV2Mixin,
+    KeyBindingsMixin,
+    MenuMixin,
+    RefreshMixin,
+    StatusBarMixin,
     ThemeMixin,
-    AdvancedFeaturesMixin,
+    ToolbarMixin,
+    ValidationMixin,
+    WindowMixin,
 )
-
 from .tabs import (
     AllocationTabMixin,
     CargoOverviewTabMixin,
     DashboardTabMixin,
     InventoryTabMixin,
+    LogTabMixin,
     OutboundScheduledTabMixin,
     PickedTabMixin,
     SoldTabMixin,
-    TonbagTabMixin,
-    LogTabMixin,
     SummaryTabMixin,
+    TonbagTabMixin,
 )
+
 # v5.5.3 P8: PivotLogicMixin 제거 (죽은 코드)
 from .tabs.dashboard_data_mixin import DashboardDataMixin
-
-from .handlers import (
-    ImportHandlersMixin,
-    OutboundHandlersMixin,
-    BackupHandlersMixin,
-    PDFHandlersMixin,
-    ExportHandlersMixin,
-    InboundProcessorMixin,
-    StatusImportHandlersMixin,
-    SimpleOutboundHandlerMixin,
-)
-from .handlers.pdf_report_handler import PDFReportMixin
-from .handlers.inbound_update_mixin import InboundUpdateMixin
-from .handlers.outbound_template_mixin import OutboundTemplateMixin
-from .handlers.product_handlers import ProductManagementMixin
-from .handlers.simple_excel_outbound import SimpleExcelOutboundMixin
-
-from .dialogs import (
-    LotDetailDialogMixin,
-    SettingsDialogMixin,
-    InfoDialogsMixin,
-    OutboundPreviewDialogMixin,
-)
 
 
 # Create combined application class with all mixins
@@ -680,7 +676,7 @@ class SQMInventoryAppFull(
     def _update_progress(self, value: int, message: str = '', detail: str = ''):
         """호환성 래퍼"""
         self._safe_progress(value, message, detail)
-    
+
     def _run_integrity_check(self) -> None:
         """
         데이터 정합성 검사 실행
@@ -690,14 +686,15 @@ class SQMInventoryAppFull(
         """
         try:
             from utils.integrity_check import run_integrity_check
+
             from .utils.constants import tk
-            
+
             # 검사 실행
             report = run_integrity_check(self.engine.db)
-            
+
             # 결과 다이얼로그
             if report.is_valid:
-                tk.CustomMessageBox.info(None, 
+                tk.CustomMessageBox.info(None,
                     "✅ 정합성 검사 완료",
                     f"모든 데이터가 정상입니다!\n\n"
                     f"검사 LOT 수: {report.total_lots}개\n"
@@ -709,25 +706,25 @@ class SQMInventoryAppFull(
                     f"- {err['lot_no']}: {err['message']}"
                     for err in report.errors[:5]
                 ])
-                
-                tk.CustomMessageBox.warning(None, 
+
+                tk.CustomMessageBox.warning(None,
                     "⚠️ 정합성 문제 발견",
                     f"일부 데이터에 문제가 있습니다.\n\n"
                     f"오류 LOT: {len(report.errors)}개\n\n"
                     f"{error_msg}\n\n"
                     f"전체 보고서는 로그를 확인하세요."
                 )
-        
+
         except ImportError as e:
             from .utils.constants import tk
-            tk.CustomMessageBox.error(None, 
+            tk.CustomMessageBox.error(None,
                 "기능 로딩 실패",
                 f"정합성 검사 모듈을 불러올 수 없습니다.\n\n{e}"
             )
         except (ValueError, TypeError, KeyError, AttributeError, OSError) as e:
             logger.exception("정합성 검사 실패")
             from .utils.constants import tk
-            tk.CustomMessageBox.error(None, 
+            tk.CustomMessageBox.error(None,
                 "검사 실행 실패",
                 f"정합성 검사 중 오류가 발생했습니다.\n\n{e}"
             )

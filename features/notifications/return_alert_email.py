@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.2.7 — 반품 이메일 알림 모듈 (스텁)
 ============================================
@@ -59,7 +58,7 @@ def check_return_alerts(engine) -> List[Dict]:
     config = load_email_config()
     threshold = config.get('threshold_count', 3)
     days = config.get('threshold_days', 30)
-    
+
     alerts = []
     try:
         rows = engine.db.fetchall(
@@ -80,7 +79,7 @@ def check_return_alerts(engine) -> List[Dict]:
             })
     except Exception as e:
         logger.warning(f"[반품알림] 조회 실패: {e}")
-    
+
     return alerts
 
 
@@ -95,14 +94,14 @@ def send_return_alert_email(engine) -> Dict:
         dict: {'sent': bool, 'count': int, 'message': str}
     """
     config = load_email_config()
-    
+
     if not config.get('enabled', False):
         return {'sent': False, 'count': 0, 'message': '이메일 알림 비활성화', 'error': '이메일 알림 비활성화'}
-    
+
     alerts = check_return_alerts(engine)
     if not alerts:
         return {'sent': False, 'count': 0, 'message': '알림 대상 없음', 'error': ''}
-    
+
     # TODO: 실제 SMTP 발송 구현
     logger.info(f"[반품알림] {len(alerts)}건 알림 대상 감지 (발송 미구현)")
     return {

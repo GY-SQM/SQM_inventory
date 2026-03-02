@@ -1,17 +1,15 @@
-# -*- coding: utf-8 -*-
 """
 P5-14: config_logging 단위 테스트
 ==================================
 setup_logging 호출, LOG_LEVEL, LOG_FILE
 """
-import sys
 import logging
+import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
-from config_logging import setup_logging, LOG_LEVEL, LOG_FILE, LOG_FORMAT
+from config_logging import LOG_FILE, LOG_FORMAT, LOG_LEVEL, setup_logging
 
 
 class TestConfigLogging:

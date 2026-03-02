@@ -1,20 +1,30 @@
-# -*- coding: utf-8 -*-
 """
 SQM 크로스 체크 엔진 단위 테스트
 v6.2.1 — 2026-02-27
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from parsers.cross_check_engine import (
-    CrossCheckEngine, CrossCheckResult, CheckLevel,
-    _normalize_vessel, _normalize_container, _normalize_bl,
-    _vessel_fuzzy_match, _weight_diff_pct, cross_check_documents,
+    CheckLevel,
+    CrossCheckResult,
+    _normalize_bl,
+    _normalize_container,
+    _normalize_vessel,
+    _vessel_fuzzy_match,
+    _weight_diff_pct,
+    cross_check_documents,
 )
 from parsers.document_models import (
-    InvoiceData, PackingListData, BLData, DOData, LOTInfo, ContainerInfo,
+    BLData,
+    ContainerInfo,
+    DOData,
+    InvoiceData,
+    LOTInfo,
+    PackingListData,
 )
 
 # ═══════════════════════════════════════════════════════════
@@ -105,7 +115,7 @@ def test_all_match():
             ContainerInfo(container_no="FFAU5355008"),
         ],
     )
-    
+
     result = cross_check_documents(inv, pl, bl, do)
     assert result.is_clean, f"예상: 불일치 없음, 실제: {result.detail_text}"
     print("  ✅ test_all_match 통과 (정상 케이스)")
@@ -115,7 +125,7 @@ def test_sap_no_mismatch():
     """SAP NO 불일치 → CRITICAL"""
     inv = InvoiceData(sap_no="2200033057")
     pl = PackingListData(sap_no="2200033058")  # 다른 SAP NO!
-    
+
     result = cross_check_documents(inv, pl)
     assert result.has_critical, "SAP NO 불일치는 CRITICAL이어야 함"
     sap_items = [i for i in result.items if i.field_name == "SAP NO"]
@@ -128,7 +138,7 @@ def test_weight_warning():
     """중량 차이 1~5% → WARNING"""
     inv = InvoiceData(net_weight_kg=100020, gross_weight_kg=102625)
     bl = BLData(net_weight_kg=98500, gross_weight_kg=101000)  # ~1.5% 차이
-    
+
     result = cross_check_documents(inv, None, bl)
     nw_items = [i for i in result.items if i.field_name == "Net Weight"]
     assert len(nw_items) == 1
@@ -140,7 +150,7 @@ def test_weight_critical():
     """중량 차이 >5% → CRITICAL"""
     inv = InvoiceData(net_weight_kg=100000)
     bl = BLData(net_weight_kg=90000)  # 10% 차이
-    
+
     result = cross_check_documents(inv, None, bl)
     nw_items = [i for i in result.items if i.field_name == "Net Weight"]
     assert len(nw_items) == 1
@@ -157,7 +167,7 @@ def test_lot_count_mismatch():
             LOTInfo(lot_no="1125081448"),
         ]
     )
-    
+
     result = cross_check_documents(inv, pl)
     lot_items = [i for i in result.items if "LOT 개수" in i.field_name]
     assert len(lot_items) >= 1
@@ -174,7 +184,7 @@ def test_lot_numbers_mismatch():
             LOTInfo(lot_no="1125081450"),  # Invoice에 없는 LOT
         ]
     )
-    
+
     result = cross_check_documents(inv, pl)
     inv_only = [i for i in result.items if "Invoice Only" in i.field_name]
     pl_only = [i for i in result.items if "PL Only" in i.field_name]
@@ -193,7 +203,7 @@ def test_duplicate_lots():
         ]
     )
     inv = InvoiceData(sap_no="TEST")  # 문서 2개 이상 필요
-    
+
     result = cross_check_documents(inv, pl)
     dup_items = [i for i in result.items if "중복 LOT" in i.field_name]
     assert len(dup_items) == 1
@@ -216,7 +226,7 @@ def test_container_mismatch():
         ],
         total_containers=2,
     )
-    
+
     result = cross_check_documents(None, pl, bl)
     cn_items = [i for i in result.items if "Container 번호" in i.field_name]
     assert len(cn_items) >= 1
@@ -227,7 +237,7 @@ def test_bl_no_normalized_match():
     """B/L 번호 정규화 후 일치 (MAEU prefix)"""
     inv = InvoiceData(bl_no="258468669")
     do = DOData(bl_no="MAEU258468669")
-    
+
     result = cross_check_documents(inv, None, None, do)
     bl_items = [i for i in result.items if "B/L No" in i.field_name]
     # 정규화 후 같으면 불일치 없어야 함
@@ -247,7 +257,7 @@ def test_product_mismatch():
     """제품명 불일치 → CRITICAL"""
     inv = InvoiceData(product_name="LITHIUM CARBONATE BATTERY GRADE")
     bl = BLData(product_name="NICKEL SULFATE HEXAHYDRATE")  # 완전히 다른 제품
-    
+
     result = cross_check_documents(inv, None, bl)
     prod_items = [i for i in result.items if "Product" in i.field_name]
     assert len(prod_items) == 1
@@ -259,10 +269,10 @@ def test_result_summary():
     """결과 요약 문자열 테스트"""
     result = CrossCheckResult()
     assert "통과" in result.summary
-    
+
     result.add("Test", CheckLevel.WARNING, "테스트 경고")
     assert "주의 1건" in result.summary
-    
+
     result.add("Test2", CheckLevel.CRITICAL, "테스트 심각")
     assert "심각 1건" in result.summary
     assert result.has_critical is True
@@ -273,7 +283,7 @@ def test_row_tag_global():
     """전체 문서 레벨 불일치 → 모든 행에 태그 적용"""
     inv = InvoiceData(sap_no="2200033057")
     pl = PackingListData(sap_no="2200033058")
-    
+
     result = cross_check_documents(inv, pl)
     # SAP NO 불일치 = CRITICAL → global_level = CRITICAL
     assert result.global_level == CheckLevel.CRITICAL
@@ -293,7 +303,7 @@ def test_row_tag_lot_specific():
         ]
     )
     inv = InvoiceData()  # 빈 Invoice (2개 이상 문서 필요)
-    
+
     result = cross_check_documents(inv, pl)
     lot_levels = result.get_lot_levels()
     assert "1125081447" in lot_levels
@@ -318,14 +328,14 @@ if __name__ == "__main__":
     print("=" * 60)
     print("🔍 SQM CrossCheckEngine 단위 테스트")
     print("=" * 60)
-    
+
     print("\n[유틸리티 함수]")
     test_normalize_vessel()
     test_normalize_container()
     test_normalize_bl()
     test_vessel_fuzzy_match()
     test_weight_diff_pct()
-    
+
     print("\n[크로스 체크 엔진 통합 테스트]")
     test_all_match()
     test_sap_no_mismatch()
@@ -342,7 +352,7 @@ if __name__ == "__main__":
     test_row_tag_global()
     test_row_tag_lot_specific()
     test_row_tag_clean()
-    
+
     print("\n" + "=" * 60)
     print("✅ 전체 테스트 통과!")
     print("=" * 60)

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.2.4 — 바코드 스캔 엔진 통합 테스트
 ============================================
@@ -21,11 +20,11 @@ SQM v6.2.4 — 바코드 스캔 엔진 통합 테스트
 작성자: Ruby
 """
 import os
+import sqlite3
 import sys
 import tempfile
-import sqlite3
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import List
 
 import pytest
 

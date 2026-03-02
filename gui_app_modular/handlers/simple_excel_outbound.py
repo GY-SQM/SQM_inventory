@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 심플 엑셀 출고
 =====================================
@@ -15,10 +14,9 @@ v5.6.0: 최소 필드(lot_no + weight_kg)만으로 출고 처리
 """
 
 import logging
-import os
-from datetime import datetime, date
+from datetime import date
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +26,8 @@ class SimpleExcelOutboundMixin:
 
     def _on_simple_excel_outbound(self) -> None:
         """심플 엑셀 출고 — Excel/데이터 입력 원칙: 데이터 붙여넣기 vs 파일 업로드 → 미리보기 → 확정"""
-        from utils.constants import tk, ttk, filedialog, BOTH, YES
+        from utils.constants import filedialog
+
         from ..utils.custom_messagebox import CustomMessageBox
 
         choice = "upload"
@@ -141,8 +140,8 @@ class SimpleExcelOutboundMixin:
 
     def _show_simple_outbound_paste_dialog(self) -> None:
         """심플 출고 — 내장 형식에 데이터 붙여넣기 후 미리보기 (Excel/데이터 입력 원칙)."""
-        from ..utils.paste_table_dialog import show_paste_table_dialog
         from ..utils.custom_messagebox import CustomMessageBox
+        from ..utils.paste_table_dialog import show_paste_table_dialog
 
         columns = [
             ("lot_no", "LOT NO", 120),
@@ -190,7 +189,8 @@ class SimpleExcelOutboundMixin:
 
     def _show_simple_outbound_preview(self, items: List[Dict]) -> None:
         """심플 출고 미리보기"""
-        from utils.constants import tk, ttk, BOTH, YES
+        from utils.constants import BOTH, YES, tk, ttk
+
         from ..utils.custom_messagebox import CustomMessageBox
 
         dialog = tk.Toplevel(self.root)
@@ -337,6 +337,7 @@ class SimpleExcelOutboundMixin:
     def _download_simple_outbound_template(self) -> None:
         """심플 출고 엑셀 양식 다운로드"""
         from utils.constants import filedialog
+
         from ..utils.custom_messagebox import CustomMessageBox
 
         try:

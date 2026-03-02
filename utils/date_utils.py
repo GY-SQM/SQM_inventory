@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v5.8.6.B — 날짜 유틸리티 (Single Source of Truth)
 ======================================================
@@ -12,10 +11,10 @@ normalize_date(), 정규식 폴백, Free Time 계산을 한 곳에 모음.
     from utils.date_utils import calculate_free_time_status
 """
 
-import re
 import logging
+import re
 from datetime import date, datetime, timedelta
-from typing import Optional, Tuple, Dict, Any
+from typing import Any, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

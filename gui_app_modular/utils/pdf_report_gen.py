@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v3.9.8 — PDF 재고 보고서 자동 생성
 ========================================
@@ -11,8 +10,8 @@ SQM v3.9.8 — PDF 재고 보고서 자동 생성
 reportlab 기반.
 """
 
-import os
 import logging
+import os
 from datetime import datetime
 from typing import List, Optional
 
@@ -31,31 +30,37 @@ def generate_daily_inventory_report(engine, output_dir: str = 'output/reports') 
         생성된 파일 경로 (실패시 None)
     """
     try:
-        from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.platypus import (
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
     except ImportError:
         logger.error("reportlab 미설치: pip install reportlab")
         return None
-    
+
     # 폰트 등록
     _register_korean_font()
-    
+
     os.makedirs(output_dir, exist_ok=True)
     today = datetime.now().strftime('%Y%m%d')
     filename = f"SQM_재고현황_{today}.pdf"
     filepath = os.path.join(output_dir, filename)
-    
+
     doc = SimpleDocTemplate(
         filepath, pagesize=A4,
         leftMargin=15*mm, rightMargin=15*mm,
         topMargin=20*mm, bottomMargin=15*mm
     )
-    
+
     # 스타일
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle(
@@ -68,16 +73,16 @@ def generate_daily_inventory_report(engine, output_dir: str = 'output/reports') 
         fontName='MalgunGothic' if _has_malgun() else 'Helvetica',
         fontSize=9
     )
-    
+
     elements = []
-    
+
     # 제목
     elements.append(Paragraph(
         f"SQM 재고 현황 보고서 — {datetime.now().strftime('%Y-%m-%d')}",
         title_style
     ))
     elements.append(Spacer(1, 5*mm))
-    
+
     # 요약
     try:
         summary = engine.get_inventory_summary()
@@ -85,7 +90,7 @@ def generate_daily_inventory_report(engine, output_dir: str = 'output/reports') 
         avail_lots = summary.get('available_lots', 0)
         total_mt = summary.get('total_current_mt', 0)
         initial_mt = summary.get('total_initial_mt', 0)
-        
+
         summary_data = [
             ['항목', '수치'],
             ['총 LOT 수', f"{total_lots}개"],
@@ -94,7 +99,7 @@ def generate_daily_inventory_report(engine, output_dir: str = 'output/reports') 
             ['현재 잔량', f"{total_mt:,.1f} MT"],
             ['Out %', f"{((initial_mt - total_mt) / max(initial_mt, 1) * 100):,.1f}%"],
         ]
-        
+
         t = Table(summary_data, colWidths=[100, 120])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
@@ -109,20 +114,20 @@ def generate_daily_inventory_report(engine, output_dir: str = 'output/reports') 
         elements.append(t)
     except (ValueError, TypeError, AttributeError) as e:
         elements.append(Paragraph(f"요약 생성 오류: {e}", normal_style))
-    
+
     elements.append(Spacer(1, 8*mm))
-    
+
     # LOT별 상세 테이블
     try:
         inventory = engine.get_inventory()
-        
+
         if inventory:
             elements.append(Paragraph("LOT별 재고 상세", ParagraphStyle(
                 'SubTitle', parent=styles['Heading2'],
                 fontName='MalgunGothic' if _has_malgun() else 'Helvetica',
                 fontSize=12, spaceAfter=5
             )))
-            
+
             header = ['LOT NO', 'SAP NO', 'PRODUCT', 'STATUS', 'Inbound(MT)', 'Balance(MT)', 'Out %']
             data = [header]
             from .ui_constants import get_status_display as _status_display
@@ -135,12 +140,12 @@ def generate_daily_inventory_report(engine, output_dir: str = 'output/reports') 
                 init_w = float(item.get('initial_weight', 0) or 0) / 1000
                 curr_w = float(item.get('current_weight', 0) or 0) / 1000
                 pct = ((init_w - curr_w) / max(init_w, 0.001)) * 100
-                
+
                 data.append([
                     str(lot_no), str(sap_no), str(product)[:12],
                     status, f"{init_w:,.1f}", f"{curr_w:,.1f}", f"{pct:.0f}%"
                 ])
-            
+
             col_widths = [75, 70, 65, 55, 50, 50, 40]
             t = Table(data, colWidths=col_widths, repeatRows=1)
             t.setStyle(TableStyle([
@@ -157,13 +162,13 @@ def generate_daily_inventory_report(engine, output_dir: str = 'output/reports') 
             elements.append(t)
     except (ValueError, KeyError, OSError) as e:
         elements.append(Paragraph(f"상세 테이블 오류: {e}", normal_style))
-    
+
     elements.append(Spacer(1, 5*mm))
     elements.append(Paragraph(
         f"생성: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | SQM Inventory Management v3.9.8",
         ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7, textColor=colors.grey)
     ))
-    
+
     # v4.0.0: GY Logistics 푸터
     try:
         from .report_footer import add_gy_logistics_footer_pdf
@@ -179,39 +184,45 @@ def generate_monthly_report(engine, year: int = None, month: int = None,
                             output_dir: str = 'output/reports') -> Optional[str]:
     """월별 입출고 실적 PDF"""
     try:
-        from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import (
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
     except ImportError:
         return None
-    
+
     _register_korean_font()
-    
+
     if not year:
         year = datetime.now().year
     if not month:
         month = datetime.now().month
-    
+
     os.makedirs(output_dir, exist_ok=True)
     filename = f"SQM_월보_{year}{month:02d}.pdf"
     filepath = os.path.join(output_dir, filename)
-    
+
     doc = SimpleDocTemplate(filepath, pagesize=A4,
                            leftMargin=15*mm, rightMargin=15*mm,
                            topMargin=20*mm, bottomMargin=15*mm)
-    
+
     styles = getSampleStyleSheet()
     fn = 'MalgunGothic' if _has_malgun() else 'Helvetica'
-    
+
     elements = []
     elements.append(Paragraph(
         f"SQM 월간 실적 보고서 — {year}년 {month}월",
         ParagraphStyle('Title', parent=styles['Title'], fontName=fn, fontSize=16)
     ))
     elements.append(Spacer(1, 8*mm))
-    
+
     # 해당 월 입출고 데이터 수집
     try:
         movements = engine.db.fetchall("""
@@ -220,7 +231,7 @@ def generate_monthly_report(engine, year: int = None, month: int = None,
             WHERE strftime('%Y', created_at) = ? AND strftime('%m', created_at) = ?
             GROUP BY movement_type
         """, (str(year), f"{month:02d}"))
-        
+
         data = [['구분', '건수', '수량 (kg)', '수량 (MT)']]
         for m in movements:
             mt = dict(m)
@@ -232,10 +243,10 @@ def generate_monthly_report(engine, year: int = None, month: int = None,
                 f"{qty:,.0f}",
                 f"{qty/1000:,.2f}"
             ])
-        
+
         if len(data) == 1:
             data.append(['(데이터 없음)', '-', '-', '-'])
-        
+
         t = Table(data, colWidths=[80, 60, 80, 80])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
@@ -249,13 +260,13 @@ def generate_monthly_report(engine, year: int = None, month: int = None,
     except (ValueError, KeyError, OSError) as e:
         elements.append(Paragraph(f"데이터 조회 오류: {e}",
                                   ParagraphStyle('err', parent=styles['Normal'], fontName=fn, fontSize=9)))
-    
+
     elements.append(Spacer(1, 5*mm))
     elements.append(Paragraph(
         f"생성: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | SQM v6.2.3",
         ParagraphStyle('Footer', parent=styles['Normal'], fontSize=7, textColor=colors.grey)
     ))
-    
+
     # v4.0.0: GY Logistics 푸터
     try:
         from .report_footer import add_gy_logistics_footer_pdf
@@ -282,22 +293,28 @@ def generate_outbound_confirmation(engine, lot_no: str, tonbag_ids: List[int] = 
         output_dir: 출력 디렉토리
     """
     try:
-        from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import (
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
     except ImportError:
         return None
-    
+
     _register_korean_font()
     fn = 'MalgunGothic' if _has_malgun() else 'Helvetica'
-    
+
     # LOT 정보
     lot_info = engine.db.fetchone("SELECT * FROM inventory WHERE lot_no = ?", (lot_no,))
     if not lot_info:
         return None
-    
+
     # 톤백 정보
     if tonbag_ids:
         placeholders = ','.join('?' * len(tonbag_ids))
@@ -308,44 +325,44 @@ def generate_outbound_confirmation(engine, lot_no: str, tonbag_ids: List[int] = 
         tonbags = engine.db.fetchall(
             "SELECT * FROM inventory_tonbag WHERE lot_no = ? AND status IN ('PICKED','SHIPPED','CONFIRMED')",
             (lot_no,))
-    
+
     if not tonbags:
         return None
-    
+
     os.makedirs(output_dir, exist_ok=True)
     today = datetime.now().strftime('%Y%m%d')
     filename = f"출고확인서_{lot_no}_{today}.pdf"
     filepath = os.path.join(output_dir, filename)
-    
+
     doc = SimpleDocTemplate(filepath, pagesize=A4,
                             leftMargin=15*mm, rightMargin=15*mm,
                             topMargin=20*mm, bottomMargin=15*mm)
-    
+
     styles = getSampleStyleSheet()
     elements = []
-    
+
     # 제목
     elements.append(Paragraph("출 고 확 인 서",
         ParagraphStyle('Title', parent=styles['Title'], fontName=fn, fontSize=20,
                        spaceAfter=5, alignment=1)))
-    elements.append(Paragraph(f"Outbound Confirmation",
+    elements.append(Paragraph("Outbound Confirmation",
         ParagraphStyle('SubTitle', parent=styles['Normal'], fontName=fn, fontSize=10,
                        textColor=colors.grey, alignment=1)))
     elements.append(Spacer(1, 8*mm))
-    
+
     # 기본 정보 테이블
     product = lot_info.get('product', '-') or '-'
     sap_no = lot_info.get('sap_no', '-') or '-'
     bl_no = lot_info.get('bl_no', '-') or '-'
     container = lot_info.get('container_no', '-') or '-'
-    
+
     info_data = [
         ['LOT NO', str(lot_no), '제품명', str(product)],
         ['SAP NO', str(sap_no), 'B/L NO', str(bl_no)],
         ['CONTAINER', str(container), '고객명', str(customer or '-')],
         ['출고일', datetime.now().strftime('%Y-%m-%d'), '문서번호', f"OUT-{today}-{lot_no[-4:]}"],
     ]
-    
+
     t = Table(info_data, colWidths=[70, 130, 70, 130])
     t.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (-1, -1), fn),
@@ -359,11 +376,11 @@ def generate_outbound_confirmation(engine, lot_no: str, tonbag_ids: List[int] = 
     ]))
     elements.append(t)
     elements.append(Spacer(1, 6*mm))
-    
+
     # 톤백 상세
     elements.append(Paragraph("출고 톤백 상세",
         ParagraphStyle('H2', parent=styles['Heading2'], fontName=fn, fontSize=12, spaceAfter=3)))
-    
+
     tb_data = [['No.', '톤백#', '중량(kg)', '중량(MT)', '상태', '비고']]
     total_kg = 0.0
     for idx, tb in enumerate(tonbags, 1):
@@ -373,9 +390,9 @@ def generate_outbound_confirmation(engine, lot_no: str, tonbag_ids: List[int] = 
         rem = tb.get('remarks', '') if isinstance(tb, dict) else ''
         total_kg += w
         tb_data.append([str(idx), str(sub), f"{w:,.1f}", f"{w/1000:,.3f}", str(st), str(rem)[:20]])
-    
+
     tb_data.append(['', '합계', f"{total_kg:,.1f}", f"{total_kg/1000:,.3f}", f"{len(tonbags)}개", ''])
-    
+
     t = Table(tb_data, colWidths=[30, 50, 80, 70, 70, 100])
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
@@ -392,9 +409,9 @@ def generate_outbound_confirmation(engine, lot_no: str, tonbag_ids: List[int] = 
         ('FONTNAME', (0, -1), (-1, -1), fn),
     ]))
     elements.append(t)
-    
+
     elements.append(Spacer(1, 15*mm))
-    
+
     # 서명란
     sig_data = [
         ['출고 담당', '', '인수 담당', ''],
@@ -409,20 +426,20 @@ def generate_outbound_confirmation(engine, lot_no: str, tonbag_ids: List[int] = 
         ('TOPPADDING', (0, 0), (-1, -1), 8),
     ]))
     elements.append(t)
-    
+
     # 푸터
     elements.append(Spacer(1, 10*mm))
     elements.append(Paragraph(
         f"생성: {datetime.now().strftime('%Y-%m-%d %H:%M')} | SQM Inventory v4.1.1 | GY Logistics",
         ParagraphStyle('Footer', parent=styles['Normal'], fontName=fn, fontSize=7,
                        textColor=colors.grey, alignment=1)))
-    
+
     try:
         from .report_footer import add_gy_logistics_footer_pdf
         add_gy_logistics_footer_pdf(elements, styles)
     except (ValueError, TypeError, KeyError, ImportError) as _e:
         logger.debug(f"Suppressed: {_e}")
-    
+
     doc.build(elements)
     logger.info(f"출고확인서 생성: {filepath}")
     return filepath
@@ -441,17 +458,23 @@ def generate_transaction_statement(engine, customer: str = '',
         output_dir: 출력 디렉토리
     """
     try:
-        from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import (
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
     except ImportError:
         return None
-    
+
     _register_korean_font()
     fn = 'MalgunGothic' if _has_malgun() else 'Helvetica'
-    
+
     # 출고 데이터 조회
     query = """
         SELECT t.lot_no, t.sub_lt, t.weight, t.status, t.picked_to,
@@ -472,22 +495,22 @@ def generate_transaction_statement(engine, customer: str = '',
         query += " AND COALESCE(t.outbound_date, t.picked_date) <= ?"
         params.append(date_to)
     query += " ORDER BY COALESCE(t.outbound_date, t.picked_date) DESC"
-    
+
     records = engine.db.fetchall(query, params)
-    
+
     os.makedirs(output_dir, exist_ok=True)
     today = datetime.now().strftime('%Y%m%d')
     cust_tag = customer.replace(' ', '_')[:10] if customer else 'ALL'
     filename = f"거래명세서_{cust_tag}_{today}.pdf"
     filepath = os.path.join(output_dir, filename)
-    
+
     doc = SimpleDocTemplate(filepath, pagesize=A4,
                             leftMargin=12*mm, rightMargin=12*mm,
                             topMargin=18*mm, bottomMargin=12*mm)
-    
+
     styles = getSampleStyleSheet()
     elements = []
-    
+
     # 제목
     elements.append(Paragraph("거 래 명 세 서",
         ParagraphStyle('Title', parent=styles['Title'], fontName=fn, fontSize=20,
@@ -496,7 +519,7 @@ def generate_transaction_statement(engine, customer: str = '',
         ParagraphStyle('Sub', parent=styles['Normal'], fontName=fn, fontSize=10,
                        textColor=colors.grey, alignment=1)))
     elements.append(Spacer(1, 6*mm))
-    
+
     # 헤더 정보
     period_str = ''
     if date_from and date_to:
@@ -505,7 +528,7 @@ def generate_transaction_statement(engine, customer: str = '',
         period_str = f"{date_from} ~ 현재"
     else:
         period_str = "전체 기간"
-    
+
     info_data = [
         ['수신', str(customer or '(전체)'), '기간', period_str],
         ['발신', 'GY Logistics', '문서일', datetime.now().strftime('%Y-%m-%d')],
@@ -522,12 +545,12 @@ def generate_transaction_statement(engine, customer: str = '',
     ]))
     elements.append(t)
     elements.append(Spacer(1, 6*mm))
-    
+
     # 거래 내역 테이블
     header = ['No.', 'LOT NO', '제품', 'SAP NO', '톤백#', '중량(kg)', '출고처', '출고일']
     data = [header]
     total_kg = 0.0
-    
+
     for idx, r in enumerate(records, 1):
         w = float(r.get('weight', 0) or (r[2] if not isinstance(r, dict) else 0))
         total_kg += w
@@ -537,17 +560,17 @@ def generate_transaction_statement(engine, customer: str = '',
         sap = (r.get('sap_no', '') if isinstance(r, dict) else r[9]) or ''
         p_to = (r.get('picked_to', '') if isinstance(r, dict) else r[4]) or ''
         o_date = (r.get('outbound_date', '') or r.get('picked_date', '')) if isinstance(r, dict) else (r[6] or r[5] or '')
-        
+
         data.append([
             str(idx), str(lot), str(prod)[:15], str(sap),
             str(sub), f"{w:,.1f}", str(p_to)[:15], str(o_date)[:10]
         ])
-    
+
     if not records:
         data.append(['', '(해당 거래 없음)', '', '', '', '', '', ''])
-    
+
     data.append(['', '합계', '', '', f"{len(records)}건", f"{total_kg:,.1f}", f"{total_kg/1000:,.3f} MT", ''])
-    
+
     t = Table(data, colWidths=[28, 68, 60, 55, 35, 55, 60, 55], repeatRows=1)
     t.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
@@ -562,14 +585,14 @@ def generate_transaction_statement(engine, customer: str = '',
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#ecf0f1')),
     ]))
     elements.append(t)
-    
+
     # 푸터
     elements.append(Spacer(1, 10*mm))
     elements.append(Paragraph(
         f"생성: {datetime.now().strftime('%Y-%m-%d %H:%M')} | SQM v6.2.3 | GY Logistics",
         ParagraphStyle('Footer', parent=styles['Normal'], fontName=fn, fontSize=7,
                        textColor=colors.grey, alignment=1)))
-    
+
     doc.build(elements)
     logger.info(f"거래명세서 생성: {filepath}")
     return filepath
@@ -581,11 +604,17 @@ def generate_lot_outbound_history_pdf(engine, lot_no: str, history: List[dict],
     LOT 출고 이력 PDF 생성 (톤백·샘플 출고/예약 이력)
     """
     try:
-        from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
         from reportlab.lib.units import mm
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import (
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
     except ImportError:
         return None
 
@@ -663,10 +692,10 @@ def _register_korean_font() -> None:
     try:
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
-        
+
         if 'MalgunGothic' in pdfmetrics.getRegisteredFontNames():
             return
-        
+
         font_paths = [
             'C:/Windows/Fonts/malgun.ttf',
             '/usr/share/fonts/truetype/nanum/NanumGothic.ttf',

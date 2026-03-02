@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.2.7 — PICKED → SOLD 2단계 워크플로 테스트
 ====================================================
@@ -7,13 +6,14 @@ S4-1 엔진 수정 이후 stop_at_picked=True의 정상 동작을 검증.
 실행: python -m pytest tests/test_picked_to_sold_flow.py -v
 """
 
+import logging
 import os
 import sys
+
 import pytest
-import logging
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from tests.conftest import inbound_lot, outbound_lot, get_lot, get_tonbags
+from tests.conftest import get_lot, get_tonbags, inbound_lot, outbound_lot
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class TestPickedThenCancel:
         lot_no = lot_500kg['lot_no']
 
         outbound_lot(engine, lot_no, 'CATL', 500.0, stop_at_picked=True)
-        
+
         picked = get_tonbags(engine, lot_no, 'PICKED')
         assert len(picked) == 1
 
@@ -112,7 +112,7 @@ class TestPickedThenCancel:
         lot_no = lot_500kg['lot_no']
 
         outbound_lot(engine, lot_no, 'CATL', 1500.0, stop_at_picked=True)
-        
+
         picked = get_tonbags(engine, lot_no, 'PICKED')
         assert len(picked) == 3
 

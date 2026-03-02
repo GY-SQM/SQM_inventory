@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM Inventory - Information Dialogs
 ===================================
@@ -11,10 +10,10 @@ v3.6.0 - 안정성/효율성/편의성 강화
 - 중앙 배치 (center_dialog)
 """
 
-import os
 import logging
 
 from ..utils.ui_constants import CustomMessageBox
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,17 +23,17 @@ class InfoDialogsMixin:
     
     Mixed into SQMInventoryApp class
     """
-    
+
     def _show_about_detail(self) -> None:
         """Show about dialog"""
 
-        
+
         try:
             from version import __version__
             version = __version__
         except ImportError:
             version = "3.9.4"
-        
+
         about_text = f"""SQM Inventory Management System
 
 Version: {version}

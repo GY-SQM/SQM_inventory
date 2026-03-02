@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v5.9.4 — 원스톱 입고: DB 업로드 + Excel 내보내기 Mixin
 ==========================================================
@@ -7,8 +6,8 @@ onestop_inbound.py에서 분리 (1869줄 → ~1300 + ~500).
 DB 저장 로직(_save_to_db), 업로드 스레드(_upload_thread),
 중복 체크(_on_upload), Excel 내보내기(_export_to_excel)를 담당.
 """
-import sqlite3
 import logging
+import sqlite3
 import threading
 from datetime import datetime
 from tkinter import filedialog
@@ -94,7 +93,7 @@ class InboundUploadMixin:
             return
 
         preflight_errors = self._preflight_validate_preview_data()
-        
+
         # v6.2.1: 크로스 체크 CRITICAL 항목 차단
         xc = getattr(self, '_cross_check_result', None)
         if xc and xc.has_critical:
@@ -486,7 +485,7 @@ class InboundUploadMixin:
             return
         try:
             import openpyxl
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
             save_path = filedialog.asksaveasfilename(
                 parent=self.dialog, title="Excel 내보내기",

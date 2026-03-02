@@ -1,14 +1,13 @@
-# -*- coding: utf-8 -*-
 """GUI dialogs module"""
 
-from .lot_detail_dialog import LotDetailDialogMixin
-from .settings_dialog import SettingsDialogMixin
 from .info_dialogs import InfoDialogsMixin
+from .lot_detail_dialog import LotDetailDialogMixin
 from .outbound_preview_dialog import OutboundPreviewDialogMixin
+from .settings_dialog import SettingsDialogMixin
 
 __all__ = [
-    'LotDetailDialogMixin', 
-    'SettingsDialogMixin', 
+    'LotDetailDialogMixin',
+    'SettingsDialogMixin',
     'InfoDialogsMixin',
     'OutboundPreviewDialogMixin',
 ]

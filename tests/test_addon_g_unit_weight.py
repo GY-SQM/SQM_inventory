@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.12 Addon-G 테스트: 500kg / 1000kg 동적 대응
 =====================================================
@@ -13,12 +12,13 @@ SQM v6.12 Addon-G 테스트: 500kg / 1000kg 동적 대응
   python tests/test_addon_g_unit_weight.py
 """
 
-import os
-import sys
-import sqlite3
 import logging
+import os
+import sqlite3
+import sys
+from datetime import date, datetime
+
 import pytest
-from datetime import datetime, date
 
 # 프로젝트 루트를 path에 추가
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -223,7 +223,7 @@ def simulate_outbound(db: TestDB, lot_no: str, pick_count: int, picking_no: str,
 # ═══════════════════════════════════════════════════════
 def test_get_tonbag_unit_weight():
     """get_tonbag_unit_weight가 500/1000 LOT 각각 정확한 단가를 반환하는지."""
-    from engine_modules.constants import get_tonbag_unit_weight, DEFAULT_TONBAG_WEIGHT
+    from engine_modules.constants import DEFAULT_TONBAG_WEIGHT, get_tonbag_unit_weight
 
     db = TestDB()
 
@@ -372,7 +372,6 @@ def test_1000kg_outbound():
 # ═══════════════════════════════════════════════════════
 def test_return_inbound_1000kg_correction():
     """반품 엔진이 파서의 500kg 추정을 1000kg으로 보정하는지 확인."""
-    from engine_modules.constants import get_tonbag_unit_weight
 
     db = TestDB()
     create_lot(db, "LOT1000C", bag_count=10, unit_weight=1000.0)
@@ -466,6 +465,7 @@ except (ImportError, ModuleNotFoundError):
 def test_diagnostic_script():
     """db_tonbag_weight_diagnostic가 500/1000 혼합을 정확히 감지."""
     import tempfile
+
     from utils.db_tonbag_weight_diagnostic import diagnose_tonbag_weights
     db = TestDB()
     create_lot(db, "DIAG500", bag_count=10, unit_weight=500.0)

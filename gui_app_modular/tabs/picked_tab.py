@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
 """
 v7.0 4단계: PICKED 탭 — picking_table(ACTIVE) 기반 LOT 리스트 + 전체 피킹 보기
 """
 import logging
 import tkinter as tk
 from tkinter import ttk
-from ..utils.ui_constants import ThemeColors, Spacing, apply_tooltip
-from ..utils.constants import BOTH, YES, X, LEFT, VERTICAL, RIGHT
+
+from ..utils.constants import BOTH, LEFT, VERTICAL, YES, X
+from ..utils.ui_constants import Spacing, ThemeColors, apply_tooltip
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class PickedTabMixin:
         btn_show_all = ttk.Button(btn_frame, text="📋 전체 피킹 보기", command=self._on_show_all_picked)
         btn_show_all.pack(side=tk.RIGHT, padx=Spacing.XS)
         apply_tooltip(btn_show_all, "피킹(ACTIVE) 톤백 전체. [← LOT 리스트로]로 복귀.")
-        
+
         btn_picked_export = ttk.Button(btn_frame, text="📥 Excel 내보내기", command=self._on_picked_export_excel)
         btn_picked_export.pack(side=tk.RIGHT, padx=Spacing.XS)
         apply_tooltip(btn_picked_export, "현재 판매화물 결정 목록을 Excel로 내보내기")
@@ -113,10 +113,11 @@ class PickedTabMixin:
     def _on_picked_export_excel(self) -> None:
         """판매화물 결정(Picked) 데이터 Excel 내보내기"""
         try:
-            import pandas as pd
-            from tkinter import filedialog
             from datetime import datetime
-            
+            from tkinter import filedialog
+
+            import pandas as pd
+
             sql = """
                 SELECT lot_no, sub_lt, picking_no, customer, qty_kg, picking_date, created_by
                 FROM picking_table
@@ -124,7 +125,7 @@ class PickedTabMixin:
                 ORDER BY lot_no, sub_lt
             """
             rows = self.engine.db.fetchall(sql) if hasattr(self.engine, 'db') and self.engine.db else []
-            
+
             if not rows:
                 if hasattr(self, '_log'):
                     self._log("내보낼 판매화물 결정 데이터가 없습니다.")
@@ -141,7 +142,7 @@ class PickedTabMixin:
                 'created_by': '작업자'
             }
             df.rename(columns=col_map, inplace=True)
-            
+
             path = filedialog.asksaveasfilename(
                 defaultextension='.xlsx',
                 filetypes=[('Excel', '*.xlsx'), ('All', '*.*')],

@@ -1,18 +1,15 @@
-# -*- coding: utf-8 -*-
 """
 가상 Allocation Table Excel 3개 생성
 - 입고 리스트에 있는 컬럼만 사용: Product, SAP NO, Lot No, WH, Customs, Date in stock, QTY (MT)
 - ETA BUSAN, GW, SALE REF는 빈칸 (입고 리스트에 없음)
 - 파일당 200 일반 톤백 + 200 샘플 = 400행
 """
-import os
 import random
-from datetime import datetime
 from pathlib import Path
 
 try:
     import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 except ImportError:
     print("openpyxl 필요: pip install openpyxl")
@@ -42,11 +39,11 @@ def _generate_lot_no(used: set) -> str:
 def _create_allocation_file(filepath: Path, file_index: int, seed: int) -> None:
     random.seed(seed)
     used_lots = set()
-    
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Allocation Table"
-    
+
     title_font = Font(bold=True, size=14, color="2C3E50")
     header_font = Font(bold=True, color="FFFFFF", size=10)
     data_font = Font(size=10)
@@ -60,16 +57,16 @@ def _create_allocation_file(filepath: Path, file_index: int, seed: int) -> None:
     )
     center = Alignment(horizontal='center', vertical='center')
     right_align = Alignment(horizontal='right', vertical='center')
-    
+
     # Row 1: 타이틀
     ws.merge_cells('A1:J1')
     ws['A1'] = f"Allocation - PT LBM - File{file_index} / CIF Semarang - 2000MT of MIC9000"
     ws['A1'].font = title_font
     ws.row_dimensions[1].height = 30
-    
+
     # Row 2: 합계 (나중에 수식)
     ws.row_dimensions[2].height = 20
-    
+
     # Row 3: 헤더 (화주 양식 — 입고 리스트에 있는 것 + QTY)
     headers = [
         ('Product', 16), ('SAP NO', 14), ('ETA BUSAN', 14), ('Date in stock', 14),
@@ -83,10 +80,10 @@ def _create_allocation_file(filepath: Path, file_index: int, seed: int) -> None:
         cell.alignment = center
         cell.border = thin_border
         ws.column_dimensions[get_column_letter(col)].width = width
-    
+
     row_num = 4
     total_qty = 0.0
-    
+
     # 200 일반 톤백
     for _ in range(200):
         lot = _generate_lot_no(used_lots)
@@ -108,7 +105,7 @@ def _create_allocation_file(filepath: Path, file_index: int, seed: int) -> None:
                 cell.alignment = center
         row_num += 1
         total_qty += qty
-    
+
     # 200 샘플 톤백
     for _ in range(200):
         lot = _generate_lot_no(used_lots)
@@ -130,12 +127,12 @@ def _create_allocation_file(filepath: Path, file_index: int, seed: int) -> None:
                 cell.alignment = center
         row_num += 1
         total_qty += qty
-    
+
     last_row = row_num - 1
     ws['E2'].value = f"=SUM(E4:E{last_row})"
     ws['E2'].number_format = '#,##0.0000'
     ws['E2'].font = Font(bold=True)
-    
+
     wb.save(filepath)
     print(f"  생성: {filepath.name} ({last_row - 3}행, 합계 QTY 약 {total_qty:.3f} MT)")
 

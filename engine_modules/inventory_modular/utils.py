@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM Inventory Engine - Utilities
 ================================
@@ -9,9 +8,8 @@ Safe parsing and utility functions
 """
 
 import logging
-from datetime import datetime, date
-from typing import Optional, List, Any, Dict
-from core.types import normalize_column_name
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -29,37 +27,37 @@ def safe_parse_date(date_value: Any, formats: List[str] = None) -> Optional[date
     """
     if date_value is None:
         return None
-    
+
     # Already date/datetime
     if isinstance(date_value, datetime):
         return date_value.date()
     if isinstance(date_value, date):
         return date_value
-    
+
     # pandas Timestamp
     if hasattr(date_value, 'date'):
         try:
             return date_value.date()
         except (ValueError, TypeError, KeyError) as _e:
             logger.debug(f"utils: {_e}")
-    
+
     # String parsing
     if isinstance(date_value, str):
         if formats is None:
             formats = [
-                '%Y-%m-%d', '%Y.%m.%d', '%d/%m/%Y', 
+                '%Y-%m-%d', '%Y.%m.%d', '%d/%m/%Y',
                 '%m/%d/%Y', '%Y%m%d', '%d-%m-%Y'
             ]
-        
+
         date_str = str(date_value).strip()
         for fmt in formats:
             try:
                 return datetime.strptime(date_str, fmt).date()
             except ValueError:
                 continue
-        
+
         logger.debug(f"Date parsing failed: {date_value}")
-    
+
     return None
 
 
@@ -76,7 +74,7 @@ def safe_parse_float(value: Any, default: float = 0.0) -> float:
     """
     if value is None:
         return default
-    
+
     try:
         if isinstance(value, str):
             value = value.replace(',', '').strip()
@@ -99,7 +97,7 @@ def safe_parse_int(value: Any, default: int = 0) -> int:
     """
     if value is None:
         return default
-    
+
     try:
         if isinstance(value, str):
             value = value.replace(',', '').strip()
@@ -115,7 +113,7 @@ class PackingDataAdapter:
     
     Converts dict packing data to object-like access
     """
-    
+
     def __init__(self, data: Dict):
         """PackingData 초기화"""
         self._data = data
@@ -133,16 +131,16 @@ class PackingDataAdapter:
         self.eta_busan = data.get('eta_busan')
         self.stock_date = data.get('stock_date')
         self.salar_invoice_no = data.get('salar_invoice_no', '')
-        
+
         # Calculated fields
         total_weight = sum(lot.get('net_weight', 0) for lot in self.lots)
         self.total_net_weight = total_weight
         self.total_lots = len(self.lots)
-    
+
     def __getattr__(self, name: str):
         """dict 스타일 속성 접근"""
         return self._data.get(name, '')
-    
+
     def get(self, key: str, default: Any = None) -> Any:
         """dict.get() 호환 메서드"""
         return self._data.get(key, default)
@@ -173,14 +171,14 @@ def format_lot_no(lot_no: Any) -> str:
     """
     if lot_no is None:
         return ""
-    
+
     if isinstance(lot_no, float):
         return str(int(lot_no))
-    
+
     lot_str = str(lot_no).strip()
     if '.' in lot_str:
         lot_str = lot_str.split('.')[0]
-    
+
     return lot_str
 
 

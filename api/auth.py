@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v7.0.0-alpha — JWT 인증 미들웨어
 ======================================
@@ -25,7 +24,7 @@ from base64 import b64decode, b64encode
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)

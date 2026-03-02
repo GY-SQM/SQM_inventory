@@ -1,20 +1,29 @@
-# -*- coding: utf-8 -*-
 """
 SQM 크로스 체크 엔진 단위 테스트
 v6.2.1 — 2026-02-27
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from parsers.cross_check_engine import (
-    CrossCheckResult, CheckLevel,
-    _normalize_vessel, _normalize_container, _normalize_bl,
-    _vessel_fuzzy_match, _weight_diff_pct, cross_check_documents,
+    CheckLevel,
+    _normalize_bl,
+    _normalize_container,
+    _normalize_vessel,
+    _vessel_fuzzy_match,
+    _weight_diff_pct,
+    cross_check_documents,
 )
 from parsers.document_models import (
-    InvoiceData, PackingListData, BLData, DOData, LOTInfo, ContainerInfo,
+    BLData,
+    ContainerInfo,
+    DOData,
+    InvoiceData,
+    LOTInfo,
+    PackingListData,
 )
 
 

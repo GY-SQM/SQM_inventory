@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 P5-12: core.config 단위 테스트
 ===============================
@@ -9,7 +8,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
 from core.config import (
     BASE_DIR,
     DB_PATH,

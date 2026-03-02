@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 재고 엔진 V3 (모듈화 버전)
 =================================================
@@ -53,18 +52,18 @@ Mixin 구성:
 버전: v3.6.0
 """
 
-import os
 import logging
+import os
 import sqlite3
-from typing import Dict, Any
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
 # Import mixins
-from .query_mixin import QueryMixin
+from .export_mixin import ExportMixin
 from .inbound_mixin import InboundMixin
 from .outbound_mixin import OutboundMixin
-from .export_mixin import ExportMixin
+from .query_mixin import QueryMixin
 
 # New mixins (v2.9.91)
 # v5.5.3 P6: ExportExtendedMixin 제거 (죽은 코드 — export_mixin.py로 통합 완료)
@@ -152,7 +151,7 @@ class SQMInventoryEngineV3(
     Utilities:
     - CRUDMixin: Basic CRUD and search
     """
-    
+
     def __init__(self, db_path: str = None):
         """
         Initialize engine
@@ -172,10 +171,17 @@ class SQMInventoryEngineV3(
         if DB_TYPE.lower() == 'postgresql':
             # PostgreSQL 모드
             try:
+                from core.config import (
+                    PG_DATABASE,
+                    PG_HOST,
+                    PG_MAX_CONNECTIONS,
+                    PG_MIN_CONNECTIONS,
+                    PG_PASSWORD,
+                    PG_PORT,
+                    PG_USER,
+                )
                 from engine_modules.database_postgresql import PostgreSQLDatabase
-                from core.config import PG_HOST, PG_PORT, PG_DATABASE, PG_USER, PG_PASSWORD
-                from core.config import PG_MIN_CONNECTIONS, PG_MAX_CONNECTIONS
-                
+
                 self.db = PostgreSQLDatabase(
                     host=PG_HOST,
                     port=PG_PORT,
@@ -187,7 +193,7 @@ class SQMInventoryEngineV3(
                 )
                 self.db_path = f"postgresql://{PG_USER}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
                 logger.info(f"✅ PostgreSQL 연결 완료: {PG_HOST}:{PG_PORT}/{PG_DATABASE}")
-                
+
             except ImportError as e:
                 logger.error(f"PostgreSQL 모듈 import 실패: {e}")
                 logger.info("SQLite로 폴백합니다.")
@@ -198,13 +204,13 @@ class SQMInventoryEngineV3(
                 logger.info("SQLite로 폴백합니다.")
                 DB_TYPE = 'sqlite'
                 self.db_type = 'sqlite'
-        
+
         if DB_TYPE.lower() == 'sqlite':
             # SQLite 모드 (기존)
             self.db_path = db_path or os.environ.get(
                 'SQM_DB_PATH', 'data/db/sqm_inventory.db'
             )
-            
+
             try:
                 from engine_modules.database import SQMDatabase
                 self.db = SQMDatabase(self.db_path)
@@ -217,12 +223,12 @@ class SQMInventoryEngineV3(
                     pool_pre_ping=True
                 )
                 self.db = None
-        
+
         self.errors = []
         self.warnings = []
-        
+
         logger.info(f"SQMInventoryEngineV3 initialized: {self.db_path}")
-    
+
     def get_connection(self) -> Any:
         """
         Get database connection (SQLite 호환)
@@ -236,7 +242,7 @@ class SQMInventoryEngineV3(
         if self.db is not None:
             return self.db.conn
         raise RuntimeError("Database not initialized")
-    
+
     def get_statistics(self) -> Dict[str, Any]:
         """
         Get overall statistics
@@ -255,7 +261,7 @@ class SQMInventoryEngineV3(
                 'total_tonbags': 0,
                 'available_tonbags': 0,
             }
-            
+
             if self.db:
                 # LOT statistics
                 lot_result = self.db.fetchone("""
@@ -266,13 +272,13 @@ class SQMInventoryEngineV3(
                         COALESCE(SUM(picked_weight), 0) as picked_weight
                     FROM inventory
                 """)
-                
+
                 if lot_result:
                     stats['total_lots'] = lot_result['total_lots'] or 0
                     stats['total_weight_kg'] = lot_result['total_weight'] or 0
                     stats['available_weight_kg'] = lot_result['available_weight'] or 0
                     stats['picked_weight_kg'] = lot_result['picked_weight'] or 0
-                
+
                 # Tonbag statistics
                 tonbag_result = self.db.fetchone("""
                     SELECT 
@@ -280,21 +286,21 @@ class SQMInventoryEngineV3(
                         SUM(CASE WHEN status = 'AVAILABLE' THEN 1 ELSE 0 END) as available
                     FROM inventory_tonbag
                 """)
-                
+
                 if tonbag_result:
                     stats['total_tonbags'] = tonbag_result['total'] or 0
                     stats['available_tonbags'] = tonbag_result['available'] or 0
-            
+
             # Convert to MT
             stats['total_weight_mt'] = stats['total_weight_kg'] / 1000
             stats['available_weight_mt'] = stats['available_weight_kg'] / 1000
-            
+
             return stats
-            
+
         except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
             logger.error(f"Statistics error: {e}")
             return {}
-    
+
     def health_check(self) -> Dict[str, Any]:
         """
         Check system health
@@ -308,13 +314,13 @@ class SQMInventoryEngineV3(
             'tables': [],
             'message': '',
         }
-        
+
         try:
             if self.db:
                 # Check DB connection
                 self.db.fetchone("SELECT 1")
                 status['database'] = True
-                
+
                 # Get table list (PostgreSQL 호환)
                 if getattr(self, 'db_type', 'sqlite') == 'postgresql':
                     tables = self.db.fetchall("""
@@ -328,15 +334,15 @@ class SQMInventoryEngineV3(
                         WHERE type='table' AND name NOT LIKE 'sqlite_%'
                     """)
                 status['tables'] = [t['name'] for t in tables]
-            
+
             status['message'] = "OK"
-            
+
         except (sqlite3.Error, OSError) as e:
             status['message'] = str(e)
             logger.error(f"Health check error: {e}")
-        
+
         return status
-    
+
     def close(self) -> None:
         """Close engine"""
         if getattr(self, 'db', None):
@@ -344,7 +350,7 @@ class SQMInventoryEngineV3(
         if hasattr(self, 'engine') and self.engine:
             self.engine.dispose()
         logger.info("SQMInventoryEngineV3 closed")
-    
+
     def __del__(self) -> None:
         """v3.7.0: GC 시 DB 연결 확실히 닫기"""
         try:

@@ -5,26 +5,42 @@ SQM v3.8.4 — 원스톱 입고 팝업
 
 작성일: 2025-02-06
 """
-import sqlite3
+import logging
 import os
-from tkinter import messagebox as msgbox
+import threading
 import time
 import tkinter as tk
-from tkinter import ttk, filedialog, BOTH, YES, X, Y, LEFT, RIGHT, BOTTOM, END, VERTICAL, HORIZONTAL
-import logging
-import threading
-from datetime import datetime, timedelta, date as _date_type
 from copy import deepcopy
+from datetime import date as _date_type
+from datetime import datetime, timedelta
+from tkinter import (
+    BOTH,
+    BOTTOM,
+    END,
+    HORIZONTAL,
+    LEFT,
+    RIGHT,
+    VERTICAL,
+    YES,
+    X,
+    Y,
+    filedialog,
+    ttk,
+)
 
 # 비즈니스 기본값
 from core.constants import DEFAULT_WAREHOUSE
-
-from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog, apply_modal_window_options
 from core.types import safe_float
-from ..utils.tree_enhancements import HeaderFilterBar
 
 # v5.8.7: DatePicker 달력 UI — gui_bootstrap 통일 (ttkbootstrap.DateEntry, 없으면 텍스트 입력 폴백)
-from ..utils.gui_bootstrap import DateEntry, HAS_DATEENTRY
+from ..utils.gui_bootstrap import HAS_DATEENTRY, DateEntry
+from ..utils.tree_enhancements import HeaderFilterBar
+from ..utils.ui_constants import (
+    DialogSize,
+    ThemeColors,
+    apply_modal_window_options,
+    center_dialog,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -78,27 +94,27 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     3. 18열 미리보기 테이블
     4. [DB 업로드] 또는 [Excel 내보내기]
     """
-    
+
     def __init__(self, parent, engine, log_fn=None, app=None):
         self.parent = parent
         self.engine = engine
         self.app = app  # v3.8.8: 메인 앱 참조 (새로고침용)
         self._log = log_fn or (lambda msg, **kw: logger.info(msg))
-        
+
         # 파일 경로 저장
         self.file_paths = {}  # {doc_type: file_path}
-        
+
         # 파싱 결과
         self.parsed_results = {}
         self.preview_data = []
-        
+
         # 업로드 결과
         self.upload_success = False
         # v5.8.9: 컨테이너 번호 접미사(-숫자) 디폴트 숨김, 필요 시 표시
         self._show_container_suffix = False
         # 파싱 결과 팝업에서 DB 업로드 선택 시, 완료 후 엑셀 내보내기 여부 질의
         self._ask_excel_after_upload = False
-        
+
         # UI 참조
         self.dialog = None
         self.file_labels = {}
@@ -122,12 +138,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._sort_desc = False
         self._view_indices = []
         self._original_preview_data = []
-    
+
     def show(self, initial_files: dict = None) -> None:
         """팝업 표시. initial_files: { 'DO': 경로 } 등 드래그앤드롭/캡처 이미지 사전 지정."""
         self._initial_files = initial_files or {}
         self._create_dialog()
-    
+
     def _attach_doc_tooltip(self, widget, text: str):
         """v3.8.9: 문서 위젯에 툴팁 추가"""
         tip = None
@@ -149,7 +165,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 tip = None
         widget.bind('<Enter>', enter)
         widget.bind('<Leave>', leave)
-    
+
     def _create_dialog(self) -> None:
         """원스톱 입고 팝업 생성"""
         self.dialog = tk.Toplevel(self.parent)
@@ -164,29 +180,29 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
             center_dialog(self.dialog, self.parent)
         self.dialog.protocol("WM_DELETE_WINDOW", self._on_cancel)
-        
+
         main = ttk.Frame(self.dialog, padding=6)
         main.pack(fill=BOTH, expand=YES)
-        
+
         # ═══════════════════════════════════════════════════════════
         # 1. 상단: 4종 서류 + 파싱 버튼 (1줄 균등 배치)
         # ═══════════════════════════════════════════════════════════
         file_frame = ttk.Frame(main)
         file_frame.pack(fill=X, pady=(0, 4))
-        
+
         # 6열 그리드: [①PL][②INV][③BL][④DO] [파싱][힌트]
         for i in range(4):
             file_frame.columnconfigure(i, weight=1, uniform='doc')
         file_frame.columnconfigure(4, weight=0)  # 파싱 버튼
         file_frame.columnconfigure(5, weight=0)  # 힌트
-        
+
         short_names = {
             'PACKING_LIST': '① Packing List',
             'INVOICE':      '② Invoice, FA',
             'BL':           '③ Bill of Loading',
             'DO':           '④ Delivery Order',
         }
-        
+
         # v3.8.9: 서류별 상세 툴팁 — v5.7.5: Invoice/FA, Bill of Loading, Delivery Order
         _tooltips = {
             'PACKING_LIST': '📦 Packing List (포장명세서)\n\n• LOT번호, 제품명, 수량, 중량 정보 추출\n• 필수 서류 — 없으면 입고 불가\n• PDF 또는 Excel 파일 지원',
@@ -194,12 +210,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             'BL':           '🚢 Bill of Loading (선하증권)\n\n• BL번호, 선박명, 출항일, 도착일 추출\n• 필수 서류 — 없으면 선적 정보 누락\n• PDF 파일 지원',
             'DO':           '📋 Delivery Order (인도지시서)\n\n• 인도 장소, Free Time 정보 추출\n• 선택 서류 — 없어도 입고 가능\n• PDF 파일 지원',
         }
-        
+
         _os_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
         for idx, (doc_type, doc_name, required) in enumerate(DOC_TYPES):
             cell = ttk.Frame(file_frame)
             cell.grid(row=0, column=idx, sticky='ew', padx=(0, 2))
-            
+
             _cell_fg = ThemeColors.get('text_primary', _os_dark)
             # 서류명
             lbl = ttk.Label(cell, text=short_names.get(doc_type, ''),
@@ -207,7 +223,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                       foreground=_cell_fg)
             lbl.pack(side=LEFT, padx=(2, 2))
             self._attach_doc_tooltip(lbl, _tooltips.get(doc_type, ''))
-            
+
             # 📂 폴더선택 버튼
             btn_sel = tk.Button(cell, text="📂",
                                 command=lambda dt=doc_type: self._select_file(dt),
@@ -216,12 +232,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             btn_sel.pack(side=LEFT, padx=(0, 2))
             _req = '(필수)' if required else '(선택)'
             self._attach_doc_tooltip(btn_sel, f"클릭하여 {doc_name} 파일 선택 {_req}")
-            
+
             # 체크 표시
             check_label = ttk.Label(cell, text="☐", font=('', 15))
             check_label.pack(side=LEFT, padx=(0, 2))
             self.check_labels[doc_type] = check_label
-            
+
             # 파일명 (동그라미 서류명과 같은 색)
             file_label = ttk.Label(cell, text="", foreground=_cell_fg,
                                    font=('맑은 고딕', 12), anchor='w')
@@ -234,7 +250,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 self.file_paths[doc_type] = path
                 self.file_labels[doc_type].configure(text=os.path.basename(path))
                 self.check_labels[doc_type].configure(text="☑")
-        
+
         # [파싱 시작] 버튼
         self.btn_parse = ttk.Button(
             file_frame, text="▶ 파싱 시작",
@@ -244,21 +260,21 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self.btn_parse.grid(row=0, column=4, padx=(6, 2))
         self._attach_doc_tooltip(self.btn_parse,
             "선택한 서류를 분석합니다\n\n• Packing List → LOT, 수량, 중량 추출\n• Invoice, FA → SAP번호, 금액 추출\n• Bill of Loading → BL번호, 선박, 일정 추출\n• Delivery Order → 인도장소, Free Time 추출")
-        
+
         self.parse_hint = ttk.Label(
             file_frame, text="",
             foreground='white', font=('맑은 고딕', 12)
         )
         self.parse_hint.grid(row=0, column=5, padx=(2, 4), sticky='w')
         self._update_parse_hint()
-        
+
         # v5.7.5: 프로그레스 (팝업 + 인라인)
         self.progress_var = tk.DoubleVar(value=0)
         self.status_var = tk.StringVar(value="")
         self._progress_popup = None
         self._progress_popup_label = None
         self._progress_popup_bar = None
-        
+
         # ═══════════════════════════════════════════════════════════
         # 1.5 진행 상태 (미리보기 위에 고정 — 진행/데이터 혼동 방지)
         # ═══════════════════════════════════════════════════════════
@@ -286,19 +302,19 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         _row2.pack(fill=X)
         self._progress_inline_pct_elapsed = ttk.Label(_row2, text="", font=('맑은 고딕', 10), foreground=ThemeColors.get('text_secondary', _pop_dark))
         self._progress_inline_pct_elapsed.pack(side=tk.RIGHT)
-        
+
         # ═══════════════════════════════════════════════════════════
         # 2. 미리보기 테이블 (v5.9.9: 폰트 20% 축소 — 14pt→11pt, 13pt→10pt)
         # ═══════════════════════════════════════════════════════════
         # v5.7.5: "업로드 2" 삭제 — "(확인 후 업로드)" 문구 제거
         tree_frame = ttk.LabelFrame(main, text="📊 미리보기 (스케일링·처리된 데이터)", padding=4)
         tree_frame.pack(fill=BOTH, expand=YES, pady=(0, 3))
-        
+
         import tkinter.font as tkfont
         preview_font = tkfont.Font(family='맑은 고딕', size=11)
         heading_font = tkfont.Font(family='맑은 고딕', size=10, weight='bold')
         row_height = preview_font.metrics('linespace') + 6
-        
+
         _tree_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
         _tree_fg = ThemeColors.get('text_primary', _tree_dark)
         style = ttk.Style()
@@ -309,7 +325,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         fieldbackground=ThemeColors.get('bg_card', _tree_dark))
         style.configure('Preview.Treeview.Heading',
                         font=('맑은 고딕', 10, 'bold'))
-        
+
         columns = tuple(col[0] for col in PREVIEW_COLUMNS)
         self.tree = ttk.Treeview(
             tree_frame, columns=columns, show="headings",
@@ -323,20 +339,20 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self.tree.tag_configure('xc_critical', background='#FFCDD2', foreground='#B71C1C')   # 빨강 (심각)
         self.tree.tag_configure('xc_warning', background='#FFE0B2', foreground='#E65100')     # 주황 (주의)
         self.tree.tag_configure('xc_info', background='#FFF9C4', foreground='#F57F17')        # 노랑 (참고)
-        
+
         for col_id, header, width, anchor in PREVIEW_COLUMNS:
             self.tree.heading(col_id, text=header, command=lambda c=col_id: self._toggle_preview_sort(c))
             self.tree.column(col_id, width=width, anchor=anchor, minwidth=35)
-        
+
         scrollbar_y = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree.yview)
         scrollbar_x = ttk.Scrollbar(tree_frame, orient=HORIZONTAL, command=self.tree.xview)
         self.tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
-        
+
         scrollbar_x.pack(side=BOTTOM, fill=X)
         self.tree.pack(side=LEFT, fill=BOTH, expand=YES)
         scrollbar_y.pack(side=RIGHT, fill=Y)
         self._setup_preview_edit_bindings()
-        
+
         # v5.8.9: 컨테이너 번호 접미사(-숫자) 표시 옵션
         self._var_show_container_suffix = tk.BooleanVar(value=False)
         chk_container = ttk.Checkbutton(
@@ -360,20 +376,20 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             is_dark=_tree_dark
         )
         self.filter_bar.pack(fill=X, pady=(2, 2))
-        
+
         # ═══════════════════════════════════════════════════════════
         # 4. 하단 한 줄 — 업로드5: 폰트 통일(15), 업로드6: 합계 가운데 배치
         # [엑셀][DB 업로드]  (합계: ... 가운데)  [취소]
         # ═══════════════════════════════════════════════════════════
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=X, pady=(8, 0))
-        
+
         _font = getattr(self, '_toolbar_font', '맑은 고딕') if hasattr(self, '_toolbar_font') else '맑은 고딕'
         _btn_font_size = 15
         _btn_fg = ThemeColors.get('badge_text', _tree_dark)
         _blue = ThemeColors.get('info', _tree_dark)
         _red = ThemeColors.get('statusbar_icon_err', _tree_dark)
-        
+
         self.btn_excel = tk.Button(
             btn_frame, text="📥 Excel 내보내기",
             command=self._export_to_excel, state='disabled',
@@ -412,7 +428,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             variable=self._var_upload_by_view_order
         )
         chk_upload_order.pack(side=LEFT, padx=(8, 0))
-        
+
         self.btn_upload = tk.Button(
             btn_frame, text="📤 DB 업로드",
             command=self._on_upload, state='disabled',
@@ -422,24 +438,24 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self.btn_upload.pack(side=LEFT, padx=(5, 0))
         self._attach_doc_tooltip(self.btn_upload,
             "미리보기 데이터를 DB에 저장합니다\n\n• 저장 후 재고리스트에 자동 반영\n• 중복 LOT는 자동 스킵\n• 저장 완료 후 재고리스트 화면 표시")
-        
+
         self.summary_var = tk.StringVar(value="")
         _summary_lbl = ttk.Label(btn_frame, textvariable=self.summary_var,
                                 font=('맑은 고딕', 13, 'bold'),
                                 foreground=ThemeColors.get('statusbar_progress', _tree_dark))
         _summary_lbl.pack(side=LEFT, fill=X, expand=True, padx=10)
-        
+
         tk.Button(
             btn_frame, text="❌ 취소",
             command=self._on_cancel,
             font=(_font, _btn_font_size, 'bold'), bg=_red, fg=_btn_fg,
             padx=20, pady=8, cursor='hand2', bd=0
         ).pack(side=RIGHT, padx=(5, 0))
-    
+
     # ═══════════════════════════════════════════════════════════
     # 파일 선택
     # ═══════════════════════════════════════════════════════════
-    
+
     def _update_parse_hint(self) -> None:
         """파싱 시작 옆 업로드 상태 문구 갱신: 총 4개 중 N개 업로드되었습니다."""
         n = len(self.file_paths)
@@ -460,7 +476,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 text=f"총 4개 중 {n}개 업로드되었습니다.",
                 foreground=ThemeColors.get('text_primary', _hint_dark)
             )
-    
+
     def _select_file(self, doc_type: str):
         """서류별 파일 선택"""
         type_names = {
@@ -469,7 +485,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             'BL': 'Bill of Loading',
             'DO': 'Delivery Order',
         }
-        
+
         file_path = filedialog.askopenfilename(
             parent=self.dialog,
             title=f"{type_names.get(doc_type, doc_type)} 파일 선택",
@@ -479,26 +495,26 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 ("All files", "*.*")
             ]
         )
-        
+
         if not file_path:
             return
-        
+
         self.file_paths[doc_type] = file_path
         fname = os.path.basename(file_path)
-        
+
         # UI 업데이트
         self.file_labels[doc_type].config(text=fname, foreground=ThemeColors.get('text_primary', ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))))
         self.check_labels[doc_type].config(text="✅")
-        
+
         self._log(f"📂 {doc_type}: {fname}")
-        
+
         # 파싱 버튼 활성화 조건: PL 필수
         self._update_parse_hint()
-    
+
     # ═══════════════════════════════════════════════════════════
     # 파싱
     # ═══════════════════════════════════════════════════════════
-    
+
     def _start_parsing(self) -> None:
         """v3.8.9: 파싱 시작 — 입고 서류 현황 안내 후 진행 확인"""
         # 들어온 서류 / 빠진 서류 분류
@@ -519,7 +535,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 missing.append(name)
                 if doc_type == 'DO':
                     do_missing = True
-        
+
         # 메시지 구성: 들어온 서류 / 빠진 서류 / D/O 안내 / 진행할까요?
         lines = []
         if received:
@@ -530,7 +546,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             lines.append("\n📋 D/O가 빠진 경우에는 입항일 혹은 프리타임을 반드시 입력해야 합니다.")
         lines.append("\n진행할까요?")
         msg = "\n".join(lines)
-        
+
         from ..utils.custom_messagebox import CustomMessageBox
         proceed = CustomMessageBox.askyesno(
             self.dialog,
@@ -539,19 +555,19 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         )
         if not proceed:
             return
-        
+
         if missing:
             self._update_progress(0, f"ℹ️ {', '.join(missing)} 미선택 — 해당 정보 생략")
-        
+
         self.btn_parse.config(state='disabled')
         self._show_progress_inline()
-        
+
         thread = threading.Thread(
             target=self._parse_thread,
             daemon=True
         )
         thread.start()
-    
+
     def _show_progress_inline(self) -> None:
         """진행 상태를 미리보기 위 인라인 영역에만 표시 (팝업 없음, 움직임 표시 포함)"""
         ph = getattr(self, '_progress_inline_placeholder', None)
@@ -704,12 +720,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 self.dialog.after(PROGRESS_POPUP_CLOSE_DELAY_MS + 100, self._hide_progress_inline)
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(0, _update)
-    
+
     def _parse_thread(self) -> None:
         """백그라운드 파싱"""
         try:
             from parsers.document_parser_v2 import DocumentParserV2
-            
+
             gemini_key = os.environ.get('GEMINI_API_KEY', '')
             if not gemini_key:
                 try:
@@ -718,13 +734,13 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     gemini_key = settings.get('gemini_api_key', '')
                 except (ImportError, ModuleNotFoundError) as _e:
                     logger.debug(f"onestop_inbound: {_e}")
-            
+
             # v5.5.1: 모든 파싱은 API(Gemini) 강제
             if not gemini_key or str(gemini_key).strip() == '' or str(gemini_key).startswith('your-'):
                 raise RuntimeError("API-only 모드: Gemini API Key가 필요합니다. 설정에서 API Key를 입력하세요.")
 
             parser = DocumentParserV2(gemini_api_key=gemini_key)
-            
+
             # 파싱 순서: PL → Invoice → BL → DO
             parse_order = ['PACKING_LIST', 'INVOICE', 'BL', 'DO']
             to_parse = [(dt, self.file_paths[dt]) for dt in parse_order if dt in self.file_paths]
@@ -732,14 +748,14 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             if total == 0:
                 self._update_progress(90, "파싱할 파일이 없습니다")
                 return
-            
+
             icons = {'PACKING_LIST': '📦', 'INVOICE': '📑', 'BL': '🚢', 'DO': '📋'}
-            
+
             pl_result = None
             inv_result = None
             bl_result = None
             do_result = None
-            
+
             # v5.7.5: 현재 파싱 중인 서류 이름 표시
             doc_type_display = {
                 'PACKING_LIST': 'Packing List',
@@ -754,7 +770,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 doc_name = doc_type_display.get(doc_type, doc_type)
                 self._update_progress(pct, f"현재 파싱 중: {doc_name} — {fname}")
                 self._log_safe(f"{icon} {doc_type} 파싱: {fname}")
-                
+
                 try:
                     if doc_type == 'PACKING_LIST':
                         pl_result = parser.parse_packing_list(file_path)
@@ -767,25 +783,25 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             _dup_cnt = getattr(pl_result, 'duplicates_removed', 0) or 0
                             if _dup_cnt > 0:
                                 self._log_safe(f"  ⚠️ Gemini 응답에서 중복 행 {_dup_cnt}건 자동 제거됨")
-                    
+
                     elif doc_type == 'INVOICE':
                         inv_result = parser.parse_invoice(file_path)
                         self.parsed_results['invoice'] = inv_result
                         if inv_result:
                             self._log_safe(f"  ✅ SAP: {getattr(inv_result, 'sap_no', '')}, Invoice: {getattr(inv_result, 'salar_invoice_no', '')}")
-                    
+
                     elif doc_type == 'BL':
                         bl_result = parser.parse_bl(file_path)
                         self.parsed_results['bl'] = bl_result
                         if bl_result:
                             self._log_safe(f"  ✅ B/L: {getattr(bl_result, 'bl_no', '')}, Containers: {getattr(bl_result, 'total_containers', 0)}")
-                    
+
                     elif doc_type == 'DO':
                         do_result = parser.parse_do(file_path)
                         self.parsed_results['do'] = do_result
                         if do_result:
                             self._log_safe(f"  ✅ D/O: B/L={getattr(do_result, 'bl_no', '')}")
-                
+
                 except (ValueError, TypeError, AttributeError, RuntimeError) as e:
                     self._log_safe(f"  ❌ {doc_type} 파싱 오류: {e}")
                     logger.error(f"파싱 오류 [{doc_type}]: {e}", exc_info=True)
@@ -798,11 +814,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     if self.dialog and self.dialog.winfo_exists():
                         self.dialog.after(0, lambda: self._push_preview_to_main())
                         self.dialog.after(0, lambda: self._refresh_preview_tree_only())
-            
+
             # 병합
             self._update_progress(85, "📊 데이터 병합 중...")
             self._merge_results(inv_result, pl_result, bl_result, do_result)
-            
+
             # ═══════════════════════════════════════════════════════
             # ★★★ v5.8.7: D/O 없거나 arrival_date 누락 시 사용자 입력
             # ═══════════════════════════════════════════════════════
@@ -814,27 +830,27 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             elif self.preview_data and not (self.preview_data[0].get('arrival_date') or '').strip():
                 _need_date_input = True
                 self._log_safe("📋 D/O에서 입항일 추출 실패 — 수동 입력 필요")
-            
+
             if _need_date_input and self.preview_data:
                 prefilled_ship = ''
                 if self.preview_data:
                     prefilled_ship = self.preview_data[0].get('ship_date', '') or ''
-                
+
                 import queue
                 date_queue = queue.Queue()
-                
+
                 def _show_date_popup():
                     self._hide_progress_popup()
                     result = self._ask_missing_dates(prefilled_ship, do_result)
                     date_queue.put(result)
-                
+
                 if self.dialog and self.dialog.winfo_exists():
                     self.dialog.after(0, _show_date_popup)
                     try:
                         user_dates = date_queue.get(timeout=300)
                     except queue.Empty:
                         user_dates = None
-                    
+
                     if user_dates:
                         if user_dates.get('deferred'):
                             # "D/O 추후 첨부" 선택
@@ -854,7 +870,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             self._log_safe(f"  ✅ 수동 입력: arrival={user_dates.get('arrival_date')}, con_return={user_dates.get('con_return')}, free_time={user_dates.get('free_time')}")
                     else:
                         self._log_safe("  ⚠️ 날짜 입력 취소 — arrival_date 없이 진행")
-            
+
             # v3.8.9: 파싱 결과 경고 (누락된 정보)
             _warnings = []
             if not pl_result or not getattr(pl_result, 'lots', None):
@@ -863,14 +879,14 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 _warnings.append("⚠️ Invoice: SAP번호 추출 실패 — 수동 입력 필요")
             if not bl_result or not getattr(bl_result, 'bl_no', None):
                 _warnings.append("⚠️ B/L: BL번호 추출 실패 — 수동 입력 필요")
-            
+
             # ═══════════════════════════════════════════════════════
             # v6.2.1: 4종 서류 크로스 체크 엔진
             # ※ B/L 파싱·SHIP DATE 파싱 로직은 변경하지 않음 (읽기 전용 검증)
             # ═══════════════════════════════════════════════════════
             self._cross_check_result = None
             try:
-                from parsers.cross_check_engine import cross_check_documents, CheckLevel
+                from parsers.cross_check_engine import CheckLevel, cross_check_documents
                 xc = cross_check_documents(
                     invoice=inv_result,
                     packing_list=pl_result,
@@ -878,18 +894,18 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     do=do_result,
                 )
                 self._cross_check_result = xc
-                
+
                 if not xc.is_clean:
                     self._log_safe(f"\n{'='*40}")
                     self._log_safe(f"🔍 {xc.summary}")
                     for item in xc.items:
                         self._log_safe(f"  {item}")
                     self._log_safe(f"{'='*40}")
-                    
+
                     # 크로스 체크 경고를 _warnings에 병합
                     for item in xc.items:
                         _warnings.append(str(item))
-                    
+
                     # CRITICAL 있으면 서류 확인 권장 메시지 추가
                     if xc.has_critical:
                         _warnings.insert(0,
@@ -900,7 +916,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     self._log_safe("✅ 4종 서류 크로스 체크 통과 — 불일치 없음")
             except (ImportError, Exception) as e:
                 logger.debug(f"[CrossCheck] 원스톱 크로스 체크 스킵: {e}")
-            
+
             if _warnings:
                 _warn_msg = "\n".join(_warnings)
                 self._log_safe(f"\n{'='*40}\n{_warn_msg}\n{'='*40}")
@@ -910,7 +926,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     CustomMessageBox.warning(None, "파싱 결과 확인", _warn_msg, parent=self.dialog)
                 if self.dialog and self.dialog.winfo_exists():
                     self.dialog.after(500, _show_warn)
-            
+
             # 병합 직후 메인 화면 재고 리스트에 실시간 반영
             if self.dialog and self.dialog.winfo_exists() and self.preview_data:
                 self.dialog.after(0, lambda: self._push_preview_to_main())
@@ -923,7 +939,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self._update_filter_values_from_preview()
             if self.btn_reset_original and self.btn_reset_original.winfo_exists():
                 self.btn_reset_original.config(state='normal' if self._original_preview_data else 'disabled')
-            
+
             # 표시
             self._update_progress(95, "📋 미리보기 준비...")
             self._display_preview()
@@ -942,22 +958,22 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             self.btn_upload.config(state='disabled')
             if self.dialog and self.dialog.winfo_exists():
                 self.dialog.after(400, _ensure_buttons_visible)
-            
+
             elapsed_sec = time.time() - getattr(self, '_progress_start_time', time.time())
             elapsed_str = f"{elapsed_sec:.1f}초" if elapsed_sec < 60 else f"{int(elapsed_sec // 60)}분 {elapsed_sec % 60:.0f}초"
             self._update_progress(100, f"✅ 파싱 완료 — {len(self.preview_data)}개 LOT ({elapsed_str})")
             self._log_safe(f"✅ 파싱 완료: {len(self.preview_data)} LOT, {total}종 서류 (경과: {elapsed_str})")
-        
+
         except (RuntimeError, ValueError) as e:
             self._update_progress(0, f"❌ 오류: {e}")
             self._log_safe(f"❌ 파싱 오류: {e}")
             logger.error(f"원스톱 파싱 오류: {e}", exc_info=True)
             self._enable_parse_btn()
-    
+
     # ═══════════════════════════════════════════════════════════
     # 데이터 병합 (4종 → 18열)
     # ═══════════════════════════════════════════════════════════
-    
+
     def _merge_results(self, invoice, pl, bl, do) -> list:
         """4종 파싱 결과를 18열 미리보기 데이터로 병합"""
         self.preview_data = []
@@ -965,7 +981,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._undo_stack = []
         self._redo_stack = []
         self._update_undo_redo_buttons()
-        
+
         if not pl or not getattr(pl, 'lots', None):
             if invoice and getattr(invoice, 'lot_numbers', None):
                 for idx, lot_no in enumerate(getattr(invoice, 'lot_numbers', []), 1):
@@ -1023,7 +1039,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 except Exception as e:
                     logger.debug(f"D/O 단독 DB 자동매칭 실패: {e}")
             return
-        
+
         _lots = list(getattr(pl, 'lots', []) or [])
         _lots_sorted = sorted(
             enumerate(_lots, 1),
@@ -1037,23 +1053,23 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             row['product_code'] = getattr(pl, 'code', '') or ''
             row['lot_no'] = getattr(lot, 'lot_no', '') or ''
             row['lot_sqm'] = getattr(lot, 'lot_sqm', '') or ''
-            
+
             _mxbg = getattr(lot, 'mxbg_pallet', None)
             row['mxbg_pallet'] = str(_mxbg) if _mxbg else '10'
-            
+
             _nw = getattr(lot, 'net_weight_kg', None)
             row['net_weight'] = f"{float(_nw):,.1f}" if _nw else ''
-            
+
             _gw = getattr(lot, 'gross_weight_kg', None)
             row['gross_weight'] = f"{float(_gw):,.3f}" if _gw else ''
-            
+
             # v3.8.8: B/L ship_date 우선, Invoice 폴백 — 업로드3/4: 파싱값으로 채움 (날짜는 YYYY-MM-DD)
             if bl:
                 row['bl_no'] = self._format_bl(getattr(bl, 'bl_no', '') or '')
                 _sd = getattr(bl, 'ship_date', None)
                 if _sd:
                     row['ship_date'] = str(_sd)[:10] if len(str(_sd)) >= 10 else str(_sd)
-            
+
             if invoice:
                 row['salar_invoice_no'] = getattr(invoice, 'salar_invoice_no', '') or ''
                 if not (row.get('ship_date') or '').strip():
@@ -1062,18 +1078,18 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         row['ship_date'] = str(_id)[:10] if len(str(_id)) >= 10 else str(_id)
                 if not row['sap_no']:
                     row['sap_no'] = getattr(invoice, 'sap_no', '') or ''
-            
+
             self._fill_do(row, do)
             if not (row.get('warehouse') or '').strip():
                 row['warehouse'] = DEFAULT_WAREHOUSE
             row['status'] = 'AVAILABLE'
             self.preview_data.append(row)
-    
+
     def _empty_row(self, no: int) -> dict:
         row = {col[0]: '' for col in PREVIEW_COLUMNS}
         row['no'] = str(no)
         return row
-    
+
     def _date_str(self, val) -> str:
         """날짜를 YYYY-MM-DD 문자열로. None/'None'/비어있으면 '' 반환 (date.today() 사용 안 함)."""
         if val is None or (isinstance(val, str) and (not val.strip() or val.strip() in ('None', 'none'))):
@@ -1090,14 +1106,14 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         if bl_no.isdigit() and len(bl_no) >= 9:
             return f"MAEU{bl_no}"
         return bl_no
-    
+
     def _fill_do(self, row: dict, do) -> None:
         """v3.8.8: D/O 데이터로 미리보기 행 보완 (free_time 계산 포함)"""
         if not do:
             return
         if not row.get('bl_no') and getattr(do, 'bl_no', None):
             row['bl_no'] = str(getattr(do, 'bl_no', ''))
-        
+
         # arrival_date (업로드3/4: D/O 파싱값으로 채움, YYYY-MM-DD)
         # v5.8.8: 날짜가 아닌 값(예: '광양')이면 넣지 않음 — ARRIVAL 컬럼 혼동 방지
         arr = getattr(do, 'arrival_date', None)
@@ -1105,12 +1121,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             _s = str(arr).strip()[:10]
             if len(_s) == 10 and _s.count('-') == 2 and _s.replace('-', '').isdigit():
                 row['arrival_date'] = _s
-        
+
         # warehouse
         wh = getattr(do, 'warehouse_name', '') or getattr(do, 'warehouse', '')
         if wh:
             row['warehouse'] = str(wh)
-        
+
         # FREE TIME = con_return(컨테이너 반납일) - arrival_date (일수). D/O의 Free_Time 컬럼 = 반납일
         ft_infos = getattr(do, 'free_time_info', []) or []
         if ft_infos and arr and str(arr) != 'None':
@@ -1154,11 +1170,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             row['con_return'] = con_dt.strftime('%Y-%m-%d')
                         except (ValueError, TypeError):
                             pass
-    
+
     # ═══════════════════════════════════════════════════════════
     # ★★★ v5.8.7: 날짜 입력 팝업 (DatePicker 달력 UI)
     # ═══════════════════════════════════════════════════════════
-    
+
     def _ask_missing_dates(self, prefilled_ship: str = '', do_result=None) -> dict:
         """
         사용자에게 입항일·반납기한·Free time을 물어보는 DatePicker 팝업.
@@ -1179,40 +1195,40 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             또는 None (취소)
         """
         result_holder = [None]
-        
+
         def _build_popup():
             win = None
             try:
                 win = tk.Toplevel(self.dialog)
-                
+
                 if not do_result:
                     win.title("📋 D/O 미첨부 — 날짜 정보 입력")
                     msg_text = "D/O가 없습니다. 입항일 등을 직접 입력하거나,\n나중에 D/O를 추가할 수 있습니다."
                 else:
                     win.title("📋 D/O 파싱 실패 — 날짜 정보 입력")
                     msg_text = "D/O에서 날짜를 읽지 못했습니다.\n직접 입력하거나 나중에 D/O를 다시 첨부할 수 있습니다."
-                
+
                 win.geometry(DialogSize.get_geometry(self.dialog, 'medium'))
                 apply_modal_window_options(win)
                 win.transient(self.dialog)
                 win.grab_set()
                 center_dialog(win, self.dialog)
-                
+
                 frame = ttk.Frame(win, padding=20)
                 frame.pack(fill=tk.BOTH, expand=True)
-                
+
                 # 안내 메시지
                 ttk.Label(frame, text=msg_text,
                          font=('맑은 고딕', 11, 'bold'),
                          wraplength=460).pack(anchor='w', pady=(0, 12))
-                
+
                 # ── 날짜/입력 필드 공통 참조: .get(), .set(val), .widget ──
                 class _FieldRef:
                     def __init__(self, get_fn, widget, set_fn):
                         self.get = get_fn
                         self.widget = widget
                         self.set = set_fn
-                
+
                 # ── 헬퍼: DateEntry( gui_bootstrap ) 또는 텍스트 입력 생성 ──
                 def _make_date_field(parent, label, hint, prefill='', required=False):
                     """HAS_DATEENTRY면 ttkbootstrap 달력, 없으면 텍스트 입력. _FieldRef 반환( .get/.set/.widget )"""
@@ -1221,9 +1237,9 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         text=f"{'★ ' if required else ''}{label}{' — 필수' if required else ''}",
                         padding=8)
                     lf.pack(fill=tk.X, pady=(0, 8))
-                    
+
                     var = tk.StringVar(value=prefill)
-                    
+
                     if HAS_DATEENTRY and DateEntry is not None:
                         startdate = None
                         if prefill:
@@ -1262,19 +1278,19 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         ttk.Label(lf, text=hint,
                                  font=('맑은 고딕', 9), foreground=ThemeColors.get('text_muted', _cal_dark)).pack(side=tk.LEFT)
                         return _FieldRef(lambda: (var.get() or '').strip(), entry, var.set)
-                
+
                 # ── 선적일(ship_date) 미표시 — B/L에서 추출되므로 톤백 리스트에 이미 있음 ──
                 ship_var = None
-                
+
                 arrival_var = _make_date_field(frame,
                     "입항일 (Arrival Date)",
                     "YYYY-MM-DD (예: 2025-10-17)",
                     required=True)
-                
+
                 con_return_ref = _make_date_field(frame,
                     "컨테이너 반납기한 (con_return)",
                     "반납일 YYYY-MM-DD (비우면 Free time 일수로)")
-                
+
                 # Free time은 일수(숫자) 전용 — DateEntry 사용 시 '14' 입력이 깨지므로 항상 Entry
                 _ft_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
                 lf_ft = ttk.LabelFrame(frame, text="Free time (일수)", padding=8)
@@ -1285,13 +1301,13 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 ttk.Label(lf_ft, text="반납일-입항일=Free time (둘 중 하나만 입력 시 나머지 자동 계산·자동 입력 시 상대 필드 비활성화)",
                          font=('맑은 고딕', 9), foreground=ThemeColors.get('text_muted', _ft_dark)).pack(side=tk.LEFT)
                 ft_ref = _FieldRef(lambda: (ft_var.get() or '').strip(), ft_entry, ft_var.set)
-                
+
                 # 에러 표시
                 err_var = tk.StringVar()
                 _err_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
                 ttk.Label(frame, textvariable=err_var,
                          font=('맑은 고딕', 10), foreground=ThemeColors.get('danger', _err_dark)).pack(anchor='w', pady=(4, 0))
-                
+
                 # ── con_return ↔ free_time 상호 계산·비활성화 (둘 중 하나 입력 시 상대 필드 자동 계산 후 비활성화) ──
                 _updating_silently = {'v': False}
                 def _sync_from_con_return(*_):
@@ -1353,7 +1369,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 else:
                     con_return_ref.widget.bind('<FocusOut>', _sync_from_con_return)
                 ft_entry.bind('<FocusOut>', _sync_from_ft)
-                
+
                 # ── 날짜 검증 함수 ──
                 def _validate_date(s):
                     import re as _re
@@ -1368,7 +1384,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         except ValueError:
                             return False
                     return False
-                
+
                 # ── 확인 버튼 ── (반납일 또는 Free time 중 하나만 알면 나머지 자동 계산)
                 def _on_ok():
                     err_var.set('')
@@ -1453,52 +1469,52 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     }
                     win.destroy()
                     return
-                
+
                 # ── D/O 추후 첨부 버튼 ──
                 def _on_defer():
                     result_holder[0] = {'deferred': True}
                     win.destroy()
-                
+
                 # ── 취소 ──
                 def _on_cancel():
                     result_holder[0] = None
                     win.destroy()
-                
+
                 # ── 버튼 배치 ──
                 btn_frame = ttk.Frame(frame)
                 btn_frame.pack(fill=tk.X, pady=(12, 0))
-                
+
                 ttk.Button(btn_frame, text="✅ 확인",
                           command=_on_ok, width=10).pack(side=tk.LEFT, padx=(0, 8))
-                
+
                 ttk.Button(btn_frame, text="✏️ 수정",
                           command=_enable_both, width=10).pack(side=tk.LEFT, padx=(0, 8))
-                
+
                 ttk.Button(btn_frame, text="📋 D/O 추후 첨부",
                           command=_on_defer, width=16).pack(side=tk.LEFT, padx=(0, 8))
-                
+
                 ttk.Button(btn_frame, text="❌ 취소",
                           command=_on_cancel, width=10).pack(side=tk.LEFT)
-                
+
                 win.protocol("WM_DELETE_WINDOW", _on_cancel)
                 return win
-                
+
             except Exception as e:
                 logger.error(f"[_ask_missing_dates] 팝업 오류: {e}", exc_info=True)
                 return None
-        
+
         if not self.dialog or not self.dialog.winfo_exists():
             return None
-        
+
         win = _build_popup()
         if win and win.winfo_exists():
             win.wait_window(win)
         return result_holder[0]
-    
+
     # ═══════════════════════════════════════════════════════════
     # 미리보기 표시
     # ═══════════════════════════════════════════════════════════
-    
+
     def _push_preview_to_main(self) -> None:
         """파싱된 미리보기 데이터를 메인 화면 재고 리스트에 실시간 반영"""
         if not getattr(self, 'app', None) or not hasattr(self.app, '_set_parsing_preview_data'):
@@ -1531,14 +1547,14 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             if suf.isdigit():
                 return pre
         return s
-    
+
     def _on_toggle_container_suffix(self) -> None:
         """컨테이너 접미사 표시 체크 시 미리보기 테이블 갱신"""
         var = getattr(self, '_var_show_container_suffix', None)
         self._show_container_suffix = bool(var and var.get())
         if self.preview_data and getattr(self, 'tree', None) and self.tree.winfo_exists():
             self._refresh_preview_tree_only()
-    
+
     def _row_display_values(self, row: dict) -> tuple:
         """한 행의 표시용 values (container_no는 접미사 옵션 적용)."""
         out = []
@@ -1993,7 +2009,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._update_summary()
         self._push_preview_to_main()
         return "break"
-    
+
     def _refresh_preview_tree_only(self) -> None:
         """미리보기 테이블만 현재 preview_data로 갱신 (요약/버튼/팝업 없음). 파싱 중 실시간 표시용."""
         if not getattr(self, 'tree', None) or not self.tree.winfo_exists():
@@ -2059,25 +2075,25 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
 
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(0, _update)
-    
+
     def _has_required_docs(self) -> bool:
         """필수 서류 3종(Packing List, Invoice, B/L)이 모두 선택·파싱되었는지 확인"""
         for doc_type, _name, required in DOC_TYPES:
             if required and doc_type not in self.file_paths:
                 return False
         return True
-    
+
     def _update_summary(self) -> None:
         """합계행"""
         if not self.preview_data:
             self.summary_var.set("")
             return
-        
+
         containers = set(r['container_no'] for r in self.preview_data if r['container_no'])
         total_tb = 0
         total_net = 0.0
         total_gross = 0.0
-        
+
         for r in self.preview_data:
             try:
                 total_tb += int(r.get('mxbg_pallet', '10')) if r.get('mxbg_pallet', '') else 0
@@ -2091,7 +2107,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 total_gross += safe_float(r['gross_weight']) if r['gross_weight'] else 0
             except (ValueError, TypeError) as _e:
                 logger.debug(f"onestop_inbound: {_e}")
-        
+
         self.summary_var.set(
             f"합계: {len(self.preview_data)} LOT | "
             f"{len(containers)} 컨테이너 | "
@@ -2099,7 +2115,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             f"Net {total_net:,.0f} kg | "
             f"Gross {total_gross:,.0f} kg"
         )
-    
+
     def _check_parsing_duplicates(self) -> str:
         """파싱 결과에서 입고 중복 여부 검사 (lot_no 기준). 중복이 있으면 안내 문구 반환, 없으면 빈 문자열."""
         if not self.preview_data:
@@ -2116,11 +2132,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
 
     # v5.9.4: _on_upload, _upload_thread, _save_to_db, _export_to_excel
     # → inbound_upload_mixin.py (InboundUploadMixin)으로 분리
-    
+
     # ═══════════════════════════════════════════════════════════
     # 유틸리티
     # ═══════════════════════════════════════════════════════════
-    
+
     def _show_success_and_close(self, count: int):
         def _close():
             if self.dialog and self.dialog.winfo_exists():
@@ -2142,7 +2158,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 except (ImportError, ModuleNotFoundError):
                     CustomMessageBox.info(None, "완료", _msg)
                 self.dialog.destroy()
-                
+
                 # v3.8.9: 업로드 후 재고리스트 탭 이동 + 자동 새로고침
                 # dialog.destroy() 후이므로 app.root.after 사용
                 if _app:
@@ -2161,10 +2177,10 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                                 logger.info("[onestop] 재고 새로고침 예약 완료 (500ms)")
                     except (RuntimeError, ValueError) as e:
                         logger.debug(f"재고 새로고침 호출 실패: {e}")
-        
+
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(100, _close)
-    
+
     def _enable_buttons(self) -> None:
         def _u():
             try:
@@ -2176,19 +2192,19 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 logger.debug(f'Suppressed: {_e}')
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(0, _u)
-    
+
     def _enable_parse_btn(self):
         def _u():
             if self.btn_parse:
                 self.btn_parse.config(state='normal')
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(0, _u)
-    
+
     def _on_cancel(self):
         self._clear_preview_from_main()
         if self.dialog:
             self.dialog.destroy()
-    
+
     def _log_safe(self, msg: str):
         try:
             if self._log:

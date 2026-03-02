@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.0.0 — Picking List PDF 파서
 =====================================
@@ -22,8 +21,8 @@ SQM(SOQUIMICH LLC.)이 발행하는 Picking List PDF 전용 파서.
     # result["items"] → [{"lot_no": "1125072340", "qty_kg": 5000.0, ...}, ...]
 """
 
-import re
 import logging
+import re
 from datetime import datetime
 from typing import Optional
 

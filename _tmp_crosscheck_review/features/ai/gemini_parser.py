@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - Gemini AI 파서 (v2.5.4)
 
@@ -31,13 +30,13 @@ Author: Ruby
 Version: 2.5.4
 """
 
-import os
-import re
 import json
 import logging
-from pathlib import Path
-from typing import Optional, List, Dict, Any
+import os
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +82,7 @@ def parse_euro_weight(value) -> float:
     """
     if value is None:
         return 0.0
-    
+
     if isinstance(value, (int, float)):
         # 이미 숫자이면 크기 검증
         # LOT당 일반적으로 4000~6000 kg 범위
@@ -91,24 +90,24 @@ def parse_euro_weight(value) -> float:
             # 100 미만이면 MT 단위일 가능성 → kg로 변환
             return value * 1000
         return float(value)
-    
+
     s = str(value).strip()
     if not s:
         return 0.0
-    
+
     # 숫자와 구분자만 추출
     s = re.sub(r'[^\d.,]', '', s)
-    
+
     if not s:
         return 0.0
-    
+
     try:
         # 케이스 1: 둘 다 있는 경우
         if ',' in s and '.' in s:
             # 어떤게 마지막인지 확인
             last_comma = s.rfind(',')
             last_dot = s.rfind('.')
-            
+
             if last_comma > last_dot:
                 # 유럽식: 5.131,250 → 5131.250
                 s = s.replace('.', '')  # 천단위 제거
@@ -116,7 +115,7 @@ def parse_euro_weight(value) -> float:
             else:
                 # 미국식: 5,131.250 → 5131.250
                 s = s.replace(',', '')  # 천단위 제거
-        
+
         # 케이스 2: 점만 있는 경우
         elif '.' in s:
             parts = s.split('.')
@@ -126,7 +125,7 @@ def parse_euro_weight(value) -> float:
                     # 유럽식 천단위: 5.001 → 5001
                     s = s.replace('.', '')
                 # 그 외는 소수점으로 처리
-        
+
         # 케이스 3: 쉼표만 있는 경우
         elif ',' in s:
             parts = s.split(',')
@@ -141,16 +140,16 @@ def parse_euro_weight(value) -> float:
             else:
                 # 여러 쉼표: 1,000,000 → 1000000
                 s = s.replace(',', '')
-        
+
         result = float(s)
-        
+
         # 크기 검증: LOT 중량은 보통 1000~10000 kg
         # 너무 작으면 MT 단위일 가능성
         if result < 100:
             result = result * 1000
-        
+
         return result
-        
+
     except (ValueError, TypeError):
         return 0.0
 
@@ -287,7 +286,7 @@ class GeminiDocumentParser:
     
     ★★★ v2.7.1: 모델 자동 검증 + 대체 로직 추가 ★★★
     """
-    
+
     # 권장 모델 후보 (우선순위 순) - v3.6.9 업데이트
     FALLBACK_MODELS = [
         "gemini-2.5-flash",        # ★ 프로덕션 권장 (Stable)
@@ -295,7 +294,7 @@ class GeminiDocumentParser:
         "gemini-2.0-flash",        # ⚠️ 2026.3.31 종료 예정 (deprecated)
         "gemini-1.5-flash",        # ⚠️ 레거시 (최후 수단)
     ]
-    
+
     def __init__(self, api_key: str = None):
         """
         Args:
@@ -303,29 +302,29 @@ class GeminiDocumentParser:
         """
         if not HAS_GEMINI:
             raise ImportError("google-genai가 필요합니다: pip install google-genai")
-        
+
         if not HAS_PYMUPDF:
             raise ImportError("PyMuPDF가 필요합니다: pip install pymupdf")
-        
+
         # API Key 로드
         if api_key is None:
             api_key = self._load_api_key()
-        
+
         if not api_key:
             raise ValueError("Gemini API Key가 필요합니다")
-        
+
         self.api_key = api_key
         self.client = genai.Client(api_key=api_key)
         self.timeout_seconds = 60  # v4.1.7: API 타임아웃 (초) — PDF 이미지 파싱용 확장
-        
+
         # 설정된 모델 우선 (config/settings.ini/환경변수 GEMINI_MODEL)
         self._preferred_model = self._load_preferred_model()
-        
+
         # ★★★ v2.7.1: 모델 자동 검증 ★★★
         self.model = self._validate_and_select_model()
-        
+
         logger.info(f"[GeminiParser] 초기화 완료 (모델: {self.model}, 타임아웃: {self.timeout_seconds}초)")
-    
+
     def _load_preferred_model(self) -> str | None:
         """config/settings.ini/환경변수 GEMINI_MODEL 반환 (없으면 None)."""
         try:
@@ -346,7 +345,7 @@ class GeminiDocumentParser:
         4. 기본값 반환
         """
         default_model = "gemini-2.5-flash"
-        
+
         try:
             # 사용 가능한 모델 목록 조회
             available_models = set()
@@ -358,14 +357,14 @@ class GeminiDocumentParser:
                     if '/' in model_name:
                         model_name = model_name.split('/')[-1]
                     available_models.add(model_name)
-                
+
                 logger.info(f"[GeminiParser] 사용 가능한 모델 {len(available_models)}개 확인")
             except (ValueError, TypeError, KeyError) as list_error:
                 logger.warning(f"[GeminiParser] 모델 목록 조회 실패: {list_error}")
                 if self._preferred_model:
                     return self._preferred_model
                 return default_model
-            
+
             # 1순위: 설정된 모델이 사용 가능하면 사용
             if self._preferred_model:
                 if self._preferred_model in available_models:
@@ -375,32 +374,32 @@ class GeminiDocumentParser:
                     if self._preferred_model in av or av.startswith(self._preferred_model):
                         logger.info(f"[GeminiParser] 설정 모델(부분매칭) 사용: {av}")
                         return av
-            
+
             # 2순위: 후보 모델 중 사용 가능한 것 선택
             for candidate in self.FALLBACK_MODELS:
                 if candidate in available_models:
                     logger.info(f"[GeminiParser] 모델 선택: {candidate}")
                     return candidate
-                
+
                 # 부분 매칭 시도 (gemini-1.5-flash-xxx 형태)
                 for available in available_models:
                     if candidate in available or available.startswith(candidate):
                         logger.info(f"[GeminiParser] 모델 선택 (부분매칭): {available}")
                         return available
-            
+
             # 사용 가능한 모델 중 generateContent 지원하는 것 선택
             for available in available_models:
                 if 'gemini' in available.lower() and 'vision' not in available.lower():
                     logger.info(f"[GeminiParser] 대체 모델 선택: {available}")
                     return available
-            
+
             logger.warning(f"[GeminiParser] 적합한 모델을 찾지 못함, 기본값 사용: {default_model}")
             return default_model
-            
+
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"[GeminiParser] 모델 검증 오류: {e}")
             return default_model
-    
+
     def is_available(self) -> bool:
         """API 연결 상태 확인 (v2.7.1 개선)"""
         try:
@@ -412,26 +411,26 @@ class GeminiDocumentParser:
             return bool(test_response.text)
         except (ValueError, TypeError, AttributeError) as e:
             logger.warning(f"[GeminiParser] API 연결 확인 실패: {e}")
-            
+
             # 404 오류 시 모델 재선택 시도
             if '404' in str(e) or 'not found' in str(e).lower():
                 logger.info("[GeminiParser] 모델 재선택 시도...")
                 self.model = self._validate_and_select_model()
-                
+
             return False
-    
+
     @property
     def model_name(self) -> str:
         """현재 모델명 반환"""
         return self.model
-    
+
     def _load_api_key(self) -> str:
         """API Key 로드 (환경변수 → config)"""
         # 1. 환경변수
         key = os.environ.get('GEMINI_API_KEY')
         if key:
             return key
-        
+
         # 2. config.py
         try:
             from core.config import GEMINI_API_KEY
@@ -439,28 +438,28 @@ class GeminiDocumentParser:
                 return GEMINI_API_KEY
         except ImportError as _e:
             logger.debug(f"[gemini_parser] 무시: {_e}")
-        
+
         return ""
-    
+
     def _pdf_to_images(self, pdf_path: str, dpi: int = 150) -> List[bytes]:
         """PDF를 이미지로 변환 (v2.9.41: 안전한 파일 핸들링)"""
         doc = None
         try:
             doc = fitz.open(pdf_path)
             images = []
-            
+
             for page in doc:
                 # 페이지를 이미지로 렌더링
                 mat = fitz.Matrix(dpi / 72, dpi / 72)
                 pix = page.get_pixmap(matrix=mat)
                 img_bytes = pix.tobytes("png")
                 images.append(img_bytes)
-            
+
             return images
         finally:
             if doc:
                 doc.close()
-    
+
     def _call_gemini(self, prompt: str, image_bytes: bytes = None, mime_type: str = "image/png") -> str:
         """Gemini API 호출
         
@@ -470,7 +469,7 @@ class GeminiDocumentParser:
         """
         try:
             contents = []
-            
+
             if image_bytes:
                 # 이미지 + 텍스트 (캡처 이미지: image/png, image/jpeg 등)
                 contents.append(
@@ -479,26 +478,26 @@ class GeminiDocumentParser:
                         mime_type=mime_type
                     )
                 )
-            
+
             contents.append(prompt)
-            
+
             # v2.6.0: 타임아웃 적용
             response = self._call_api_with_timeout(contents)
-            
+
             # v3.8.4: thinking model 대응 - 안전한 텍스트 추출
             text = self._extract_response_text(response)
-            
+
             if text:
                 logger.debug(f"[GeminiParser] 응답 길이: {len(text)} chars")
             else:
-                logger.warning(f"[GeminiParser] 빈 응답 수신")
-            
+                logger.warning("[GeminiParser] 빈 응답 수신")
+
             return text
-            
+
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"[GeminiParser] API 호출 오류: {e}")
             raise
-    
+
     def _extract_response_text(self, response) -> str:
         """Gemini 응답에서 텍스트 안전 추출
         
@@ -513,7 +512,7 @@ class GeminiDocumentParser:
                 return text.strip()
         except (AttributeError, ValueError, IndexError) as _e:
             logger.debug(f"Suppressed: {_e}")
-        
+
         # 2차: candidates[0].content.parts에서 직접 추출
         try:
             if hasattr(response, 'candidates') and response.candidates:
@@ -533,18 +532,18 @@ class GeminiDocumentParser:
                         return combined
         except (AttributeError, IndexError, TypeError) as e:
             logger.debug(f"[GeminiParser] parts 추출 실패: {e}")
-        
+
         # 3차: 전체 응답을 문자열로
         try:
             text = str(response)
             if len(text) > 10:
-                logger.warning(f"[GeminiParser] str(response) 폴백 사용")
+                logger.warning("[GeminiParser] str(response) 폴백 사용")
                 return text
         except (ValueError, TypeError, AttributeError) as _e:
             logger.debug(f"Suppressed: {_e}")
-        
+
         return ""
-    
+
     def _call_api_with_timeout(self, contents):
         """
         API 호출 (타임아웃 + OCR 자동 튜닝 적용) - v3.0
@@ -554,14 +553,14 @@ class GeminiDocumentParser:
         """
         import concurrent.futures
         import time
-        
+
         # OCR 튜너 가져오기
         try:
             from ocr_auto_tuner import get_ocr_tuner
             tuner = get_ocr_tuner()
         except ImportError:
             tuner = None
-        
+
         def api_call():
             # v5.5.1: gemini-2.5-flash thinking 모델 대응 — thinking이 토큰을 많이 쓰면 JSON이 잘림
             # → max_output_tokens 65536으로 상향, thinking_budget 2048로 제한(단순 추출 작업에 적합)
@@ -580,16 +579,16 @@ class GeminiDocumentParser:
                 contents=contents,
                 config=types.GenerateContentConfig(**config_kw)
             )
-        
+
         # 세마포어 획득 (튜너 사용 시)
         if tuner:
             if not tuner.acquire():
                 raise Exception("OCR Circuit Breaker가 열려 있습니다. 잠시 후 재시도하세요.")
-        
+
         start_time = time.time()
         is_429 = False
         success = False
-        
+
         try:
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(api_call)
@@ -604,11 +603,11 @@ class GeminiDocumentParser:
             error_msg = str(e).lower()
             if '429' in error_msg or 'rate limit' in error_msg or 'quota' in error_msg:
                 is_429 = True
-                logger.warning(f"[GeminiParser] 429 Rate Limit 감지")
+                logger.warning("[GeminiParser] 429 Rate Limit 감지")
             raise
         finally:
             response_time = time.time() - start_time
-            
+
             # 튜너에 결과 기록
             if tuner:
                 tuner.record_result(
@@ -618,7 +617,7 @@ class GeminiDocumentParser:
                     error_message="" if success else "API 오류"
                 )
                 tuner.release()
-                
+
                 # 튜너 상태 로깅 (디버그)
                 if logger.isEnabledFor(logging.DEBUG):
                     stats = tuner.stats
@@ -627,7 +626,7 @@ class GeminiDocumentParser:
                         f"성공률={stats['success_rate']:.1%}, "
                         f"응답시간={response_time:.1f}s"
                     )
-    
+
     def _extract_json(self, text: str) -> Dict:
         """응답에서 JSON 추출
         
@@ -640,7 +639,7 @@ class GeminiDocumentParser:
         if not text or not text.strip():
             logger.warning("[GeminiParser] JSON 추출: 빈 텍스트")
             return {}
-        
+
         # 1차: ```json ... ``` 블록 (여러 개면 마지막 사용 — gemini-2.5-flash thinking이 앞에 올 수 있음)
         json_blocks = re.findall(r'```json\s*([\s\S]*?)\s*```', text)
         if json_blocks:
@@ -651,7 +650,7 @@ class GeminiDocumentParser:
                         return parsed
                 except json.JSONDecodeError as _e:
                     logger.debug(f"Suppressed: {_e}")
-        
+
         # 2차: ``` ... ``` 일반 코드블록 (마지막 블록 우선)
         code_blocks = re.findall(r'```\s*([\s\S]*?)\s*```', text)
         if code_blocks:
@@ -664,7 +663,7 @@ class GeminiDocumentParser:
                         return parsed
                 except json.JSONDecodeError as _e:
                     logger.debug(f"Suppressed: {_e}")
-        
+
         # 2b: 단일 ``` ... ``` (기존 2차 호환)
         code_match = re.search(r'```\s*([\s\S]*?)\s*```', text)
         if code_match:
@@ -672,7 +671,7 @@ class GeminiDocumentParser:
                 return json.loads(code_match.group(1))
             except json.JSONDecodeError as _e:
                 logger.debug(f"Suppressed: {_e}")
-        
+
         # 2c: ```json 뒤만 있고 닫는 ``` 없음 (응답 잘림) — 첫 { 부터 끝까지 추출 후 괄호 복구
         if '```json' in text:
             start = text.find('```json')
@@ -694,14 +693,14 @@ class GeminiDocumentParser:
                         return result
                 except json.JSONDecodeError as _e:
                     logger.debug(f"Suppressed: {_e}")
-        
+
         # 3차: 전체가 JSON인 경우
         stripped = text.strip()
         try:
             return json.loads(stripped)
         except json.JSONDecodeError as _e:
             logger.debug(f"Suppressed: {_e}")
-        
+
         # 4차: 첫 번째 { ~ 마지막 } 추출 (v5.5.2: 후행 콤마 제거 후 재시도)
         first_brace = stripped.find('{')
         last_brace = stripped.rfind('}')
@@ -716,9 +715,9 @@ class GeminiDocumentParser:
                 return json.loads(normalized)
             except json.JSONDecodeError as _e:
                 logger.debug(f"Suppressed: {_e}")
-        
+
         logger.warning(f"[GeminiParser] JSON 파싱 실패 — 응답 미리보기: {text[:200]}...")
-        
+
         # 5차: v3.8.8 불완전 JSON 복구 (토큰 절단 시 닫는 괄호 추가)
         try:
             first_brace = text.find('{')
@@ -737,13 +736,13 @@ class GeminiDocumentParser:
                 return result
         except (json.JSONDecodeError, Exception) as _e:
             logger.debug(f"Suppressed: {_e}")
-        
+
         return {}
-    
+
     # =========================================================================
     # Packing List 파싱
     # =========================================================================
-    
+
     def parse_packing_list(self, pdf_path: str) -> PackingListResult:
         """
         Packing List PDF를 Gemini로 파싱
@@ -755,16 +754,16 @@ class GeminiDocumentParser:
             PackingListResult: 파싱 결과
         """
         result = PackingListResult()
-        
+
         try:
             logger.info(f"[GeminiParser] Packing List 파싱 시작: {pdf_path}")
-            
+
             # PDF → 이미지
             images = self._pdf_to_images(pdf_path)
             if not images:
                 result.error_message = "PDF 이미지 변환 실패"
                 return result
-            
+
             # 프롬프트 (v5.5.2: 강제 스키마 — 오직 JSON만, 설명/마크다운/코드블럭 금지, lots 필수)
             prompt = """오직 JSON만 출력하세요. 설명·마크다운·코드블럭(```) 표시 금지. 반드시 lots 배열을 포함하고, 각 lot에는 lot_no, mxbg, net_weight_kg가 필수입니다.
 
@@ -806,7 +805,7 @@ class GeminiDocumentParser:
             # API 호출 (첫 페이지)
             response_text = self._call_gemini(prompt, images[0])
             result.raw_response = response_text
-            
+
             # v5.5.2: 디버깅 시 Gemini 원문을 파일로 저장 (ON/OFF: config 또는 SQM_SAVE_RAW_GEMINI_RESPONSE=1)
             try:
                 from core.config import SAVE_RAW_GEMINI_RESPONSE
@@ -818,10 +817,10 @@ class GeminiDocumentParser:
                     logger.info(f"[GeminiParser] PL 원문 저장: {raw_path}")
             except (ValueError, TypeError, KeyError, IndexError) as _e:
                 logger.debug(f"Suppressed: {_e}")
-            
+
             # JSON 파싱
             data = self._extract_json(response_text)
-            
+
             # v5.5.2: LOT 추출 실패 원인 분해 로그 (JSON 파싱 실패 vs lots 비었는지 확정)
             parsed_keys = list(data.keys()) if data else []
             lots = data.get("lots") if data else None
@@ -830,11 +829,11 @@ class GeminiDocumentParser:
                 first_lot = lots[0]
                 first_keys = list(first_lot.keys()) if isinstance(first_lot, dict) else str(type(first_lot))
                 logger.info(f"[GeminiParser] PL lots[0] 키: {first_keys}")
-            
+
             if not data:
                 result.error_message = "JSON 추출 실패"
                 return result
-            
+
             # 결과 매핑 (1페이지)
             result.folio = str(data.get('folio', ''))
             result.product = data.get('product', '')
@@ -846,19 +845,19 @@ class GeminiDocumentParser:
             # ★★★ v2.9.52: 유럽식 숫자 변환 적용 ★★★
             result.total_net_weight_kg = parse_euro_weight(data.get('total_net_weight_kg', 0))
             result.total_gross_weight_kg = parse_euro_weight(data.get('total_gross_weight_kg', 0))
-            
+
             seen_lot_nos = set()
             seen_fingerprints = set()  # v6.2.1: 행 전체 중복 감지 (lot_no 없는 경우도 대비)
             total_dup_count = 0  # v6.2.1: 전체 중복 제거 건수
             def append_lot(lot_data: dict, from_continuation_page: bool = False) -> None:
                 nonlocal total_dup_count
                 lot_no = str(lot_data.get('lot_no', '')).strip()
-                
+
                 # v6.2.1: 행 fingerprint (lot_no + container + net_weight)
                 _fp_container = str(lot_data.get('container_no', '')).strip()
                 _fp_nw = str(lot_data.get('net_weight_kg', '')).strip()
                 fingerprint = f"{lot_no}|{_fp_container}|{_fp_nw}"
-                
+
                 # fingerprint 완전 중복 → 스킵 (lot_no 유무와 무관)
                 if fingerprint in seen_fingerprints:
                     page_label = "추가 페이지" if from_continuation_page else "1페이지"
@@ -868,18 +867,18 @@ class GeminiDocumentParser:
                     )
                     total_dup_count += 1
                     return
-                
+
                 # lot_no 동일 + fingerprint 다름 → 경고만, 추가 허용
                 if lot_no and lot_no in seen_lot_nos:
                     logger.warning(
                         f"[GeminiParser] PL lot_no 중복이지만 데이터 상이: "
                         f"lot_no={lot_no} — 두 번째 행도 추가 (수동 확인 필요)"
                     )
-                
+
                 if lot_no:
                     seen_lot_nos.add(lot_no)
                 seen_fingerprints.add(fingerprint)
-                
+
                 lot = LOTItem(
                     list_no=int(lot_data.get('list_no', 0)),
                     container_no=str(lot_data.get('container_no', '')),
@@ -892,24 +891,24 @@ class GeminiDocumentParser:
                     al_no=str(lot_data.get('al_no', ''))
                 )
                 result.lots.append(lot)
-            
+
             # 1페이지: v6.2.1 — 중복 제거 적용 (fingerprint 기반)
             for lot_data in data.get('lots', []):
                 append_lot(lot_data, from_continuation_page=False)
-            
+
             if total_dup_count > 0:
                 logger.warning(
                     f"[GeminiParser] ⚠️ PL 파싱에서 중복 행 {total_dup_count}건 자동 제거됨 "
                     f"(Gemini 응답에 동일 행이 반복됨)"
                 )
-            
+
             # 다중 페이지: 2페이지부터 추가 LOT 추출 (20개 롯트 등이 2페이지에 나뉠 경우 누락 방지)
             prompt_continuation = """오직 JSON만 출력하세요. 설명·마크다운·코드블럭(```) 금지.
 이 Packing List의 이어지는 페이지입니다. 이 페이지에 있는 LOT 행만 아래 형식으로 추출하세요.
 유럽식 숫자 (5.131,250 = 5131.250)를 숫자로 변환하고, net_weight_kg·gross_weight_kg는 소수점 포함 kg로 넣으세요.
 {"lots": [ {"list_no": 1, "container_no": "", "lot_no": "", "lot_sqm": "", "mxbg": 10, "net_weight_kg": 5001.5, "gross_weight_kg": 5131.25, "del_no": "", "al_no": ""} ]}
 JSON만 출력하세요."""
-            
+
             for page_idx in range(1, len(images)):
                 try:
                     page_text = self._call_gemini(prompt_continuation, images[page_idx])
@@ -927,47 +926,47 @@ JSON만 출력하세요."""
                         append_lot(lot_data, from_continuation_page=True)
                 except (ValueError, TypeError, KeyError) as _e:
                     logger.warning(f"[GeminiParser] PL 페이지 {page_idx + 1} 추출 실패: {_e}")
-            
+
             # list_no 순서대로 재정렬 및 총중량 재계산
             if result.lots:
                 for idx, lot in enumerate(result.lots, 1):
                     lot.list_no = idx
                 result.total_net_weight_kg = sum(lot.net_weight_kg for lot in result.lots)
                 result.total_gross_weight_kg = sum(lot.gross_weight_kg for lot in result.lots)
-            
+
             result.success = len(result.lots) > 0
             result.duplicates_removed = total_dup_count  # v6.2.1
-            
+
             # v2.5.8: 제품명 로깅
             logger.info(f"[GeminiParser] Packing List 완료: {len(result.lots)} LOT, {result.total_net_weight_kg:,.0f}kg, 제품: {result.product or '(없음)'}")
             # 1페이지뿐인데 20개 미만이면 누락 가능성 경고 (원본이 20행인 경우)
             if len(images) == 1 and len(result.lots) < 20 and len(result.lots) >= 19:
                 logger.warning(f"[GeminiParser] PL 1페이지인데 {len(result.lots)}개만 추출됨 — 원본에 20행이 있다면 응답 잘림 또는 모델 누락일 수 있음. 로그/raw 응답 확인 권장.")
-            
+
         except (ValueError, TypeError, KeyError) as e:
             result.error_message = str(e)
             logger.error(f"[GeminiParser] Packing List 오류: {e}")
-        
+
         return result
-    
+
     # =========================================================================
     # Invoice 파싱
     # =========================================================================
-    
+
     def parse_invoice(self, pdf_path: str) -> InvoiceResult:
         """
         Invoice PDF를 Gemini로 파싱
         """
         result = InvoiceResult()
-        
+
         try:
             logger.info(f"[GeminiParser] Invoice 파싱 시작: {pdf_path}")
-            
+
             images = self._pdf_to_images(pdf_path)
             if not images:
                 result.error_message = "PDF 이미지 변환 실패"
                 return result
-            
+
             prompt = """이 Invoice(상업송장/FACTURA) 문서를 분석하여 아래 JSON 형식으로 추출해주세요.
 
 **중요 추출 규칙:**
@@ -1000,9 +999,9 @@ JSON만 출력하세요."""
 
             response_text = self._call_gemini(prompt, images[0])
             result.raw_response = response_text
-            
+
             data = self._extract_json(response_text)
-            
+
             if data:
                 result.sap_no = str(data.get('sap_no', ''))
                 result.invoice_no = str(data.get('invoice_no', ''))
@@ -1019,34 +1018,34 @@ JSON만 출력하세요."""
                 result.vessel = data.get('vessel', '')
                 result.lot_numbers = data.get('lot_numbers', [])
                 result.success = bool(result.sap_no)
-            
+
             logger.info(f"[GeminiParser] Invoice 완료: SAP={result.sap_no}")
-            
+
         except (ValueError, TypeError, KeyError) as e:
             result.error_message = str(e)
             logger.error(f"[GeminiParser] Invoice 오류: {e}")
-        
+
         return result
-    
+
     # =========================================================================
     # B/L 파싱
     # =========================================================================
-    
+
     def parse_bl(self, pdf_path: str) -> BLResult:
         """
         B/L (Bill of Lading) PDF를 Gemini로 파싱
         멀티페이지 지원 (3페이지까지 분석)
         """
         result = BLResult()
-        
+
         try:
             logger.info(f"[GeminiParser] B/L 파싱 시작: {pdf_path}")
-            
+
             images = self._pdf_to_images(pdf_path)
             if not images:
                 result.error_message = "PDF 이미지 변환 실패"
                 return result
-            
+
             prompt = """이 B/L(선하증권/NON-NEGOTIABLE WAYBILL) 문서를 분석하여 아래 JSON 형식으로 추출해주세요.
 
 **중요 추출 규칙:**
@@ -1091,17 +1090,17 @@ JSON만 출력하세요."""
             # 멀티페이지: 최대 3페이지까지 분석
             all_containers = []
             sap_no = ""
-            
+
             for i, img in enumerate(images[:3]):
                 response_text = self._call_gemini(prompt, img)
-                
+
                 if i == 0:
                     result.raw_response = response_text
                 else:
                     result.raw_response += f"\n\n--- Page {i+1} ---\n{response_text}"
-                
+
                 data = self._extract_json(response_text)
-                
+
                 if data:
                     # 첫 페이지에서만 기본 정보 추출
                     if i == 0:
@@ -1118,12 +1117,12 @@ JSON만 출력하세요."""
                         result.shipped_date = data.get('shipped_on_board_date', '') or data.get('shipped_date', '') or data.get('ship_date', '')
                         result.ship_date = result.shipped_date  # 호출부 getattr(bl, 'ship_date') 호환
                         result.shipped_on_board_date = result.shipped_date  # BLData 필드 호환
-                    
+
                     # SAP NO 찾기 (어느 페이지에서든)
                     page_sap = str(data.get('sap_no', ''))
                     if page_sap and page_sap.startswith('22') and len(page_sap) == 10:
                         sap_no = page_sap
-                    
+
                     # 컨테이너 수집 (중복 제거)
                     for cont in data.get('containers', []):
                         cont_no = cont.get('container_no', '')
@@ -1133,24 +1132,24 @@ JSON만 출력하세요."""
                                 seal_no=cont.get('seal_no', ''),
                                 weight_kg=float(cont.get('weight_kg', 0))
                             ))
-            
+
             result.sap_no = sap_no
             result.containers = all_containers
             result.container_numbers = [c.container_no for c in all_containers]
             result.success = bool(result.bl_no)
-            
+
             logger.info(f"[GeminiParser] B/L 완료: BL={result.bl_no}, SAP={result.sap_no}, 컨테이너 {len(result.containers)}개")
-            
+
         except (ValueError, TypeError, KeyError) as e:
             result.error_message = str(e)
             logger.error(f"[GeminiParser] B/L 오류: {e}")
-        
+
         return result
-    
+
     # =========================================================================
     # D/O 파싱
     # =========================================================================
-    
+
     def _get_do_prompt(self) -> str:
         """D/O 파싱용 공통 프롬프트 (PDF/캡처 이미지 공유)."""
         return """이 D/O(화물인도지시서/발급확인서) 문서를 분석하여 아래 JSON 형식으로 추출해주세요.
@@ -1310,11 +1309,11 @@ arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
             result.error_message = str(e)
             logger.error(f"[GeminiParser] D/O 이미지 오류: {e}")
         return result
-    
+
     # =========================================================================
     # 자동 문서 유형 감지 및 파싱
     # =========================================================================
-    
+
     def parse_auto(self, pdf_path: str) -> Dict[str, Any]:
         """
         문서 유형을 자동 감지하여 파싱
@@ -1323,12 +1322,12 @@ arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
             dict: {'type': 문서유형, 'result': 파싱결과}
         """
         filename = Path(pdf_path).name.upper()
-        
+
         # ★★★ v2.9.19: 공백을 언더스코어로 정규화 (현장 파일명 대응) ★★★
         fname = re.sub(r"\s+", "_", filename)
         # ★★★ v2.9.21: 하이픈도 언더스코어로 정규화 (D-O → D_O) ★★★
         fname_normalized = re.sub(r"[-]", "_", fname)
-        
+
         # 파일명으로 1차 판단 (정규화된 이름 사용)
         if 'PACKING' in fname or '_PL' in fname or 'PACKLIST' in fname:
             doc_type = 'PACKING_LIST'
@@ -1336,16 +1335,16 @@ arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
             doc_type = 'INVOICE'
         elif '_BL' in fname or 'BILL' in fname or re.search(r'(^|_)BL(\.|_|$)', fname):
             doc_type = 'BL'
-        elif ('_DO' in fname_normalized or 'DELIVERY' in fname or 'D_O' in fname_normalized or 
+        elif ('_DO' in fname_normalized or 'DELIVERY' in fname or 'D_O' in fname_normalized or
               re.search(r'(^|_)DO(\.|_|$)', fname) or re.search(r'DO\.PDF$', fname) or
               '화물인도' in filename or '발급확인' in filename):
             doc_type = 'DO'
         else:
             # AI로 문서 유형 판단
             doc_type = self._detect_document_type(pdf_path)
-        
+
         logger.info(f"[GeminiParser] 문서유형 감지: {filename} → {doc_type}")
-        
+
         # 유형별 파싱
         if doc_type == 'PACKING_LIST':
             result = self.parse_packing_list(pdf_path)
@@ -1357,12 +1356,12 @@ arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
             result = self.parse_do(pdf_path)
         else:
             result = None
-        
+
         return {
             'type': doc_type,
             'result': result
         }
-    
+
     def detect_document_type(self, pdf_path: str) -> str:
         """
         ★★★ v2.9.19: 호환성 메서드 ★★★
@@ -1375,14 +1374,14 @@ arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
         except (ValueError, TypeError, KeyError) as e:
             logger.warning(f"[GeminiParser] detect_document_type 오류: {e}")
             return "UNKNOWN"
-    
+
     def _detect_document_type(self, pdf_path: str) -> str:
         """AI로 문서 유형 감지"""
         try:
             images = self._pdf_to_images(pdf_path, dpi=100)
             if not images:
                 return 'UNKNOWN'
-            
+
             prompt = """이 문서의 유형을 판단해주세요.
 
 다음 중 하나만 응답해주세요:
@@ -1396,13 +1395,13 @@ arrival_date는 위 날짜들보다 보통 더 이른(과거) 날짜입니다.
 
             response = self._call_gemini(prompt, images[0])
             doc_type = response.strip().upper()
-            
+
             if doc_type in ['PACKING_LIST', 'INVOICE', 'BL', 'DO']:
                 return doc_type
-            
+
         except (ValueError, TypeError, KeyError) as e:
             logger.warning(f"[GeminiParser] 문서 유형 감지 실패: {e}")
-        
+
         return 'UNKNOWN'
 
 
@@ -1435,17 +1434,17 @@ if __name__ == "__main__":
     logger.debug("=" * 60)
     logger.debug("Gemini Document Parser 테스트")
     logger.debug("=" * 60)
-    
+
     if not HAS_GEMINI:
         logger.debug("❌ google-genai 미설치")
         logger.debug("   pip install google-genai")
         exit(1)
-    
+
     if not HAS_PYMUPDF:
         logger.debug("❌ PyMuPDF 미설치")
         logger.debug("   pip install pymupdf")
         exit(1)
-    
+
     logger.debug("✅ 의존성 확인 완료")
     logger.debug("사용법:")
     logger.debug("  from gemini_parser import GeminiDocumentParser")

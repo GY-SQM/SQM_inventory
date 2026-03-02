@@ -1,15 +1,18 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.12.1 — 반품 강화 테스트
 ================================
 1. source_type 이력 기록
 2. 반품 사유 통계
 """
-import sys, os, sqlite3
+import os
+import sqlite3
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from datetime import date
+
 import pytest
-from datetime import date, datetime
 
 
 class FakeDB:

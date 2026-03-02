@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v5.9.8 패치 스크립트
 ========================
@@ -20,9 +19,8 @@ SQM v5.9.8 패치 스크립트
 """
 
 import os
-import sys
 import shutil
-from datetime import datetime
+import sys
 
 PATCH_VERSION = "5.9.8"
 PATCH_DATE = "2026-02-18"
@@ -190,7 +188,7 @@ def apply_patches():
         print(f"     파일: {patch['file']}")
 
         if not os.path.exists(filepath):
-            print(f"     ❌ 파일 없음!")
+            print("     ❌ 파일 없음!")
             fail += 1
             continue
 
@@ -215,7 +213,7 @@ def apply_patches():
             old_text = patch['old'].replace('\n', '\r\n')
 
         if old_text not in content:
-            print(f"     ⚠️  이미 패치됨 또는 코드 변경됨 (스킵)")
+            print("     ⚠️  이미 패치됨 또는 코드 변경됨 (스킵)")
             continue
 
         count = content.count(old_text)
@@ -227,7 +225,7 @@ def apply_patches():
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
 
-        print(f"     ✅ 패치 완료")
+        print("     ✅ 패치 완료")
         success += 1
 
     # ═══════════════════════════════════════════════════════
@@ -264,7 +262,7 @@ def apply_patches():
     print(f"\n{'=' * 60}")
     print(f"  결과: ✅ {success}건 성공 / ❌ {fail}건 실패")
     if success == len(PATCHES):
-        print(f"  🎉 모든 패치 적용 완료!")
+        print("  🎉 모든 패치 적용 완료!")
     print(f"{'=' * 60}")
 
     return success == len(PATCHES)

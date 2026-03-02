@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - Excel 내보내기 Mixin
 ==========================================
@@ -40,7 +39,7 @@ def _unique_excel_path(desired_path: str) -> str:
 
 class ExportMixin:
     """엑셀 내보내기 Mixin"""
-    
+
     def export_to_excel(self, output_path: str, option: int = 1) -> str:
         """
         엑셀 내보내기.
@@ -70,10 +69,10 @@ class ExportMixin:
             8: self._export_return_history,
             9: self._export_integrity_report,
         }
-        
+
         exporter = exporters.get(option, self._export_basic_inventory)
         return exporter(output_path)
-    
+
     def _apply_excel_formatting(self, ws, df, title: str = '',
                                 col_widths: dict = None, num_formats: dict = None) -> None:
         """v5.5.3 P1: 공통 Excel 서식 (타이틀, 헤더, 컬럼 너비, 숫자 포맷, 푸터)
@@ -85,7 +84,7 @@ class ExportMixin:
             col_widths: {헤더명: 너비} — 미지정 시 15
             num_formats: {헤더명: '#,##0' 등} — 숫자 컬럼 포맷
         """
-        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
         from openpyxl.utils import get_column_letter
 
         col_count = len(df.columns)
@@ -164,17 +163,17 @@ class ExportMixin:
     def _export_basic_inventory(self, output_path: str) -> str:
         """기본 재고 목록 내보내기"""
         import pandas as pd
-        
+
         try:
             inventory = self.get_inventory()
-            
+
             if not inventory:
                 # 빈 파일 생성
                 pd.DataFrame().to_excel(output_path, index=False)
                 return output_path
-            
+
             df = pd.DataFrame(inventory)
-            
+
             # v4.19.1: 18개 전체 컬럼 포함
             columns = [
                 'lot_no', 'sap_no', 'bl_no', 'product', 'arrival_date',
@@ -184,7 +183,7 @@ class ExportMixin:
             ]
             columns = [c for c in columns if c in df.columns]
             df = df[columns]
-            
+
             # 한글 컬럼명 (v4.19.1: 18열 전체)
             column_names = {
                 'lot_no': 'LOT NO',
@@ -207,18 +206,19 @@ class ExportMixin:
                 'remarks': 'REMARKS'
             }
             df = df.rename(columns=column_names)
-            
+
             # 엑셀 저장
             with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
                 df.to_excel(writer, sheet_name='재고목록', index=False, startrow=2)
-                
+
                 worksheet = writer.sheets['재고목록']
-                
+
                 # v4.0.0 Q8: 타이틀행 삽입
-                from openpyxl.styles import Font, Alignment, PatternFill
-                from openpyxl.utils import get_column_letter
                 from datetime import datetime
-                
+
+                from openpyxl.styles import Alignment, Font, PatternFill
+                from openpyxl.utils import get_column_letter
+
                 # Row 1: 타이틀
                 worksheet.merge_cells(f'A1:{get_column_letter(len(df.columns))}1')
                 title_cell = worksheet['A1']
@@ -226,10 +226,10 @@ class ExportMixin:
                 title_cell.font = Font(name='맑은 고딕', bold=True, size=14, color='2C3E50')
                 title_cell.alignment = Alignment(horizontal='center')
                 worksheet.row_dimensions[1].height = 32
-                
+
                 # Row 2: 빈 줄 (헤더와 타이틀 사이 간격)
                 worksheet.row_dimensions[2].height = 8
-                
+
                 # 헤더 스타일 (Row 3)
                 header_fill = PatternFill(start_color='2C3E50', end_color='2C3E50', fill_type='solid')
                 header_font = Font(name='맑은 고딕', bold=True, color='FFFFFF', size=10)
@@ -238,29 +238,32 @@ class ExportMixin:
                     cell.fill = header_fill
                     cell.font = header_font
                     cell.alignment = Alignment(horizontal='center')
-                
+
                 # 컬럼 너비 조정
                 for i, col in enumerate(df.columns, 1):
                     worksheet.column_dimensions[get_column_letter(i)].width = 15
-                
+
                 # v4.0.0 Q9: GY Logistics 푸터
                 try:
-                    from gui_app_modular.utils.report_footer import add_gy_logistics_footer
+                    from gui_app_modular.utils.report_footer import (
+                        add_gy_logistics_footer,
+                    )
                     add_gy_logistics_footer(worksheet)
                 except (ImportError, ModuleNotFoundError) as _e:
                     logger.debug(f'Suppressed: {_e}')
-            
+
             logger.info(f"엑셀 내보내기 완료: {output_path}")
             return output_path
-            
+
         except (ImportError, ModuleNotFoundError) as e:
             logger.error(f"엑셀 내보내기 오류: {e}")
             raise
-    
+
     def _export_detailed_inventory(self, output_path: str) -> str:
         """v5.5.3 P4: 상세 재고 — 컬럼 한글화 + 서식"""
-        import pandas as pd
         from datetime import datetime as dt
+
+        import pandas as pd
 
         try:
             inventory = self.get_inventory()
@@ -322,7 +325,7 @@ class ExportMixin:
         except (ValueError, OSError, KeyError) as e:
             logger.error(f"상세 재고 내보내기 오류: {e}")
             raise
-    
+
     def _export_ruby_format(self, output_path: str) -> str:
         """v5.5.3 P1: 재고리스트 Excel — 화면 18열 동일 출력 + 서식"""
         import pandas as pd
@@ -388,7 +391,7 @@ class ExportMixin:
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"재고리스트 Excel 내보내기 오류: {e}")
             raise
-    
+
     def _export_tonbag_list(self, output_path: str) -> str:
         """v5.5.3 P2: 톤백리스트 Excel — 화면 20열 동일 (v5.6.3: MXBG 제거, 개별 무게)"""
         import pandas as pd
@@ -429,7 +432,8 @@ class ExportMixin:
 
             # tonbag_no_print, tonbag_uid 계산
             from engine_modules.tonbag_compat import (
-                get_tonbag_display_no, get_tonbag_uid
+                get_tonbag_display_no,
+                get_tonbag_uid,
             )
 
             rows = []
@@ -484,11 +488,12 @@ class ExportMixin:
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"톤백리스트 Excel 내보내기 오류: {e}")
             raise
-    
+
     def _export_lot_tonbag_report(self, output_path: str) -> str:
         """v5.5.3 P4: LOT-톤백 리포트 — 컬럼 한글화 + 서식"""
-        import pandas as pd
         from datetime import datetime as dt
+
+        import pandas as pd
 
         # LOT 컬럼 한글 매핑
         lot_rename = {
@@ -551,11 +556,12 @@ class ExportMixin:
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"LOT-톤백 리포트 내보내기 오류: {e}")
             raise
-    
+
     def _export_full_inventory(self, output_path: str) -> str:
         """v5.5.3 P4: 전체 재고 — 5개 시트 서식 + 한글화"""
-        import pandas as pd
         from datetime import datetime as dt
+
+        import pandas as pd
 
         try:
             today = dt.now().strftime("%Y-%m-%d")
@@ -668,8 +674,9 @@ class ExportMixin:
 
     def _export_return_history(self, output_path: str) -> str:
         """v6.12.2: 반품 이력 전체 내보내기 (3시트: 이력/사유별/고객별)."""
-        import pandas as pd
         from datetime import date as _date
+
+        import pandas as pd
 
         today = _date.today().strftime('%Y-%m-%d')
 

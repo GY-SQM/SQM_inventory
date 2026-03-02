@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - 통합 문서 데이터 모델 (v2.5.4)
 
@@ -17,11 +16,10 @@ Version: 2.5.4
 Date: 2026-01-09
 """
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
-from typing import List, Optional, Dict, Any
 from enum import Enum
-
+from typing import Any, Dict, List, Optional
 
 # =============================================================================
 # 열거형 (Enum)

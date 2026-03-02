@@ -1,16 +1,15 @@
-# -*- coding: utf-8 -*-
 """
 Excel 파일 열기/읽기 시 동일 이름 파일 열림 처리
 
 같은 이름의 파일이 Excel 등에서 열려 있으면 PermissionError 발생.
 에러 대신 사용자에게 "순번 붙여서 오픈할까요?" 또는 "파일 닫은 후 다시 시도" 안내.
 """
+import logging
 import os
 import shutil
-import tempfile
-import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Optional, Tuple, Callable, Any
+from typing import Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

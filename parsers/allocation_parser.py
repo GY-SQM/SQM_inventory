@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - Allocation (출고 리스트) Excel 파서
 
@@ -20,15 +19,16 @@ B) 템플릿: 1행 타이틀, 2행 무시, 3행 헤더, 4행~ 데이터
 """
 
 import logging
-from core.types import safe_float, normalize_lot
-from utils.common import norm_sap_no, norm_sale_ref, norm_date_any
+
+from core.types import normalize_lot, safe_float
+from utils.common import norm_date_any, norm_sale_ref, norm_sap_no
+
 logger = logging.getLogger(__name__)
 import re
-from datetime import datetime, date
-from typing import Optional, List, Dict
-from pathlib import Path
 from dataclasses import dataclass, field
-
+from datetime import date, datetime
+from pathlib import Path
+from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -69,7 +69,7 @@ class AllocationRow:
     def tonbag_no(self) -> int:
         """v5.1.0: sub_lt의 표준 별칭"""
         return self.sub_lt
-    
+
     @tonbag_no.setter
     def tonbag_no(self, value: int):
         self.sub_lt = value
@@ -78,7 +78,7 @@ class AllocationRow:
     def customer(self) -> str:
         """v5.1.0: sold_to의 표준 별칭"""
         return self.sold_to
-    
+
     @customer.setter
     def customer(self, value: str):
         self.sold_to = value
@@ -87,7 +87,7 @@ class AllocationRow:
     def tonbag_count(self) -> int:
         """v5.1.0: sublot_count의 표준 별칭"""
         return self.sublot_count
-    
+
     @tonbag_count.setter
     def tonbag_count(self, value: int):
         self.sublot_count = value
@@ -148,7 +148,8 @@ class AllocationParser:
 
             return result
 
-        except (ValueError, TypeError, KeyError) as e:
+        except (ValueError, TypeError, KeyError, FileNotFoundError, OSError,
+                PermissionError, IsADirectoryError) as e:
             self.errors.append(f"Allocation 파싱 오류: {str(e)}")
             return None
 
@@ -172,8 +173,8 @@ class AllocationParser:
                     only_val = title_parts[0].replace(',', '')
                     if re.match(r'^\d+(?:\.\d+)?$', only_val):
                         header.total_qty = safe_float(only_val)
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"[_extract_header] Suppressed: {e}")
 
         title = header.title.upper()
 
@@ -393,15 +394,15 @@ class AllocationParser:
         - SOLD TO: 'SOLD TO', 'SOLD_TO', 'Sold To', 'Customer'
         """
         col_map = {}
-        
+
         # ★★★ v2.9.84: 확장된 alias 매핑 ★★★
         alias_patterns = {
             'product': ['PRODUCT', 'PRODUCT_NAME', 'PRODUCT_CODE', '제품', '품목'],
             'sap_no': ['SAP_NO', 'SAP NO', 'SAPNO', 'SAP'],
             'eta_busan': ['ETA_BUSAN', 'ETA BUSAN', 'ETA', '입항일'],
-            'date_in_stock': ['DATE_IN_STOCK', 'DATE IN STOCK', 'INBOUND_DATE', 'INBOUND DATE', 
+            'date_in_stock': ['DATE_IN_STOCK', 'DATE IN STOCK', 'INBOUND_DATE', 'INBOUND DATE',
                              '입고일', 'STOCK_DATE', 'STOCK DATE'],
-            'qty_mt': ['QTY_MT', 'QTY (MT)', 'QTY(MT)', 'QTY', 'QUANTITY', '수량', 
+            'qty_mt': ['QTY_MT', 'QTY (MT)', 'QTY(MT)', 'QTY', 'QUANTITY', '수량',
                       'WEIGHT', 'NET_WEIGHT', 'NET WEIGHT'],
             'lot_no': ['LOT_NO', 'LOT NO', 'LOTNO', 'LOT', 'LOT_NUMBER'],
             'sub_lt': ['SUB_LT', 'SUB LT', 'SUBLT', 'SUB_LOT', 'SUBLOT', 'TONBAG', '톤백', '톤백번호'],
@@ -418,19 +419,19 @@ class AllocationParser:
         for i, h in enumerate(headers):
             if not h:
                 continue
-            
+
             # 정규화: 대문자, 공백→언더스코어, 특수문자 제거
             h_norm = str(h).upper().replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
             h_orig = str(h).upper().replace(' ', '_')  # 원본도 유지
-            
+
             # alias 패턴 매칭
             for standard_key, aliases in alias_patterns.items():
                 if standard_key in col_map:
                     continue  # 이미 매핑됨
-                
+
                 for alias in aliases:
                     alias_norm = alias.upper().replace(' ', '_').replace('-', '_').replace('(', '').replace(')', '')
-                    
+
                     # 정확히 일치하거나 포함 관계
                     if h_norm == alias_norm or h_orig == alias.upper().replace(' ', '_'):
                         col_map[standard_key] = i

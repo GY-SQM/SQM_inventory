@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM - 로깅 설정 (P2 config 분할)
 ================================
@@ -6,12 +5,12 @@ SQM - 로깅 설정 (P2 config 분할)
 config 의존 없이 자체 경로 사용 (순환 참조 방지).
 """
 
+import logging
 import os
 import sys
-import logging
 import threading
-from pathlib import Path
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 # 프로젝트 루트 (이 파일 위치 기준)
 _BASE_DIR = Path(__file__).parent.absolute()
@@ -52,8 +51,8 @@ class _StreamTeeToLogger:
         # 1) 콘솔 출력은 원본 스트림 유지
         try:
             self._original.write(s)
-        except (OSError, ValueError):
-            pass
+        except (OSError, ValueError) as e:
+            logger.debug(f"[write] Suppressed: {e}")
         # 2) 로그 파일에도 동일 메시지 저장
         if getattr(self._local, "in_write", False):
             return len(s)
@@ -72,13 +71,13 @@ class _StreamTeeToLogger:
     def flush(self):
         try:
             self._original.flush()
-        except (OSError, ValueError):
-            pass
+        except (OSError, ValueError) as e:
+            logger.debug(f"[flush] Suppressed: {e}")
         if self._buf.strip():
             try:
                 self._logger.log(self._level, self._buf.strip())
-            except (OSError, ValueError):
-                pass
+            except (OSError, ValueError) as e:
+                logger.debug(f"[flush] Suppressed: {e}")
         self._buf = ""
 
     def isatty(self):

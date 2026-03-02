@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v5.9.7 — 스플릿 패널 (마스터-상세)
 =======================================
@@ -7,9 +6,9 @@ SQM v5.9.7 — 스플릿 패널 (마스터-상세)
 - 상단=마스터, 하단=상세(톤백/Allocation 이력)
 """
 
+import logging
 import tkinter as tk
 from tkinter import ttk
-import logging
 
 logger = logging.getLogger(__name__)
 

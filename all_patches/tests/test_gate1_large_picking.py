@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.12.1 — Gate-1 교차검증 + 60LOT/300MT 대용량 파싱 테스트
 ================================================================
 """
-import sys
+import json
 import os
 import sqlite3
-import json
+import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -100,8 +99,11 @@ class FakeDB:
 # 모듈 로드
 # ═══════════════════════════════════════════════════
 from parsers.document_parser_modular.picking_mixin import (
-    PickingListParserMixin, PickingLotItem, PickingListResult, PickingListMeta,
-    _normalize_num, RE_QUANTITY, RE_QUANTITY_LOOSE, RE_LOT_ONLY, RE_EURO_NUMBER
+    RE_LOT_ONLY,
+    RE_QUANTITY,
+    RE_QUANTITY_LOOSE,
+    PickingListParserMixin,
+    _normalize_num,
 )
 
 
@@ -154,11 +156,11 @@ class TestPickingParser10LOT:
             # 본품
             blocks.append(f"Quantity: {weight_mt:.2f} MT")
             blocks.append(f"Batch number: {lot}")
-            blocks.append(f"Storage location: K001")
+            blocks.append("Storage location: K001")
             # 샘플
-            blocks.append(f"Quantity: 1.00 KG")
+            blocks.append("Quantity: 1.00 KG")
             blocks.append(f"Batch number: {lot}")
-            blocks.append(f"Storage location: K001")
+            blocks.append("Storage location: K001")
         return blocks
 
     def test_parse_10lot(self):
@@ -193,7 +195,7 @@ class TestPickingParser60LOT:
             blocks.append(f"Quantity: {weight_mt:.2f} MT")
             blocks.append(f"Batch number: {lot}")
             blocks.append(f"Storage location: K00{(i % 3) + 1}")
-            blocks.append(f"Quantity: 1.00 KG")
+            blocks.append("Quantity: 1.00 KG")
             blocks.append(f"Batch number: {lot}")
             blocks.append(f"Storage location: K00{(i % 3) + 1}")
         return blocks

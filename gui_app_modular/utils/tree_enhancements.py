@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v5.5.3 — Treeview 향상: 줄무늬, 필터, 합계
 =================================================
@@ -12,8 +11,10 @@ v5.5.3 patch_03: tk→ttk 전환으로 테마 자동 대응
 
 import calendar
 import logging
+from collections.abc import Callable
 from datetime import date, datetime
-from typing import List, Tuple, Callable, Optional, Dict
+from typing import Dict, List, Optional, Tuple
+
 from .ui_constants import ThemeColors, apply_modal_window_options
 
 logger = logging.getLogger(__name__)

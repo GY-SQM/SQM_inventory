@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 P5-11: core.constants 단위 테스트
 =================================
@@ -9,16 +8,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
 from engine_modules.constants import (
-    STATUS_AVAILABLE,
-    STATUS_PICKED,
-    STATUS_SOLD,
-    STATUS_DEPLETED,
-    DEFAULT_WAREHOUSE,
-    SAMPLE_WEIGHT_KG,
     BL_PREFIXES,
     DATE_FORMAT,
+    DEFAULT_WAREHOUSE,
+    SAMPLE_WEIGHT_KG,
+    STATUS_AVAILABLE,
+    STATUS_DEPLETED,
+    STATUS_PICKED,
+    STATUS_SOLD,
 )
 
 

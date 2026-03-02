@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - Gemini AI 대화형 재고 조회 (v2.9.43)
 
@@ -18,14 +17,14 @@ SQM 재고관리 - Gemini AI 대화형 재고 조회 (v2.9.43)
     # Excel 내보내기
     chat.export_last_result_to_excel("output.xlsx")
 """
-import os
 import json
-import re
 import logging
-from datetime import datetime
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
+import os
+import re
 import sqlite3
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ QUERY_TEMPLATES = {
             ROUND((SUM(initial_weight) - SUM(current_weight))/1000, 2) as total_outbound_mt
         FROM inventory
     """,
-    
+
     "제품별_재고": """
         SELECT 
             product as 제품,
@@ -56,7 +55,7 @@ QUERY_TEMPLATES = {
         GROUP BY product
         ORDER BY 현재고_MT DESC
     """,
-    
+
     "SAP별_재고": """
         SELECT 
             sap_no as SAP_NO,
@@ -69,7 +68,7 @@ QUERY_TEMPLATES = {
         GROUP BY sap_no
         ORDER BY sap_no
     """,
-    
+
     "LOT_목록": """
         SELECT 
             lot_no as LOT_NO,
@@ -85,7 +84,7 @@ QUERY_TEMPLATES = {
         ORDER BY arrival_date DESC, lot_no
         LIMIT {limit}
     """,
-    
+
     "SubLOT_목록": """
         SELECT 
             t.lot_no as LOT_NO,
@@ -101,7 +100,7 @@ QUERY_TEMPLATES = {
         ORDER BY t.lot_no, t.sub_lt
         LIMIT {limit}
     """,
-    
+
     "월별_현황": """
         SELECT 
             strftime('%Y-%m', arrival_date) as 월,
@@ -112,7 +111,7 @@ QUERY_TEMPLATES = {
         GROUP BY 월
         ORDER BY 월
     """,
-    
+
     "상태별_현황": """
         SELECT 
             status as 상태,
@@ -122,7 +121,7 @@ QUERY_TEMPLATES = {
         {where_clause}
         GROUP BY status
     """,
-    
+
     "출고_현황": """
         SELECT 
             t.outbound_date as 출고일,
@@ -137,7 +136,7 @@ QUERY_TEMPLATES = {
         ORDER BY t.outbound_date DESC
         LIMIT {limit}
     """,
-    
+
     "저재고_LOT": """
         SELECT 
             lot_no as LOT_NO,
@@ -216,7 +215,7 @@ class QueryResult:
 
 class GeminiChatQuery:
     """Gemini AI 대화형 재고 조회"""
-    
+
     def __init__(self, db_path: str, api_key: str = None):
         """
         Args:
@@ -225,14 +224,14 @@ class GeminiChatQuery:
         """
         self.db_path = db_path
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
-        
+
         self.db = None
         self.chat_history: List[Dict] = []
         self.last_result: Optional[QueryResult] = None
-        
+
         self._init_db()
         self._init_gemini()
-    
+
     def _init_db(self):
         """DB 초기화"""
         try:
@@ -242,17 +241,17 @@ class GeminiChatQuery:
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             logger.error(f"DB 연결 실패: {e}")
             raise
-    
+
     def _init_gemini(self):
         """Gemini API 초기화 (v3.6.9: google-genai SDK로 통일)"""
         self.gemini_available = False
         self.client = None
         self.model_name = "gemini-2.5-flash"
-        
+
         if not self.api_key:
             logger.warning("Gemini API 키가 없습니다. 규칙 기반 파싱만 사용합니다.")
             return
-        
+
         try:
             from google import genai
             self.client = genai.Client(api_key=self.api_key)
@@ -262,7 +261,7 @@ class GeminiChatQuery:
             logger.warning("google-genai 패키지가 없습니다: pip install google-genai")
         except (ImportError, ModuleNotFoundError) as e:
             logger.warning(f"Gemini API 초기화 실패: {e}")
-    
+
     def ask(self, question: str) -> Dict[str, Any]:
         """
         자연어 질문으로 재고 조회
@@ -283,16 +282,16 @@ class GeminiChatQuery:
         """
         import time
         _ask_start = time.time()
-        
+
         logger.info(f"질문: {question}")
-        
+
         # 1. 질문 분석
         intent = self._analyze_intent(question)
         logger.info(f"의도 분석: {intent}")
-        
+
         # 2. SQL 생성 및 실행
         result = self._execute_query(intent, question)
-        
+
         # 3. 결과 저장
         self.last_result = result
         self.chat_history.append({
@@ -305,10 +304,10 @@ class GeminiChatQuery:
             "content": result.answer,
             "timestamp": datetime.now().isoformat()
         })
-        
+
         _elapsed_ms = int((time.time() - _ask_start) * 1000)
         logger.info(f"질문 처리 완료: {_elapsed_ms}ms")
-        
+
         return {
             "success": result.success,
             "answer": result.answer,
@@ -319,11 +318,11 @@ class GeminiChatQuery:
             "sql": result.sql,
             "elapsed_ms": _elapsed_ms
         }
-    
+
     def _analyze_intent(self, question: str) -> Dict[str, Any]:
         """질문 의도 분석"""
         q = question.lower()
-        
+
         intent = {
             "query_type": "전체_재고_요약",
             "product": None,
@@ -335,13 +334,13 @@ class GeminiChatQuery:
             "limit": 100,
             "threshold": 0.3,  # 저재고 기준
         }
-        
+
         # 제품 추출
         for kr_name, en_name in PRODUCT_MAPPING.items():
             if kr_name in q:
                 intent["product"] = en_name
                 break
-        
+
         # SAP NO 추출
         sap_match = re.search(r'sap\s*(?:no|번호)?\s*[:\s]?\s*(\d{7})', q)
         if sap_match:
@@ -350,12 +349,12 @@ class GeminiChatQuery:
             sap_match = re.search(r'22\d{5}', q)
             if sap_match:
                 intent["sap_no"] = sap_match.group(0)
-        
+
         # BL NO 추출
         bl_match = re.search(r'bl\s*(?:no|번호)?\s*[:\s]?\s*([A-Z]{4}\d+)', q, re.I)
         if bl_match:
             intent["bl_no"] = bl_match.group(1).upper()
-        
+
         # LOT NO 추출
         lot_match = re.search(r'lot\s*(?:no|번호)?\s*[:\s]?\s*(\d{10})', q)
         if lot_match:
@@ -364,12 +363,12 @@ class GeminiChatQuery:
             lot_match = re.search(r'112\d{7}', q)
             if lot_match:
                 intent["lot_no"] = lot_match.group(0)
-        
+
         # 날짜/월 추출
         month_match = re.search(r'(\d{4})년?\s*(\d{1,2})월', q)
         if month_match:
             intent["date_range"] = f"{month_match.group(1)}-{int(month_match.group(2)):02d}"
-        
+
         # 쿼리 타입 결정
         if "allocation" in q or "allocaton" in q or "예약" in q or "배정" in q or "allocation table" in q:
             # "allocation table에서 몇 개 allocation됐니?" → 예약/배정 현황
@@ -410,38 +409,38 @@ class GeminiChatQuery:
                 intent["query_type"] = "제품별_재고"
             else:
                 intent["query_type"] = "전체_재고_요약"
-        
+
         return intent
-    
+
     def _execute_query(self, intent: Dict, question: str) -> QueryResult:
         """쿼리 실행"""
         query_type = intent["query_type"]
-        
+
         try:
             # WHERE 절 구성
             where_parts = []
             and_parts = []
-            
+
             if intent["product"]:
                 where_parts.append(f"product = '{intent['product']}'")
                 and_parts.append(f"i.product = '{intent['product']}'")
-            
+
             if intent["sap_no"]:
                 where_parts.append(f"sap_no = '{intent['sap_no']}'")
                 and_parts.append(f"i.sap_no = '{intent['sap_no']}'")
-            
+
             if intent["bl_no"]:
                 where_parts.append(f"bl_no = '{intent['bl_no']}'")
                 and_parts.append(f"i.bl_no = '{intent['bl_no']}'")
-            
+
             if intent["lot_no"]:
                 where_parts.append(f"lot_no = '{intent['lot_no']}'")
                 and_parts.append(f"i.lot_no = '{intent['lot_no']}'")
-            
+
             if intent["date_range"]:
                 where_parts.append(f"arrival_date LIKE '{intent['date_range']}%'")
                 and_parts.append(f"i.arrival_date LIKE '{intent['date_range']}%'")
-            
+
             # 예약_배정: allocation_plan 테이블만 사용 → lot_no / created_at 조건만
             if query_type in ("예약_배정_현황", "예약_배정_목록"):
                 ap_parts = []
@@ -451,13 +450,13 @@ class GeminiChatQuery:
                     ap_parts.append(f"ap.created_at LIKE '{intent['date_range']}%'")
                 where_parts = ap_parts
                 and_parts = ap_parts
-            
+
             where_clause = ""
             and_clause = ""
             if where_parts:
                 where_clause = "WHERE " + " AND ".join(where_parts)
                 and_clause = "AND " + " AND ".join(and_parts)
-            
+
             # SQL 생성
             sql_template = QUERY_TEMPLATES.get(query_type, QUERY_TEMPLATES["전체_재고_요약"])
             sql = sql_template.format(
@@ -466,10 +465,10 @@ class GeminiChatQuery:
                 limit=intent.get("limit", 100),
                 threshold=intent.get("threshold", 0.3)
             )
-            
+
             # 실행
             rows = self.db.fetchall(sql)
-            
+
             # 결과를 딕셔너리 리스트로 변환
             if rows and isinstance(rows[0], dict):
                 # SQMDatabase가 이미 dict로 반환
@@ -480,10 +479,10 @@ class GeminiChatQuery:
                 cursor = self.db.execute(sql)
                 columns = [desc[0] for desc in cursor.description] if cursor.description else []
                 data = [dict(zip(columns, row)) for row in rows]
-            
+
             # 답변 생성
             answer = self._generate_answer(query_type, data, columns, intent, question)
-            
+
             return QueryResult(
                 success=True,
                 query_type=query_type,
@@ -493,7 +492,7 @@ class GeminiChatQuery:
                 row_count=len(data),
                 answer=answer
             )
-            
+
         except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
             err_msg = str(e)
             logger.error(f"쿼리 실행 오류: {e}")
@@ -514,8 +513,8 @@ class GeminiChatQuery:
                 answer=answer,
                 error=err_msg
             )
-    
-    def _generate_answer(self, query_type: str, data: List[Dict], 
+
+    def _generate_answer(self, query_type: str, data: List[Dict],
                          columns: List[str], intent: Dict, question: str) -> str:
         """자연어 답변 생성"""
         if not data:
@@ -527,7 +526,7 @@ class GeminiChatQuery:
                 return (f"📋 '{intent['product']}' 제품의 재고가 없습니다.\n"
                         f"현재 DB에 등록된 제품을 확인하려면 '제품별 재고'를 조회하세요.")
             return "📋 조회 결과가 없습니다."
-        
+
         # Gemini 사용 가능하면 AI 답변 생성
         if self.gemini_available and len(data) <= 50:
             try:
@@ -536,7 +535,7 @@ class GeminiChatQuery:
                 answer = self._generate_ai_answer(data, columns, question)
                 _elapsed = int((time.time() - _start) * 1000)
                 logging.info(f"AI 답변 생성 완료 ({_elapsed}ms)")
-                
+
                 # v5.6.8: AI 답변 검증 — 데이터가 있는데 "없습니다"라고 하면 fallback
                 if data and any(kw in answer for kw in ['없습니다', '정보가 없', '데이터가 없', '찾을 수 없']):
                     logging.warning(f"AI 답변이 데이터({len(data)}건)와 모순 → 규칙 기반 fallback")
@@ -545,12 +544,12 @@ class GeminiChatQuery:
             except PermissionError as e:
                 return f"⚠️ API 키 오류: {e}\nsettings.ini의 api_key를 확인하세요."
             except RuntimeError as e:
-                return f"⚠️ API 한도 초과: 잠시 후 다시 시도해주세요."
+                return "⚠️ API 한도 초과: 잠시 후 다시 시도해주세요."
             except TimeoutError:
                 pass  # 규칙 기반으로 fallback
             except (ValueError, TypeError, KeyError) as e:
                 logging.debug(f"AI 답변 생성 실패: {e}")  # 실패시 규칙 기반으로
-        
+
         # 규칙 기반 답변
         if query_type == "전체_재고_요약":
             r = data[0]
@@ -561,7 +560,7 @@ class GeminiChatQuery:
                 f"• 현재 재고: {r.get('total_current_mt', 0):,.1f} MT\n"
                 f"• 총 출고량: {r.get('total_outbound_mt', 0):,.1f} MT"
             )
-        
+
         elif query_type == "제품별_재고":
             lines = ["📊 제품별 재고 현황\n"]
             for r in data:
@@ -570,7 +569,7 @@ class GeminiChatQuery:
                     f"({r.get('LOT수', 0)}개 LOT, 잔량율 {r.get('잔량율', 0):.1f}%)"
                 )
             return "\n".join(lines)
-        
+
         elif query_type == "SAP별_재고":
             lines = [f"📊 SAP NO별 재고 현황 ({len(data)}건)\n"]
             for r in data[:10]:  # 상위 10개만
@@ -581,7 +580,7 @@ class GeminiChatQuery:
             if len(data) > 10:
                 lines.append(f"\n... 외 {len(data)-10}건")
             return "\n".join(lines)
-        
+
         elif query_type == "월별_현황":
             lines = ["📊 월별 입고 현황\n"]
             for r in data:
@@ -589,7 +588,7 @@ class GeminiChatQuery:
                     f"• {r.get('월', '')}: {r.get('입고량_MT', 0):,.1f} MT ({r.get('LOT수', 0)}개 LOT)"
                 )
             return "\n".join(lines)
-        
+
         elif query_type in ("LOT_목록", "SubLOT_목록"):
             product_info = ""
             if intent.get("product"):
@@ -605,7 +604,7 @@ class GeminiChatQuery:
                     f"(상세 데이터는 Excel/PDF로 내보내기 가능)"
                 )
             return f"📋 조회 결과: {len(data)}건\n\n(상세 데이터는 Excel/PDF로 내보내기 가능)"
-        
+
         elif query_type == "저재고_LOT":
             lines = [f"⚠️ 저재고 LOT ({len(data)}건)\n"]
             for r in data[:10]:
@@ -631,15 +630,15 @@ class GeminiChatQuery:
             if not data:
                 return "📋 예약/배정 목록: 0건"
             return f"📋 예약/배정 목록: {len(data)}건\n\n(상세는 Excel/PDF 내보내기 가능)"
-        
+
         else:
             return f"조회 결과: {len(data)}건"
-    
+
     def _generate_ai_answer(self, data: List[Dict], columns: List[str], question: str) -> str:
         """Gemini로 AI 답변 생성"""
         if not self.client:
             return self._generate_answer_fallback(data, columns)
-        
+
         prompt = f"""
 다음은 재고 조회 결과입니다. 사용자의 질문에 대해 친절하고 간결하게 한국어로 답변해주세요.
 
@@ -661,7 +660,7 @@ class GeminiChatQuery:
 - 이모지 적절히 사용
 - 200자 이내로 간결하게
 """
-        
+
         try:
             from features.ai.gemini_utils import call_gemini_safe
             response = call_gemini_safe(
@@ -673,24 +672,24 @@ class GeminiChatQuery:
                 contents=prompt
             )
         return response.text
-    
+
     def export_to_excel(self, filepath: str = None) -> str:
         """마지막 조회 결과를 Excel로 내보내기"""
         if not self.last_result or not self.last_result.data:
             return "내보낼 데이터가 없습니다."
-        
+
         try:
             import pandas as pd
-            
+
             if filepath is None:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filepath = f"재고조회_{self.last_result.query_type}_{timestamp}.xlsx"
-            
+
             df = pd.DataFrame(self.last_result.data)
-            
+
             with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
                 df.to_excel(writer, sheet_name='조회결과', index=False)
-                
+
                 # 열 너비 자동 조정
                 worksheet = writer.sheets['조회결과']
                 for idx, col in enumerate(df.columns):
@@ -699,39 +698,45 @@ class GeminiChatQuery:
                         len(str(col))
                     ) + 2
                     worksheet.column_dimensions[chr(65 + idx)].width = min(max_len, 50)
-            
+
             logger.info(f"Excel 내보내기 완료: {filepath}")
             return filepath
-            
+
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"Excel 내보내기 실패: {e}")
             return f"오류: {str(e)}"
-    
+
     def export_to_pdf(self, filepath: str = None) -> str:
         """마지막 조회 결과를 PDF로 내보내기"""
         if not self.last_result or not self.last_result.data:
             return "내보낼 데이터가 없습니다."
-        
+
         try:
             from reportlab.lib import colors
             from reportlab.lib.pagesizes import A4, landscape
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
             from reportlab.lib.units import mm
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
             from reportlab.pdfbase import pdfmetrics
             from reportlab.pdfbase.ttfonts import TTFont
-            
+            from reportlab.platypus import (
+                Paragraph,
+                SimpleDocTemplate,
+                Spacer,
+                Table,
+                TableStyle,
+            )
+
             if filepath is None:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filepath = f"재고조회_{self.last_result.query_type}_{timestamp}.pdf"
-            
+
             # 한글 폰트 등록 시도
             try:
                 pdfmetrics.registerFont(TTFont('Malgun', 'malgun.ttf'))
                 font_name = 'Malgun'
             except (ValueError, TypeError, KeyError):
                 font_name = 'Helvetica'
-            
+
             doc = SimpleDocTemplate(
                 filepath,
                 pagesize=landscape(A4),
@@ -740,10 +745,10 @@ class GeminiChatQuery:
                 topMargin=10*mm,
                 bottomMargin=10*mm
             )
-            
+
             elements = []
             styles = getSampleStyleSheet()
-            
+
             # 제목
             title_style = ParagraphStyle(
                 'CustomTitle',
@@ -755,15 +760,15 @@ class GeminiChatQuery:
             elements.append(Paragraph(f"재고 조회 결과 - {self.last_result.query_type}", title_style))
             elements.append(Paragraph(f"생성일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
             elements.append(Spacer(1, 10*mm))
-            
+
             # 테이블
             data = self.last_result.data[:100]  # 최대 100행
             columns = self.last_result.columns
-            
+
             table_data = [columns]  # 헤더
             for row in data:
                 table_data.append([str(row.get(col, '')) for col in columns])
-            
+
             table = Table(table_data, repeatRows=1)
             table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -776,28 +781,28 @@ class GeminiChatQuery:
                 ('GRID', (0, 0), (-1, -1), 1, colors.black),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.lightgrey]),
             ]))
-            
+
             elements.append(table)
-            
+
             # 요약
             elements.append(Spacer(1, 10*mm))
             elements.append(Paragraph(f"총 {len(data)}건 / 전체 {self.last_result.row_count}건", styles['Normal']))
-            
+
             doc.build(elements)
-            
+
             logger.info(f"PDF 내보내기 완료: {filepath}")
             return filepath
-            
+
         except ImportError:
             return "PDF 생성을 위해 reportlab 패키지가 필요합니다."
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"PDF 내보내기 실패: {e}")
             return f"오류: {str(e)}"
-    
+
     def get_history(self) -> List[Dict]:
         """대화 히스토리 반환"""
         return self.chat_history
-    
+
     def clear_history(self):
         """대화 히스토리 초기화"""
         self.chat_history = []
@@ -811,17 +816,17 @@ class GeminiChatQuery:
 if __name__ == "__main__":
     # 테스트 실행
     TEST_DB = "./test_inventory.db"
-    
+
     if not os.path.exists(TEST_DB):
         logger.debug(f"테스트 DB가 없습니다: {TEST_DB}")
         exit(1)
-    
+
     chat = GeminiChatQuery(db_path=TEST_DB)
-    
+
     logger.debug("=" * 60)
     logger.debug("  SQM 재고 AI 조회 테스트")
     logger.debug("=" * 60)
-    
+
     # 테스트 질문들
     questions = [
         "전체 재고 현황 알려줘",
@@ -831,14 +836,14 @@ if __name__ == "__main__":
         "저재고 LOT 목록 (30% 이하)",
         "SAP NO별 재고 현황",
     ]
-    
+
     for q in questions:
         logger.debug(f"\n질문: {q}")
         logger.debug("-" * 40)
         result = chat.ask(q)
         logger.debug(f"{result['answer']}")
         logger.debug(f"(조회 건수: {result['row_count']})")
-    
+
     # Excel 내보내기 테스트
     logger.debug("\n" + "=" * 60)
     logger.debug("Excel 내보내기 테스트...")

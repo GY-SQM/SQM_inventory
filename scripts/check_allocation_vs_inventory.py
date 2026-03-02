@@ -1,4 +1,5 @@
 import logging
+
 # -*- coding: utf-8 -*-
 """
 판매 가능(재고) vs 판매 배정(Allocation) LOT 규칙 검증.
@@ -14,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import pandas as pd
+
 from utils.common import normalize_lot
 
 INVENTORY_PATH = ROOT.parent / "SQM-Inventory-2026_02_21.xlsx"

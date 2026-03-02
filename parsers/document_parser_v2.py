@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v4.0.3 — document_parser_v2.py → Modular V3 래퍼
 ======================================================
@@ -8,8 +7,7 @@ DocumentParserV2 호출은 내부적으로 DocumentParserV3로 위임됩니다.
 외부 인터페이스(클래스명, 함수명)는 동일하게 유지합니다.
 """
 import logging
-from typing import Optional, Dict, List, Any
-from core.types import safe_float
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

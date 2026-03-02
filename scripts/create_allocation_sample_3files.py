@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Allocation 형식 샘플 파일 3개 생성 (DB 불필요)
 
@@ -40,7 +39,7 @@ DATES = ["2026-02-20", "2026-03-24", "2026-03-10", "2026-02-15", "2026-04-01"]
 
 def _create_one_excel(filepath: Path, num_rows: int, total_mt: float) -> None:
     import openpyxl
-    from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
     wb = openpyxl.Workbook()

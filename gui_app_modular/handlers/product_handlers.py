@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v4.1.2 — 품목관리 핸들러
 ==============================
@@ -8,6 +7,7 @@ SQM v4.1.2 — 품목관리 핸들러
 
 import logging
 import sqlite3
+
 from ..utils.ui_constants import CustomMessageBox, ThemeColors
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ class ProductManagementMixin:
 
     def _show_product_summary(self) -> None:
         """v4.1.2: 품목별 재고 요약 팝업"""
-        from ..utils.constants import tk, ttk, VERTICAL, BOTH, LEFT, RIGHT, X, Y, END
+        from ..utils.constants import BOTH, END, LEFT, RIGHT, VERTICAL, Y, tk, ttk
 
         popup = tk.Toplevel(self.root)
         popup.title("📋 품목별 재고 요약")
@@ -107,7 +107,7 @@ class ProductManagementMixin:
 
     def _show_product_lot_lookup(self) -> None:
         """v4.1.2: 품목별 LOT 조회 — 품목 선택 → 해당 LOT + 톤백 수 표시"""
-        from ..utils.constants import tk, ttk, VERTICAL, BOTH, LEFT, RIGHT, X, Y, END
+        from ..utils.constants import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y, tk, ttk
 
         popup = tk.Toplevel(self.root)
         popup.title("🔍 품목별 LOT 조회")
@@ -212,7 +212,7 @@ class ProductManagementMixin:
 
     def _show_product_movement(self) -> None:
         """v4.1.2: 품목별 입출고 현황"""
-        from ..utils.constants import tk, ttk, VERTICAL, BOTH, LEFT, RIGHT, X, Y, END
+        from ..utils.constants import BOTH, END, LEFT, RIGHT, VERTICAL, Y, tk, ttk
 
         popup = tk.Toplevel(self.root)
         popup.title("📊 품목별 입출고 현황")

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 업로드한 톤백 테이블(DB)에서 Allocation Table 샘플 Excel 3개 생성
 
@@ -21,7 +20,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
     import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 except ImportError:
     print("openpyxl 필요: pip install openpyxl")

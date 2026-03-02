@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 문서 파서 기본 클래스
 ============================================
@@ -15,10 +14,10 @@ v3.6.0: document_parser_v2.py에서 분리
 버전: v3.6.0
 """
 
-import os
 import logging
+import os
 import time
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ class DocumentParserBase:
         >>> diagnosis = parser.diagnose_pdf('document.pdf')
         >>> print(diagnosis['detected_type'])
     """
-    
+
     def __init__(self, gemini_api_key: str = None):
         """
         Args:
@@ -197,7 +196,7 @@ class DocumentParserBase:
             try:
                 detector = DocumentDetector()
                 result = detector.detect(text, file_path)
-                
+
                 if result.confidence >= 0.5:
                     logger.info(f"[DETECT] 점수 기반 감지 성공: {result.doc_type.name} ({result.confidence:.1%})")
                     return result.doc_type.name
@@ -205,7 +204,7 @@ class DocumentParserBase:
                     logger.warning(f"[DETECT] 점수 기반 감지 신뢰도 낮음: {result.confidence:.1%}, 폴백 시도")
             except (ValueError, TypeError, AttributeError) as e:
                 logger.warning(f"[DETECT] 점수 기반 감지 실패: {e}, 레거시 방식 사용")
-        
+
         return self._detect_document_type_legacy(text, file_path)
 
     def _detect_document_type_legacy(self, text: str, file_path: str) -> str:
@@ -221,7 +220,7 @@ class DocumentParserBase:
         """
         text_lower = text.lower()
         filename_lower = os.path.basename(file_path).lower()
-        
+
         # 파일명 기반 우선 감지
         if 'invoice' in filename_lower or 'fa' in filename_lower:
             return 'INVOICE'
@@ -231,25 +230,25 @@ class DocumentParserBase:
             return 'BL'
         if 'do' in filename_lower or 'delivery' in filename_lower:
             return 'DO'
-        
+
         # 텍스트 내용 기반 감지
         invoice_keywords = ['factura', 'invoice', 'commercial invoice', 'proforma']
         packing_keywords = ['packing list', 'lista de empaque', 'folio']
         bl_keywords = ['bill of lading', 'b/l', 'shipper', 'consignee', 'notify party']
         do_keywords = ['delivery order', 'd/o', 'arrival', 'free time']
-        
+
         scores = {
             'INVOICE': sum(1 for kw in invoice_keywords if kw in text_lower),
             'PACKING_LIST': sum(1 for kw in packing_keywords if kw in text_lower),
             'BL': sum(1 for kw in bl_keywords if kw in text_lower),
             'DO': sum(1 for kw in do_keywords if kw in text_lower)
         }
-        
+
         max_type = max(scores, key=scores.get)
         if scores[max_type] > 0:
             logger.info(f"[DETECT] 레거시 감지: {max_type} (점수: {scores})")
             return max_type
-        
+
         return 'UNKNOWN'
 
     def _extract_text(self, pdf_path: str) -> str:
@@ -309,17 +308,17 @@ class DocumentParserBase:
         try:
             doc = fitz.open(pdf_path)
             images = []
-            
+
             for i, page in enumerate(doc):
                 if i >= max_pages:
                     break
-                
+
                 # 고해상도 렌더링 (300 DPI)
                 mat = fitz.Matrix(300/72, 300/72)
                 pix = page.get_pixmap(matrix=mat)
                 img_bytes = pix.tobytes("png")
                 images.append(img_bytes)
-            
+
             return images
         finally:
             if doc is not None:

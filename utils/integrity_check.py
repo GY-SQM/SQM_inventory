@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 데이터 정합성 검사 리포트 (v3.8.4)
 =======================================================
@@ -23,12 +22,12 @@ Author: Ruby
 Version: v3.8.4
 """
 
-import sqlite3
-import re
 import logging
-from datetime import datetime
-from typing import Dict, List, Any, Optional
+import re
+import sqlite3
 from dataclasses import dataclass, field
+from datetime import datetime
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +56,7 @@ class IntegrityReport:
     failed: int = 0
     warnings: int = 0
     results: List[CheckResult] = field(default_factory=list)
-    
+
     @property
     def score(self) -> int:
         """정합성 점수 (0~100)"""
@@ -68,20 +67,20 @@ class IntegrityReport:
 
 class IntegrityChecker:
     """데이터 정합성 검사기"""
-    
+
     def __init__(self, db):
         """
         Args:
             db: SQMDatabase 인스턴스
         """
         self.db = db
-    
+
     def run_all(self) -> IntegrityReport:
         """전체 정합성 검사 실행"""
         report = IntegrityReport(
             timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         )
-        
+
         checks = [
             self._check_duplicate_lots,
             self._check_orphan_tonbags,
@@ -90,7 +89,7 @@ class IntegrityChecker:
             self._check_status_consistency,
             self._check_fk_integrity,
         ]
-        
+
         for check_fn in checks:
             try:
                 result = check_fn()
@@ -113,9 +112,9 @@ class IntegrityChecker:
                 ))
                 report.total_checks += 1
                 report.failed += 1
-        
+
         return report
-    
+
     def _check_duplicate_lots(self) -> CheckResult:
         """1. 중복 LOT 번호 검사"""
         rows = self.db.fetchall("""
@@ -125,13 +124,13 @@ class IntegrityChecker:
             GROUP BY lot_no 
             HAVING cnt > 1
         """)
-        
+
         issues = []
         for row in rows:
             lot_no = row['lot_no'] if isinstance(row, dict) else row[0]
             cnt = row['cnt'] if isinstance(row, dict) else row[1]
             issues.append(f"LOT '{lot_no}' → {cnt}건 중복")
-        
+
         return CheckResult(
             check_name="중복 LOT 번호",
             passed=len(issues) == 0,
@@ -139,7 +138,7 @@ class IntegrityChecker:
             details=issues[:20],  # 최대 20건
             severity="CRITICAL" if issues else "INFO"
         )
-    
+
     def _check_orphan_tonbags(self) -> CheckResult:
         """2. 고아 TONBAG 검사 (LOT에 연결 안 됨)"""
         rows = self.db.fetchall("""
@@ -148,13 +147,13 @@ class IntegrityChecker:
             LEFT JOIN inventory i ON t.lot_no = i.lot_no
             WHERE i.id IS NULL AND t.lot_no IS NOT NULL AND t.lot_no != ''
         """)
-        
+
         issues = []
         for row in rows:
             lot_no = row['lot_no'] if isinstance(row, dict) else row[1]
             sub_lt = row['sub_lt'] if isinstance(row, dict) else row[2]
             issues.append(f"TONBAG {lot_no}-{sub_lt} → inventory에 LOT 없음")
-        
+
         return CheckResult(
             check_name="고아 TONBAG (LOT 미연결)",
             passed=len(issues) == 0,
@@ -162,7 +161,7 @@ class IntegrityChecker:
             details=issues[:20],
             severity="ERROR" if issues else "INFO"
         )
-    
+
     def _check_date_formats(self) -> CheckResult:
         """3. 날짜 포맷 불량 검사 (ISO 8601 위반)"""
         date_columns = [
@@ -172,7 +171,7 @@ class IntegrityChecker:
             ("inventory", "stock_date"),
             ("inventory_tonbag", "inbound_date"),
         ]
-        
+
         issues = []
         for table, column in date_columns:
             try:
@@ -189,7 +188,7 @@ class IntegrityChecker:
                     issues.append(f"{table}.{column} (id={row_id}): '{val}'")
             except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
                 logger.debug(f"[integrity_check] 무시: {_e}")
-        
+
         return CheckResult(
             check_name="날짜 포맷 불량 (ISO 8601)",
             passed=len(issues) == 0,
@@ -197,11 +196,11 @@ class IntegrityChecker:
             details=issues[:20],
             severity="WARNING" if issues else "INFO"
         )
-    
+
     def _check_weight_integrity(self) -> CheckResult:
         """4. 수량/중량 불일치 검사"""
         issues = []
-        
+
         # 음수 중량
         rows = self.db.fetchall("""
             SELECT lot_no, net_weight, current_weight, picked_weight
@@ -211,7 +210,7 @@ class IntegrityChecker:
         for row in rows:
             lot_no = row['lot_no'] if isinstance(row, dict) else row[0]
             issues.append(f"LOT '{lot_no}' → 음수 중량 발견")
-        
+
         # current_weight > initial_weight (비정상)
         rows = self.db.fetchall("""
             SELECT lot_no, initial_weight, current_weight
@@ -223,7 +222,7 @@ class IntegrityChecker:
             initial = row['initial_weight'] if isinstance(row, dict) else row[1]
             current = row['current_weight'] if isinstance(row, dict) else row[2]
             issues.append(f"LOT '{lot_no}' → current({current}) > initial({initial})")
-        
+
         # TONBAG 음수 중량
         rows = self.db.fetchall("""
             SELECT lot_no, sub_lt, weight
@@ -234,7 +233,7 @@ class IntegrityChecker:
             lot_no = row['lot_no'] if isinstance(row, dict) else row[0]
             sub_lt = row['sub_lt'] if isinstance(row, dict) else row[1]
             issues.append(f"TONBAG {lot_no}-{sub_lt} → 음수 중량")
-        
+
         return CheckResult(
             check_name="수량/중량 불일치",
             passed=len(issues) == 0,
@@ -242,11 +241,11 @@ class IntegrityChecker:
             details=issues[:20],
             severity="ERROR" if issues else "INFO"
         )
-    
+
     def _check_status_consistency(self) -> CheckResult:
         """5. 상태 불일치 검사"""
         issues = []
-        
+
         # AVAILABLE인데 current_weight = 0
         rows = self.db.fetchall("""
             SELECT lot_no, status, current_weight
@@ -257,7 +256,7 @@ class IntegrityChecker:
         for row in rows:
             lot_no = row['lot_no'] if isinstance(row, dict) else row[0]
             issues.append(f"LOT '{lot_no}' → AVAILABLE인데 잔량 0 (DEPLETED여야 함)")
-        
+
         # DEPLETED인데 current_weight > 0
         rows = self.db.fetchall("""
             SELECT lot_no, status, current_weight
@@ -268,7 +267,7 @@ class IntegrityChecker:
             lot_no = row['lot_no'] if isinstance(row, dict) else row[0]
             current = row['current_weight'] if isinstance(row, dict) else row[2]
             issues.append(f"LOT '{lot_no}' → DEPLETED인데 잔량 {current}kg")
-        
+
         return CheckResult(
             check_name="상태 불일치 (STATUS vs 중량)",
             passed=len(issues) == 0,
@@ -276,11 +275,11 @@ class IntegrityChecker:
             details=issues[:20],
             severity="WARNING" if issues else "INFO"
         )
-    
+
     def _check_fk_integrity(self) -> CheckResult:
         """6. FK 무결성 검사"""
         issues = []
-        
+
         # inventory.shipment_id → shipment.id
         try:
             rows = self.db.fetchall("""
@@ -295,7 +294,7 @@ class IntegrityChecker:
                 issues.append(f"LOT '{lot_no}' → shipment_id={sid} 존재하지 않음")
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
             logger.warning(f"Suppressed: {_e}")
-        
+
         # inventory_tonbag.inventory_id → inventory.id
         try:
             rows = self.db.fetchall("""
@@ -310,7 +309,7 @@ class IntegrityChecker:
                 issues.append(f"TONBAG {lot_no} → inventory_id={iid} 존재하지 않음")
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
             logger.warning(f"Suppressed: {_e}")
-        
+
         return CheckResult(
             check_name="FK 무결성 (외래키 참조)",
             passed=len(issues) == 0,
@@ -318,12 +317,12 @@ class IntegrityChecker:
             details=issues[:20],
             severity="ERROR" if issues else "INFO"
         )
-    
+
     def print_report(self, report: IntegrityReport) -> str:
         """리포트를 텍스트로 출력"""
         lines = []
         lines.append("=" * 60)
-        lines.append(f"  SQM 데이터 정합성 리포트 (v3.8.7)")
+        lines.append("  SQM 데이터 정합성 리포트 (v3.8.7)")
         lines.append(f"  검사 시각: {report.timestamp}")
         lines.append("=" * 60)
         lines.append("")
@@ -334,7 +333,7 @@ class IntegrityChecker:
         lines.append(f"  📊 점수: {report.score}/100")
         lines.append("")
         lines.append("-" * 60)
-        
+
         for r in report.results:
             icon = "✅" if r.passed else ("⚠️" if r.severity == "WARNING" else "❌")
             lines.append(f"  {icon} {r.check_name}: {r.issue_count}건")
@@ -343,28 +342,28 @@ class IntegrityChecker:
                     lines.append(f"      → {d}")
                 if len(r.details) > 5:
                     lines.append(f"      ... 외 {len(r.details) - 5}건")
-        
+
         lines.append("")
         lines.append("=" * 60)
-        
+
         text = "\n".join(lines)
         logger.info(f"정합성 리포트 생성 완료 (점수: {report.score}/100)")
         return text
-    
+
     def save_report(self, report: IntegrityReport, filepath: str = None) -> str:
         """리포트를 파일로 저장"""
         import os
-        
+
         if filepath is None:
             reports_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'REPORTS')
             os.makedirs(reports_dir, exist_ok=True)
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             filepath = os.path.join(reports_dir, f'INTEGRITY_{timestamp}.txt')
-        
+
         text = self.print_report(report)
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(text)
-        
+
         logger.info(f"정합성 리포트 저장: {filepath}")
         return filepath
 

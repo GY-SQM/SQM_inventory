@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Packing List PDF 파싱 테스트 스크립트"""
 import sys
 from pathlib import Path
@@ -8,6 +7,7 @@ root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(root))
 
 from parsers.pdf_parser import PDFParser
+
 
 def main():
     # PDF 경로: 워크스페이스 상위 폴더

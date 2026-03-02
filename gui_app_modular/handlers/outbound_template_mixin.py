@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v4.0.1 — 출고 템플릿/Allocation Mixin
 ===========================================
@@ -9,8 +8,8 @@ outbound_handlers.py에서 분리:
 - Virtual Allocation 생성
 """
 import logging
+
 from ..utils.custom_messagebox import CustomMessageBox
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ class OutboundTemplateMixin:
 
         try:
             import openpyxl
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
             from openpyxl.utils import get_column_letter
 
             wb = openpyxl.Workbook()
@@ -163,7 +162,7 @@ class OutboundTemplateMixin:
                 f"파일: {file_path}\n\n"
                 "★ 4행부터 데이터 붙여넣기 후 저장하거나,\n"
                 "★ 화주에서 받은 동일 양식 Excel을 그대로 업로드하세요.")
-                
+
         except ImportError:
             CustomMessageBox.showerror(self.root, "오류", "openpyxl 패키지가 필요합니다.\npip install openpyxl")
         except (RuntimeError, ValueError) as e:
@@ -180,7 +179,7 @@ class OutboundTemplateMixin:
         - 일반 + 샘플 톤백 모두 포함
         """
         from ..utils.constants import filedialog
-        
+
         file_path = filedialog.asksaveasfilename(
             title="가상 출고 Allocation Table 저장",
             defaultextension=".xlsx",
@@ -189,32 +188,33 @@ class OutboundTemplateMixin:
         )
         if not file_path:
             return
-        
+
         try:
-            import openpyxl
-            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-            from openpyxl.utils import get_column_letter
             import random
             from datetime import datetime, timedelta
-            
+
+            import openpyxl
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+            from openpyxl.utils import get_column_letter
+
             # DB에서 재고 로드
             all_lots = self.engine.get_inventory()
             if not all_lots:
                 CustomMessageBox.showwarning(self.root, "데이터 없음",
                     "DB에 재고 데이터가 없습니다.\n먼저 입고를 진행해주세요.")
                 return
-            
+
             random.seed(42)
             random.shuffle(all_lots)
-            
+
             total = len(all_lots)
             n_out = int(total * 0.6)
             n_ret = int(total * 0.2)
-            
+
             out_lots = sorted(all_lots[:n_out], key=lambda x: x.get('lot_no', ''))
             ret_lots = sorted(all_lots[n_out:n_out+n_ret], key=lambda x: x.get('lot_no', ''))
             stk_lots = sorted(all_lots[n_out+n_ret:], key=lambda x: x.get('lot_no', ''))
-            
+
             # 스타일
             hdr_font = Font(bold=True, color="FFFFFF", size=10)
             hdr_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
@@ -227,9 +227,9 @@ class OutboundTemplateMixin:
                           top=Side(style='thin'), bottom=Side(style='thin'))
             ctr = Alignment(horizontal='center', vertical='center')
             rgt = Alignment(horizontal='right', vertical='center')
-            
+
             sold_tos = ['LBM AP - Q4 2025', 'PT ABC - Q1 2026', 'Samsung SDI', 'LG Energy', 'CATL']
-            
+
             def rand_date(start_str):
                 try:
                     s = datetime.strptime(str(start_str)[:10], '%Y-%m-%d')
@@ -238,16 +238,16 @@ class OutboundTemplateMixin:
                 e = datetime(2026, 2, 8)
                 d = max((e - s).days, 7)
                 return (s + timedelta(days=random.randint(7, d))).strftime('%Y-%m-%d')
-            
+
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "Allocation Table"
-            
+
             # 타이틀
             ws.merge_cells('A1:K1')
             ws['A1'] = f"Allocation - {total} LOTs (가상 60/20/20)"
             ws['A1'].font = Font(bold=True, size=14)
-            
+
             # 헤더
             headers = ['Product','SAP NO','Date in stock','QTY (MT)','Lot No',
                        'WH','Customs','Export','SOLD TO','SALE REF','GW']
@@ -256,10 +256,10 @@ class OutboundTemplateMixin:
                 c = ws.cell(row=3, column=i, value=h)
                 c.font = hdr_font; c.fill = hdr_fill; c.alignment = ctr; c.border = border
                 ws.column_dimensions[get_column_letter(i)].width = w
-            
+
             row = 4
             out_qty = out_gw = ret_qty = ret_gw = 0
-            
+
             def write_row(r, vals, fill, is_sample=False):
                 for i, v in enumerate(vals, 1):
                     c = ws.cell(row=r, column=i, value=v)
@@ -269,7 +269,7 @@ class OutboundTemplateMixin:
                     c.alignment = rgt if i in (4, 11) else ctr
                     if i in (4, 11):
                         c.number_format = '#,##0.00000' if is_sample else '#,##0.000'
-            
+
             # 출고 (60%)
             for lot in out_lots:
                 qty_mt = (lot.get('net_weight', 5000) or 5000) / 1000
@@ -279,14 +279,14 @@ class OutboundTemplateMixin:
                     lot.get('warehouse','GY'), lot.get('customs','Cleared'), '분할/반송',
                     random.choice(sold_tos), str(2900+random.randint(1,99)), gw_mt], out_fill)
                 row += 1; out_qty += qty_mt; out_gw += gw_mt
-            
+
             for lot in out_lots:
                 write_row(row, [f"{lot.get('product','')}_sample", lot.get('sap_no',''),
                     lot.get('arrival_date',''), 0.001, lot.get('lot_no',''),
                     lot.get('warehouse','GY'), lot.get('customs','Cleared'), '분할/반송',
                     random.choice(sold_tos), '', 0.00125], out_fill, is_sample=True)
                 row += 1; out_qty += 0.001; out_gw += 0.00125
-            
+
             # 반품 (20%)
             for lot in ret_lots:
                 qty_mt = (lot.get('net_weight', 5000) or 5000) / 1000
@@ -296,14 +296,14 @@ class OutboundTemplateMixin:
                     lot.get('warehouse','GY'), 'Uncleared', '반송',
                     'RETURN - 반품', '', gw_mt], ret_fill)
                 row += 1; ret_qty += qty_mt; ret_gw += gw_mt
-            
+
             for lot in ret_lots:
                 write_row(row, [f"{lot.get('product','')}_sample", lot.get('sap_no',''),
                     lot.get('arrival_date',''), 0.001, lot.get('lot_no',''),
                     lot.get('warehouse','GY'), 'Uncleared', '반송',
                     'RETURN - 반품', '', 0.00125], ret_fill, is_sample=True)
                 row += 1; ret_qty += 0.001; ret_gw += 0.00125
-            
+
             last = row - 1
             ws.cell(row=2, column=3, value="합계 QTY").font = Font(bold=True)
             ws.cell(row=2, column=4, value=f"=SUM(D4:D{last})").font = Font(bold=True)
@@ -311,14 +311,14 @@ class OutboundTemplateMixin:
             ws.cell(row=2, column=10, value="합계 GW").font = Font(bold=True)
             ws.cell(row=2, column=11, value=f"=SUM(K4:K{last})").font = Font(bold=True)
             ws['K2'].number_format = '#,##0.000'
-            
+
             # 요약
             sc = 14
             for i, h in enumerate(['Export','LOTs','합계 QTY(MT)','합계 GW']):
                 c = ws.cell(row=3, column=sc+i, value=h)
                 c.font = hdr_font; c.fill = hdr_fill; c.alignment = ctr; c.border = border
                 ws.column_dimensions[get_column_letter(sc+i)].width = 16
-            
+
             stk_qty = sum((l.get('net_weight', 5000) or 5000)/1000 for l in stk_lots)
             for r, d in enumerate([
                 ['분할/반송 (출고)', f'{len(out_lots)}', out_qty, out_gw],
@@ -332,7 +332,7 @@ class OutboundTemplateMixin:
                     if c >= 2: cell.number_format = '#,##0.000'
                     if '총합계' in str(d[0]):
                         cell.font = Font(bold=True); cell.fill = sum_fill
-            
+
             # 재고 유지 시트
             ws2 = wb.create_sheet("재고 유지 (20%)")
             ws2.cell(row=1, column=1, value="재고 유지 LOT (미출고)").font = Font(bold=True, size=13)
@@ -347,7 +347,7 @@ class OutboundTemplateMixin:
                     c = ws2.cell(row=3+idx, column=j, value=v)
                     c.fill = stk_fill; c.border = border; c.alignment = ctr
                     if j == 5: c.number_format = '#,##0.000'
-            
+
             wb.save(file_path)
             self._log(f"✅ 가상 Allocation Table 저장: {file_path}")
             self._log(f"  출고: {len(out_lots)} LOTs | 반품: {len(ret_lots)} LOTs | 재고: {len(stk_lots)} LOTs")
@@ -357,7 +357,7 @@ class OutboundTemplateMixin:
                 f"반품 (20%): {len(ret_lots)} LOTs\n"
                 f"재고 유지 (20%): {len(stk_lots)} LOTs\n\n"
                 f"파일: {file_path}")
-            
+
         except ImportError:
             CustomMessageBox.showerror(self.root, "오류", "openpyxl 필요: pip install openpyxl")
         except (RuntimeError, ValueError) as e:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Sales Order 엑셀 구조 확인 (헤더·샘플 행)."""
 import sys
 from pathlib import Path

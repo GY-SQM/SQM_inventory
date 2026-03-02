@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 비날짜 정규화 회귀 테스트
 """
@@ -8,8 +7,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.common import norm_digits_only, norm_bl_no, norm_sap_no
 from features.ai.gemini_parser import parse_euro_weight
+from utils.common import norm_bl_no, norm_digits_only, norm_sap_no
 
 
 def test_norm_digits_only_excel_float_suffix():

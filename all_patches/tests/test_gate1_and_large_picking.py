@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.12.1 — Gate-1 교차검증 강화 + 60LOT 대용량 파싱 테스트
 ==============================================================
@@ -9,10 +8,11 @@ SQM v6.12.1 — Gate-1 교차검증 강화 + 60LOT 대용량 파싱 테스트
   9:   _gate1_to_json 직렬화
 """
 
-import pytest
-import sqlite3
 import json
+import sqlite3
 from unittest.mock import MagicMock
+
+import pytest
 
 # ── 파서 테스트 ──
 
@@ -38,12 +38,12 @@ def test_large_picking_60lot():
 
     for i in range(60):
         lot = f'11250{72300 + i}'
-        lines.append(f'Quantity: 5.00 MT')
+        lines.append('Quantity: 5.00 MT')
         lines.append(f'Batch number: {lot}')
-        lines.append(f'Storage location: WH-GY-01')
-        lines.append(f'Quantity: 1.00 KG')
+        lines.append('Storage location: WH-GY-01')
+        lines.append('Quantity: 1.00 KG')
         lines.append(f'Batch number: {lot}')
-        lines.append(f'Storage location: WH-GY-01')
+        lines.append('Storage location: WH-GY-01')
 
     # NW/GW
     lines.append('300,000.00 KG')
@@ -93,9 +93,9 @@ def test_big_bag_doc_mismatch_warning():
     lines.extend([''] * 40)
     for i in range(10):
         lot = f'11250{72300 + i}'
-        lines.append(f'Quantity: 5.00 MT')
+        lines.append('Quantity: 5.00 MT')
         lines.append(f'Batch number: {lot}')
-        lines.append(f'Quantity: 1.00 KG')
+        lines.append('Quantity: 1.00 KG')
         lines.append(f'Batch number: {lot}')
 
     # NW 200,000 이상 + Big bag 20ea로 표기 (실제 10개)

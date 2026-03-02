@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.2.7 — 출고 상태전이 회귀 테스트
 ========================================
@@ -18,10 +17,11 @@ SQM v6.2.7 — 출고 상태전이 회귀 테스트
 실행: python -m pytest tests/test_outbound_state_transition.py -v
 """
 
+import logging
 import os
 import sys
 import tempfile
-import logging
+
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

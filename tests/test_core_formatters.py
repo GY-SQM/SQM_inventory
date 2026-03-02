@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 P5-10: core.formatters 단위 테스트
 ===================================
@@ -9,13 +8,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
 from gui_app_modular.utils.formatters import (
+    find_column,
     format_number,
     format_weight,
     format_weight_kg,
     format_weight_mt,
-    find_column,
 )
 
 

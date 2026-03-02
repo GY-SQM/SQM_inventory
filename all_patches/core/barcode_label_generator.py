@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.12 Stage7 — 바코드 라벨 PDF 생성기
 작성자: Ruby
@@ -7,6 +6,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
+
 logger = logging.getLogger(__name__)
 
 def generate_barcode_labels(tonbags: list, output_dir: str = 'output/labels',

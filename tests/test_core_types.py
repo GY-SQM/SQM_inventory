@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 P5-8: core.types 단위 테스트
 ============================
@@ -9,8 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import pytest
-from core.types import safe_int, safe_float, safe_str, normalize_column_name
+from core.types import normalize_column_name, safe_float, safe_int, safe_str
 
 
 class TestSafeInt:

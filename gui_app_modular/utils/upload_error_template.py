@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 업로드 실패 메시지 템플릿
 ================================================
@@ -9,18 +8,18 @@ v4.2.1: 상세한 오류 메시지 및 해결 방법 제공
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
 
 class UploadErrorTemplate:
     """업로드 실패 메시지 템플릿"""
-    
+
     # ========================================
     # 오류 타입별 템플릿
     # ========================================
-    
+
     ERROR_TEMPLATES = {
         'missing_lot_no': {
             'title': 'LOT NO 누락',
@@ -32,7 +31,7 @@ class UploadErrorTemplate:
             ],
             'example': '1125072340'
         },
-        
+
         'invalid_lot_no': {
             'title': 'LOT NO 형식 오류',
             'description': 'LOT NO가 올바른 형식이 아닙니다.',
@@ -43,7 +42,7 @@ class UploadErrorTemplate:
             ],
             'example': '1125072340 (O) / 112-507-2340 (X)'
         },
-        
+
         'missing_date': {
             'title': '날짜 누락',
             'description': '필수 날짜 컬럼이 비어있습니다.',
@@ -54,7 +53,7 @@ class UploadErrorTemplate:
             ],
             'example': '2025-01-15'
         },
-        
+
         'invalid_date': {
             'title': '날짜 형식 오류',
             'description': '날짜가 올바른 형식이 아닙니다.',
@@ -66,7 +65,7 @@ class UploadErrorTemplate:
             ],
             'example': '2025-01-15 (O) / 2025/01/15 (X) / 20250115 (X)'
         },
-        
+
         'missing_required': {
             'title': '필수 컬럼 누락',
             'description': '아래 "실패 행"에서 어떤 행의 어떤 항목이 비어 있는지 확인한 뒤, 해당 셀을 채워 주세요.',
@@ -77,7 +76,7 @@ class UploadErrorTemplate:
             ],
             'example': 'LOT NO: 1125072340\nPRODUCT: LITHIUM CARBONATE\nNET(Kg): 25000\nMXBG: 10'
         },
-        
+
         'invalid_number': {
             'title': '숫자 형식 오류',
             'description': '숫자 컬럼에 잘못된 값이 입력되었습니다.',
@@ -89,7 +88,7 @@ class UploadErrorTemplate:
             ],
             'example': '25000 (O) / 25,000 (X) / 25톤 (X)'
         },
-        
+
         'duplicate_lot': {
             'title': 'LOT NO 중복',
             'description': '이미 존재하는 LOT NO입니다.',
@@ -111,7 +110,7 @@ class UploadErrorTemplate:
             ],
             'example': '첫 입고 완료 후 → 같은 파일 재선택 시 이 오류 발생'
         },
-        
+
         'file_format': {
             'title': '파일 형식 오류',
             'description': 'Excel 파일을 읽을 수 없습니다.',
@@ -123,7 +122,7 @@ class UploadErrorTemplate:
             ],
             'example': 'file.xlsx (O) / file.csv (X) / file.txt (X)'
         },
-        
+
         'encoding': {
             'title': '인코딩 오류',
             'description': '파일의 문자 인코딩이 올바르지 않습니다.',
@@ -135,7 +134,7 @@ class UploadErrorTemplate:
             ],
             'example': 'UTF-8 인코딩 권장'
         },
-        
+
         'column_header': {
             'title': '컬럼명 오류',
             'description': '필수 컬럼명을 찾을 수 없습니다.',
@@ -168,11 +167,11 @@ class UploadErrorTemplate:
             'example': ''
         }
     }
-    
+
     @classmethod
     def format_error_message(
-        cls, 
-        error_type: str, 
+        cls,
+        error_type: str,
         failed_rows: List[Dict],
         total_rows: int = 0
     ) -> Dict:
@@ -194,7 +193,7 @@ class UploadErrorTemplate:
             'solution': ['파일을 확인하고 다시 시도하세요.'],
             'example': ''
         })
-        
+
         # 실패 행 상세 정보 생성 — 어느 행의 어떤 데이터가 빠졌는지 명확히 표시
         failed_details = []
         for item in failed_rows[:10]:  # 최대 10개만 표시
@@ -203,7 +202,7 @@ class UploadErrorTemplate:
             column = item.get('column', '')
             missing_columns = item.get('missing_columns', [])  # ['LOT NO', 'PRODUCT'] 등
             row_label = f"행 {row_num}" if row_num != '?' else "행 번호 미상(전체/DB 오류 등)"
-            
+
             if missing_columns:
                 cols_str = ', '.join(missing_columns)
                 failed_details.append(f"  • {row_label}: [{cols_str}] 비어 있음")
@@ -211,10 +210,10 @@ class UploadErrorTemplate:
                 failed_details.append(f"  • {row_label}, {column}: {value}")
             else:
                 failed_details.append(f"  • {row_label}: {value}")
-        
+
         if len(failed_rows) > 10:
             failed_details.append(f"  • ... 외 {len(failed_rows) - 10}건")
-        
+
         return {
             'title': template['title'],
             'description': template['description'],
@@ -224,7 +223,7 @@ class UploadErrorTemplate:
             'solution': template['solution'],
             'example': template['example']
         }
-    
+
     @classmethod
     def format_multiple_errors(
         cls,
@@ -244,24 +243,24 @@ class UploadErrorTemplate:
         """
         if not errors:
             return "알 수 없는 오류가 발생했습니다."
-        
+
         total_failed = sum(len(e.get('rows', [])) for e in errors)
-        
+
         message_parts = []
         message_parts.append(f"{'='*50}")
-        message_parts.append(f"📋 업로드 실패 요약")
+        message_parts.append("📋 업로드 실패 요약")
         message_parts.append(f"{'='*50}")
         message_parts.append(f"전체 행: {total_rows}개")
         message_parts.append(f"실패: {total_failed}개")
         message_parts.append(f"성공: {total_rows - total_failed}개")
         message_parts.append("")
-        
+
         for idx, error in enumerate(errors, 1):
             error_type = error.get('type', 'unknown')
             failed_rows = error.get('rows', [])
-            
+
             formatted = cls.format_error_message(error_type, failed_rows, total_rows)
-            
+
             message_parts.append(f"{'-'*50}")
             message_parts.append(f"❌ {idx}. {formatted['title']} ({formatted['failed_count']}건)")
             message_parts.append(f"{'-'*50}")
@@ -278,11 +277,11 @@ class UploadErrorTemplate:
                 message_parts.append("📌 예시:")
                 message_parts.append(f"  {formatted['example']}")
             message_parts.append("")
-        
+
         message_parts.append(f"{'='*50}")
         message_parts.append("📞 추가 도움이 필요하면 관리자에게 문의하세요.")
         message_parts.append(f"{'='*50}")
-        
+
         return '\n'.join(message_parts)
 
 
@@ -296,10 +295,10 @@ if __name__ == '__main__':
             {'row': 5, 'value': '', 'column': 'LOT NO'},
         ]
     }]
-    
+
     msg = UploadErrorTemplate.format_multiple_errors(errors, total_rows=10)
     logger.debug(f"{msg}")
-    
+
     # 예시 2: 복수 오류
     errors = [
         {
@@ -317,6 +316,6 @@ if __name__ == '__main__':
             ]
         }
     ]
-    
+
     msg = UploadErrorTemplate.format_multiple_errors(errors, total_rows=10)
     logger.debug(f"{msg}")

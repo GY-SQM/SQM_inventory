@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 출고 처리 Mixin
 ======================================
@@ -9,16 +8,16 @@ v3.6.6: SQLAlchemy → SQMDatabase API 전환 (self.db 기반)
 버전: v3.6.6
 """
 
-import sqlite3
 import logging
+import sqlite3
 from datetime import datetime
 from typing import Dict, Optional
 
 from core.constants import (
     STATUS_AVAILABLE,
-    STATUS_RESERVED,
     STATUS_DEPLETED,
     STATUS_PICKED,
+    STATUS_RESERVED,
     STATUS_SOLD,
 )
 from core.types import normalize_lot
@@ -40,7 +39,7 @@ class OutboundMixin(InventoryBaseMixin):
             raise ValueError(f"샘플 정책 위반: LOT {lot_no}에 샘플 {cnt}개 (필수 정확히 1개)")
 
     """출고 처리 Mixin (v3.6.6: SQMDatabase API 기반)"""
-    
+
     def process_outbound(self, allocation_data, source: str = 'AUTO', stop_at_picked: bool = False) -> Dict:
         """
         출고 처리 (v3.8.4: All-or-Nothing + 톤백 동기화, v5.9.92: source/stop_at_picked)
@@ -58,17 +57,17 @@ class OutboundMixin(InventoryBaseMixin):
             'errors': [],
             'warnings': [],
         }
-        
+
         try:
             if isinstance(allocation_data, dict):
                 allocations = [allocation_data]
             else:
                 allocations = list(allocation_data)
-            
+
             if not allocations:
                 result['message'] = "처리할 데이터 없음"
                 return result
-            
+
             # ★ All-or-Nothing: 전체를 하나의 트랜잭션으로
             with self.db.transaction("IMMEDIATE"):
                 processed_lots = []
@@ -79,7 +78,7 @@ class OutboundMixin(InventoryBaseMixin):
                         result['total_weight_kg'] += processed.get('weight_kg', 0)
                         result['total_picked'] += processed.get('weight_kg', 0) / 1000.0
                         processed_lots.append(processed.get('lot_no'))
-                
+
                 # v5.1.4: 트랜잭션 안에서 정합성 검증
                 if hasattr(self, 'verify_lot_integrity') and processed_lots:
                     for lot_no in set(processed_lots):
@@ -88,26 +87,26 @@ class OutboundMixin(InventoryBaseMixin):
                             raise ValueError(
                                 f"출고 후 정합성 실패 ({lot_no}): {integrity.get('errors', [])}"
                             )
-            
+
             result['lots_processed'] = result['processed']
-            
+
             if result['processed'] > 0:
                 result['success'] = True
                 result['message'] = f"출고 완료: {result['processed']}건"
             else:
                 result['message'] = "처리된 출고 없음"
-            
+
             self._log_operation("출고", {
                 'processed': result['processed'],
                 'weight_kg': result['total_weight_kg']
             })
-            
+
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"출고 처리 오류 (전체 롤백): {e}", exc_info=True)
             result['errors'].append(str(e))
-        
+
         return result
-    
+
     def _process_single_outbound(
         self, alloc: Dict, source: str = 'AUTO', stop_at_picked: bool = False
     ) -> Optional[Dict]:
@@ -121,29 +120,29 @@ class OutboundMixin(InventoryBaseMixin):
         if weight_kg <= 0:
             qty_mt = self._safe_parse_float(alloc.get('qty_mt'))
             weight_kg = qty_mt * 1000.0
-        
+
         customer = alloc.get('customer') or alloc.get('sold_to', '')
         sale_ref = alloc.get('sale_ref', '')
-        
+
         if not lot_no or weight_kg <= 0:
             return None
-        
+
         lot = self.db.fetchone(
             "SELECT current_weight, picked_weight FROM inventory WHERE lot_no = ?",
             (lot_no,)
         )
         if not lot:
             raise ValueError(f"LOT 없음: {lot_no}")
-        
+
         available = lot['current_weight'] or 0
         if available < weight_kg - 0.01:
             raise ValueError(
                 f"가용 재고 부족: {lot_no} (가용: {available:.0f}kg, 요청: {weight_kg:.0f}kg)"
             )
-        
+
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         qty_mt_val = weight_kg / 1000.0
-        
+
         # ★ 1단계: 톤백 PICKED 처리 (가용 톤백에서 필요 수량만큼, 샘플 제외)
         remaining_kg = weight_kg
         tonbags = self.db.fetchall(
@@ -177,7 +176,7 @@ class OutboundMixin(InventoryBaseMixin):
                 )
                 remaining_kg -= tb_weight
                 picked_count += 1
-        
+
         # v5.9.92: allocation_plan에 출고 기록 (source 저장)
         try:
             self.db.execute(
@@ -191,11 +190,11 @@ class OutboundMixin(InventoryBaseMixin):
                 logger.debug("allocation_plan.source 미존재 시 무시: %s", e)
             else:
                 raise
-        
+
         if stop_at_picked:
             self._recalc_lot_status(lot_no)
             return {'lot_no': lot_no, 'weight_kg': weight_kg, 'tonbags_picked': picked_count}
-        
+
         # ★ 2단계: inventory 업데이트
         new_weight = available - weight_kg
         if new_weight < 0:
@@ -212,7 +211,7 @@ class OutboundMixin(InventoryBaseMixin):
             (new_weight, weight_kg, new_status, customer, customer, now, lot_no)
         )
         self._recalc_lot_status(lot_no)
-        
+
         # ★ 3단계: stock_movement 이력
         self.db.execute(
             """INSERT INTO stock_movement 
@@ -220,7 +219,7 @@ class OutboundMixin(InventoryBaseMixin):
             VALUES (?, 'OUTBOUND', ?, ?, ?)""",
             (lot_no, weight_kg, f"customer={customer}" if customer else '', now)
         )
-        
+
         # ★ 4단계: outbound 테이블 기록
         self.db.execute(
             """INSERT INTO outbound 
@@ -228,13 +227,13 @@ class OutboundMixin(InventoryBaseMixin):
             VALUES (?, ?, ?, ?)""",
             (customer, weight_kg, now, now)
         )
-        
+
         return {'lot_no': lot_no, 'weight_kg': weight_kg, 'tonbags_picked': picked_count}
-    
+
     def _update_lot_after_pick(self, lot_no: str, weight_kg: float) -> None:
         """피킹 후 LOT 업데이트"""
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
+
         self.db.execute(
             """UPDATE inventory SET
                 current_weight = MAX(0, current_weight - ?),
@@ -247,7 +246,7 @@ class OutboundMixin(InventoryBaseMixin):
             WHERE lot_no = ?""",
             (weight_kg, weight_kg, weight_kg, STATUS_DEPLETED, now, lot_no)
         )
-    
+
 
     # NOTE: process_outbound_safe, preflight_check_outbound
     #   → PreflightMixin으로 이관 완료 (v3.8.4 데드코드 정리)
@@ -260,7 +259,7 @@ class OutboundMixin(InventoryBaseMixin):
         """
         from datetime import datetime
         result = {'success': False, 'message': '', 'errors': []}
-        
+
         try:
             with self.db.transaction("IMMEDIATE"):
                 # 톤백 정보 조회
@@ -269,18 +268,18 @@ class OutboundMixin(InventoryBaseMixin):
                     FROM inventory_tonbag 
                     WHERE lot_no = ? AND sub_lt = ?
                 """, (lot_no, sub_lt))
-                
+
                 if not tonbag:
                     result['errors'].append(f"톤백 없음: {lot_no}-{sub_lt}")
                     return result
-                
+
                 if tonbag['status'] != STATUS_PICKED:
                     result['errors'].append(f"PICKED 상태가 아님: {lot_no}-{sub_lt} ({tonbag['status']})")
                     return result
-                
+
                 weight = tonbag['weight'] or 0
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                
+
                 # 1. 톤백: PICKED → AVAILABLE
                 self.db.execute("""
                     UPDATE inventory_tonbag SET
@@ -292,7 +291,7 @@ class OutboundMixin(InventoryBaseMixin):
                         updated_at = ?
                     WHERE lot_no = ? AND sub_lt = ?
                 """, (STATUS_AVAILABLE, now, lot_no, sub_lt))
-                
+
                 # 2. inventory: current_weight 복구
                 self.db.execute("""
                     UPDATE inventory SET
@@ -301,29 +300,29 @@ class OutboundMixin(InventoryBaseMixin):
                         updated_at = ?
                     WHERE lot_no = ?
                 """, (weight, weight, now, lot_no))
-                
+
                 # 3. inventory status 재계산
                 self._recalc_lot_status(lot_no)
-                
+
                 # 4. stock_movement 이력 (B3 FIX: 필수 기록)
                 self.db.execute("""
                     INSERT INTO stock_movement 
                     (lot_no, movement_type, qty_kg, remarks, created_at)
                     VALUES (?, 'CANCEL_OUTBOUND', ?, ?, ?)
                 """, (lot_no, weight, f"customer={tonbag['picked_to'] or ''}", now))
-                
+
                 result['success'] = True
                 result['message'] = f"출고 취소 완료: {lot_no}-{sub_lt} ({weight:.0f}kg)"
                 logger.info(result['message'])
-            
+
             # v3.8.5: 취소 후 자동 정합성 검증
             if result['success'] and hasattr(self, '_assert_lot_integrity'):
                 self._assert_lot_integrity(lot_no)
-                
+
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             result['errors'].append(str(e))
             logger.error(f"출고 취소 오류: {e}")
-        
+
         return result
 
     def cancel_outbound_bulk(self, items: list) -> Dict:
@@ -333,33 +332,33 @@ class OutboundMixin(InventoryBaseMixin):
         """
         from datetime import datetime
         result = {'success': False, 'cancelled': 0, 'errors': []}
-        
+
         try:
             with self.db.transaction("IMMEDIATE"):
                 touched_lots = set()
                 for item in items:
                     lot_no = str(item.get('lot_no') or '').strip()
                     sub_lt = item.get('sub_lt')
-                    
+
                     tonbag = self.db.fetchone("""
                         SELECT weight, status, picked_to 
                         FROM inventory_tonbag 
                         WHERE lot_no = ? AND sub_lt = ? AND status = ?
                     """, (lot_no, sub_lt, STATUS_PICKED))
-                    
+
                     if not tonbag:
                         raise ValueError(f"취소 불가: {lot_no}-{sub_lt}")
-                    
+
                     weight = tonbag['weight'] or 0
                     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    
+
                     self.db.execute("""
                         UPDATE inventory_tonbag SET
                             status = ?, picked_to = NULL, picked_date = NULL,
                             pick_ref = NULL, outbound_date = NULL, updated_at = ?
                         WHERE lot_no = ? AND sub_lt = ?
                     """, (STATUS_AVAILABLE, now, lot_no, sub_lt))
-                    
+
                     self.db.execute("""
                         UPDATE inventory SET
                             current_weight = current_weight + ?,
@@ -367,29 +366,29 @@ class OutboundMixin(InventoryBaseMixin):
                             updated_at = ?
                         WHERE lot_no = ?
                     """, (weight, weight, now, lot_no))
-                    
+
                     # stock_movement 이력 기록 (v3.8.4 bugfix)
                     self.db.execute("""
                         INSERT INTO stock_movement 
                         (lot_no, movement_type, qty_kg, remarks, created_at)
                         VALUES (?, 'CANCEL_OUTBOUND', ?, ?, ?)
                     """, (lot_no, weight, f"bulk_cancel customer={tonbag['picked_to'] or ''}", now))
-                    
+
                     result['cancelled'] += 1
                     if lot_no:
                         touched_lots.add(lot_no)
-                
+
                 # 모든 관련 LOT status 재계산
                 for lot_no in touched_lots:
                     self._recalc_lot_status(lot_no)
-                
+
                 result['success'] = True
                 result['message'] = f"일괄 취소 완료: {result['cancelled']}건"
-                
+
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             result['errors'].append(str(e))
             logger.error(f"일괄 출고 취소 오류: {e}")
-        
+
         return result
 
     def _recalc_lot_status(self, lot_no: str) -> None:
@@ -949,7 +948,7 @@ class OutboundMixin(InventoryBaseMixin):
 
             lines.append('=' * 60)
             result['error_report'] = '\n'.join(lines)
-            logger.info(f'[Gate-1] passed=%s, matched=%s, missing=%s, qty_mismatch=%s',
+            logger.info('[Gate-1] passed=%s, matched=%s, missing=%s, qty_mismatch=%s',
                         result['passed'], len(matched), len(only_in_picking), len(qty_mismatches))
         except (sqlite3.Error, AttributeError) as e:
             result['error_report'] = f'Gate-1 DB 오류: {e}'

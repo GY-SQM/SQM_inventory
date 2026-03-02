@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM Inventory - Query Cache
 ============================
@@ -9,19 +8,19 @@ v4.19.0 - Phase 5
 작성자: Ruby
 """
 
-import time
-import logging
-from typing import Any, Optional, Callable
-from functools import wraps
 import hashlib
-import json
+import logging
+import time
+from collections.abc import Callable
+from functools import wraps
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 
 class QueryCache:
     """쿼리 결과 캐시"""
-    
+
     def __init__(self, ttl: int = 60):
         """
         Args:
@@ -31,19 +30,19 @@ class QueryCache:
         self.ttl = ttl
         self.hits = 0
         self.misses = 0
-    
+
     def _make_key(self, sql: str, params: tuple) -> str:
         """캐시 키 생성"""
         key_str = f"{sql}:{params}"
         return hashlib.md5(key_str.encode()).hexdigest()
-    
+
     def get(self, sql: str, params: tuple = ()) -> Optional[Any]:
         """캐시에서 조회"""
         key = self._make_key(sql, params)
-        
+
         if key in self.cache:
             data, timestamp = self.cache[key]
-            
+
             # TTL 체크
             if time.time() - timestamp < self.ttl:
                 self.hits += 1
@@ -52,15 +51,15 @@ class QueryCache:
             else:
                 # 만료된 캐시 삭제
                 del self.cache[key]
-        
+
         self.misses += 1
         return None
-    
+
     def set(self, sql: str, params: tuple, data: Any):
         """캐시에 저장"""
         key = self._make_key(sql, params)
         self.cache[key] = (data, time.time())
-    
+
     def invalidate(self, pattern: str = None):
         """
         캐시 무효화
@@ -77,17 +76,17 @@ class QueryCache:
             for key in self.cache:
                 if pattern in key:
                     keys_to_delete.append(key)
-            
+
             for key in keys_to_delete:
                 del self.cache[key]
-            
+
             logger.info(f"캐시 삭제: {len(keys_to_delete)}개 (pattern={pattern})")
-    
+
     def get_stats(self) -> dict:
         """캐시 통계"""
         total = self.hits + self.misses
         hit_rate = (self.hits / total * 100) if total > 0 else 0
-        
+
         return {
             'hits': self.hits,
             'misses': self.misses,
@@ -116,21 +115,21 @@ def cached_query(ttl: int = 60):
             # 캐시 키 생성 (함수명 + 인자)
             cache_key = f"{func.__name__}:{args}:{kwargs}"
             key_hash = hashlib.md5(cache_key.encode()).hexdigest()
-            
+
             # 캐시 조회
             if key_hash in cache.cache:
                 data, timestamp = cache.cache[key_hash]
                 if time.time() - timestamp < ttl:
                     cache.hits += 1
                     return data
-            
+
             # 캐시 미스 - 실제 실행
             cache.misses += 1
             result = func(*args, **kwargs)
-            
+
             # 결과 캐싱
             cache.cache[key_hash] = (result, time.time())
-            
+
             return result
         return wrapper
     return decorator

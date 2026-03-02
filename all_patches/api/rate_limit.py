@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v7.0.0-alpha — Rate Limiting 미들웨어
 ==========================================
@@ -13,12 +12,11 @@ slowapi 기반 IP/사용자별 요청 속도 제한.
 
 import logging
 import os
-from typing import Optional
 
 from fastapi import Request, Response
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)

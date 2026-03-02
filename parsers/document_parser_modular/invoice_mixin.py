@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - Invoice 파서 Mixin
 =========================================
@@ -20,14 +19,13 @@ v3.6.0: document_parser_v2.py에서 분리
 버전: v3.6.0
 """
 
-import os
-import re
 import logging
-from datetime import datetime, date
-from typing import Optional, List
+from datetime import datetime
+from typing import Optional
+
+from core.types import safe_float
 
 from ..document_models import InvoiceData
-from core.types import safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +42,7 @@ class InvoiceMixin:
         >>> parser = MyParser()
         >>> invoice = parser.parse_invoice('invoice.pdf')
     """
-    
+
     def parse_invoice(self, pdf_path: str) -> Optional[InvoiceData]:
         """
         Invoice PDF 파싱 (API-Only)
@@ -79,7 +77,7 @@ class InvoiceMixin:
 
         if not gemini_result or not getattr(gemini_result, 'success', False):
             try:
-                from core.config import OPENAI_API_KEY, DISABLE_OPENAI_FALLBACK
+                from core.config import DISABLE_OPENAI_FALLBACK, OPENAI_API_KEY
                 if DISABLE_OPENAI_FALLBACK:
                     logger.info("[INVOICE] OpenAI 폴백 비활성(설정) — Gemini만 사용")
                 elif not OPENAI_API_KEY or not OPENAI_API_KEY.strip():

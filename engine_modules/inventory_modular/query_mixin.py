@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 조회 기능 Mixin (v3.6.0)
 ================================================
 실제 DB 테이블: inventory, inventory_tonbag, stock_movement, shipment
 """
-import sqlite3
 import logging
+import sqlite3
 from typing import Dict, List
 
 logger = logging.getLogger(__name__)

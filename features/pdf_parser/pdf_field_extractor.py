@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 피킹리스트 PDF 파서 — 최종 로직 (라벨-라인 기반, 하드스톱 검증)
 ================================================================
@@ -14,10 +13,10 @@ SQM 피킹리스트 PDF 파서 — 최종 로직 (라벨-라인 기반, 하드�
 파이프라인: PDF/Text 추출 → 블록(줄) 목록 → Quantity/Batch/Storage 파싱 → 메타 파싱
             → 정규화(MT→kg, 콤마 제거) → 하드스톱 검증 → success/errors
 """
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Any
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

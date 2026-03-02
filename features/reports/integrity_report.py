@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v7.0.1 — 정합성 검증 리포트 생성
 =====================================
@@ -9,10 +8,10 @@ Excel: 정합성 결과 시트 + LOT별 상세 시트 + 위치 현황 시트
 일본 고객 감사 대응용 — "시스템 정합성 검사 리포트" 제출
 """
 
-import os
 import logging
+import os
 from datetime import datetime
-from typing import Any, Optional, Dict, List
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +28,9 @@ def generate_integrity_report_pdf(engine: Any, save_path: str) -> Optional[str]:
         저장된 파일 경로 (실패 시 None)
     """
     try:
+        from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import mm
-        from reportlab.lib import colors
         from reportlab.pdfgen import canvas
     except ImportError:
         logger.error("reportlab 필요: pip install reportlab")
@@ -230,7 +229,7 @@ def generate_integrity_report_excel(engine: Any, save_path: str) -> Optional[str
     """
     try:
         import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     except ImportError:
         logger.error("openpyxl 필요: pip install openpyxl")
         return None

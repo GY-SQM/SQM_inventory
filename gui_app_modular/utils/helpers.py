@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM Inventory - Helper Functions
 ================================
@@ -11,12 +10,18 @@ Date parsing, format conversion, file operations
           문자열 필요 → safe_utils.safe_date_str
 """
 
+import logging
 import os
 import re
-import logging
 from datetime import date, datetime
-from typing import Optional, List, Any
-from core.types import normalize_column_name, safe_float, safe_str, safe_int  # noqa: F401 (re-export)
+from typing import Any, Optional
+
+from core.types import (  # noqa: F401 (re-export)
+    normalize_column_name,
+    safe_float,
+    safe_int,
+    safe_str,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,19 +48,19 @@ def safe_date(value: Any, default: Optional[date] = None) -> Optional[date]:
     """
     if value is None:
         return default or date.today()
-    
+
     if isinstance(value, datetime):
         return value.date()
-    
+
     if isinstance(value, date):
         return value
-    
+
     if hasattr(value, 'date'):  # pandas Timestamp
         return value.date()
-    
+
     # String parsing
     value_str = str(value).strip()
-    
+
     # Try common formats
     formats = [
         '%Y-%m-%d',
@@ -66,13 +71,13 @@ def safe_date(value: Any, default: Optional[date] = None) -> Optional[date]:
         '%d.%m.%Y',
         '%Y/%m/%d',
     ]
-    
+
     for fmt in formats:
         try:
             return datetime.strptime(value_str, fmt).date()
         except ValueError:
             continue
-    
+
     return default or date.today()
 
 
@@ -82,6 +87,7 @@ safe_date_to_date = safe_date  # 날짜 객체 필요 시. 문자열 필요 시 
 
 # P1: format_* / find_column 단일 소스
 from .formatters import find_column, format_number, format_weight  # noqa: F401
+
 
 def validate_lot_no(lot_no: str) -> bool:
     """LOT 번호 검증. 단일 소스: engine_modules.validators.validate_lot_no"""
@@ -109,7 +115,7 @@ def get_file_extension(file_path: str) -> str:
     """
     if not file_path:
         return ""
-    
+
     _, ext = os.path.splitext(file_path)
     return ext.lower().lstrip('.')
 
@@ -126,7 +132,7 @@ def ensure_directory(dir_path: str) -> bool:
     """
     if not dir_path:
         return False
-    
+
     try:
         os.makedirs(dir_path, exist_ok=True)
         return True
@@ -149,11 +155,11 @@ def truncate_string(text: str, max_length: int = 50, suffix: str = "...") -> str
     """
     if not text:
         return ""
-    
+
     text = str(text)
     if len(text) <= max_length:
         return text
-    
+
     return text[:max_length - len(suffix)] + suffix
 
 
@@ -174,18 +180,18 @@ def clean_lot_no(value: Any) -> str:
     """
     if value is None:
         return ""
-    
+
     # Handle numeric types
     if isinstance(value, (int, float)):
         return str(int(value))
-    
+
     # Handle strings
     value_str = str(value).strip()
-    
+
     # Remove decimal part if present
     if '.' in value_str:
         value_str = value_str.split('.')[0]
-    
+
     return value_str
 
 
@@ -206,15 +212,15 @@ def parse_weight_string(value: str) -> float:
     """
     if not value:
         return 0.0
-    
+
     value_str = str(value).strip().upper()
-    
+
     # Check for MT unit
     is_mt = 'MT' in value_str
-    
+
     # Remove non-numeric characters except . and ,
     cleaned = re.sub(r'[^\d.,]', '', value_str)
-    
+
     # Handle comma as thousands separator
     if ',' in cleaned and '.' in cleaned:
         # Assume format: 1,234.56
@@ -222,7 +228,7 @@ def parse_weight_string(value: str) -> float:
     elif ',' in cleaned:
         # Assume format: 1234,56 (European)
         cleaned = cleaned.replace(',', '.')
-    
+
     try:
         weight = float(cleaned)
         if is_mt:

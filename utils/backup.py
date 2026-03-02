@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - 자동 백업 모듈 (v2.9.43)
 
@@ -12,23 +11,23 @@ Version: 2.4.2
 Date: 2026-01-09
 """
 
-import sqlite3
+import glob
+import logging
 import os
 import shutil
-import glob
+import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Tuple, List
-import logging
+from typing import List, Optional, Tuple
 
 # 설정 import
 try:
     from core.config import (
-        DB_PATH,
         BACKUP_DIR,
         BACKUP_ENABLED,
+        BACKUP_INTERVAL_HOURS,
         BACKUP_MAX_COUNT,
-        BACKUP_INTERVAL_HOURS
+        DB_PATH,
     )
 except ImportError:
     # 기본값

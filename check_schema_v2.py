@@ -1,8 +1,8 @@
-import sqlite3
 import os
+import sqlite3
 
 # Use the workspace path provided in user_info
-db_path = "sqm_inventory.db" 
+db_path = "sqm_inventory.db"
 # Or search for it
 if not os.path.exists(db_path):
     # Try absolute path based on workspace

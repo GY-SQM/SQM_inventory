@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v5.5.3 — 컬럼 표시/숨김 위젯
 ================================
@@ -11,7 +10,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import List, Tuple
 
-from .ui_constants import Spacing, FontScale, FontStyle
+from .ui_constants import FontScale, FontStyle, Spacing
 
 logger = logging.getLogger(__name__)
 

@@ -1,18 +1,17 @@
-# -*- coding: utf-8 -*-
 """GUI handlers module"""
 
-from .import_handlers import ImportHandlersMixin
-from .outbound_handlers import OutboundHandlersMixin
 from .backup_handlers import BackupHandlersMixin
-from .pdf_handlers import PDFHandlersMixin
 from .export_handlers import ExportHandlersMixin
+from .import_handlers import ImportHandlersMixin
 from .inbound_processor import InboundProcessorMixin
-from .status_import_handlers import StatusImportHandlersMixin
+from .outbound_handlers import OutboundHandlersMixin
+from .pdf_handlers import PDFHandlersMixin
 from .simple_outbound_handler import SimpleOutboundHandlerMixin
+from .status_import_handlers import StatusImportHandlersMixin
 
 __all__ = [
-    'ImportHandlersMixin', 
-    'OutboundHandlersMixin', 
+    'ImportHandlersMixin',
+    'OutboundHandlersMixin',
     'BackupHandlersMixin',
     'PDFHandlersMixin',
     'ExportHandlersMixin',

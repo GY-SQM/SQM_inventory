@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 공용 테스트 fixture
 ========================
@@ -6,12 +5,12 @@ SQM 공용 테스트 fixture
 pytest가 자동 로드.
 """
 
+import logging
 import os
 import sys
 import tempfile
-import logging
+
 import pytest
-from datetime import datetime
 
 # 프로젝트 루트 설정
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,12 +36,12 @@ def engine():
     finally:
         try:
             eng.db.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[engine] Suppressed: {e}")
         try:
             os.unlink(db_path)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.warning(f"[engine] Suppressed: {e}")
 
 
 @pytest.fixture
@@ -59,13 +58,13 @@ def engine_pair():
     for eng in engines:
         try:
             eng.db.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"[engine_pair] Suppressed: {e}")
     for p in paths:
         try:
             os.unlink(p)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.warning(f"[engine_pair] Suppressed: {e}")
 
 
 # ═══════════════════════════════════════════

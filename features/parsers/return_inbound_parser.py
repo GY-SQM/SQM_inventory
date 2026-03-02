@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.0 — 반품 입고 Excel 파서
 ================================
@@ -10,7 +9,6 @@ SQM v6.0 — 반품 입고 Excel 파서
 """
 
 import logging
-import re
 from datetime import date
 from typing import Any, List, Optional
 

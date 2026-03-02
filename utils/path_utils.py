@@ -1,12 +1,11 @@
-# -*- coding: utf-8 -*-
 """Path utilities (v5.3.4)
 
 Goal:
 - Make REPORTS/settings.ini path stable even when the app is launched from shortcuts or different working dirs.
 """
 
-import os
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 

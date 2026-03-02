@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 재고 엔진 (Facade)
 ==========================================
@@ -19,8 +18,8 @@ v3.0 - 레거시 버전 사용 (호환성 보장)
 """
 
 import logging
-import sys
 import os
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -41,25 +40,25 @@ except ImportError as e:
 # 모듈화 버전도 export (선택적 사용)
 try:
     from engine_modules.inventory_modular import (
-        SQMInventoryEngineV3,
+        CRUDMixin,
+        ExportMixin,
+        ImportMixin,
         InboundMixin,
         OutboundMixin,
-        QueryMixin,
-        ExportMixin,
-        ShipmentMixin,
-        TonbagMixin,
-        ReturnMixin,
-        ImportMixin,
-        PreflightMixin,
-        CRUDMixin,
-        safe_parse_date,
-        safe_parse_float,
-        safe_parse_int,
-        dict_to_packing_data,
         PackingDataAdapter,
+        PreflightMixin,
+        QueryMixin,
+        ReturnMixin,
+        ShipmentMixin,
+        SQMInventoryEngineV3,
+        TonbagMixin,
+        dict_to_packing_data,
         format_lot_no,
         format_weight,
         normalize_column_name,
+        safe_parse_date,
+        safe_parse_float,
+        safe_parse_int,
     )
 except ImportError as e:
     logger.warning(f"[v3.0] 모듈화 버전 import 실패: {e}")
@@ -82,10 +81,10 @@ except ImportError:
 __all__ = [
     # Main engine (레거시)
     'SQMInventoryEngine',
-    
+
     # Modular version (선택적)
     'SQMInventoryEngineV3',
-    
+
     # Flags
     'HAS_PANDAS',
     'HAS_VALIDATORS',

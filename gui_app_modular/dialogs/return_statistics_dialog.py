@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.12.1 — 반품 사유 통계 리포트 다이얼로그 v2
 ====================================================
@@ -7,16 +6,19 @@ SQM v6.12.1 — 반품 사유 통계 리포트 다이얼로그 v2
 
 import logging
 import tkinter as tk
-from tkinter import ttk
-from tkinter.constants import BOTH, LEFT, RIGHT, X, Y, END, VERTICAL, W, E
 from datetime import date, timedelta
+from tkinter import ttk
+from tkinter.constants import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y
 
 logger = logging.getLogger(__name__)
 
 try:
     from gui_app_modular.utils.gui_bootstrap import (
-        DialogSize, center_dialog, apply_modal_window_options,
-        DateEntry, HAS_DATEENTRY,
+        HAS_DATEENTRY,
+        DateEntry,
+        DialogSize,
+        apply_modal_window_options,
+        center_dialog,
     )
 except ImportError:
     DialogSize = center_dialog = apply_modal_window_options = None
@@ -356,15 +358,15 @@ class ReturnStatisticsDialog:
     def _on_export(self):
         try:
             import openpyxl
-            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+            from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
         except ImportError:
             if CustomMessageBox:
                 CustomMessageBox.showerror(self.popup, "오류", "openpyxl 라이브러리가 필요합니다.")
             return
 
-        from tkinter import filedialog
         import os
         from datetime import datetime
+        from tkinter import filedialog
 
         desktop = os.path.join(os.path.expanduser('~'), 'Desktop')
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -421,9 +423,9 @@ class ReturnStatisticsDialog:
 
     def _on_export_pdf(self):
         """반품 원인 분석 PDF 생성."""
-        from tkinter import filedialog
         import os
         from datetime import datetime as _dt
+        from tkinter import filedialog
 
         desktop = os.path.join(os.path.expanduser('~'), 'Desktop')
         ts = _dt.now().strftime('%Y%m%d_%H%M%S')

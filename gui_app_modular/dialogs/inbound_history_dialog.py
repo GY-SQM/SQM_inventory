@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 입고현황 조회 다이얼로그 (성능 보완 버전)
 """
 
-import os
 import logging
-from datetime import datetime as _dt, timedelta
+import os
+from datetime import datetime as _dt
+from datetime import timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +47,12 @@ class InboundHistoryDialog:
                 logging.getLogger(__name__).debug(f"[입고현황] 다이얼로그 정리 실패: {_de}")
 
     def _create_dialog(self) -> None:
-        from ..utils.constants import tk, ttk, BOTH, X, Y, LEFT, RIGHT, W
-        from ..utils.ui_constants import DialogSize, center_dialog, apply_modal_window_options
+        from ..utils.constants import BOTH, LEFT, RIGHT, W, X, Y, tk, ttk
+        from ..utils.ui_constants import (
+            DialogSize,
+            apply_modal_window_options,
+            center_dialog,
+        )
 
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📋 입고현황 조회")
@@ -302,8 +306,8 @@ class InboundHistoryDialog:
             CustomMessageBox.showinfo(self.dialog, "완료", f"저장 완료: {os.path.basename(save_path)}")
             try:
                 os.startfile(save_path)
-            except (AttributeError, OSError):
-                pass
+            except (AttributeError, OSError) as e:
+                logger.warning(f"[_export_excel] Suppressed: {e}")
         except ImportError:
             CustomMessageBox.showerror(self.dialog, "오류", "openpyxl이 설치되지 않았습니다.")
         except (OSError, PermissionError) as e:

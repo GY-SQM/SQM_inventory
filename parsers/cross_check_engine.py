@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 문서 간 크로스 체크 엔진
 ==============================================
@@ -8,11 +7,11 @@ v6.2.1: 신규 생성
 4종 선적 문서(Invoice, Packing List, B/L, D/O) 간 교차 검증을 수행합니다.
 """
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict
 from enum import IntEnum
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

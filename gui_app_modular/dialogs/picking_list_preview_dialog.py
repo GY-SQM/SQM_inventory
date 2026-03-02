@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.0 - Picking List PDF 파싱 결과 미리보기 다이얼로그
 =========================================================
@@ -8,13 +7,11 @@ DB 반영 버튼은 엔진 연동 시 사용.
 """
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from ..utils.ui_constants import (
-    DialogSize,
-    center_dialog,
-    apply_modal_window_options,
     setup_dialog_geometry_persistence,
 )
 

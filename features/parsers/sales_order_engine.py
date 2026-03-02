@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.0.0 — Sales Order Excel 처리 엔진 (4·5단계)
 ===================================================
@@ -16,14 +15,14 @@ picking_table에서 매칭된 톤백을 SOLD 처리한다.
     - All-or-Nothing 트랜잭션
 """
 
-import logging
-import os
-import re
-import math
 import hashlib
 import json
-import uuid
+import logging
+import math
+import os
+import re
 import time
+import uuid
 from datetime import datetime
 from typing import Any, Optional
 

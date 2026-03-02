@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v5.9.4 — DB 스키마 초기화 Mixin
 ====================================
@@ -7,9 +6,9 @@ database.py에서 분리 (1242줄 → ~660 + ~580).
 테이블 생성(_init_*), 마이그레이션(_migrate_v243),
 스키마 검증(_verify_schema), 인덱스 생성(_create_indexes)을 담당.
 """
-import sqlite3
 import logging
-from typing import Dict, Any
+import sqlite3
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 

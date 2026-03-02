@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v6.12.2 — 반품 원인 분석 리포트 PDF 생성
 ==============================================
@@ -13,7 +12,7 @@ reportlab 기반 월간/기간별 반품 분석 PDF.
 import logging
 import os
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +32,9 @@ def generate_return_report_pdf(engine: Any, save_path: str,
         저장된 파일 경로
     """
     try:
+        from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import mm
-        from reportlab.lib import colors
         from reportlab.pdfgen import canvas
     except ImportError:
         raise ImportError("reportlab 필요: pip install reportlab")

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v7.0.0-alpha — FastAPI REST API 프로토타입
 ================================================
@@ -21,10 +20,10 @@ SQM v7.0.0-alpha — FastAPI REST API 프로토타입
 import logging
 import os
 import sys
-from datetime import date, datetime
+from datetime import datetime
 from typing import Dict, List, Optional
 
-from fastapi import FastAPI, Query, HTTPException, Depends, Request
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -96,8 +95,14 @@ except ImportError:
 
 # Rate Limiting
 try:
-    from api.rate_limit import limiter, rate_limit_exceeded_handler, DEFAULT_RATE, WRITE_RATE
     from slowapi.errors import RateLimitExceeded
+
+    from api.rate_limit import (
+        DEFAULT_RATE,
+        WRITE_RATE,
+        limiter,
+        rate_limit_exceeded_handler,
+    )
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
     _rate_limit_enabled = True
@@ -581,9 +586,10 @@ def api_return(req: ReturnRequest, user: dict = Depends(require_role('operator')
 # WebSocket 실시간 대시보드
 # ═══════════════════════════════════════════
 
-from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 import json as _json
+
+from fastapi import WebSocket, WebSocketDisconnect
 
 
 class ConnectionManager:

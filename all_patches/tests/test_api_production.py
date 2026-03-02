@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v7.0.0-alpha — FastAPI REST API 테스트
 =============================================
@@ -6,10 +5,11 @@ pytest + httpx TestClient 기반 엔드포인트 자동 테스트.
 """
 
 import os
-import sys
 import sqlite3
+import sys
+from datetime import date
+
 import pytest
-from datetime import date, datetime
 
 # 프로젝트 루트 설정
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

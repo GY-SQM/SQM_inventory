@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 설정 모듈
 ================================
@@ -48,8 +47,8 @@ v3.6.0: Docstring 보강
 버전: v3.6.0
 """
 
-import os
 import logging
+import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -59,7 +58,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 try:
-    from version import __version__, APP_NAME, APP_NAME_EN
+    from version import APP_NAME, APP_NAME_EN, __version__
 except ImportError:
     __version__ = "0.0.0"  # S2-3: version.py 누락 시 fallback
     import logging as _vlog
@@ -173,7 +172,7 @@ def _load_settings():
         'save_raw_gemini_response': False,   # v5.5.2: 디버깅 시 Gemini 원문을 logs/에 저장 (ON/OFF)
         'disable_openai_fallback': False,     # v5.5.2: True면 OpenAI 폴백 비활성 (Gemini-only)
     }
-    
+
     # ★★★ 1순위: 환경변수 ★★★
     env_api_key = os.environ.get('GEMINI_API_KEY', '')
     env_model = os.environ.get('GEMINI_MODEL', '')
@@ -181,16 +180,16 @@ def _load_settings():
     env_openai_key = os.environ.get('OPENAI_API_KEY', '')
     env_openai_model = os.environ.get('OPENAI_MODEL', '')
     env_save_raw = os.environ.get('SQM_SAVE_RAW_GEMINI_RESPONSE', '')
-    
+
     result = defaults.copy()
-    
+
     if env_api_key:
         result['api_key'] = env_api_key
         result['api_key_source'] = 'ENV'
-    
+
     if env_model:
         result['model'] = env_model
-    
+
     if env_openai_key:
         result['openai_api_key'] = env_openai_key
     if env_openai_model:
@@ -212,7 +211,7 @@ def _load_settings():
     if SETTINGS_FILE.exists():
         try:
             config.read(SETTINGS_FILE, encoding='utf-8')
-            
+
             # ★★★ 3순위: ini 파일 (+ 자동 마이그레이션) ★★★
             if not result.get('api_key') or result.get('api_key_source') is None:
                 ini_key = config.get('Gemini', 'api_key', fallback='')
@@ -223,7 +222,7 @@ def _load_settings():
                     print("   자동으로 OS 자격증명에 이관을 시도합니다...")
                     # v3.9.7: keyring으로 자동 이관 시도
                     _migrate_api_key_to_keyring(ini_key, config)
-            
+
             result['model'] = config.get('Gemini', 'model', fallback=result['model'])
             result['use_gemini'] = config.getboolean('Parser', 'use_gemini', fallback=True)
             result['theme'] = config.get('UI', 'theme', fallback=defaults['theme'])
@@ -234,7 +233,7 @@ def _load_settings():
                 result['save_raw_gemini_response'] = config.getboolean('Debug', 'save_raw_gemini_response', fallback=result.get('save_raw_gemini_response', False))
             if config.has_section('Parser'):
                 result['disable_openai_fallback'] = config.getboolean('Parser', 'disable_openai_fallback', fallback=result.get('disable_openai_fallback', False))
-            
+
         except (ValueError, TypeError, KeyError) as e:
             logger.debug(f"⚠️ settings.ini 읽기 오류: {e}")
 
@@ -246,12 +245,12 @@ def _migrate_api_key_to_keyring(api_key: str, config: configparser.ConfigParser)
     try:
         import keyring
         keyring.set_password('SQM_Inventory', 'GEMINI_API_KEY', api_key)
-        
+
         # ini에서 키 제거 (주석으로 대체)
         config.set('Gemini', 'api_key', '# MIGRATED_TO_KEYRING')
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
             config.write(f)
-        
+
         print("   ✅ API 키가 OS 자격증명 관리자로 안전하게 이관되었습니다.")
         return True
     except ImportError:
@@ -271,7 +270,7 @@ def save_api_key_secure(api_key: str) -> str:
         return 'KEYRING'
     except (ImportError, Exception) as _e:
         logger.debug(f"Suppressed: {_e}")
-    
+
     # 2순위: 환경변수 안내
     # (실제 환경변수 설정은 사용자가 해야 하므로 ini에 저장)
     try:
@@ -390,13 +389,6 @@ VALIDATION = {
 # 로깅 설정 (P2: config_logging에서 구현, 하위 호환 re-export)
 # =============================================================================
 from config_logging import (
-    LOG_LEVEL,
-    LOG_FORMAT,
-    LOG_DATE_FORMAT,
-    LOG_MAX_SIZE_MB,
-    LOG_BACKUP_COUNT,
-    LOG_KEEP_DAYS,
-    LOG_FILE,
     setup_logging,
 )
 
@@ -448,18 +440,19 @@ def validate_api_key_with_gui(parent=None):
         bool: 계속 실행 여부 (True: 진행, False: 중단)
     """
     api_valid, api_error = validate_api_key()
-    
+
     if not api_valid:
         try:
             import tkinter as tk
+
             from gui_app_modular.utils.custom_messagebox import CustomMessageBox
 
             # 임시 루트 윈도우 (숨김)
             if parent is None:
                 temp_root = tk.Tk()
                 temp_root.withdraw()
-            
-            CustomMessageBox.warning(None, 
+
+            CustomMessageBox.warning(None,
                 "⚠️ API 설정 필요",
                 "Gemini API 키가 설정되지 않았습니다.\n\n"
                 "PDF 파싱 기능을 사용하려면:\n"
@@ -467,20 +460,19 @@ def validate_api_key_with_gui(parent=None):
                 "2. 또는 환경변수 GEMINI_API_KEY 설정\n\n"
                 "API 키 없이도 기본 기능은 사용 가능합니다."
             )
-            
+
             if parent is None:
                 temp_root.destroy()
-                
+
         except (RuntimeError, ValueError) as e:
             print(f"⚠️ API 키 미설정: {api_error}")
-    
+
     return True  # 실행은 허용 (경고만 표시)
 
 
 # =============================================================================
 # 파일/경로 유틸 (P2: utils.file_utils에서 구현, 하위 호환 re-export)
 # =============================================================================
-from utils.file_utils import smart_path_recovery, get_recent_files, safe_file_backup
 
 
 # =============================================================================
@@ -488,10 +480,12 @@ from utils.file_utils import smart_path_recovery, get_recent_files, safe_file_ba
 # =============================================================================
 from config_sql import (
     sql_auto_increment as _sql_auto_increment_impl,
+)
+from config_sql import (
     sql_date_format as _sql_date_format_impl,
+)
+from config_sql import (
     sql_group_concat as _sql_group_concat_impl,
-    sql_ifnull,
-    sql_current_timestamp,
 )
 
 

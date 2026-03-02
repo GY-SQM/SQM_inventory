@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 - 커스텀 메뉴바 (v3.0)
 ===================================
@@ -10,12 +9,14 @@ ttkbootstrap 기반 메뉴바
 """
 
 import logging
-import os  # v5.3.5
 import sqlite3
 import tkinter as tk
-from ..utils.ui_constants import CustomMessageBox, ThemeColors
-from typing import Dict, Callable
+from collections.abc import Callable
+from typing import Dict
+
 from utils.ui_debug import log_ui_event, safe_widget_bg  # v5.3.6
+
+from ..utils.ui_constants import CustomMessageBox, ThemeColors
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +27,13 @@ class CustomMenuBar:
     
     tk.Menu 대신 ttk.Frame + Menubutton 사용
     """
-    
+
     # 메뉴 스타일 설정 (v4.0.8: 가시성 대폭 개선)
     MENU_FONT = ('맑은 고딕', 13, 'bold')
     MENU_PADX = 16
     MENU_PADY = 7
     DROPDOWN_FONT = ('맑은 고딕', 11)
-    
+
     # v4.0.8 / v8.7.0 Phase2: 메뉴바 색상 — ThemeColors 단일 소스 (메뉴바는 다크 스타일)
     MENUBAR_BG = None  # __init__에서 ThemeColors로 설정
     MENUBAR_FG = None
@@ -42,15 +43,15 @@ class CustomMenuBar:
     DROPDOWN_FG = None
     DROPDOWN_ACTIVE_BG = None
     DROPDOWN_ACTIVE_FG = None
-    
+
     def __init__(self, parent, app):
         """
         Args:
             parent: 부모 위젯 (root)
             app: SQMInventoryApp 인스턴스
         """
-        from ..utils.constants import tk, ttk, X, LEFT
-        
+        from ..utils.constants import X, tk, ttk
+
         self.parent = parent
         self.app = app
         self.tk = tk
@@ -67,18 +68,18 @@ class CustomMenuBar:
         self.DROPDOWN_FG = ThemeColors.get('text_primary', _dark_dd)
         self.DROPDOWN_ACTIVE_BG = ThemeColors.get('info', _dark_dd)
         self.DROPDOWN_ACTIVE_FG = ThemeColors.get('badge_text', _dark_dd)
-        
+
         # v4.0.8: 메뉴바 프레임 — 진한 배경, 충분한 높이
         self.menubar_frame = tk.Frame(parent, bg=self.MENUBAR_BG, pady=3, padx=6)
         self.menubar_frame.pack(fill=X, side='top')
-        
+
         # 메뉴바를 맨 위로 올리기 (lift)
         self.menubar_frame.lift()
-        
+
         # 메뉴 버튼들 저장
         self.menu_buttons: Dict[str, ttk.Menubutton] = {}
         self.menus: Dict[str, tk.Menu] = {}
-        
+
         # 메뉴 구성
         self._create_menus()
 
@@ -113,12 +114,12 @@ class CustomMenuBar:
             return ""
         icon = "🔴" if count >= 5 else "🟡"
         return f" {icon} [{count}]"
-    
+
     def _get_first_child(self):
         """첫 번째 자식 위젯 반환 (더 이상 사용 안 함)"""
         children = self.parent.winfo_children()
         return children[0] if children else None
-    
+
     def _create_menus(self) -> None:
         """v4.1.4: 메뉴 재구성 — v6.0.2: 탑레벨 출고 먼저(Picking List 노출)"""
         self._create_outbound_menu()
@@ -159,21 +160,18 @@ class CustomMenuBar:
 
     def _create_file_menu(self) -> None:
         """1. 📁 파일 메뉴 (입고는 menu_registry, 출고는 탑레벨로 분리)"""
-        from ..utils.constants import (
-            HAS_GEMINI, HAS_DB_PROTECTION, HAS_FEATURES, HAS_FEATURES_V2
-        )
         from ..menu_registry import (
+            FILE_MENU_BACKUP_ITEMS,
+            FILE_MENU_EXPORT_ITEMS,
             FILE_MENU_INBOUND_ITEMS,
             FILE_MENU_INBOUND_RETURN_SUB_ITEMS,
-            FILE_MENU_EXPORT_ITEMS,
-            FILE_MENU_BACKUP_ITEMS,
         )
-        
+
         # =====================================================
         # 1. 파일 메뉴 (v6.0.2: 출고는 탑레벨 📤 출고 메뉴로 이동)
         # =====================================================
         file_menu = self._add_menu("📁 파일")
-        
+
         # 입고 — menu_registry 기반
         inbound_sub = self._add_submenu(file_menu, "📥 입고 (Ctrl+I)")
         for entry in FILE_MENU_INBOUND_ITEMS:
@@ -198,16 +196,16 @@ class CustomMenuBar:
             if callable(callback):
                 self._add_command(inbound_sub, label, callback)
         self._add_separator(inbound_sub)
-        
+
         self._add_separator(file_menu)
-        
+
         # 내보내기
         export_sub = self._add_submenu(file_menu, "💾 내보내기 (Ctrl+E)")
         for label, option in FILE_MENU_EXPORT_ITEMS:
             self._add_command(export_sub, label, lambda op=option: self.app._on_export_click(op))
-        
+
         self._add_separator(file_menu)
-        
+
         # 백업 (v3.8.4: 자동 백업 추가)
         backup_sub = self._add_submenu(file_menu, "🔐 백업 (Ctrl+B)")
         for label, method_name in FILE_MENU_BACKUP_ITEMS:
@@ -216,28 +214,28 @@ class CustomMenuBar:
                 self._add_command(backup_sub, label, callback)
         self._add_separator(backup_sub)
         self._add_command(backup_sub, "⏰ 자동 백업 설정", self.app._show_auto_backup_settings)
-        
+
         self._add_separator(file_menu)
-        
+
         # 도구
         tools_sub = self._add_submenu(file_menu, "🔧 도구")
-        
+
         pdf_sub = self._add_submenu(tools_sub, "📄 PDF/이미지 변환")
         self._add_command(pdf_sub, "→ Excel", self.app._convert_pdf_to_excel)
         self._add_command(pdf_sub, "→ Word", self.app._convert_pdf_to_word)
         self._add_separator(pdf_sub)
         self._add_command(pdf_sub, "📁 일괄 변환", self.app._batch_convert_pdf_excel)
         self._add_command(pdf_sub, "🔍 분석", self.app._analyze_pdf)
-        
+
         self._add_separator(tools_sub)
         self._add_command(tools_sub, "🩺 데이터 정합성 검사", self._show_integrity_check_safe)
-        
+
         self._add_separator(file_menu)
-        
+
         # 최근 파일
         self.recent_menu = self._add_submenu(file_menu, "📂 최근 파일")
         self._update_recent_files()
-        
+
         self._add_separator(file_menu)
         self._add_command(file_menu, "종료", self.parent.quit)
 
@@ -249,25 +247,27 @@ class CustomMenuBar:
         self._add_command(report_menu, "📦 재고 현황 보고서", self.app._generate_inventory_pdf_report)
         self._add_command(report_menu, "📈 입출고 내역", self.app._generate_transaction_pdf)
         self._add_command(report_menu, "🔖 LOT 상세", self.app._generate_lot_detail_pdf)
-        
+
     def _create_tools_menu(self) -> None:
         """2. 🔧 도구 메뉴"""
         from ..utils.constants import (
-            HAS_GEMINI, HAS_DB_PROTECTION, HAS_FEATURES, HAS_FEATURES_V2
+            HAS_DB_PROTECTION,
+            HAS_FEATURES,
+            HAS_GEMINI,
         )
         # =====================================================
         # 2. 도구 메뉴
         # =====================================================
         tools_menu = self._add_menu("🔧 도구")
-        
+
         # v5.9.0: 컨테이너 구분 → 필터바 초기화 옆으로 이동 (변수만 초기화)
         if not hasattr(self.app, '_container_suffix_var'):
             self.app._container_suffix_var = self.tk.BooleanVar(value=True)
-        
+
         # D/O 후속 연결 (입고 후 D/O 나중에 도착 시 LOT에 도착일/Free Time 보충)
         self._add_command(tools_menu, "📋 D/O 후속 연결", self.app._on_do_update)
         self._add_separator(tools_menu)
-        
+
         # PDF/이미지 변환
         pdf_sub = self._add_submenu(tools_menu, "📄 PDF/이미지 변환")
         self._add_command(pdf_sub, "→ Excel", self.app._convert_pdf_to_excel)
@@ -275,10 +275,10 @@ class CustomMenuBar:
         self._add_separator(pdf_sub)
         self._add_command(pdf_sub, "📁 일괄 변환", self.app._batch_convert_pdf_excel)
         self._add_command(pdf_sub, "🔍 분석", self.app._analyze_pdf)
-        
+
         # v3.8.4: 문서 변환 (OCR)
         self._add_command(tools_menu, "📷 문서 변환 (OCR/PDF)", self._show_doc_convert_safe)
-        
+
         # PDF 보고서 (거래 명세서는 상단 보고서 메뉴로 이동)
         report_sub = self._add_submenu(tools_menu, "📋 PDF 보고서")
         self._add_command(report_sub, "📦 재고 현황 보고서", self.app._generate_inventory_pdf_report)
@@ -288,14 +288,14 @@ class CustomMenuBar:
         report_sub.add_separator()
         self._add_command(report_sub, "📊 일일 현황 PDF", self.app._generate_daily_pdf_v398)
         self._add_command(report_sub, "📅 월간 실적 PDF", self.app._generate_monthly_pdf_v398)
-        
+
         self._add_separator(tools_menu)
-        
+
         # v3.8.4: 정합성 리포트
         self._add_command(tools_menu, "🩺 데이터 정합성 검사", self._show_integrity_check_safe)
-        
+
         self._add_separator(tools_menu)
-        
+
         # v4.1.2: Gemini AI — 항상 표시 (API 키 없으면 설정 안내)
         api_sub = self._add_submenu(tools_menu, "🤖 AI 어시스턴트")
         if HAS_GEMINI:
@@ -306,7 +306,7 @@ class CustomMenuBar:
         self._add_command(api_sub, "⚙️ API 설정", self.app._show_api_settings)
         self._add_command(api_sub, "🔬 API 테스트", self.app._test_gemini_api_connection)
         self._add_separator(tools_menu)
-        
+
         # DB 보호 (조건부)
         if HAS_DB_PROTECTION:
             db_sub = self._add_submenu(tools_menu, "🛡️ DB 보호")
@@ -316,7 +316,7 @@ class CustomMenuBar:
             self._add_separator(db_sub)
             self._add_command(db_sub, "🔄 체크섬 갱신", self.app._update_checksum)
             self._add_separator(tools_menu)
-        
+
         self._add_command(tools_menu, "🔍 DB 검사", self.app._on_integrity_check)
         self._add_command(tools_menu, "🔧 DB 최적화", self.app._on_optimize_db)
         self._add_separator(tools_menu)
@@ -325,7 +325,7 @@ class CustomMenuBar:
         self._add_separator(tools_menu)
         if hasattr(self.app, '_is_developer_mode_enabled') and self.app._is_developer_mode_enabled():
             self._add_command(tools_menu, "🗑️ 테스트 DB 초기화 (데이터 삭제)", self.app._show_test_db_reset_popup)
-        
+
         # 고급 기능 (조건부)
         if HAS_FEATURES:
             self._add_separator(tools_menu)
@@ -335,7 +335,7 @@ class CustomMenuBar:
             self._add_separator(adv_sub)
             self._add_command(adv_sub, "🩺 전체 진단", self.app._run_self_test)
             self._add_command(adv_sub, "🧪 단위 테스트", self.app._open_test_runner)
-        
+
     def _create_features_menu(self) -> None:
         """3. 🚀 v2.7 기능 메뉴"""
         from ..utils.constants import HAS_FEATURES_V2
@@ -354,7 +354,7 @@ class CustomMenuBar:
             self._add_command(v2_menu, "📂 필터 불러오기", self.app._load_filter_preset)
             self._add_separator(v2_menu)
             self._add_command(v2_menu, "📊 일일 리포트", self.app._generate_daily_report)
-        
+
     def _create_view_menu(self) -> None:
         """4. 👁️ 보기 메뉴 — 7탭: 판매가능/판매배정/판매화물 결정/출고/총괄 재고 리스트/통계/로그"""
         view_menu = self._add_menu("👁️ 보기")
@@ -369,7 +369,7 @@ class CustomMenuBar:
         self._add_command(view_menu, "📝 로그", lambda: self.app.notebook.select(6))
         self._add_separator(view_menu)
         self._add_command(view_menu, "🎨 테마 선택", self.app._show_theme_selector)
-        
+
     def _create_help_menu(self) -> None:
         """5. ❓ 도움말 메뉴"""
         # =====================================================
@@ -385,7 +385,7 @@ class CustomMenuBar:
         self._add_command(help_menu, "🔬 API 테스트", self.app._test_gemini_api_connection)
         self._add_separator(help_menu)
         self._add_command(help_menu, "ℹ️ 정보", self.app._show_about)
-        
+
     def _create_product_menu(self) -> None:
         """6. 📦 품목 메뉴"""
         # =====================================================
@@ -470,18 +470,18 @@ class CustomMenuBar:
                 logger.debug(f"Suppressed: {_e}")
 
 
-    
+
     def _add_menu(self, label: str) -> 'tk.Menu':
         """v4.0.8: 고대비 메뉴 버튼 — 진한 남색 배경 + 흰 텍스트 + 호버 효과"""
         from ..utils.constants import LEFT
-        
+
         # 드롭다운 메뉴 생성 (밝은 배경)
         menu = self.tk.Menu(self.parent, tearoff=0, font=self.DROPDOWN_FONT,
                             bg=self.DROPDOWN_BG, fg=self.DROPDOWN_FG,
                             activebackground=self.DROPDOWN_ACTIVE_BG,
                             activeforeground=self.DROPDOWN_ACTIVE_FG,
                             relief='flat', bd=1)
-        
+
         # v4.0.8: tk.Menubutton (진한 배경 + 흰 글자)
         btn = self.tk.Menubutton(
             self.menubar_frame,
@@ -500,7 +500,7 @@ class CustomMenuBar:
         btn.pack(side=LEFT)
         btn._menu_active = False  # v5.3.5
 
-        
+
         # 호버 효과 (v5.0.9: 안전한 색상 복구)
         def on_enter(e):
             try:
@@ -543,13 +543,13 @@ class CustomMenuBar:
         except (ValueError, TypeError, AttributeError, tk.TclError) as _e:
             logger.debug(f"Suppressed: {_e}")
 
-        
+
         # 저장
         self.menu_buttons[label] = btn
         self.menus[label] = menu
-        
+
         return menu
-    
+
     def _add_command(self, menu: 'tk.Menu', label: str, command: Callable) -> None:
         """메뉴 항목 추가 (v3.6.9: 넉넉한 간격)"""
         menu.add_command(
@@ -558,7 +558,7 @@ class CustomMenuBar:
             font=self.DROPDOWN_FONT,
             hidemargin=False,
         )
-    
+
     def _add_header(self, menu: 'tk.Menu', label: str) -> None:
         """비활성 헤더 라벨 (구분 제목용)"""
         menu.add_command(
@@ -566,7 +566,7 @@ class CustomMenuBar:
             state='disabled',
             font=('맑은 고딕', 13, 'bold'),
         )
-    
+
     def _add_submenu(self, parent_menu: 'tk.Menu', label: str) -> 'tk.Menu':
         """서브메뉴 추가 (v4.0.8: 색상 통일)"""
         submenu = self.tk.Menu(parent_menu, tearoff=0, font=self.DROPDOWN_FONT,
@@ -575,12 +575,12 @@ class CustomMenuBar:
                                activeforeground=self.DROPDOWN_ACTIVE_FG)
         parent_menu.add_cascade(label=label, menu=submenu, font=self.DROPDOWN_FONT)
         return submenu
-    
+
     def _add_separator(self, menu: 'tk.Menu') -> None:
         """구분선 추가"""
         menu.add_separator()
-    
-    def _add_checkbutton(self, menu: 'tk.Menu', label: str, 
+
+    def _add_checkbutton(self, menu: 'tk.Menu', label: str,
                          variable: 'tk.BooleanVar', command: Callable) -> None:
         """체크박스 메뉴 항목 추가"""
         menu.add_checkbutton(
@@ -589,27 +589,27 @@ class CustomMenuBar:
             command=command,
             font=self.DROPDOWN_FONT,
         )
-    
+
     def _show_status_guide(self) -> None:
         """v4.0.8: STATUS 상태값 안내 팝업"""
         from ..utils.constants import tk
-        
+
         guide = tk.Toplevel(self.parent)
         guide.title("📊 STATUS 상태값 안내")
         guide.geometry("620x520")
         guide.transient(self.parent)
         guide.grab_set()
-        
+
         # 제목
         tk.Label(guide, text="📊 SQM 재고 STATUS 상태값 안내",
                  font=('맑은 고딕', 16, 'bold'), fg=ThemeColors.get('text_primary')).pack(pady=(15, 5))
         tk.Label(guide, text="재고(LOT) 및 톤백에 사용되는 상태값 목록",
                  font=('맑은 고딕', 11), fg=ThemeColors.get('text_secondary')).pack(pady=(0, 10))
-        
+
         # 상태값 프레임
         content = tk.Frame(guide, padx=20, pady=10)
         content.pack(fill='both', expand=True)
-        
+
         _gd = ThemeColors.is_dark_theme(getattr(self.app, 'current_theme', 'flatly'))
         _sec = ThemeColors.get('text_secondary', _gd)
         _pri = ThemeColors.get('text_primary', _gd)
@@ -629,38 +629,38 @@ class CustomMenuBar:
             ('🧪 샘플', '샘플', ThemeColors.get('success', _gd), ThemeColors.get('available', _gd),
              '샘플 톤백(1kg). 정규 재고와 별도 관리.'),
         ]
-        
+
         for i, (icon_label, ko_name, fg_color, bg_color, desc) in enumerate(statuses):
             row = tk.Frame(content, bg=bg_color, padx=10, pady=6, relief='groove', bd=1)
             row.pack(fill='x', pady=3)
-            
+
             tk.Label(row, text=icon_label, font=('맑은 고딕', 13, 'bold'),
                      bg=bg_color, fg=fg_color, width=18, anchor='w').pack(side='left')
             tk.Label(row, text=f"({ko_name})", font=('맑은 고딕', 11),
                      bg=bg_color, fg=_sec, width=8).pack(side='left')
             tk.Label(row, text=desc, font=('맑은 고딕', 10),
                      bg=bg_color, fg=_pri, anchor='w', wraplength=300).pack(side='left', padx=(10, 0))
-        
+
         # 닫기 버튼
         tk.Button(guide, text="닫기", command=guide.destroy,
                   font=('맑은 고딕', 11), padx=20, pady=5).pack(pady=15)
-    
+
     def _show_backup_guide(self) -> None:
         """v4.1.2: DB 백업/복구 가이드 팝업"""
         from ..utils.constants import tk
-        
+
         guide = tk.Toplevel(self.parent)
         guide.title("💾 DB 백업/복구 가이드")
         guide.geometry("650x580")
         guide.transient(self.parent)
         guide.grab_set()
-        
+
         tk.Label(guide, text="💾 DB 백업 및 복구 가이드",
                  font=('맑은 고딕', 16, 'bold'), fg=ThemeColors.get('text_primary')).pack(pady=(15, 10))
-        
+
         text = tk.Text(guide, font=('맑은 고딕', 11), wrap='word', padx=15, pady=10)
         text.pack(fill='both', expand=True, padx=10)
-        
+
         content = """📁 DB 파일 위치
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • 파일명: data/db/sqm_inventory.db
@@ -700,26 +700,26 @@ class CustomMenuBar:
 """
         text.insert('1.0', content)
         text.config(state='disabled')
-        
+
         tk.Button(guide, text="닫기", command=guide.destroy,
                   font=('맑은 고딕', 11), padx=20, pady=5).pack(pady=10)
-    
+
     def _show_return_safe(self) -> None:
         """반품 처리 (안전한 호출)"""
 
-        
+
         if hasattr(self.app, '_show_return_dialog'):
             self.app._show_return_dialog()
         else:
             CustomMessageBox.showinfo(self.parent, "반품", "반품 기능을 사용하려면 EntryPoint 모듈이 필요합니다.")
-    
+
     def _show_doc_convert_safe(self) -> None:
         """v3.8.4: 문서 변환 (안전한 호출)"""
         if hasattr(self.app, '_show_document_convert_dialog'):
             self.app._show_document_convert_dialog()
         else:
             CustomMessageBox.showinfo(self.parent, "문서 변환", "문서 변환 기능이 로드되지 않았습니다.")
-    
+
     def _show_integrity_check_safe(self) -> None:
         """v3.8.4: 데이터 정합성 검사 실행"""
         try:
@@ -729,18 +729,18 @@ class CustomMenuBar:
                 report = checker.run_all()
                 text = checker.print_report(report)
                 saved = checker.save_report(report)
-                
+
                 # 결과 표시
                 from ..utils.constants import tk
                 result_win = tk.Toplevel(self.parent)
                 result_win.title("🩺 데이터 정합성 검사 결과")
                 result_win.geometry("650x500")
-                
+
                 txt = tk.Text(result_win, wrap='word', font=('Consolas', 10))
                 txt.pack(fill='both', expand=True, padx=10, pady=10)
                 txt.insert('1.0', text)
                 txt.config(state='disabled')
-                
+
                 CustomMessageBox.showinfo(self.parent, "검사 완료",
                     f"정합성 점수: {report.score}/100\n"
                     f"리포트 저장: {saved}")
@@ -748,14 +748,14 @@ class CustomMenuBar:
                 CustomMessageBox.showwarning(self.parent, "검사 불가", "DB 엔진이 초기화되지 않았습니다.")
         except (ImportError, ModuleNotFoundError) as e:
             CustomMessageBox.showerror(self.parent, "검사 오류", f"정합성 검사 오류:\n{e}")
-    
+
     def _update_recent_files(self) -> None:
         """최근 파일 메뉴 업데이트"""
         if hasattr(self.app, '_update_recent_files_menu'):
             # 기존 메서드가 recent_menu를 사용하므로 참조 설정
             self.app.recent_menu = self.recent_menu
             self.app._update_recent_files_menu()
-    
+
     def get_recent_menu(self) -> 'tk.Menu':
         """최근 파일 메뉴 반환"""
         return self.recent_menu
@@ -767,7 +767,7 @@ class CustomMenuBarMixin:
     
     MenuMixin 대신 사용
     """
-    
+
     def _setup_custom_menu(self) -> None:
         """커스텀 메뉴바 설정"""
         try:
@@ -778,14 +778,14 @@ class CustomMenuBarMixin:
             logger.error(f"커스텀 메뉴바 초기화 실패: {e}")
             # 폴백: 기존 메뉴 사용
             self._setup_menu_fallback()
-    
+
     def _setup_menu_fallback(self) -> None:
         """폴백: 기존 tk.Menu 사용"""
         from ..utils.constants import tk
-        
+
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
-        
+
         # 최소한의 메뉴만 생성
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="파일", menu=file_menu)
@@ -793,7 +793,7 @@ class CustomMenuBarMixin:
         file_menu.add_command(label="출고 Allocation", command=self._on_allocation_input_unified)
         file_menu.add_separator()
         file_menu.add_command(label="종료", command=self.root.quit)
-        
+
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="도움말", menu=help_menu)
         help_menu.add_command(label="정보", command=self._show_about)

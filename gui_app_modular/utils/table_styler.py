@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 테이블 스타일 유틸리티
 ============================================
@@ -8,10 +7,10 @@ v4.2.2: 그리드 라인, 줄무늬, 가독성 개선
 작성자: Ruby
 """
 
+import logging
 import tkinter as tk
 from tkinter import ttk
-from typing import Optional, Dict, List
-import logging
+from typing import List, Optional
 
 from gui_app_modular.utils.ui_constants import ThemeColors
 
@@ -20,13 +19,13 @@ logger = logging.getLogger(__name__)
 
 class TableStyler:
     """테이블 스타일 관리 클래스"""
-    
+
     # 색상 테마 (라이트)
     COLORS = {
         # 그리드 라인
         'grid_line': '#e0e0e0',
         'grid_line_strong': '#bdbdbd',
-        
+
         # 줄무늬 (Striped rows)
         'row_even': '#ffffff',
         'row_odd': '#f5f5f5',
@@ -34,15 +33,15 @@ class TableStyler:
         'row_odd_selected': '#bbdefb',
         # v5.7.5: 선택 행 글자색 — 연한 배경에서도 데이터가 보이도록 진한색
         'row_selected_fg': '#1a1a1a',
-        
+
         # 헤더
         'header_bg': '#1976d2',
         'header_fg': '#ffffff',
-        
+
         # 테두리
         'border': '#9e9e9e',
     }
-    
+
     # v5.6.9: 다크 테마 — 행 글씨 가시성
     COLORS_DARK = {
         'grid_line': '#555555',
@@ -58,14 +57,14 @@ class TableStyler:
         'foreground': '#f0f0f0',
         'fieldbackground': '#1e1e1e',
     }
-    
+
     # 행 높이 (v8.7.0 Phase1: normal 36px로 가독성 개선)
     ROW_HEIGHT = {
         'compact': 24,
         'normal': 36,
         'comfortable': 40,
     }
-    
+
     @classmethod
     def apply_grid_lines(
         cls,
@@ -88,7 +87,7 @@ class TableStyler:
         colors = cls.COLORS_DARK if is_dark else cls.COLORS
         fg = colors.get('foreground', '#f0f0f0') if is_dark else '#1a1a1a'
         fbg = colors.get('fieldbackground', '#1e1e1e') if is_dark else cls.COLORS['row_even']
-        
+
         style.configure(
             style_name,
             background=colors['row_even'],
@@ -97,7 +96,7 @@ class TableStyler:
             borderwidth=1,
             relief='solid'
         )
-        
+
         # v5.7.5: 선택 행 foreground 명시 — 연한 배경에서 글자가 사라지는 현상 수정
         selected_fg = colors.get('row_selected_fg', '#1a1a1a' if not is_dark else '#e0e0e0')
         style.map(
@@ -110,9 +109,9 @@ class TableStyler:
                 ('selected', selected_fg),
             ]
         )
-        
+
         treeview.configure(style=style_name)
-        
+
         if show_vertical or show_horizontal:
             style.configure(
                 f"{style_name}.Heading",
@@ -121,7 +120,7 @@ class TableStyler:
                 relief='raised',
                 borderwidth=1
             )
-    
+
     @classmethod
     def update_grid_style_for_theme(cls, treeview: ttk.Treeview, is_dark: bool) -> None:
         """v5.6.9: 테마 변경 시 Grid/RowHeight 스타일 전체 갱신 (배경+글씨 — 다크에서 행 배경도 어둡게)"""
@@ -163,7 +162,7 @@ class TableStyler:
             )
         except (tk.TclError, ValueError, TypeError) as e:
             logger.debug(f"Grid 스타일 테마 갱신 무시: {e}")
-    
+
     @classmethod
     def apply_striped_rows(
         cls,
@@ -182,12 +181,12 @@ class TableStyler:
         # 태그 색상 정의
         treeview.tag_configure(tag_even, background=cls.COLORS['row_even'])
         treeview.tag_configure(tag_odd, background=cls.COLORS['row_odd'])
-        
+
         # 기존 아이템에 태그 적용
         for idx, item in enumerate(treeview.get_children()):
             tag = tag_even if idx % 2 == 0 else tag_odd
             treeview.item(item, tags=(tag,))
-    
+
     @classmethod
     def set_row_height(
         cls,
@@ -207,7 +206,7 @@ class TableStyler:
             style_name = f"RowHeight.{id(treeview)}.Treeview"
             style.configure(style_name, rowheight=height)
             treeview.configure(style=style_name)
-    
+
     @classmethod
     def toggle_column(
         cls,
@@ -227,7 +226,7 @@ class TableStyler:
         if treeview is None:
             logger.warning(f"toggle_column: treeview가 None입니다 (column_id={column_id})")
             return
-        
+
         if visible:
             # 컬럼 너비 복원 (기본값 또는 저장된 값)
             width = getattr(treeview, f'_{column_id}_width', 100)
@@ -238,7 +237,7 @@ class TableStyler:
             setattr(treeview, f'_{column_id}_width', current_width)
             # 너비 0으로 설정 (숨김)
             treeview.column(column_id, width=0, minwidth=0)
-    
+
     @classmethod
     def create_style_toolbar(
         cls,
@@ -261,7 +260,7 @@ class TableStyler:
         _ts_bg = ThemeColors.get('bg_secondary', _ts_dark)
         _ts_fg = ThemeColors.get('text_primary', _ts_dark)
         toolbar = tk.Frame(parent, bg=_ts_bg, pady=5)
-        
+
         # 왼쪽: 컬럼 토글
         if toggleable_columns:
             tk.Label(
@@ -271,15 +270,15 @@ class TableStyler:
                 fg=_ts_fg,
                 font=('맑은 고딕', 9)
             ).pack(side=tk.LEFT, padx=(10, 5))
-            
+
             for col_id, col_name in toggleable_columns:
                 var = tk.BooleanVar(value=True)
-                
+
                 def make_toggle(cid, v):
                     def toggle():
                         cls.toggle_column(treeview, cid, v.get())
                     return toggle
-                
+
                 cb = tk.Checkbutton(
                     toolbar,
                     text=col_name,
@@ -290,10 +289,10 @@ class TableStyler:
                     font=('맑은 고딕', 9)
                 )
                 cb.pack(side=tk.LEFT, padx=2)
-        
+
         # v5.7.5: 표시 모드(컬럼/본문/날짜) UI 제거 — 행 높이는 기본(normal) 고정
         return toolbar
-    
+
     @classmethod
     def refresh_striped_rows(
         cls,
@@ -334,10 +333,10 @@ def apply_table_style(
     """
     if grid_lines:
         TableStyler.apply_grid_lines(treeview, is_dark=is_dark)
-    
+
     if striped_rows:
         TableStyler.apply_striped_rows(treeview)
-    
+
     TableStyler.set_row_height(treeview, row_height)
 
 
@@ -346,24 +345,24 @@ if __name__ == '__main__':
     root = tk.Tk()
     root.title("Table Style Test")
     root.geometry("800x400")
-    
+
     # 테스트 Treeview
     columns = ('col1', 'col2', 'col3', 'col4')
     tree = ttk.Treeview(root, columns=columns, show='headings', height=15)
-    
+
     for col in columns:
         tree.heading(col, text=col.upper())
         tree.column(col, width=150)
-    
+
     # 테스트 데이터
     for i in range(20):
         tree.insert('', 'end', values=(f'Data {i}-1', f'Data {i}-2', f'Data {i}-3', f'Data {i}-4'))
-    
+
     tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-    
+
     # 스타일 적용
     apply_table_style(tree, grid_lines=True, striped_rows=True, row_height='normal')
-    
+
     # 툴바 생성
     toolbar = TableStyler.create_style_toolbar(
         root,
@@ -371,5 +370,5 @@ if __name__ == '__main__':
         toggleable_columns=[('col2', 'COL2'), ('col3', 'COL3')]
     )
     toolbar.pack(side=tk.BOTTOM, fill=tk.X)
-    
+
     root.mainloop()

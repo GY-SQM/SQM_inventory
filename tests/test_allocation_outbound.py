@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Allocation 출고 경로 검증
 - AllocationParser 호환성: 파서가 Allocation 형식 Excel을 정상 파싱하는지

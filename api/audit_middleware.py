@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 SQM v7.0.0-alpha — API 감사 로깅 미들웨어
 ==========================================
@@ -15,8 +14,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, date
-from typing import Optional
+from datetime import date, datetime
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
