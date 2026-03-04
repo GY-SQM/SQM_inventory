@@ -1,4 +1,4 @@
 SQM Inventory System
-Version: v5.9.9.1
-Release Date: 2026-02-18
-Notes: Location 4-part format A-01-01-10 (zone-row-level-bay), validate_location_format 3 or 4 parts
+Version: v6.3.3
+Release Date: 2026-03-04
+Notes: 통합 리포지토리 최종 병합 릴리즈 (main 브랜치 동기화)
