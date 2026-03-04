@@ -65,24 +65,24 @@ class ToolbarMixin:
         return f" {icon} [{count}]"
 
     def _load_toolbar_colors(self) -> None:
-        """v6.3.2-colorful: 다크/라이트 반응형 컬러풀 팔레트."""
+        """v6.3.3-modular: 다크/라이트 반응형 컬러풀 팔레트 (Light 모드 가시성 개선)."""
         is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'darkly'))
         if is_dark:
-            self._tb_bg = '#1a1a2e'          # 딥 다크 퍼플 (네이비 탈피)
-            self._tb_sep = '#3d3d5c'         # 보라 구분선
-            self._tb_fg_normal = '#c0c0d0'   # 밝은 라벤더 그레이
+            self._tb_bg = '#1e1e2e'          # 모던 다크 (차분한 남색)
+            self._tb_sep = '#313244'         # 구분선
+            self._tb_fg_normal = '#cdd6f4'   # 텍스트
             self._tb_fg_active = '#ffffff'   # 활성 텍스트
-            self._tb_fg_hover = '#e0b0ff'    # 호버: 밝은 보라 (파랑 탈피!)
-            self._tb_hover_bg = '#2a2a4a'    # 호버 배경
-            self._tb_underline_color = '#a78bfa'  # 밝은 바이올렛 강조
+            self._tb_fg_hover = '#89b4fa'    # 호버: 블루
+            self._tb_hover_bg = '#313244'    # 호버 배경
+            self._tb_underline_color = '#f5c2e7'  # 핑크 강조
         else:
-            self._tb_bg = '#1f2937'          # 다크 그레이
-            self._tb_sep = '#4b5563'         # 구분선
-            self._tb_fg_normal = '#d1d5db'   # 밝은 그레이
-            self._tb_fg_active = '#ffffff'   # 활성 텍스트
-            self._tb_fg_hover = '#fbbf24'    # 호버: 골드! (파랑 탈피)
-            self._tb_hover_bg = '#374151'    # 호버 배경
-            self._tb_underline_color = '#f59e0b'  # 앰버 강조
+            self._tb_bg = '#ffffff'          # 라이트 모드: 완전 흰색 배경
+            self._tb_sep = '#e5e7eb'         # 연한 구분선
+            self._tb_fg_normal = '#4b5563'   # 텍스트: 다크 그레이
+            self._tb_fg_active = '#111827'   # 활성: 거의 검정
+            self._tb_fg_hover = '#2563eb'    # 호버: 로얄 블루
+            self._tb_hover_bg = '#f3f4f6'    # 호버 배경: 연한 회색
+            self._tb_underline_color = '#3b82f6'  # 블루 강조
 
     def _mark_toolbar_widget(self, widget) -> None:
         """테마 리프레시가 덮어쓰지 않도록 툴바 위젯 마킹."""

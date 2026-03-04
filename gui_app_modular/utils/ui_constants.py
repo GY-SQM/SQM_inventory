@@ -387,10 +387,10 @@ class ThemeColors:
         'text_muted':     '#b0bec5',   # 비활성 텍스트
 
         # 배경 (v3.6.2: 순백색 대신 약간 따뜻한 톤)
-        'bg_primary':   '#fafbfc',   # 살짝 따뜻한 화이트
-        'bg_secondary': '#f0f3f5',   # 연한 그레이
-        'bg_hover':     '#e8ecef',   # 호버 배경
-        'bg_toolbar':   '#f0f3f5',   # 툴바 배경
+        'bg_primary':   '#ffffff',   # 순수 화이트 (가독성 최적화)
+        'bg_secondary': '#f8f9fa',   # 연한 그레이
+        'bg_hover':     '#e9ecef',   # 호버 배경
+        'bg_toolbar':   '#ffffff',   # 툴바: 화이트 (Mixin과 일치)
         'bg_card':      '#ffffff',   # 카드/패널 배경
 
         # 테두리
@@ -465,38 +465,38 @@ class ThemeColors:
     'text_muted':     '#78909c',   # Muted Blue Grey
 
     # Background (Deep Blue-Black Navy) - 조금 더 밝고 푸른빛이 돌게 수정
-    'bg_primary':   '#1a237e',     # Deep Indigo (기존보다 훨씬 컬러풀함)
-    'bg_secondary': '#283593',     # Lighter Indigo
-    'bg_hover':     '#3949ab',     # Hover Indigo
-    'bg_toolbar':   '#1a237e',     # Deep Indigo
-    'bg_card':      '#283593',     # Lighter Indigo (Card Background)
+    'bg_primary':   '#1e1e2e',     # Modern Dark (Catppuccin Mocha style)
+    'bg_secondary': '#181825',     # Darker Background
+    'bg_hover':     '#313244',     # Surface 0
+    'bg_toolbar':   '#1e1e2e',     # Toolbar matches primary
+    'bg_card':      '#1e1e2e',     # Card matches primary
 
     # Border
-    'border':       '#3949ab',     # Indigo Border
-    'border_focus': '#00e5ff',     # Cyan Accent Focus
+    'border':       '#45475a',     # Surface 1
+    'border_focus': '#89b4fa',     # Blue Accent
 
     # Buttons (Colorful Gradients Simulation)
-    'btn_inbound':        '#00c853',   # Green
-    'btn_inbound_hover':  '#69f0ae',
-    'btn_outbound':       '#ff9100',   # Orange
-    'btn_outbound_hover': '#ffd180',
-    'btn_report':         '#2979ff',   # Blue
-    'btn_report_hover':   '#82b1ff',
-    'btn_neutral':        '#5c6bc0',   # Indigo
-    'btn_neutral_hover':  '#7986cb',
+    'btn_inbound':        '#a6e3a1',   # Green (Soft)
+    'btn_inbound_hover':  '#94e2d5',   # Teal
+    'btn_outbound':       '#fab387',   # Peach
+    'btn_outbound_hover': '#f9e2af',   # Yellow
+    'btn_report':         '#89b4fa',   # Blue
+    'btn_report_hover':   '#b4befe',   # Lavender
+    'btn_neutral':        '#6c7086',   # Overlay 0
+    'btn_neutral_hover':  '#7f849c',   # Overlay 1
 
     # Treeview selection (Colorful Highlight)
-    'tree_select_bg':  '#651fff',   # Deep Purple Accent
-    'tree_select_fg':  '#ffffff',
-    'tree_stripe':     '#303f9f',   # Indigo Stripe
+    'tree_select_bg':  '#313244',   # Surface 0
+    'tree_select_fg':  '#cdd6f4',   # Text
+    'tree_stripe':     '#1e1e2e',   # Base
 
     # Charts
-    'chart_bg':   '#283593',
-    'chart_grid': '#3949ab',
+    'chart_bg':   '#1e1e2e',
+    'chart_grid': '#313244',
 
     # Searchbar
-    'search_bg':  '#1a237e',
-    'search_fg':  '#ffffff',
+    'search_bg':  '#181825',    # Mantle
+    'search_fg':  '#cdd6f4',
 }
 
 
