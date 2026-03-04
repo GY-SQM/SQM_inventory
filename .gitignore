@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Distribution / Packaging
+dist/
+build/
+*.egg-info/
+
+# Logs
+logs/
+*.log
+
+# Unit test / coverage
+.tox/
+.coverage
+.coveragerc
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Excel temporary files
+~$*
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific temporary folders
+.sync_main/
+_generated_patches/
+_review_*/
+_tmp_crosscheck_review/
+backup/
+updates/

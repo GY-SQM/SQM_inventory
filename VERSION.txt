@@ -1,0 +1,4 @@
+SQM Inventory System
+Version: v5.9.9.1
+Release Date: 2026-02-18
+Notes: Location 4-part format A-01-01-10 (zone-row-level-bay), validate_location_format 3 or 4 parts
