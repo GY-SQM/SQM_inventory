@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-__version__ = '6.3.3'
+__version__ = '6.3.3.1'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
+    '6.3.3.1': '🔧 v6.3.3.1: v6.3.3 기반 핫픽스 및 모듈별 수정 작업 진행 중',
     '6.3.3': '🚀 v6.3.3: 통합 리포지토리 최종 병합 릴리즈 — main 브랜치 동기화 및 안정화 버전',
     '6.3.1': '🚀 v6.3.1: S1 출고 안정화 — 근거문서 보관/정리(90일), 감사 로그 뷰어·CSV, 미매칭/실행 감사 이벤트 및 중복 톤백 가드 추가',
     '6.2.9': '✅ v6.2.9: 테스트 스위트 최종 통합 — parser/load/coverage 보강, requirements.txt 추가로 API 프로덕션 테스트 조건 정리, 전체 pytest 통과 기준 확정',
