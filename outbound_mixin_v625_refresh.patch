@@ -1,0 +1,1138 @@
+diff --git a/engine_modules/inventory_modular/outbound_mixin.py b/engine_modules/inventory_modular/outbound_mixin.py
+index e43f981..974913d 100644
+--- a/engine_modules/inventory_modular/outbound_mixin.py
++++ b/engine_modules/inventory_modular/outbound_mixin.py
+@@ -11,8 +11,16 @@ v3.6.6: SQLAlchemy → SQMDatabase API 전환 (self.db 기반)
+ 
+ import sqlite3
+ import logging
++import math
++import random
++import os
++import hashlib
++import configparser
++import csv
++import json
+ from datetime import datetime
+ from typing import Dict, Optional
++from utils.path_utils import resolve_reports_dir
+ 
+ from core.constants import (
+     STATUS_AVAILABLE,
+@@ -29,6 +37,90 @@ logger = logging.getLogger(__name__)
+ 
+ 
+ class OutboundMixin(InventoryBaseMixin):
++    ALLOCATION_APPROVAL_QTY_KG_THRESHOLD = 10000.0
++    ALLOCATION_APPROVAL_RATIO_THRESHOLD = 0.5
++
++    def _table_exists(self, table_name: str) -> bool:
++        try:
++            row = self.db.fetchone(
++                "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
++                (table_name,),
++            )
++            return bool(row)
++        except Exception:
++            return False
++
++    def _normalize_outbound_date(self, raw_date) -> str:
++        """outbound_date를 YYYY-MM-DD로 정규화, 실패 시 ValueError."""
++        txt = str(raw_date or "").strip()
++        if not txt:
++            return ""
++        try:
++            return datetime.strptime(txt[:10], "%Y-%m-%d").strftime("%Y-%m-%d")
++        except Exception:
++            raise ValueError(f"INVALID_OUTBOUND_DATE: '{txt}' (허용 형식: YYYY-MM-DD)")
++
++    def _save_allocation_fail_report(
++        self,
++        rows: list,
++        errors: list,
++        source_file: str = "",
++        error_details: list | None = None,
++    ) -> dict:
++        """Allocation 검증 실패 리포트 CSV+JSON 저장."""
++        out = {"csv": "", "json": ""}
++        if not errors:
++            return out
++        try:
++            reports_root = resolve_reports_dir()
++            out_dir = os.path.join(reports_root, "allocation")
++            os.makedirs(out_dir, exist_ok=True)
++            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
++            csv_path = os.path.join(out_dir, f"allocation_fail_{ts}.csv")
++            json_path = os.path.join(out_dir, f"allocation_fail_{ts}.json")
++
++            detail_rows = list(error_details or [])
++            with open(csv_path, "w", encoding="utf-8-sig", newline="") as f:
++                w = csv.writer(f)
++                w.writerow(["line_no", "FAIL_CODE", "lot_no", "sold_to", "qty_mt", "reason"])
++                if detail_rows:
++                    for d in detail_rows:
++                        w.writerow([
++                            d.get("line_no", ""),
++                            d.get("fail_code", "ALLOCATION_VALIDATE_FAIL"),
++                            d.get("lot_no", ""),
++                            d.get("sold_to", ""),
++                            d.get("qty_mt", ""),
++                            d.get("reason", ""),
++                        ])
++                else:
++                    for r in rows or []:
++                        lot_no = str((r.get("lot_no", "") if isinstance(r, dict) else getattr(r, "lot_no", "")) or "")
++                        sold_to = str((r.get("sold_to", "") if isinstance(r, dict) else getattr(r, "sold_to", "")) or "")
++                        qty_mt = (r.get("qty_mt", "") if isinstance(r, dict) else getattr(r, "qty_mt", ""))
++                        fail_reason = "; ".join(errors[:3])
++                        fail_code = "ALLOCATION_VALIDATE_FAIL"
++                        if "INVALID_OUTBOUND_DATE" in fail_reason:
++                            fail_code = "INVALID_OUTBOUND_DATE"
++                        w.writerow(["", fail_code, lot_no, sold_to, qty_mt, fail_reason])
++
++            with open(json_path, "w", encoding="utf-8") as f:
++                payload = {
++                    "source_file": source_file,
++                    "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
++                    "error_count": len(errors),
++                    "errors": errors,
++                    "error_details": detail_rows,
++                }
++                json.dump(payload, f, ensure_ascii=False, indent=2)
++
++            out["csv"] = csv_path
++            out["json"] = json_path
++            return out
++        except Exception as e:
++            logger.debug(f"Allocation 실패 리포트 저장 스킵: {e}")
++            return out
++
+     def _assert_sample_policy(self, lot_no: str) -> None:
+         """v5.3.7: Hard-stop if sample policy is violated (must be exactly 1 sample row per LOT)."""
+         row = self.db.fetchone(
+@@ -39,6 +131,144 @@ class OutboundMixin(InventoryBaseMixin):
+         if cnt != 1:
+             raise ValueError(f"샘플 정책 위반: LOT {lot_no}에 샘플 {cnt}개 (필수 정확히 1개)")
+ 
++    def _get_allocation_random_mode(self) -> str:
++        """
++        Allocation 예약 랜덤 모드 조회.
++        우선순위: ENV(SQM_ALLOC_RANDOM_MODE) > settings.ini[outbound].allocation_random_mode > 기본(random)
++
++        Returns:
++            'random' | 'seeded'
++        """
++        raw = str(os.environ.get("SQM_ALLOC_RANDOM_MODE", "") or "").strip().lower()
++        if not raw:
++            try:
++                cfg = configparser.ConfigParser()
++                cfg.read(os.path.join(os.getcwd(), "settings.ini"), encoding="utf-8")
++                raw = str(cfg.get("outbound", "allocation_random_mode", fallback="")).strip().lower()
++            except Exception as e:
++                logger.debug(f"allocation_random_mode 설정 읽기 스킵: {e}")
++
++        if raw in ("seeded", "deterministic", "reproducible", "sale_ref_seed", "seed"):
++            return "seeded"
++        return "random"
++
++    def _get_allocation_strict_mode(self) -> bool:
++        """
++        Allocation 예약 Strict 모드 조회.
++        우선순위: ENV(SQM_ALLOCATION_STRICT_MODE) > settings.ini[outbound].allocation_strict_mode > 기본(True)
++        """
++        raw = str(os.environ.get("SQM_ALLOCATION_STRICT_MODE", "") or "").strip().lower()
++        if not raw:
++            try:
++                cfg = configparser.ConfigParser()
++                cfg.read(os.path.join(os.getcwd(), "settings.ini"), encoding="utf-8")
++                raw = str(cfg.get("outbound", "allocation_strict_mode", fallback="")).strip().lower()
++            except Exception as e:
++                logger.debug(f"allocation_strict_mode 설정 읽기 스킵: {e}")
++
++        if not raw:
++            return True
++        return raw in ("1", "true", "yes", "on", "strict")
++
++    def _get_allocation_reservation_mode(self, override_mode: str = "") -> str:
++        """
++        Allocation 예약 모드 조회.
++        우선순위: 인자 override > ENV(SQM_ALLOCATION_RESERVATION_MODE)
++               > settings.ini[outbound].allocation_reservation_mode > 기본(tonbag)
++
++        Returns:
++            'tonbag' | 'lot'
++        """
++        raw = str(override_mode or "").strip().lower()
++        if not raw:
++            raw = str(os.environ.get("SQM_ALLOCATION_RESERVATION_MODE", "") or "").strip().lower()
++        if not raw:
++            try:
++                cfg = configparser.ConfigParser()
++                cfg.read(os.path.join(os.getcwd(), "settings.ini"), encoding="utf-8")
++                raw = str(cfg.get("outbound", "allocation_reservation_mode", fallback="")).strip().lower()
++            except Exception as e:
++                logger.debug(f"allocation_reservation_mode 설정 읽기 스킵: {e}")
++        if raw in ("lot", "lot_only", "lot_mode"):
++            return "lot"
++        return "tonbag"
++
++    def _has_allocation_source_fingerprint_column(self) -> bool:
++        """allocation_plan.source_fingerprint 컬럼 존재 여부."""
++        try:
++            rows = self.db.fetchall("PRAGMA table_info(allocation_plan)")
++            cols = {str(r.get("name", "")).strip().lower() for r in (rows or [])}
++            return "source_fingerprint" in cols
++        except Exception as e:
++            logger.debug(f"source_fingerprint 컬럼 확인 스킵: {e}")
++            return False
++
++    def _compute_allocation_source_fingerprint(self, allocation_rows: list, source_file: str = "") -> str:
++        """
++        Allocation 입력 fingerprint 생성.
++        - 파일: 파일 내용 SHA1 우선, 실패 시 파일 메타+경로로 대체
++        - 붙여넣기: 행 데이터 정규화 문자열 SHA1
++        """
++        try:
++            sf = str(source_file or "").strip()
++            if sf and sf != "(붙여넣기)" and os.path.isfile(sf):
++                try:
++                    h = hashlib.sha1()
++                    with open(sf, "rb") as f:
++                        for chunk in iter(lambda: f.read(1024 * 1024), b""):
++                            h.update(chunk)
++                    return h.hexdigest()
++                except Exception as e:
++                    logger.debug(f"Allocation 파일 해시 계산 실패(메타 대체): {e}")
++                try:
++                    st = os.stat(sf)
++                    base = f"path={os.path.abspath(sf)}|size={st.st_size}|mtime={int(st.st_mtime)}"
++                    return hashlib.sha1(base.encode("utf-8", errors="ignore")).hexdigest()
++                except Exception as e:
++                    logger.debug(f"Allocation 파일 메타 해시 계산 실패: {e}")
++
++            # 붙여넣기 또는 파일 접근 불가 시: 행 기반 fingerprint
++            normalized_rows = []
++            for alloc in (allocation_rows or []):
++                lot_no = str(alloc.get("lot_no", "") if isinstance(alloc, dict) else getattr(alloc, "lot_no", "")).strip().upper()
++                qty_mt = float((alloc.get("qty_mt", 0) if isinstance(alloc, dict) else getattr(alloc, "qty_mt", 0)) or 0)
++                sold_to = str(alloc.get("sold_to", "") if isinstance(alloc, dict) else getattr(alloc, "sold_to", "")).strip().upper()
++                customer = str(alloc.get("customer", "") if isinstance(alloc, dict) else getattr(alloc, "customer", "")).strip().upper()
++                sale_ref = str(alloc.get("sale_ref", "") if isinstance(alloc, dict) else getattr(alloc, "sale_ref", "")).strip().upper()
++                outbound_date = str(
++                    alloc.get("outbound_date", "") if isinstance(alloc, dict) else getattr(alloc, "outbound_date", "")
++                ).strip()[:10]
++                normalized_rows.append(
++                    f"{lot_no}|{qty_mt:.6f}|{sold_to}|{customer}|{sale_ref}|{outbound_date}"
++                )
++            normalized_rows.sort()
++            base = "paste|" + "\n".join(normalized_rows)
++            return hashlib.sha1(base.encode("utf-8", errors="ignore")).hexdigest()
++        except Exception as e:
++            logger.debug(f"Allocation fingerprint 계산 실패: {e}")
++            return ""
++
++    @staticmethod
++    def _build_allocation_seed(
++        lot_no: str,
++        sale_ref: str,
++        qty_mt: float,
++        outbound_date,
++        source_file: str,
++    ) -> str:
++        """
++        같은 요청이면 같은 선택 결과가 나오도록 고정 시드 문자열 생성.
++        sale_ref 우선, 없으면 요청 필드 조합으로 생성.
++        """
++        sale_ref_norm = str(sale_ref or "").strip().upper()
++        date_norm = str(outbound_date or "").strip()[:10]
++        source_norm = str(source_file or "").strip()
++        base = (
++            f"sale_ref={sale_ref_norm}|lot={str(lot_no or '').strip().upper()}|"
++            f"qty_mt={float(qty_mt or 0):.6f}|date={date_norm}|src={source_norm}"
++        )
++        return hashlib.sha1(base.encode("utf-8", errors="ignore")).hexdigest()
++
+     """출고 처리 Mixin (v3.6.6: SQMDatabase API 기반)"""
+     
+     def process_outbound(self, allocation_data, source: str = 'AUTO', stop_at_picked: bool = False) -> Dict:
+@@ -437,7 +667,18 @@ class OutboundMixin(InventoryBaseMixin):
+     # v5.9.3: Allocation 기반 예약/실행/확정
+     # ═══════════════════════════════════════════════════════
+ 
+-    def reserve_from_allocation(self, allocation_rows: list, source_file: str = '') -> Dict:
++    def _allocation_risk_flags(self, qty_kg: float, available_kg: float) -> list[str]:
++        flags = []
++        if qty_kg >= self.ALLOCATION_APPROVAL_QTY_KG_THRESHOLD:
++            flags.append("LARGE_VOLUME")
++        if available_kg > 0 and qty_kg >= available_kg * self.ALLOCATION_APPROVAL_RATIO_THRESHOLD:
++            flags.append("OVER_50PCT")
++        return flags
++
++    def _allocation_requires_approval(self, qty_kg: float, available_kg: float) -> bool:
++        return len(self._allocation_risk_flags(qty_kg, available_kg)) > 0
++
++    def reserve_from_allocation(self, allocation_rows: list, source_file: str = '', reservation_mode: str = '') -> Dict:
+         """
+         Allocation 엑셀에서 파싱된 데이터로 톤백 예약 (AVAILABLE → RESERVED).
+         allocation_plan 테이블에 계획 기록 + 톤백 상태 변경.
+@@ -449,7 +690,16 @@ class OutboundMixin(InventoryBaseMixin):
+         Returns:
+             {'success': bool, 'reserved': int, 'errors': [], 'plan_ids': []}
+         """
+-        result = {'success': False, 'reserved': 0, 'errors': [], 'plan_ids': [], 'requested_rows': len(allocation_rows)}
++        result = {
++            'success': False,
++            'reserved': 0,
++            'pending_approval': 0,
++            'errors': [],
++            'error_details': [],
++            'plan_ids': [],
++            'requested_rows': len(allocation_rows),
++            'reservation_mode': 'tonbag',
++        }
+ 
+         def _alloc_val(alloc, key, default=None):
+             """AllocationRow(dataclass) 또는 dict 모두 지원"""
+@@ -457,36 +707,130 @@ class OutboundMixin(InventoryBaseMixin):
+                 return alloc.get(key, default)
+             return getattr(alloc, key, default)
+ 
+-        # 중복 Allocation 파일 감지 (basename 기준, UX 경고용)
+-        if source_file and source_file != '(붙여넣기)':
++        strict_mode = self._get_allocation_strict_mode()
++        allocation_random_mode = self._get_allocation_random_mode()
++        effective_mode = self._get_allocation_reservation_mode(reservation_mode)
++        result['reservation_mode'] = effective_mode
++        has_alloc_batch_table = self._table_exists("allocation_import_batch")
++        has_source_fp_col = self._has_allocation_source_fingerprint_column()
++        source_fingerprint = self._compute_allocation_source_fingerprint(allocation_rows, source_file)
++        alloc_plan_cols = set()
++        try:
++            rows = self.db.fetchall("PRAGMA table_info(allocation_plan)")
++            alloc_plan_cols = {str(r.get("name", "")).strip().lower() for r in (rows or [])}
++        except Exception as e:
++            logger.debug(f"allocation_plan 컬럼 조회 스킵: {e}")
++        has_source_col = "source" in alloc_plan_cols
++        has_import_batch_id_col = "import_batch_id" in alloc_plan_cols
++        has_line_no_col = "line_no" in alloc_plan_cols
++        has_gate_status_col = "gate_status" in alloc_plan_cols
++        has_fail_code_col = "fail_code" in alloc_plan_cols
++        has_fail_reason_col = "fail_reason" in alloc_plan_cols
++        has_validated_at_col = "validated_at" in alloc_plan_cols
++        has_workflow_status_col = "workflow_status" in alloc_plan_cols
++        has_risk_flags_col = "risk_flags" in alloc_plan_cols
++        has_approved_by_col = "approved_by" in alloc_plan_cols
++        has_approved_at_col = "approved_at" in alloc_plan_cols
++        has_rejected_reason_col = "rejected_reason" in alloc_plan_cols
++
++        def _build_error_detail(line_no: int, fail_code: str, reason: str, lot_no: str, sold_to: str, qty_mt):
++            result['error_details'].append(
++                {
++                    "line_no": line_no,
++                    "fail_code": fail_code,
++                    "reason": reason,
++                    "lot_no": lot_no,
++                    "sold_to": sold_to,
++                    "qty_mt": qty_mt,
++                }
++            )
++
++        def _insert_allocation_plan_row(payload: dict):
++            cols = []
++            vals = []
++            for k, v in payload.items():
++                if k in alloc_plan_cols:
++                    cols.append(k)
++                    vals.append(v)
++            if not cols:
++                raise ValueError("allocation_plan insert 컬럼 없음")
++            placeholders = ", ".join(["?"] * len(cols))
++            sql = f"INSERT INTO allocation_plan ({', '.join(cols)}) VALUES ({placeholders})"
++            self.db.execute(sql, tuple(vals))
++            row = self.db.fetchone("SELECT last_insert_rowid() AS rid")
++            rid = int(row.get("rid", 0) if isinstance(row, dict) else (row[0] if row else 0))
++            if rid:
++                result["plan_ids"].append(rid)
++            return rid
++
++        # 중복 Allocation 감지 (fingerprint 우선, 없으면 basename 폴백)
++        if source_fingerprint:
+             try:
+-                import os
+-                fname = os.path.basename(source_file)
+-                dup = self.db.fetchone(
+-                    """SELECT COUNT(*) AS cnt FROM allocation_plan
+-                       WHERE status = 'RESERVED' AND source_file LIKE ?""",
+-                    (f"%{fname}",)
+-                )
++                if has_source_fp_col:
++                    dup = self.db.fetchone(
++                        """SELECT COUNT(*) AS cnt FROM allocation_plan
++                           WHERE status = 'RESERVED' AND source_fingerprint = ?""",
++                        (source_fingerprint,)
++                    )
++                    fname = os.path.basename(source_file) if source_file and source_file != '(붙여넣기)' else '(붙여넣기)'
++                else:
++                    fname = os.path.basename(source_file) if source_file and source_file != '(붙여넣기)' else '(붙여넣기)'
++                    dup = self.db.fetchone(
++                        """SELECT COUNT(*) AS cnt FROM allocation_plan
++                           WHERE status = 'RESERVED' AND source_file LIKE ?""",
++                        (f"%{fname}",)
++                    )
+                 dup_cnt = dup.get('cnt', 0) if isinstance(dup, dict) else (dup[0] if dup else 0)
+                 if dup_cnt > 0:
+                     result['duplicate_file'] = True
+                     result['duplicate_count'] = int(dup_cnt)
+                     result['duplicate_file_name'] = fname
++                    result['duplicate_source_fingerprint'] = source_fingerprint
+             except Exception as e:
+                 logger.debug(f"중복 Allocation 파일 감지 실패: {e}")
+ 
++        import_batch_id = None
++        if has_alloc_batch_table:
++            try:
++                now_batch = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
++                self.db.execute(
++                    """INSERT INTO allocation_import_batch
++                       (source_file, total_lines, passed_lines, failed_lines, imported_at)
++                       VALUES (?, ?, 0, 0, ?)""",
++                    (source_file or '(붙여넣기)', len(allocation_rows or []), now_batch)
++                )
++                row = self.db.fetchone("SELECT last_insert_rowid() AS rid")
++                import_batch_id = int(row.get("rid", 0) if isinstance(row, dict) else (row[0] if row else 0))
++                result["import_batch_id"] = import_batch_id
++                try:
++                    self.db.commit()
++                except Exception:
++                    pass
++            except Exception as e:
++                logger.debug(f"allocation_import_batch 생성 스킵: {e}")
++
+         try:
+             with self.db.transaction("IMMEDIATE"):
+-                for alloc in allocation_rows:
++                strict_errors = []
++                plan_line_counter = 0
++
++                for line_no, alloc in enumerate(allocation_rows, start=1):
+                     lot_no = (normalize_lot(_alloc_val(alloc, 'lot_no')) or '').strip()
+                     customer = str(_alloc_val(alloc, 'sold_to') or _alloc_val(alloc, 'customer') or '').strip()
+                     sale_ref = str(_alloc_val(alloc, 'sale_ref') or '').strip()
+                     qty_mt = float(_alloc_val(alloc, 'qty_mt') or 0)
+                     outbound_date = _alloc_val(alloc, 'outbound_date')
+                     sublot_count = int(_alloc_val(alloc, 'sublot_count') or _alloc_val(alloc, 'tonbag_count') or 0)
++                    is_sample_req = bool(_alloc_val(alloc, 'is_sample', False))
++                    if not is_sample_req and qty_mt > 0:
++                        # allocation_dialog 기준: 10kg(0.01MT) 이하는 샘플 행
++                        is_sample_req = qty_mt <= 0.01 + 1e-9
+ 
+                     if not lot_no:
+-                        result['errors'].append("LOT 번호 누락")
++                        msg = "LOT 번호 누락"
++                        result['errors'].append(msg)
++                        strict_errors.append(msg)
++                        _build_error_detail(line_no, "INVALID_LOT", msg, lot_no, customer, qty_mt)
+                         continue
+ 
+                     # v6.12 Addon-G: DB에서 실제 톤백 단가 조회 (500/1000kg 동적 대응)
+@@ -494,12 +838,20 @@ class OutboundMixin(InventoryBaseMixin):
+                     _unit_w = get_tonbag_unit_weight(self.db, lot_no)
+                     weight_kg = qty_mt * 1000 if qty_mt > 0 else sublot_count * _unit_w
+ 
+-                    tonbags = self.db.fetchall(
+-                        """SELECT id, sub_lt, weight FROM inventory_tonbag
+-                           WHERE lot_no = ? AND status = ?
+-                           ORDER BY sub_lt DESC""",
+-                        (lot_no, STATUS_AVAILABLE)
+-                    )
++                    if is_sample_req:
++                        tonbags = self.db.fetchall(
++                            """SELECT id, sub_lt, weight FROM inventory_tonbag
++                               WHERE lot_no = ? AND status = ?
++                                 AND COALESCE(is_sample, 0) = 1""",
++                            (lot_no, STATUS_AVAILABLE)
++                        )
++                    else:
++                        tonbags = self.db.fetchall(
++                            """SELECT id, sub_lt, weight FROM inventory_tonbag
++                               WHERE lot_no = ? AND status = ?
++                                 AND COALESCE(is_sample, 0) = 0""",
++                            (lot_no, STATUS_AVAILABLE)
++                        )
+ 
+                     if not tonbags:
+                         # 원인 구분: DB에 LOT 없음 vs 톤백이 이미 예약/출고됨
+@@ -508,7 +860,10 @@ class OutboundMixin(InventoryBaseMixin):
+                             (lot_no,)
+                         )
+                         if not exists:
+-                            result['errors'].append(f"가용 톤백 없음: {lot_no} (LOT 미등록 → 입고 먼저 반영)")
++                            msg = f"가용 톤백 없음: {lot_no} (LOT 미등록 → 입고 먼저 반영)"
++                            result['errors'].append(msg)
++                            strict_errors.append(msg)
++                            _build_error_detail(line_no, "LOT_NOT_IN_DB", msg, lot_no, customer, qty_mt)
+                         else:
+                             status_rows = self.db.fetchall(
+                                 "SELECT status, COUNT(*) AS cnt FROM inventory_tonbag WHERE lot_no = ? GROUP BY status",
+@@ -526,57 +881,247 @@ class OutboundMixin(InventoryBaseMixin):
+                                 "WHERE lot_no = ? AND status = ? AND COALESCE(is_sample, 0) = 1",
+                                 (lot_no, STATUS_AVAILABLE)
+                             )
++                            avail_normal_row = self.db.fetchone(
++                                "SELECT COUNT(*) AS cnt FROM inventory_tonbag "
++                                "WHERE lot_no = ? AND status = ? AND COALESCE(is_sample, 0) = 0",
++                                (lot_no, STATUS_AVAILABLE)
++                            )
+                             avail_cnt = (avail_row.get('cnt') if isinstance(avail_row, dict) else avail_row[0]) if avail_row else 0
+                             avail_sample_cnt = (avail_sample_row.get('cnt') if isinstance(avail_sample_row, dict) else avail_sample_row[0]) if avail_sample_row else 0
++                            avail_normal_cnt = (avail_normal_row.get('cnt') if isinstance(avail_normal_row, dict) else avail_normal_row[0]) if avail_normal_row else 0
+                             if avail_cnt > 0:
+-                                extra_reason = f"판매가능 톤백 {avail_cnt}개 (샘플 {avail_sample_cnt}개 포함)"
++                                req_type = "샘플(1kg)" if is_sample_req else "일반(비샘플)"
++                                extra_reason = (
++                                    f"판매가능 톤백 {avail_cnt}개 "
++                                    f"(일반 {avail_normal_cnt}개 / 샘플 {avail_sample_cnt}개, 요청유형={req_type})"
++                                )
+                             else:
+                                 extra_reason = "판매가능 톤백 0개"
+-                            result['errors'].append(
++                            msg = (
+                                 f"가용 톤백 없음: {lot_no} (중복 배정 | {extra_reason} | 상태: {status_summary} | 조치: [예약 취소] 후 재시도)"
+                             )
++                            result['errors'].append(msg)
++                            strict_errors.append(msg)
++                            _build_error_detail(line_no, "NO_AVAILABLE_TONBAG", msg, lot_no, customer, qty_mt)
+                         continue
+ 
+-                    pick_count = sublot_count if sublot_count > 0 else max(1, int(weight_kg / _unit_w))
+-                    reserved_in_lot = 0
++                    if sublot_count > 0:
++                        pick_count = sublot_count
++                    else:
++                        pick_count = 1 if is_sample_req else max(1, math.ceil(weight_kg / _unit_w))
+                     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+-                    ob_date_str = str(outbound_date) if outbound_date else None
++                    try:
++                        ob_date_str = self._normalize_outbound_date(outbound_date)
++                    except ValueError as ve:
++                        msg = str(ve)
++                        result['errors'].append(msg)
++                        strict_errors.append(msg)
++                        _build_error_detail(line_no, "INVALID_OUTBOUND_DATE", msg, lot_no, customer, qty_mt)
++                        continue
+ 
+-                    for tb in tonbags[:pick_count]:
+-                        self.db.execute(
+-                            """UPDATE inventory_tonbag SET
+-                                status = ?, picked_to = ?, sale_ref = ?, updated_at = ?
+-                            WHERE id = ?""",
+-                            (STATUS_RESERVED, customer, sale_ref, now, tb['id'])
++                    if len(tonbags) < pick_count:
++                        msg = (
++                            f"가용 부족: {lot_no} 요청 {pick_count}개 / 가용 {len(tonbags)}개"
+                         )
++                        result['errors'].append(msg)
++                        strict_errors.append(msg)
++                        _build_error_detail(line_no, "QTY_EXCEEDS_AVAILABLE", msg, lot_no, customer, qty_mt)
++                        continue
+ 
+-                        self.db.execute(
+-                            """INSERT INTO allocation_plan
+-                            (lot_no, tonbag_id, sub_lt, customer, sale_ref,
+-                             qty_mt, outbound_date, status, source_file, created_at)
+-                            VALUES (?, ?, ?, ?, ?, ?, ?, 'RESERVED', ?, ?)""",
+-                            (lot_no, tb['id'], tb['sub_lt'], customer, sale_ref,
+-                             qty_mt, ob_date_str, source_file, now)
++                    reserved_in_lot = 0
++                    reserved_kg = 0.0
++                    seed_hash = ""
++                    selected_sub_lts = []
++                    available_kg = sum(float(tb.get('weight') or 0) for tb in tonbags)
++                    need_approval = self._allocation_requires_approval(weight_kg, available_kg)
++                    risk_flags = self._allocation_risk_flags(weight_kg, available_kg)
++
++                    # 대량/위험 건은 STAGED + PENDING_APPROVAL로 적재하고 즉시 RESERVED는 하지 않음
++                    if need_approval and has_workflow_status_col:
++                        qty_mt_each = (qty_mt / pick_count) if pick_count > 0 else qty_mt
++                        risk_txt = "|".join(risk_flags)
++                        for _ in range(pick_count):
++                            payload = {
++                                "lot_no": lot_no,
++                                "tonbag_id": None,
++                                "sub_lt": None,
++                                "customer": customer,
++                                "sale_ref": sale_ref,
++                                "qty_mt": qty_mt_each,
++                                "outbound_date": ob_date_str,
++                                "status": "STAGED",
++                                "source_file": source_file,
++                                "source_fingerprint": source_fingerprint if has_source_fp_col else "",
++                                "created_at": now,
++                            }
++                            if has_source_col:
++                                payload["source"] = "APPROVAL_QUEUE"
++                            if has_import_batch_id_col and import_batch_id:
++                                payload["import_batch_id"] = import_batch_id
++                            if has_line_no_col:
++                                plan_line_counter += 1
++                                payload["line_no"] = plan_line_counter
++                            if has_gate_status_col:
++                                payload["gate_status"] = "PASS"
++                            if has_fail_code_col:
++                                payload["fail_code"] = ""
++                            if has_fail_reason_col:
++                                payload["fail_reason"] = ""
++                            if has_validated_at_col:
++                                payload["validated_at"] = now
++                            if has_workflow_status_col:
++                                payload["workflow_status"] = "PENDING_APPROVAL"
++                            if has_risk_flags_col:
++                                payload["risk_flags"] = risk_txt
++                            if has_approved_by_col:
++                                payload["approved_by"] = ""
++                            if has_approved_at_col:
++                                payload["approved_at"] = None
++                            if has_rejected_reason_col:
++                                payload["rejected_reason"] = ""
++                            _insert_allocation_plan_row(payload)
++                            result['pending_approval'] += 1
++                        logger.info(
++                            f"[reserve-stage] {lot_no}: 승인대기 {pick_count}건 적재 "
++                            f"(qty_kg={weight_kg:.0f}, avail_kg={available_kg:.0f}, risk={risk_flags})"
+                         )
+-                        reserved_in_lot += 1
++                        continue
++
++                    if effective_mode == "lot":
++                        # LOT 단위 예약: 톤백 상태는 바꾸지 않고 allocation_plan에 미지정(tonbag_id NULL) 계획만 기록.
++                        qty_mt_each = (qty_mt / pick_count) if pick_count > 0 else qty_mt
++                        for _ in range(pick_count):
++                            payload = {
++                                "lot_no": lot_no,
++                                "tonbag_id": None,
++                                "sub_lt": None,
++                                "customer": customer,
++                                "sale_ref": sale_ref,
++                                "qty_mt": qty_mt_each,
++                                "outbound_date": ob_date_str,
++                                "status": "RESERVED",
++                                "source_file": source_file,
++                                "source_fingerprint": source_fingerprint if has_source_fp_col else "",
++                                "created_at": now,
++                            }
++                            if has_source_col:
++                                payload["source"] = "LOT"
++                            if has_import_batch_id_col and import_batch_id:
++                                payload["import_batch_id"] = import_batch_id
++                            if has_line_no_col:
++                                plan_line_counter += 1
++                                payload["line_no"] = plan_line_counter
++                            if has_gate_status_col:
++                                payload["gate_status"] = "PASS"
++                            if has_fail_code_col:
++                                payload["fail_code"] = ""
++                            if has_fail_reason_col:
++                                payload["fail_reason"] = ""
++                            if has_validated_at_col:
++                                payload["validated_at"] = now
++                            _insert_allocation_plan_row(payload)
++                            reserved_in_lot += 1
++                        reserved_kg = sum(float(tb.get('weight') or 0) for tb in tonbags[:pick_count])
++                    else:
++                        # 톤백 단위 예약: 기존 동작 유지
++                        pool = list(tonbags)
++                        if allocation_random_mode == "seeded":
++                            seed_hash = self._build_allocation_seed(
++                                lot_no=lot_no,
++                                sale_ref=sale_ref,
++                                qty_mt=qty_mt,
++                                outbound_date=ob_date_str,
++                                source_file=source_file,
++                            )
++                            rng = random.Random(seed_hash)
++                            rng.shuffle(pool)
++                        else:
++                            random.shuffle(pool)
++                        selected = pool[:pick_count]
++                        selected_sub_lts = [str(tb.get('sub_lt', '')) for tb in selected]
++
++                        for tb in selected:
++                            self.db.execute(
++                                """UPDATE inventory_tonbag SET
++                                    status = ?, picked_to = ?, sale_ref = ?, updated_at = ?
++                                WHERE id = ?""",
++                                (STATUS_RESERVED, customer, sale_ref, now, tb['id'])
++                            )
++                            payload = {
++                                "lot_no": lot_no,
++                                "tonbag_id": tb["id"],
++                                "sub_lt": tb["sub_lt"],
++                                "customer": customer,
++                                "sale_ref": sale_ref,
++                                "qty_mt": qty_mt,
++                                "outbound_date": ob_date_str,
++                                "status": "RESERVED",
++                                "source_file": source_file,
++                                "source_fingerprint": source_fingerprint if has_source_fp_col else "",
++                                "created_at": now,
++                            }
++                            if has_source_col:
++                                payload["source"] = "TONBAG"
++                            if has_import_batch_id_col and import_batch_id:
++                                payload["import_batch_id"] = import_batch_id
++                            if has_line_no_col:
++                                plan_line_counter += 1
++                                payload["line_no"] = plan_line_counter
++                            if has_gate_status_col:
++                                payload["gate_status"] = "PASS"
++                            if has_fail_code_col:
++                                payload["fail_code"] = ""
++                            if has_fail_reason_col:
++                                payload["fail_reason"] = ""
++                            if has_validated_at_col:
++                                payload["validated_at"] = now
++                            _insert_allocation_plan_row(payload)
++                            reserved_in_lot += 1
++                            reserved_kg += float(tb.get('weight') or 0)
+ 
+                     result['reserved'] += reserved_in_lot
+-                    if reserved_in_lot > 0:
++                    if reserved_in_lot > 0 and effective_mode != "lot":
+                         self._recalc_lot_status(lot_no)
+-                        # v6.12.1: stock_movement 'RESERVED' 이력
++                    if reserved_in_lot > 0:
+                         self.db.execute(
+                             "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) "
+                             "VALUES (?, 'RESERVED', ?, ?, ?)",
+-                            (lot_no, reserved_in_lot * _unit_w,
+-                             f"allocation, tonbags={reserved_in_lot}, customer={customer}", now))
+-                    logger.info(f"[reserve] {lot_no}: {reserved_in_lot}개 톤백 RESERVED → {customer}")
++                            (
++                                lot_no,
++                                reserved_kg,
++                                f"allocation(mode:{effective_mode}, rand:{allocation_random_mode}), tonbags={reserved_in_lot}, "
++                                f"sub_lt={','.join(selected_sub_lts) if selected_sub_lts else '-'}, "
++                                f"customer={customer}, seed={seed_hash[:8] if seed_hash else '-'}",
++                                now,
++                            ),
++                        )
++                    logger.info(
++                        f"[reserve-{effective_mode}] {lot_no}: {reserved_in_lot}개 RESERVED "
++                        f"(rand={allocation_random_mode}, seed={seed_hash[:8] if seed_hash else '-'}, "
++                        f"sample={is_sample_req}, sub_lt={selected_sub_lts}) -> {customer}"
++                    )
++
++                if strict_mode and strict_errors:
++                    raise ValueError(
++                        "[STRICT] Allocation 예약 중단: " + " | ".join(strict_errors[:10])
++                    )
+ 
+-            result['success'] = result['reserved'] > 0
++            result['success'] = (result['reserved'] > 0) or (result.get('pending_approval', 0) > 0)
+             if result['success']:
+-                result['message'] = f"예약 완료: {result['reserved']}개 톤백"
++                if effective_mode == "lot":
++                    result['message'] = f"예약 완료(LOT 단위): {result['reserved']}개 계획"
++                else:
++                    result['message'] = f"예약 완료: {result['reserved']}개 톤백"
++            if result.get('pending_approval', 0) > 0:
++                staged_msg = f"승인대기 적재: {result.get('pending_approval', 0)}건"
++                if result.get('message'):
++                    result['message'] += f" / {staged_msg}"
++                else:
++                    result['message'] = staged_msg
+ 
+         except (ValueError, TypeError, sqlite3.Error) as e:
+             logger.error(f"Allocation 예약 오류 (전체 롤백): {e}", exc_info=True)
++            result['reserved'] = 0
+             result['errors'].append(str(e))
+ 
+         # 모든 LOT이 이미 예약 상태인 경우 안내 메시지 추가
+@@ -589,8 +1134,152 @@ class OutboundMixin(InventoryBaseMixin):
+                     "• 기존 예약 진행: [출고 실행]"
+                 )
+ 
++        if has_alloc_batch_table and result.get("import_batch_id"):
++            try:
++                failed_lines = len(result.get("error_details", []))
++                passed_lines = max(0, len(allocation_rows or []) - failed_lines)
++                self.db.execute(
++                    "UPDATE allocation_import_batch SET passed_lines=?, failed_lines=? WHERE id=?",
++                    (passed_lines, failed_lines, result.get("import_batch_id"))
++                )
++                try:
++                    self.db.commit()
++                except Exception:
++                    pass
++            except Exception as e:
++                logger.debug(f"allocation_import_batch 집계 업데이트 스킵: {e}")
++
++        if result.get("errors"):
++            report_paths = self._save_allocation_fail_report(
++                allocation_rows,
++                result.get("errors", []),
++                source_file=source_file,
++                error_details=result.get("error_details", []),
++            )
++            if report_paths.get("csv") or report_paths.get("json"):
++                result["fail_report"] = report_paths
++                if has_alloc_batch_table and result.get("import_batch_id"):
++                    try:
++                        self.db.execute(
++                            "UPDATE allocation_import_batch SET report_csv_path=?, report_json_path=? WHERE id=?",
++                            (
++                                report_paths.get("csv", ""),
++                                report_paths.get("json", ""),
++                                result.get("import_batch_id"),
++                            ),
++                        )
++                        try:
++                            self.db.commit()
++                        except Exception:
++                            pass
++                    except Exception as e:
++                        logger.debug(f"allocation_import_batch 리포트 경로 업데이트 스킵: {e}")
++
+         return result
+ 
++    def apply_approved_allocation_reservations(self, limit: int = 0) -> Dict:
++        """
++        승인 완료(STAGED + APPROVED) 건을 실제 RESERVED로 반영.
++        """
++        result = {"success": False, "applied": 0, "errors": []}
++        try:
++            alloc_plan_cols = set()
++            rows = self.db.fetchall("PRAGMA table_info(allocation_plan)")
++            alloc_plan_cols = {str(r.get("name", "")).strip().lower() for r in (rows or [])}
++            if "workflow_status" not in alloc_plan_cols:
++                result["errors"].append("allocation_plan.workflow_status 컬럼이 없습니다.")
++                return result
++            has_risk_flags_col = "risk_flags" in alloc_plan_cols
++            has_source_col = "source" in alloc_plan_cols
++            has_approved_by_col = "approved_by" in alloc_plan_cols
++            has_approved_at_col = "approved_at" in alloc_plan_cols
++
++            q = (
++                "SELECT id, lot_no, customer, sale_ref, qty_mt, outbound_date, COALESCE(risk_flags, '') AS risk_flags "
++                "FROM allocation_plan "
++                "WHERE status='STAGED' AND workflow_status='APPROVED' "
++                "ORDER BY created_at ASC, id ASC"
++            )
++            if limit and int(limit) > 0:
++                q += f" LIMIT {int(limit)}"
++            staged_rows = self.db.fetchall(q) or []
++            if not staged_rows:
++                result["errors"].append("반영할 승인 완료(STAGED/APPROVED) 건이 없습니다.")
++                return result
++
++            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
++            actor = os.environ.get("USERNAME", "") or os.environ.get("USER", "") or "system"
++            with self.db.transaction("IMMEDIATE"):
++                for r in staged_rows:
++                    plan_id = int(r.get("id", 0))
++                    lot_no = str(r.get("lot_no", "")).strip()
++                    customer = str(r.get("customer", "")).strip()
++                    sale_ref = str(r.get("sale_ref", "")).strip()
++                    qty_mt = float(r.get("qty_mt", 0) or 0)
++                    is_sample_req = qty_mt <= 0.01 + 1e-9
++                    if is_sample_req:
++                        tb = self.db.fetchone(
++                            """SELECT id, sub_lt, weight FROM inventory_tonbag
++                               WHERE lot_no=? AND status=? AND COALESCE(is_sample, 0)=1
++                               ORDER BY id ASC LIMIT 1""",
++                            (lot_no, STATUS_AVAILABLE),
++                        )
++                    else:
++                        tb = self.db.fetchone(
++                            """SELECT id, sub_lt, weight FROM inventory_tonbag
++                               WHERE lot_no=? AND status=? AND COALESCE(is_sample, 0)=0
++                               ORDER BY id ASC LIMIT 1""",
++                            (lot_no, STATUS_AVAILABLE),
++                        )
++                    if not tb:
++                        result["errors"].append(f"미반영: {lot_no} 판매가능 톤백 없음 (plan_id={plan_id})")
++                        continue
++
++                    self.db.execute(
++                        """UPDATE inventory_tonbag
++                           SET status=?, picked_to=?, sale_ref=?, updated_at=?
++                           WHERE id=?""",
++                        (STATUS_RESERVED, customer, sale_ref, now, tb["id"]),
++                    )
++                    self.db.execute(
++                        """UPDATE allocation_plan
++                           SET status='RESERVED', tonbag_id=?, sub_lt=?, workflow_status='APPLIED'
++                           WHERE id=? AND status='STAGED' AND workflow_status='APPROVED'""",
++                        (tb["id"], tb.get("sub_lt"), plan_id),
++                    )
++                    result["applied"] += 1
++                    try:
++                        details = {
++                            "plan_id": plan_id,
++                            "workflow": "APPROVED_TO_RESERVED",
++                            "risk_flags": r.get("risk_flags", "") if has_risk_flags_col else "",
++                        }
++                        self.db.execute(
++                            """INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at, source, actor, details_json)
++                               VALUES (?, 'RESERVED', ?, ?, ?, ?, ?, ?)""",
++                            (
++                                lot_no,
++                                float(tb.get("weight") or 0),
++                                f"approved allocation apply, customer={customer}",
++                                now,
++                                "APPROVAL_APPLY" if has_source_col else None,
++                                actor if has_approved_by_col else None,
++                                json.dumps(details, ensure_ascii=False) if has_approved_at_col else None,
++                            ),
++                        )
++                    except Exception as e:
++                        logger.debug(f"stock_movement 기록 스킵: {e}")
++                    self._recalc_lot_status(lot_no)
++
++            result["success"] = result["applied"] > 0
++            if not result["success"] and not result["errors"]:
++                result["errors"].append("반영된 건이 없습니다.")
++            return result
++        except (sqlite3.Error, ValueError, TypeError) as e:
++            logger.error(f"승인분 예약 반영 오류: {e}", exc_info=True)
++            result["errors"].append(str(e))
++            return result
++
+     def execute_reserved(self, lot_no: str = None, target_date: str = None) -> Dict:
+         """
+         RESERVED 톤백을 PICKED로 전환 (출고 실행).
+@@ -604,7 +1293,8 @@ class OutboundMixin(InventoryBaseMixin):
+         query = """SELECT ap.id, ap.lot_no, ap.tonbag_id, ap.sub_lt,
+                           ap.customer, ap.sale_ref, ap.outbound_date
+                    FROM allocation_plan ap
+-                   WHERE ap.status = 'RESERVED'"""
++                   WHERE ap.status = 'RESERVED'
++                     AND ap.tonbag_id IS NOT NULL"""
+         params = []
+ 
+         if lot_no:
+@@ -617,7 +1307,20 @@ class OutboundMixin(InventoryBaseMixin):
+         try:
+             plans = self.db.fetchall(query, tuple(params))
+             if not plans:
+-                result['message'] = "실행할 예약 건 없음"
++                lot_mode_cnt = 0
++                try:
++                    row = self.db.fetchone(
++                        "SELECT COUNT(*) AS cnt FROM allocation_plan WHERE status='RESERVED' AND tonbag_id IS NULL"
++                    )
++                    lot_mode_cnt = int(row.get('cnt', 0) if isinstance(row, dict) else (row[0] if row else 0))
++                except Exception:
++                    lot_mode_cnt = 0
++                if lot_mode_cnt > 0:
++                    result['message'] = (
++                        f"실행할 톤백 예약 건 없음 (LOT 단위 예약 {lot_mode_cnt}건 대기 중: 바코드 스캔으로 확정하세요)"
++                    )
++                else:
++                    result['message'] = "실행할 예약 건 없음"
+                 return result
+ 
+             with self.db.transaction("IMMEDIATE"):
+@@ -788,6 +1491,8 @@ class OutboundMixin(InventoryBaseMixin):
+         """
+         result = {
+             'passed': False,
++            'requires_approval': False,
++            'fail_code': '',
+             'picking_lots': set(),
+             'reserved_lots': set(),
+             'only_in_picking': set(),
+@@ -937,9 +1642,11 @@ class OutboundMixin(InventoryBaseMixin):
+             # 최종 판정
+             if not only_in_picking:
+                 if qty_mismatches:
+-                    lines.append('⚠️ Gate-1 조건부 통과 — LOT 매칭 OK, 수량 불일치 있음')
+-                    lines.append('   수량 차이를 확인 후 진행하세요')
+-                    result['passed'] = True  # LOT 매칭은 통과, 수량 경고만
++                    lines.append('⚠️ Gate-1 승인 필요 — LOT 매칭 OK, 수량 불일치 있음')
++                    lines.append('   관리자 승인 후 진행할 수 있습니다')
++                    result['passed'] = False
++                    result['requires_approval'] = True
++                    result['fail_code'] = 'QTY_MISMATCH'
+                 else:
+                     lines.append('✅ Gate-1 완전 통과 — LOT 매칭 + 수량 검증 모두 OK')
+                     result['passed'] = True
+@@ -978,20 +1685,45 @@ class OutboundMixin(InventoryBaseMixin):
+         picking_result,
+         picking_no: str = '',
+         sales_order: str = '',
++        allow_qty_mismatch: bool = False,
++        approval_reason: str = '',
+     ) -> dict:
+         """Gate-1 통과 후 피킹리스트 기반 RESERVED → PICKED 전환."""
+         result = {'success': False, 'executed': 0, 'gate1': {}, 'errors': []}
+         gate1 = self.gate1_verify_picking(picking_result, picking_no)
+         result['gate1'] = gate1
+-        if not gate1['passed']:
+-            result['errors'].append(gate1['error_report'])
+-            logger.warning('[execute_from_picking] Gate-1 실패 → 중단')
++        if gate1.get('requires_approval') and not allow_qty_mismatch:
++            result['errors'].append('Gate-1 승인 필요: 수량 불일치(QTY_MISMATCH)')
++            logger.warning('[execute_from_picking] 승인 필요 상태 → 중단')
+             return result
++        if not gate1['passed']:
++            if gate1.get('requires_approval') and allow_qty_mismatch:
++                logger.info('[execute_from_picking] 수량 불일치 승인 후 계속 진행')
++            else:
++                result['errors'].append(gate1['error_report'])
++                logger.warning('[execute_from_picking] Gate-1 실패 → 중단')
++                return result
+ 
+         try:
+             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+             meta = picking_result.meta
+             with self.db.transaction('IMMEDIATE'):
++                if gate1.get('requires_approval') and allow_qty_mismatch:
++                    try:
++                        details = {
++                            'picking_no': picking_no,
++                            'sales_order': sales_order,
++                            'fail_code': gate1.get('fail_code', 'QTY_MISMATCH'),
++                            'qty_mismatches': list(gate1.get('qty_mismatches', [])),
++                            'approval_reason': approval_reason or '',
++                        }
++                        self.db.execute(
++                            """INSERT INTO audit_log(event_type, payload, created_at)
++                               VALUES (?, ?, ?)""",
++                            ('OUTBOUND_QTY_MISMATCH_APPROVED', json.dumps(details, ensure_ascii=False), now)
++                        )
++                    except sqlite3.Error as e:
++                        logger.debug(f'Suppressed: {e}')
+                 self.db.execute(
+                     """INSERT INTO picking_list_order
+                        (sales_order, customer_ref, picking_date, status,
+@@ -1223,23 +1955,27 @@ class OutboundMixin(InventoryBaseMixin):
+         return result
+ 
+     # ═══════════════════════════════════════════════════════
+-    # v6.12 Stage4: 빠른 출고 (Quick Outbound)
++    # v6.2.4 Stage4: 빠른 출고 (Quick Outbound) — 성능 개선판
+     # ═══════════════════════════════════════════════════════
+ 
+     def quick_outbound(self, lot_no: str, count: int, customer: str,
+                         reason: str = '', operator: str = '') -> Dict:
+         """
+         빠른 출고: Allocation 없이 소량 즉시 출고.
+-        최대 QUICK_OUTBOUND_MAX_TONBAGS개, PICKED에서 멈춤.
+-        allocation_plan source='QUICK' 자동 기록.
++        최대 QUICK_OUTBOUND_MAX_TONBAGS개, AVAILABLE → PICKED 직접 전환.
+         """
++        import uuid
+         from engine_modules.constants import QUICK_OUTBOUND_MAX_TONBAGS
+-        result = {'success': False, 'picked_count': 0, 'total_weight_kg': 0, 'errors': []}
++        result = {
++            'success': False, 'picked_count': 0,
++            'total_weight_kg': 0, 'errors': []
++        }
+ 
+         if count > QUICK_OUTBOUND_MAX_TONBAGS:
+             result['errors'].append(f"빠른 출고 최대 {QUICK_OUTBOUND_MAX_TONBAGS}개 (요청: {count}개)")
+             return result
+-        if not customer.strip():
++        customer = (customer or '').strip()
++        if not customer:
+             result['errors'].append("고객명 필수")
+             return result
+         lot_no = str(lot_no).strip()
+@@ -1259,29 +1995,39 @@ class OutboundMixin(InventoryBaseMixin):
+                     raise ValueError(f"가용 톤백 부족: {len(tonbags)}개 (요청: {count}개)")
+ 
+                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+-                quick_ref = f"QUICK-{now.replace(' ','_').replace(':','')}"
++                quick_ref = f"QUICK-{now.replace(' ', '_').replace(':', '')}-{uuid.uuid4().hex[:6]}"
+                 total_weight = 0.0
+ 
+                 for tb in tonbags:
+                     tb_w = tb['weight'] or 0
+-                    # AVAILABLE → RESERVED
+-                    self.db.execute(
+-                        "UPDATE inventory_tonbag SET status=?, picked_to=?, sale_ref=?, updated_at=? WHERE id=?",
+-                        (STATUS_RESERVED, customer, quick_ref, now, tb['id']))
+-                    # allocation_plan QUICK
++                    # AVAILABLE → PICKED 직접
+                     self.db.execute(
+-                        """INSERT INTO allocation_plan
+-                        (lot_no, tonbag_id, sub_lt, customer, sale_ref, qty_mt, status, source_file, created_at)
+-                        VALUES (?,?,?,?,?,?,'RESERVED',?,?)""",
+-                        (lot_no, tb['id'], tb['sub_lt'], customer, quick_ref, tb_w/1000.0, f"QUICK:{reason}:{operator}", now))
+-                    # RESERVED → PICKED
+-                    self.db.execute(
+-                        "UPDATE inventory_tonbag SET status=?, picked_date=?, outbound_date=?, updated_at=? WHERE id=?",
+-                        (STATUS_PICKED, now, now, now, tb['id']))
+-                    # allocation_plan EXECUTED
+-                    self.db.execute(
+-                        "UPDATE allocation_plan SET status='EXECUTED', executed_at=? WHERE tonbag_id=? AND sale_ref=? AND status='RESERVED'",
+-                        (now, tb['id'], quick_ref))
++                        """UPDATE inventory_tonbag
++                           SET status = ?, picked_to = ?, sale_ref = ?,
++                               picked_date = ?, outbound_date = ?, updated_at = ?
++                           WHERE id = ?""",
++                        (STATUS_PICKED, customer, quick_ref, now, now, now, tb['id']))
++
++                    # allocation_plan EXECUTED 직접 적재
++                    try:
++                        self.db.execute(
++                            """INSERT INTO allocation_plan
++                               (lot_no, tonbag_id, sub_lt, customer, sale_ref,
++                                qty_mt, status, source, source_file, executed_at, created_at)
++                               VALUES (?, ?, ?, ?, ?, ?, 'EXECUTED', 'QUICK', ?, ?, ?)""",
++                            (lot_no, tb['id'], tb['sub_lt'], customer, quick_ref,
++                             tb_w / 1000.0, f"reason={reason}, op={operator}", now, now))
++                    except (sqlite3.OperationalError, OSError) as e:
++                        if "source" in str(e).lower():
++                            self.db.execute(
++                                """INSERT INTO allocation_plan
++                                   (lot_no, tonbag_id, sub_lt, customer, sale_ref,
++                                    qty_mt, status, source_file, executed_at, created_at)
++                                   VALUES (?, ?, ?, ?, ?, ?, 'EXECUTED', ?, ?, ?)""",
++                                (lot_no, tb['id'], tb['sub_lt'], customer, quick_ref,
++                                 tb_w / 1000.0, f"QUICK:reason={reason}:op={operator}", now, now))
++                        else:
++                            raise
+                     # picking_table
+                     try:
+                         self.db.execute(
+@@ -1302,21 +2048,35 @@ class OutboundMixin(InventoryBaseMixin):
+                 # stock_movement
+                 self.db.execute(
+                     "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) VALUES (?,'QUICK_OUTBOUND',?,?,?)",
+-                    (lot_no, total_weight, f"customer={customer}, reason={reason}, op={operator}, count={count}", now))
++                    (
++                        lot_no,
++                        total_weight,
++                        f"customer={customer}, reason={reason}, op={operator}, count={count}, ref={quick_ref}",
++                        now,
++                    ))
+ 
+                 self._recalc_lot_status(lot_no)
+                 if hasattr(self, 'verify_lot_integrity'):
+                     integrity = self.verify_lot_integrity(lot_no)
+                     if not integrity.get('valid', True):
+-                        raise ValueError(f"빠른 출고 정합성 실패 ({lot_no}): {integrity.get('errors',[])}")
++                        err_list = integrity.get('errors', [])
++                        err_msg = "; ".join(str(e) for e in err_list[:3])
++                        raise ValueError(f"빠른 출고 정합성 실패 ({lot_no}): {err_msg}")
+ 
+                 result['success'] = True
+                 result['total_weight_kg'] = total_weight
++                result['quick_ref'] = quick_ref
+                 result['message'] = f"빠른 출고: {result['picked_count']}개 → PICKED ({total_weight:,.0f}kg)"
+                 logger.info(result['message'])
+ 
+         except (ValueError, TypeError) as e:
+             result['errors'].append(str(e))
+-            logger.error(f"빠른 출고 오류: {e}", exc_info=True)
++            logger.error(f"빠른 출고 검증 오류: {e}", exc_info=True)
++        except (sqlite3.OperationalError, sqlite3.IntegrityError) as e:
++            result['errors'].append(f"DB 오류: {e}")
++            logger.error(f"빠른 출고 DB 오류: {e}", exc_info=True)
++        except Exception as e:
++            result['errors'].append(f"예기치 않은 오류: {e}")
++            logger.error(f"빠른 출고 미예상 오류: {e}", exc_info=True)
+         return result
+ 

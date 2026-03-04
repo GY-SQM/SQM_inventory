@@ -1,0 +1,99 @@
+diff --git a/features/ai/gemini_parser.py b/features/ai/gemini_parser.py
+index 0bed629..8cbd7be 100644
+--- a/features/ai/gemini_parser.py
++++ b/features/ai/gemini_parser.py
+@@ -155,6 +155,20 @@ def parse_euro_weight(value) -> float:
+         return 0.0
+ 
+ 
++def _make_lot_fingerprint(lot_data: dict) -> str:
++    """
++    LOT 행 중복 제거용 fingerprint 생성.
++    키: lot_no + container_no(공백/하이픈 제거) + net_weight_kg
++    """
++    if not isinstance(lot_data, dict):
++        return ""
++    lot_no = str(lot_data.get('lot_no', '') or '').strip().upper()
++    container_no = str(lot_data.get('container_no', '') or '').strip().upper()
++    container_no = re.sub(r'[\s-]+', '', container_no)
++    net_weight_kg = parse_euro_weight(lot_data.get('net_weight_kg', 0))
++    return f"{lot_no}|{container_no}|{net_weight_kg:.3f}"
++
++
+ # =============================================================================
+ # 데이터 클래스
+ # =============================================================================
+@@ -847,10 +861,19 @@ class GeminiDocumentParser:
+             result.total_gross_weight_kg = parse_euro_weight(data.get('total_gross_weight_kg', 0))
+             
+             seen_lot_nos = set()
++            seen_fingerprints = set()
+             def append_lot(lot_data: dict, from_continuation_page: bool = False) -> None:
+                 lot_no = str(lot_data.get('lot_no', '')).strip()
+-                if from_continuation_page and lot_no and lot_no in seen_lot_nos:
++                fp = _make_lot_fingerprint(lot_data)
++                if fp and fp in seen_fingerprints:
++                    page_label = "연속페이지" if from_continuation_page else "1페이지"
++                    logger.warning(
++                        f"[GeminiParser] PL 행 중복 감지({page_label}) -> 스킵: "
++                        f"lot_no={lot_no or '-'}, fp={fp}"
++                    )
+                     return
++                if fp:
++                    seen_fingerprints.add(fp)
+                 if lot_no:
+                     seen_lot_nos.add(lot_no)
+                 lot = LOTItem(
+@@ -866,7 +889,7 @@ class GeminiDocumentParser:
+                 )
+                 result.lots.append(lot)
+             
+-            # 1페이지: 중복 제거 없이 전부 추가 (1페이지에 20개 있으면 20개 모두 반영)
++            # 1페이지/연속페이지 공통: fingerprint 기반 중복 제거
+             for lot_data in data.get('lots', []):
+                 append_lot(lot_data, from_continuation_page=False)
+             
+@@ -888,7 +911,7 @@ JSON만 출력하세요."""
+                     for lot_data in page_lots:
+                         if not isinstance(lot_data, dict):
+                             continue
+-                        # list_no 재부여 (이어지는 번호), 2페이지 이후는 lot_no 중복 시 스킵
++                        # list_no 재부여 (이어지는 번호), 중복은 append_lot 내부에서 fingerprint 스킵
+                         lot_data = dict(lot_data)
+                         lot_data["list_no"] = len(result.lots) + 1
+                         append_lot(lot_data, from_continuation_page=True)
+diff --git a/tests/test_packing_dedup.py b/tests/test_packing_dedup.py
+new file mode 100644
+index 0000000..9002970
+--- /dev/null
++++ b/tests/test_packing_dedup.py
+@@ -0,0 +1,29 @@
++# -*- coding: utf-8 -*-
++from features.ai.gemini_parser import _make_lot_fingerprint
++
++
++def test_fingerprint_normalizes_container_format():
++    a = {"lot_no": "1125081447", "container_no": "FFAU-535500-6", "net_weight_kg": "5.001"}
++    b = {"lot_no": "1125081447", "container_no": "ffau5355006", "net_weight_kg": "5001"}
++    assert _make_lot_fingerprint(a) == _make_lot_fingerprint(b)
++
++
++def test_first_page_duplicate_row_detected_by_fingerprint():
++    seen = set()
++    row = {"lot_no": "1125081447", "container_no": "FFAU5355006", "net_weight_kg": "5001"}
++    fp = _make_lot_fingerprint(row)
++    assert fp not in seen
++    seen.add(fp)
++    assert fp in seen
++
++
++def test_same_lot_different_weight_not_duplicate():
++    a = {"lot_no": "1125081447", "container_no": "FFAU5355006", "net_weight_kg": "5001"}
++    b = {"lot_no": "1125081447", "container_no": "FFAU5355006", "net_weight_kg": "5131.25"}
++    assert _make_lot_fingerprint(a) != _make_lot_fingerprint(b)
++
++
++def test_empty_lot_number_still_deduplicated_by_container_weight():
++    a = {"lot_no": "", "container_no": "MSCU1234567", "net_weight_kg": "5001"}
++    b = {"lot_no": "", "container_no": "MSCU-1234567", "net_weight_kg": "5.001"}
++    assert _make_lot_fingerprint(a) == _make_lot_fingerprint(b)

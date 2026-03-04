@@ -1,0 +1,174 @@
+diff --git a/features/ai/gemini_parser.py b/features/ai/gemini_parser.py
+index 0bed629..2c4fd45 100644
+--- a/features/ai/gemini_parser.py
++++ b/features/ai/gemini_parser.py
+@@ -155,6 +155,20 @@ def parse_euro_weight(value) -> float:
+         return 0.0
+ 
+ 
++def _make_lot_fingerprint(lot_data: dict) -> str:
++    """
++    LOT 행 중복 제거용 fingerprint 생성.
++    키: lot_no + container_no(공백/하이픈 제거) + net_weight_kg
++    """
++    if not isinstance(lot_data, dict):
++        return ""
++    lot_no = str(lot_data.get('lot_no', '') or '').strip().upper()
++    container_no = str(lot_data.get('container_no', '') or '').strip().upper()
++    container_no = re.sub(r'[\s-]+', '', container_no)
++    net_weight_kg = parse_euro_weight(lot_data.get('net_weight_kg', 0))
++    return f"{lot_no}|{container_no}|{net_weight_kg:.3f}"
++
++
+ # =============================================================================
+ # 데이터 클래스
+ # =============================================================================
+@@ -208,6 +222,10 @@ class InvoiceResult:
+     origin: str = ""
+     destination: str = ""
+     vessel: str = ""
++    net_weight_kg: float = 0.0
++    gross_weight_kg: float = 0.0
++    package_count: int = 0
++    package_type: str = ""
+     lot_numbers: List[str] = field(default_factory=list)
+     raw_response: str = ""
+     error_message: str = ""
+@@ -847,10 +865,19 @@ class GeminiDocumentParser:
+             result.total_gross_weight_kg = parse_euro_weight(data.get('total_gross_weight_kg', 0))
+             
+             seen_lot_nos = set()
++            seen_fingerprints = set()
+             def append_lot(lot_data: dict, from_continuation_page: bool = False) -> None:
+                 lot_no = str(lot_data.get('lot_no', '')).strip()
+-                if from_continuation_page and lot_no and lot_no in seen_lot_nos:
++                fp = _make_lot_fingerprint(lot_data)
++                if fp and fp in seen_fingerprints:
++                    page_label = "연속페이지" if from_continuation_page else "1페이지"
++                    logger.warning(
++                        f"[GeminiParser] PL 행 중복 감지({page_label}) -> 스킵: "
++                        f"lot_no={lot_no or '-'}, fp={fp}"
++                    )
+                     return
++                if fp:
++                    seen_fingerprints.add(fp)
+                 if lot_no:
+                     seen_lot_nos.add(lot_no)
+                 lot = LOTItem(
+@@ -866,7 +893,7 @@ class GeminiDocumentParser:
+                 )
+                 result.lots.append(lot)
+             
+-            # 1페이지: 중복 제거 없이 전부 추가 (1페이지에 20개 있으면 20개 모두 반영)
++            # 1페이지/연속페이지 공통: fingerprint 기반 중복 제거
+             for lot_data in data.get('lots', []):
+                 append_lot(lot_data, from_continuation_page=False)
+             
+@@ -888,7 +915,7 @@ JSON만 출력하세요."""
+                     for lot_data in page_lots:
+                         if not isinstance(lot_data, dict):
+                             continue
+-                        # list_no 재부여 (이어지는 번호), 2페이지 이후는 lot_no 중복 시 스킵
++                        # list_no 재부여 (이어지는 번호), 중복은 append_lot 내부에서 fingerprint 스킵
+                         lot_data = dict(lot_data)
+                         lot_data["list_no"] = len(result.lots) + 1
+                         append_lot(lot_data, from_continuation_page=True)
+@@ -958,6 +985,10 @@ JSON만 출력하세요."""
+     "origin": "출발지 (예: PUERTO ANGAMOS-CHILE)",
+     "destination": "도착지 (예: GWANGYANG-SOUTH KOREA)",
+     "vessel": "선박명 (예: CHARLOTTE MAERSK 535W)",
++    "net_weight_kg": 100020,
++    "gross_weight_kg": 102625,
++    "package_count": 200,
++    "package_type": "MAXISACO MIC9000, PLASTIC JAR",
+     "lot_numbers": ["1125072729", "1125072730", "1125081215", ...]
+ }
+ ```
+@@ -983,10 +1014,49 @@ JSON만 출력하세요."""
+                 result.origin = data.get('origin', '')
+                 result.destination = data.get('destination', '')
+                 result.vessel = data.get('vessel', '')
+-                result.lot_numbers = data.get('lot_numbers', [])
++                result.net_weight_kg = parse_euro_weight(data.get('net_weight_kg', 0))
++                result.gross_weight_kg = parse_euro_weight(data.get('gross_weight_kg', 0))
++                try:
++                    result.package_count = int(float(data.get('package_count', 0) or 0))
++                except (ValueError, TypeError):
++                    result.package_count = 0
++                result.package_type = str(data.get('package_type', '') or '')
++                result.lot_numbers = [str(x).strip() for x in (data.get('lot_numbers', []) or []) if str(x).strip()]
+                 result.success = bool(result.sap_no)
++
++            # Invoice 추가 페이지 LOT 추출 (PL과 동일한 다중 페이지 보강)
++            if result.success and len(images) > 1:
++                prompt_continuation = """오직 JSON만 출력하세요. 설명·마크다운·코드블럭(```) 금지.
++이 Invoice의 이어지는 페이지입니다. 이 페이지에 있는 LOT 번호만 추출하세요.
++LOT 형식은 "LOT번호/중량T" 이며 LOT 번호(숫자)만 반환하세요.
++{"lot_numbers": ["1125072729", "1125072730"]}
++JSON만 출력하세요."""
++                seen_lots = set(result.lot_numbers)
++                for page_idx in range(1, len(images)):
++                    try:
++                        page_text = self._call_gemini(prompt_continuation, images[page_idx])
++                        page_data = self._extract_json(page_text)
++                        if not page_data:
++                            continue
++                        page_lots = page_data.get("lot_numbers")
++                        if not isinstance(page_lots, list):
++                            continue
++                        added = 0
++                        for raw_lot in page_lots:
++                            lot_no = str(raw_lot).strip()
++                            if not lot_no:
++                                continue
++                            if lot_no in seen_lots:
++                                continue
++                            seen_lots.add(lot_no)
++                            result.lot_numbers.append(lot_no)
++                            added += 1
++                        if added:
++                            logger.info(f"[GeminiParser] Invoice 추가 페이지 {page_idx + 1}: LOT {added}개 추가")
++                    except (ValueError, TypeError, KeyError) as page_err:
++                        logger.warning(f"[GeminiParser] Invoice 페이지 {page_idx + 1} LOT 추출 실패: {page_err}")
+             
+-            logger.info(f"[GeminiParser] Invoice 완료: SAP={result.sap_no}")
++            logger.info(f"[GeminiParser] Invoice 완료: SAP={result.sap_no}, LOT={len(result.lot_numbers)}개")
+             
+         except (ValueError, TypeError, KeyError) as e:
+             result.error_message = str(e)
+diff --git a/parsers/document_parser_modular/invoice_mixin.py b/parsers/document_parser_modular/invoice_mixin.py
+index 26c9eab..479adde 100644
+--- a/parsers/document_parser_modular/invoice_mixin.py
++++ b/parsers/document_parser_modular/invoice_mixin.py
+@@ -103,13 +103,30 @@ class InvoiceMixin:
+         result.source_file = pdf_path
+         result.parsed_at = datetime.now()
+ 
+-        # Gemini 결과 매핑(최소 필드)
++        # Gemini 결과 매핑
+         # InvoiceData.customer는 읽기전용 프로퍼티(customer_name 반환) → customer_name에 설정
+         result.sap_no = getattr(gemini_result, 'sap_no', '') or ''
+         result.invoice_no = getattr(gemini_result, 'invoice_no', '') or ''
+         result.salar_invoice_no = result.invoice_no
+         result.bl_no = getattr(gemini_result, 'bl_no', '') or ''
+         result.customer_name = getattr(gemini_result, 'customer', '') or ''
++        result.product_code = getattr(gemini_result, 'product_code', '') or ''
++        result.product_name = getattr(gemini_result, 'product', '') or ''
++        result.quantity_mt = safe_float(getattr(gemini_result, 'quantity_mt', 0))
++        result.unit_price = safe_float(getattr(gemini_result, 'unit_price', 0))
++        result.total_amount = safe_float(getattr(gemini_result, 'total_amount', 0))
++        result.currency = (getattr(gemini_result, 'currency', 'USD') or 'USD')
++        result.incoterm = getattr(gemini_result, 'incoterm', '') or ''
++        result.origin = getattr(gemini_result, 'origin', '') or ''
++        result.destination = getattr(gemini_result, 'destination', '') or ''
++        result.vessel = getattr(gemini_result, 'vessel', '') or ''
++        result.net_weight_kg = safe_float(getattr(gemini_result, 'net_weight_kg', 0))
++        result.gross_weight_kg = safe_float(getattr(gemini_result, 'gross_weight_kg', 0))
++        result.package_type = getattr(gemini_result, 'package_type', '') or ''
++        try:
++            result.package_count = int(safe_float(getattr(gemini_result, 'package_count', 0)))
++        except (ValueError, TypeError):
++            result.package_count = 0
+         if hasattr(result, 'supplier'):
+             result.supplier = getattr(gemini_result, 'supplier', '') or ''
+ 

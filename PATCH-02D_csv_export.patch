@@ -1,0 +1,91 @@
+--- a/gui_app_modular/dialogs/onestop_outbound.py
++++ b/gui_app_modular/dialogs/onestop_outbound.py
+========================================================
+ PATCH-02D: 감사 로그 CSV 내보내기 — PATCH-02C 적용 후 적용
+ 작성일: 2026-03-02
+========================================================
+
+ ★ 변경 요약 (1건)
+ ────────────────────────────────────────────
+ Q1. 감사 로그 뷰어에 "📥 CSV 내보내기" 버튼 추가
+     → 현재 조회 결과를 audit_export_YYYYMMDD_HHMMSS.csv 로 저장
+ ────────────────────────────────────────────
+
+
+====================================================================
+ [Q1] _show_audit_log_viewer 내부
+      PATCH-02C의 하단 버튼 영역에 CSV 내보내기 추가
+====================================================================
+
+@ PATCH-02C 삽입분 (하단 버튼):
++        bot = ttk.Frame(dlg)
++        bot.pack(fill=X, padx=8, pady=5)
++        ttk.Button(bot, text="닫기", command=dlg.destroy).pack(side=RIGHT, padx=4)
+
+@ 교체:
++        bot = ttk.Frame(dlg)
++        bot.pack(fill=X, padx=8, pady=5)
++        ttk.Button(bot, text="📥 CSV 내보내기",
++                   command=lambda: self._export_audit_csv(tree, status_var)
++                   ).pack(side=LEFT, padx=4)
++        ttk.Button(bot, text="닫기", command=dlg.destroy).pack(side=RIGHT, padx=4)
+
+
+====================================================================
+ [Q1] CSV 내보내기 메서드 — _show_audit_log_viewer 뒤에 삽입
+====================================================================
+
+@ PATCH-02C 삽입분 _show_audit_log_viewer 메서드 끝 뒤에 삽입:
+
++    def _export_audit_csv(self, tree, status_var):
++        """현재 조회 결과를 CSV 파일로 내보내기"""
++        items = tree.get_children()
++        if not items:
++            CustomMessageBox.showwarning(self.win, "경고", "내보낼 데이터가 없습니다.\n먼저 조회를 실행해주세요.")
++            return
++
++        # 기본 파일명: audit_export_YYYYMMDD_HHMMSS.csv
++        default_name = f"audit_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
++        fpath = filedialog.asksaveasfilename(
++            parent=self.win,
++            title="감사 로그 CSV 저장",
++            initialfile=default_name,
++            defaultextension=".csv",
++            filetypes=[("CSV 파일", "*.csv"), ("모든 파일", "*.*")],
++        )
++        if not fpath:
++            return
++
++        try:
++            with open(fpath, 'w', encoding='utf-8-sig', newline='') as f:
++                writer = csv.writer(f)
++                # 헤더
++                columns = ('ID', '이벤트유형', '배치ID', '톤백ID', '메모', '시간')
++                writer.writerow(columns)
++                # 데이터
++                for item in items:
++                    vals = tree.item(item, 'values')
++                    writer.writerow(vals)
++
++            count = len(items)
++            status_var.set(f"✅ CSV 내보내기 완료: {count}건 → {os.path.basename(fpath)}")
++            logger.info(f"[S1] audit CSV 내보내기: {count}건 → {fpath}")
++
++            # audit에 내보내기 이벤트 기록
++            self._write_audit(
++                event_type='AUDIT_EXPORT',
++                event_data={
++                    'export_file': os.path.basename(fpath),
++                    'record_count': count,
++                },
++                user_note=f"감사 로그 CSV 내보내기: {count}건"
++            )
++
++        except Exception as e:
++            logger.error(f"[S1] CSV 내보내기 실패: {e}")
++            CustomMessageBox.showerror(self.win, "오류", f"CSV 내보내기 실패:\n{e}")
+
+
+====================================================================
+ END OF PATCH-02D
+====================================================================

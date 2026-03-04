@@ -1,0 +1,86 @@
+--- a/gui_app_modular/utils/theme_refresh.py
++++ b/gui_app_modular/utils/theme_refresh.py
+========================================================
+ PATCH-THEME-01: theme_refresh.py ttk.Label 처리 추가
+ 근본 원인 #1 해결: ttk.Label hardcoded foreground 누락
+ 작성일: 2026-03-02
+========================================================
+
+
+====================================================================
+ [수정 1] _refresh_native_widget 뒤에 ttk.Label 전용 함수 추가
+====================================================================
+
+@ 기존 함수 _refresh_native_widget 끝 (약 190행) 뒤에 삽입:
+
++def _refresh_ttk_label(widget: ttk.Label, colors: dict) -> None:
++    """★ v6.3.1 신규: ttk.Label의 hardcoded foreground를 테마 안전색으로 교체.
++
++    기존 theme_refresh는 ttk.Label을 명시적으로 제외했음 (213행).
++    그러나 foreground='red' 등 하드코딩 시 다크모드에서 안 보임.
++    """
++    is_dark = colors['is_dark']
++    theme_fg = colors['fg']
++    theme_bg = colors['bg']
++
++    # 안전 색상 매핑 (어두운색 → 밝은색)
++    DARK_SAFE = {
++        '#dc2626': '#f87171', 'red': '#f87171', 'darkred': '#f87171',
++        '#d97706': '#fbbf24', 'orange': '#fbbf24',
++        '#059669': '#34d399', 'green': '#34d399', 'darkgreen': '#34d399',
++        '#6366f1': '#818cf8', 'purple': '#a78bfa',
++        '#ea580c': '#fb923c',
++        '#2563eb': '#60a5fa', 'blue': '#60a5fa', 'darkblue': '#93c5fd',
++        'gray': '#9ca3af', 'grey': '#9ca3af',
++        '#000000': '#e5e7eb', 'black': '#e5e7eb',
++    }
++    # 밝은색 → 어두운색 (라이트 모드에서 흰색 글씨 방지)
++    LIGHT_SAFE = {
++        '#f87171': '#dc2626', '#fbbf24': '#d97706', '#34d399': '#059669',
++        '#818cf8': '#6366f1', '#fb923c': '#ea580c', '#60a5fa': '#2563eb',
++        '#9ca3af': '#6b7280', '#e5e7eb': '#1f2937',
++        'white': '#1f2937', '#ffffff': '#1f2937',
++    }
++
++    try:
++        current_fg = str(widget.cget('foreground')).strip().lower()
++        if not current_fg:
++            return
++
++        # 테마 기본색이면 무시 (정상)
++        if current_fg == theme_fg.strip().lower():
++            return
++
++        if is_dark:
++            safe = DARK_SAFE.get(current_fg)
++            if safe:
++                widget.configure(foreground=safe)
++        else:
++            safe = LIGHT_SAFE.get(current_fg)
++            if safe:
++                widget.configure(foreground=safe)
++
++    except (tk.TclError, RuntimeError, ValueError) as e:
++        logger.debug(f"[_refresh_ttk_label] Suppressed: {e}")
+
+
+====================================================================
+ [수정 2] refresh_all_widgets_for_theme 내부
+          ttk.Label 처리 분기 추가 (213행 부근)
+====================================================================
+
+@ 기존 213행:
+            elif isinstance(w, tk.Label) and not isinstance(w, ttk.Label):
+                _refresh_native_widget(w, colors)
+                stats['native_widgets'] += 1
+
+@ 뒤에 추가:
++            # ★ v6.3.1: ttk.Label hardcoded foreground 수정
++            elif isinstance(w, ttk.Label):
++                _refresh_ttk_label(w, colors)
++                stats['native_widgets'] += 1
+
+
+====================================================================
+ END OF PATCH-THEME-01
+====================================================================

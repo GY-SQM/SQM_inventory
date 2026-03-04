@@ -1,0 +1,82 @@
+# ═══════════════════════════════════════════════════════════
+# SQM v6.2.7 — GitHub Actions CI
+# ═══════════════════════════════════════════════════════════
+# push/PR 시 자동 테스트 + 커버리지 측정
+# 커버리지 뱃지: README에 삽입 가능
+
+name: SQM Tests
+
+on:
+  push:
+    branches: [ main, develop, 'feature/*' ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+
+    - name: 🐍 Python ${{ matrix.python-version }} 설정
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: 📦 의존성 설치
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest coverage
+        # 선택적 의존성 (없어도 테스트 통과)
+        pip install openpyxl reportlab pillow pandas || true
+
+    - name: 🧪 테스트 실행 + 커버리지
+      run: |
+        python -m coverage run --source=engine_modules,parsers,core \
+          -m pytest tests/ -v --tb=short \
+          --junitxml=test-results.xml
+
+    - name: 📊 커버리지 리포트
+      if: always()
+      run: |
+        echo "## 커버리지 요약" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        python -m coverage report >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        
+        # 핵심 모듈 상세
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 핵심 모듈 커버리지" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        python -m coverage report \
+          --include="engine_modules/inventory_modular/outbound_mixin.py,engine_modules/inventory_modular/inbound_mixin.py,engine_modules/inventory_modular/return_mixin.py,parsers/allocation_parser.py" \
+          >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+    - name: 📋 테스트 결과 업로드
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-py${{ matrix.python-version }}
+        path: |
+          test-results.xml
+        retention-days: 30
+
+    - name: ✅ 커버리지 게이트 (70% 최소)
+      run: |
+        COVERAGE=$(python -m coverage report --format=total 2>/dev/null || \
+                   python -m coverage report | tail -1 | awk '{print $NF}' | tr -d '%')
+        echo "총 커버리지: ${COVERAGE}%"
+        # 70% 미만이면 실패
+        python -c "
+        cov = float('${COVERAGE}'.replace('%',''))
+        if cov < 70:
+            print(f'❌ 커버리지 {cov}% < 70% 최소 기준')
+            exit(1)
+        print(f'✅ 커버리지 {cov}% ≥ 70% 통과')
+        "
