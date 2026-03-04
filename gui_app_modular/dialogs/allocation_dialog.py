@@ -479,6 +479,7 @@ class AllocationDialog:
             self.btn_reserve.config(state='disabled')
             if hasattr(self, 'btn_reset_lot'):
                 self.btn_reset_lot.config(state='disabled')
+            CustomMessageBox.showwarning(self.dialog, "파싱 결과 없음", "파일을 읽었으나 유효한 데이터가 0건입니다.\n양식을 확인해주세요.")
         if getattr(self, '_alloc_total_footer', None):
             self._alloc_total_footer.update_totals()
 
@@ -516,8 +517,15 @@ class AllocationDialog:
 
     def _on_reserve(self):
         self._sync_parsed_rows_from_tree()
+        tree_count = len(self.tree.get_children(""))
         if not self.parsed_rows:
-            CustomMessageBox.showwarning(self.dialog, "경고", "예약할 행이 없습니다.")
+            if tree_count == 0:
+                CustomMessageBox.showwarning(self.dialog, "데이터 없음", "화면에 표시된 데이터가 없습니다.\n파일을 다시 선택하거나 파싱해주세요.")
+            else:
+                CustomMessageBox.showwarning(
+                    self.dialog, "데이터 오류", 
+                    f"화면에 {tree_count}개 행이 있지만 유효한 데이터(LOT번호 등)가 없습니다.\n데이터를 확인해주세요."
+                )
             return
 
         # 업로드 원본 내부 중복 LOT는 정합성 보호를 위해 전량 제외
@@ -532,7 +540,8 @@ class AllocationDialog:
             CustomMessageBox.showwarning(
                 self.dialog,
                 "중복 LOT 자동 제외",
-                "업로드 데이터 내 중복 LOT가 감지되어 해당 화물은 배정에서 제외했습니다.\n\n"
+                "업로드한 엑셀 파일 내에 동일한 LOT 번호가 중복되어 있습니다.\n"
+                "데이터 정합성을 위해 해당 화물은 배정에서 제외했습니다.\n\n"
                 f"제외 LOT: {len(excluded_lots)}건\n"
                 f"제외 행: {excluded_rows}행\n\n"
                 f"{preview}{more}"
@@ -543,14 +552,20 @@ class AllocationDialog:
 
         dup = self._check_duplicate_allocation_file()
         if dup.get('is_duplicate'):
+            last_info = ""
+            if dup.get('last_date'):
+                last_info += f"\n- 기존 예약일: {dup.get('last_date')}"
+            if dup.get('last_file_name'):
+                last_info += f"\n- 기존 파일명: {dup.get('last_file_name')}"
+
             dup_msg = (
                 f"[중복 파일 감지]\n"
-                f"파일: {dup.get('file_name', '')}\n"
-                f"예약 건수: {dup.get('count', 0)}\n\n"
-                "선택하세요:\n"
-                "• 기존 예약 진행 → [출고 실행]\n"
-                "• 다시 예약 → [예약 취소] 후 재시도\n\n"
-                "이번 예약을 계속 진행할까요?"
+                f"현재 파일: {dup.get('file_name', '')}\n"
+                f"기존 예약 건수: {dup.get('count', 0)}건{last_info}\n\n"
+                "이미 예약된 내역이 있습니다.\n"
+                "• 중복 예약을 피하려면 → [아니오] 선택 후 [예약 취소] 또는 [출고 실행] 확인\n"
+                "• 추가로 예약하려면 → [예] 선택\n\n"
+                "그래도 계속 진행하시겠습니까?"
             )
             if not CustomMessageBox.askyesno(self.dialog, "중복 Allocation", dup_msg):
                 return
@@ -741,17 +756,30 @@ class AllocationDialog:
 
             if source_fp and has_fp_col:
                 row = self.engine.db.fetchone(
-                    "SELECT COUNT(*) AS cnt FROM allocation_plan "
+                    "SELECT COUNT(*) AS cnt, MAX(created_at) as last_date, MAX(source_file) as last_file "
+                    "FROM allocation_plan "
                     "WHERE status = 'RESERVED' AND source_fingerprint = ?",
                     (source_fp,)
                 )
-                cnt = row.get('cnt', 0) if isinstance(row, dict) else (row[0] if row else 0)
+                if isinstance(row, dict):
+                    cnt = row.get('cnt', 0)
+                    last_date = row.get('last_date', '')
+                    last_file = row.get('last_file', '')
+                else:
+                    cnt = row[0] if row else 0
+                    last_date = row[1] if row and len(row) > 1 else ''
+                    last_file = row[2] if row and len(row) > 2 else ''
+
                 _name = os.path.basename(self.source_file) if self.source_file and self.source_file != '(붙여넣기)' else '(붙여넣기)'
+                last_file_name = os.path.basename(last_file) if last_file else ''
                 return {
                     'is_duplicate': cnt > 0,
                     'count': int(cnt),
                     'file_name': _name,
                     'fingerprint': source_fp,
+                    'last_date': last_date,
+                    'last_file': last_file,
+                    'last_file_name': last_file_name
                 }
 
             if not self.source_file or self.source_file == '(붙여넣기)':
@@ -759,11 +787,29 @@ class AllocationDialog:
 
             fname = os.path.basename(self.source_file)
             row = self.engine.db.fetchone(
-                "SELECT COUNT(*) AS cnt FROM allocation_plan WHERE status = 'RESERVED' AND source_file LIKE ?",
+                "SELECT COUNT(*) AS cnt, MAX(created_at) as last_date, MAX(source_file) as last_file "
+                "FROM allocation_plan WHERE status = 'RESERVED' AND source_file LIKE ?",
                 (f"%{fname}",)
             )
-            cnt = row.get('cnt', 0) if isinstance(row, dict) else (row[0] if row else 0)
-            return {'is_duplicate': cnt > 0, 'count': int(cnt), 'file_name': fname, 'fingerprint': source_fp}
+            if isinstance(row, dict):
+                cnt = row.get('cnt', 0)
+                last_date = row.get('last_date', '')
+                last_file = row.get('last_file', '')
+            else:
+                cnt = row[0] if row else 0
+                last_date = row[1] if row and len(row) > 1 else ''
+                last_file = row[2] if row and len(row) > 2 else ''
+            
+            last_file_name = os.path.basename(last_file) if last_file else ''
+            return {
+                'is_duplicate': cnt > 0, 
+                'count': int(cnt), 
+                'file_name': fname, 
+                'fingerprint': source_fp,
+                'last_date': last_date,
+                'last_file': last_file,
+                'last_file_name': last_file_name
+            }
         except Exception as e:
             logger.debug(f"중복 Allocation 확인 실패: {e}")
             return {'is_duplicate': False}
