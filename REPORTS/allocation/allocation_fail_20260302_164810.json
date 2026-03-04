@@ -1,0 +1,19 @@
+{
+  "source_file": "",
+  "saved_at": "2026-03-02 16:48:10",
+  "error_count": 2,
+  "errors": [
+    "가용 톤백 없음: LOT-GHOST-999 (LOT 미등록 → 입고 먼저 반영)",
+    "[STRICT] Allocation 예약 중단: 가용 톤백 없음: LOT-GHOST-999 (LOT 미등록 → 입고 먼저 반영)"
+  ],
+  "error_details": [
+    {
+      "line_no": 1,
+      "fail_code": "LOT_NOT_IN_DB",
+      "reason": "가용 톤백 없음: LOT-GHOST-999 (LOT 미등록 → 입고 먼저 반영)",
+      "lot_no": "LOT-GHOST-999",
+      "sold_to": "CATL",
+      "qty_mt": 1.5
+    }
+  ]
+}

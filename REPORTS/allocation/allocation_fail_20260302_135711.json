@@ -1,0 +1,19 @@
+{
+  "source_file": "",
+  "saved_at": "2026-03-02 13:57:11",
+  "error_count": 2,
+  "errors": [
+    "INVALID_OUTBOUND_DATE: 'not-a-date' (허용 형식: YYYY-MM-DD)",
+    "[STRICT] Allocation 예약 중단: INVALID_OUTBOUND_DATE: 'not-a-date' (허용 형식: YYYY-MM-DD)"
+  ],
+  "error_details": [
+    {
+      "line_no": 1,
+      "fail_code": "INVALID_OUTBOUND_DATE",
+      "reason": "INVALID_OUTBOUND_DATE: 'not-a-date' (허용 형식: YYYY-MM-DD)",
+      "lot_no": "COV00135",
+      "sold_to": "CATL",
+      "qty_mt": 1.5
+    }
+  ]
+}

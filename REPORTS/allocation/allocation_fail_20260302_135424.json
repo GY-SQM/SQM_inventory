@@ -1,0 +1,19 @@
+{
+  "source_file": "",
+  "saved_at": "2026-03-02 13:54:24",
+  "error_count": 2,
+  "errors": [
+    "가용 부족: COV00120 요청 10개 / 가용 3개",
+    "[STRICT] Allocation 예약 중단: 가용 부족: COV00120 요청 10개 / 가용 3개"
+  ],
+  "error_details": [
+    {
+      "line_no": 1,
+      "fail_code": "QTY_EXCEEDS_AVAILABLE",
+      "reason": "가용 부족: COV00120 요청 10개 / 가용 3개",
+      "lot_no": "COV00120",
+      "sold_to": "CATL",
+      "qty_mt": 1.5
+    }
+  ]
+}

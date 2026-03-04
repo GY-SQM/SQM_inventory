@@ -1,0 +1,2 @@
+﻿line_no,FAIL_CODE,lot_no,sold_to,qty_mt,reason
+1,INVALID_OUTBOUND_DATE,COV00135,CATL,1.5,INVALID_OUTBOUND_DATE: 'not-a-date' (허용 형식: YYYY-MM-DD)

@@ -1,0 +1,132 @@
+
+SQM v7.0.0 UI 개편 작업서
+
+6단계 : 통합 마무리 및 기존 탭 정리
+
+v7.0.0-final
+
+단계
+수정 파일 수
+예상 작업 시간
+위험도
+6/6 단계
+4개
+3~4시간 + 테스트 1시간
+높음
+
+
+1. 6단계 목표
+기존 톤백리스트 탭을 제거하고, 툴바 버튼을 4개 탭 기준으로 교체합니다. lot_detail_dialog를 4개 탭 상태 모두 지원하도록 수정하고 전체 통합 테스트를 완료합니다.
+
+2. 대상 파일
+파일명
+유형
+현재 크기
+작업량
+toolbar_mixin.py
+수정
+1,136줄
+60줄 수정
+tonbag_tab.py
+비활성 처리
+1,057줄
+독립 탭 제거 (코드 유지)
+lot_detail_dialog.py
+수정
+303줄
+20줄 수정
+main_app.py
+수정
+837줄
+20줄 수정
+
+3. 상세 작업 목록
+번호
+작업 항목
+상세 내용
+수정 위치
+작업량
+6-1
+toolbar_mixin.py — 탭 버튼 4개 교체
+_build_tab_buttons() 함수 수정 (L461)
+기존: 재고리스트 / 톤백리스트
+변경: AVAILABLE / ALLOCATION / PICKED / SOLD
+각 버튼 색상 구분:
+  AVAILABLE:  파란색
+  ALLOCATION: 주황색
+  PICKED:     초록색
+  SOLD:       회색
+L461~528
+40줄 수정
+6-2
+toolbar_mixin.py — _switch_tab() 확장
+'available' / 'allocation' / 'picked' / 'sold' 키 추가
+_highlight_active_tab() 4개 탭 기준 수정
+L528~567
+20줄 수정
+6-3
+tonbag_tab 독립 탭 제거
+notebook에서 tab_tonbag 제거
+⚠️ 코드 삭제 안 함 — 주석 처리만
+각 탭에서 필요한 함수는 그대로 호출 유지
+main_app.py L228~233
+3줄 수정
+6-4
+lot_detail_dialog.py — 4탭 상태 지원
+팝업 호출 시 status 파라미터 수신
+AVAILABLE → inventory_tonbag 표시
+ALLOCATION → allocation_plan 표시
+PICKED     → picking_table 표시
+SOLD       → sold_table 표시
+L23~288
+20줄 수정
+6-5
+main_app.py tab_tonbag 참조 정리
+tab_tonbag 참조 전수 확인 (grep)
+필요한 참조 유지 / 불필요한 참조 제거
+onestop_inbound.py의 tab_inventory 참조도 점검
+전수 검색
+10줄 수정
+6-6
+전체 통합 테스트 7개 항목
+① 6개 탭 전환 정상
+② 각 탭 새로고침 정상
+③ 입고 → AVAILABLE 탭 반영
+④ Allocation 시트 업로드 → ALLOCATION 탭 반영
+⑤ Picking List 업로드 → PICKED 탭 반영
+⑥ Sales Order 업로드 → SOLD 탭 반영
+⑦ 툴바 버튼 4개 탭 전환 연동
+테스트
+항목 7개
+
+4. 작업량 합계
+총 수정/추가 줄수
+예상 작업 시간
+위험도
+toolbar_mixin 60줄 + lot_detail_dialog 20줄 + main_app 20줄 수정
+3~4시간 + 테스트 1시간
+높음 — 기존 톤백탭 제거 및 툴바 전면 변경. 반드시 전체 백업 후 진행
+
+5. 완료 기준 (테스트 항목)
+• 툴바 버튼 4개 탭 전환 정상
+• lot_detail_dialog 4개 상태별 팝업 정상
+• 기존 통계/로그 탭 영향 없음
+• 4단계 업무 흐름 연속 테스트 (입고→배정→피킹→판매)
+• 앱 재시작 후 정상 작동
+
+6. 예상 결과 화면
+【 6단계 완료 — 최종 완성 화면 】
+
+┌────────────────────────────────────────────────────────┐
+│ 툴바: [📦 AVAILABLE] [📋 ALLOCATION] [🚛 PICKED]      │
+│       [✅ SOLD] │ [🔍 검색] [📥 입고▼] [📤 출고▼]   │
+├────────────────────────────────────────────────────────┤
+│ (선택 탭 기준 LOT 리스트 표시)                         │
+│ [📋 전체 톤백 펼치기]  ← 각 탭 공통 버튼              │
+│ LOT 리스트 → 더블클릭 → 팝업 (lot_detail_dialog)      │
+└────────────────────────────────────────────────────────┘
+
+7. 루비 의견
+• 6단계는 1~5단계가 모두 완료된 후에 시작하세요. 절대 중간에 하면 안 됩니다.
+• tonbag_tab.py 코드는 삭제하지 말고 주석 처리만 하세요. 나중에 참고할 수 있습니다.
+• 이 단계가 끝나면 v7.0.0이 완성됩니다. 위험도가 높으므로 반드시 전체 백업 후 진행하세요.

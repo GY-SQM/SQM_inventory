@@ -1,0 +1,2 @@
+﻿line_no,FAIL_CODE,lot_no,sold_to,qty_mt,reason
+1,QTY_EXCEEDS_AVAILABLE,COV00120,CATL,1.5,가용 부족: COV00120 요청 10개 / 가용 3개

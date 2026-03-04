@@ -1,0 +1,18 @@
+{
+  "source_file": "",
+  "saved_at": "2026-03-02 12:52:31",
+  "error_count": 1,
+  "errors": [
+    "err"
+  ],
+  "error_details": [
+    {
+      "line_no": 1,
+      "fail_code": "NOT_FOUND",
+      "lot_no": "X1",
+      "sold_to": "C1",
+      "qty_mt": 0.5,
+      "reason": "test"
+    }
+  ]
+}

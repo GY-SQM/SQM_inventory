@@ -1,0 +1,2 @@
+﻿line_no,FAIL_CODE,lot_no,sold_to,qty_mt,reason
+1,LOT_NOT_IN_DB,LOT-GHOST-999,CATL,1.5,가용 톤백 없음: LOT-GHOST-999 (LOT 미등록 → 입고 먼저 반영)
