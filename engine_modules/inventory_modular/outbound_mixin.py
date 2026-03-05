@@ -1,3 +1,5 @@
+ALLOCATION_FORCE_APPROVAL_ALL = True
+
 # -*- coding: utf-8 -*-
 """
 SQM 재고관리 시스템 - 출고 처리 Mixin
@@ -1055,7 +1057,7 @@ class OutboundMixin(InventoryBaseMixin):
                     seed_hash = ""
                     selected_sub_lts = []
                     available_kg = sum(float(tb.get('weight') or 0) for tb in tonbags)
-                    need_approval = self._allocation_requires_approval(weight_kg, available_kg)
+                    need_approval = True or self._allocation_requires_approval(weight_kg, available_kg)
                     risk_flags = self._allocation_risk_flags(weight_kg, available_kg)
 
                     # 대량/위험 건은 STAGED + PENDING_APPROVAL로 적재하고 즉시 RESERVED는 하지 않음

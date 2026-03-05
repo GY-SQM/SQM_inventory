@@ -1,10 +1,10 @@
 {
   "width": 3440,
   "height": 1061,
-  "x": 0,
-  "y": 0,
+  "x": -349,
+  "y": 214,
   "dialogs": {
-    "allocation_dialog": "1200x765+369+229",
-    "allocation_status_win": "720x681+508+243"
+    "allocation_dialog": "1200x765+2261+73",
+    "allocation_status_win": "720x681+731+199"
   }
 }

@@ -403,3 +403,9 @@ class AllocationApprovalDialog:
             logger.error(f"승인 이력 조회 오류: {e}", exc_info=True)
             CustomMessageBox.showerror(win, "오류", str(e))
 
+
+try:
+    if hasattr(self.engine, "apply_approved_allocation_reservations"):
+        self.engine.apply_approved_allocation_reservations(plan_ids=ids)
+except Exception as e:
+    print("Apply approved allocation failed:", e)
