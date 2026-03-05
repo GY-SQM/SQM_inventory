@@ -1,0 +1,888 @@
+# -*- coding: utf-8 -*-
+"""
+SQM 재고관리 시스템 - 통합 PDF 파서 (v2.5.4)
+Packing List, Invoice, B/L, D/O 문서 자동 파싱
+
+v2.5.4 개선:
+- 파일명 기반 문서 유형 감지 우선
+- 로깅 추가
+
+Author: Ruby
+Version: 2.5.4
+"""
+
+import re
+import logging
+from datetime import datetime, date
+from typing import Optional, List, Dict, Any, Tuple
+from pathlib import Path
+from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
+
+try:
+    import fitz  # PyMuPDF
+    HAS_PYMUPDF = True
+except ImportError:
+    HAS_PYMUPDF = False
+
+
+# =============================================================================
+# 데이터 클래스 정의
+# =============================================================================
+
+@dataclass
+class PackingListData:
+    """Packing List 파싱 결과"""
+    folio: str = ""
+    product: str = ""
+    product_code: str = ""
+    packing: str = ""
+    vessel: str = ""
+    customer: str = ""
+    destination: str = ""
+    lots: List[Dict] = field(default_factory=list)
+    total_net_weight: float = 0.0
+    total_gross_weight: float = 0.0
+    total_lots: int = 0
+    source_file: str = ""
+    parsed_at: datetime = None
+    sap_no: str = ""              # v2.9.1: Invoice에서 추출한 SAP NO
+    bl_no: str = ""               # v2.9.6: D/O에서 추출한 BL NO
+    salar_invoice_no: str = ""    # v2.9.7: Invoice에서 추출한 Salar Invoice No
+    arrival_date: date = None     # v2.9.7: D/O에서 추출한 입항일
+    ship_date: date = None        # v2.9.7: Invoice에서 추출한 선적일
+
+
+@dataclass
+class InvoiceData:
+    """Invoice 파싱 결과"""
+    invoice_no: str = ""
+    invoice_date: date = None
+    customer: str = ""
+    customer_code: str = ""
+    product: str = ""
+    product_code: str = ""
+    quantity_mt: float = 0.0
+    unit_price: float = 0.0
+    total_amount: float = 0.0
+    currency: str = "USD"
+    incoterm: str = ""
+    origin: str = ""
+    destination: str = ""
+    vessel: str = ""
+    bl_no: str = ""
+    sap_no: str = ""
+    lots: List[str] = field(default_factory=list)
+    source_file: str = ""
+    parsed_at: datetime = None
+
+
+@dataclass
+class BLData:
+    """B/L 파싱 결과"""
+    bl_no: str = ""
+    booking_no: str = ""
+    shipper: str = ""
+    consignee: str = ""
+    notify_party: str = ""
+    vessel: str = ""
+    voyage: str = ""
+    port_of_loading: str = ""
+    port_of_discharge: str = ""
+    ship_date: date = None
+    issue_date: date = None
+    containers: List[Dict] = field(default_factory=list)
+    total_weight: float = 0.0
+    total_packages: int = 0
+    freight_charges: List[Dict] = field(default_factory=list)
+    source_file: str = ""
+    parsed_at: datetime = None
+
+
+@dataclass
+class DOData:
+    """D/O 파싱 결과"""
+    do_no: str = ""
+    bl_no: str = ""
+    shipper: str = ""
+    consignee: str = ""
+    vessel: str = ""
+    voyage: str = ""
+    port_of_loading: str = ""
+    port_of_discharge: str = ""
+    arrival_date: date = None
+    issue_date: date = None
+    containers: List[Dict] = field(default_factory=list)
+    free_time_info: List[Dict] = field(default_factory=list)
+    source_file: str = ""
+    parsed_at: datetime = None
+
+
+# =============================================================================
+# PDF 파서 클래스
+# =============================================================================
+
+class PDFParser:
+    """통합 PDF 파서"""
+
+    def __init__(self):
+        if not HAS_PYMUPDF:
+            raise ImportError("PyMuPDF가 설치되지 않았습니다: pip install pymupdf")
+        self.errors = []
+
+    def detect_document_type(self, pdf_path: str, use_gemini_fallback: bool = True) -> str:
+        """
+        PDF 문서 유형 자동 감지
+        
+        ★★★ v2.7.1: 3단계 통합 파이프라인 ★★★
+        1단계: 파일명 패턴 (가장 빠르고 안정)
+        2단계: PDF 텍스트 키워드 분석
+        3단계: Gemini AI 판정 (옵션, fallback)
+
+        파일명 패턴 예시:
+        - 2200033057_FA.pdf → INVOICE (FA = Factura)
+        - 2200033057_PackingList1.pdf → PACKING_LIST
+        - 2200033057_BL.pdf → BL
+        - MAEU258468669_DO.pdf → DO
+        
+        Returns:
+            문서 유형: "PACKING_LIST", "INVOICE", "BL", "DO", "UNKNOWN"
+        """
+        detection_scores = {
+            'PACKING_LIST': 0,
+            'INVOICE': 0,
+            'BL': 0,
+            'DO': 0
+        }
+        # _detection_source removed (v6.2.7: unused)  # noqa: F841
+        
+        try:
+            # ============================================
+            # 1단계: 파일명 기반 감지 (가장 신뢰성 높음!)
+            # ============================================
+            filename = Path(pdf_path).stem.upper()
+
+            # Invoice: _FA, FA_, INVOICE, INV
+            if '_FA' in filename or 'FA_' in filename or 'INVOICE' in filename:
+                logger.info(f"[문서감지] 1단계(파일명): INVOICE ({filename})")
+                return "INVOICE"
+
+            # B/L: _BL, BL_, B_L
+            if '_BL' in filename or 'BL_' in filename or ' BL' in filename or 'BL ' in filename:
+                logger.info(f"[문서감지] 1단계(파일명): BL ({filename})")
+                return "BL"
+
+            # D/O: _DO, DO_, D_O, MAEU/MSCU/HLCU 등 (컨테이너 SCAC 코드)
+            scac_prefixes = ['MAEU', 'MSCU', 'HLCU', 'CMAU', 'OOLU', 'COSU', 'EGLV']
+            if '_DO' in filename or 'DO_' in filename or ' DO' in filename:
+                logger.info(f"[문서감지] 1단계(파일명): DO ({filename})")
+                return "DO"
+            if any(filename.startswith(scac) for scac in scac_prefixes):
+                logger.info(f"[문서감지] 1단계(파일명-SCAC): DO ({filename})")
+                return "DO"
+
+            # Packing List: PACKING, PACKINGLIST, PL, PLIST (숫자 접미사 포함)
+            # 예: PackingList1.pdf, PACKING_LIST.pdf, 2200033057_PL.pdf
+            if ('PACKINGLIST' in filename or 'PACKING_LIST' in filename or 
+                'PACKING' in filename or '_PL' in filename or 'PL_' in filename or
+                'PLIST' in filename):
+                logger.info(f"[문서감지] 1단계(파일명): PACKING_LIST ({filename})")
+                return "PACKING_LIST"
+            
+            # 숫자 접미사 패턴 (PACKINGLIST1, PACKING1 등)
+            import re
+            if re.search(r'PACKING\s*LIST\d*', filename) or re.search(r'PACKING\d+', filename):
+                logger.info(f"[문서감지] 1단계(파일명-정규식): PACKING_LIST ({filename})")
+                return "PACKING_LIST"
+
+            # ============================================
+            # 2단계: 텍스트 기반 감지 (키워드 점수)
+            # ============================================
+            doc = None
+            try:
+                doc = fitz.open(pdf_path)
+                text = ""
+                for page in doc:
+                    text += page.get_text()
+            finally:
+                if doc:
+                    doc.close()
+
+            text_upper = text.upper().replace('\xa0', ' ')  # non-breaking space 처리
+
+            # 텍스트가 거의 없으면 이미지 PDF (D/O 가능성 높음)
+            if len(text.strip()) < 100:
+                logger.info(f"[문서감지] 2단계(텍스트): 텍스트 적음 → DO 추정 ({filename})")
+                detection_scores['DO'] += 10
+            else:
+                # Invoice 키워드 점수
+                invoice_keywords = ["FACTURA", "EXPORT INVOICE", "COMMERCIAL INVOICE",
+                                   "UNIT PRICE USD", "TOTAL AMOUNT USD", "FOB VALUE", "SAP NO"]
+                invoice_score = sum(2 for kw in invoice_keywords if kw in text_upper)
+                detection_scores['INVOICE'] += invoice_score
+                
+                # B/L 키워드 점수
+                bl_keywords = ["NON-NEGOTIABLE WAYBILL", "BILL OF LADING", "BOOKING NO",
+                              "SHIPPER:", "CONSIGNEE:", "NOTIFY PARTY:", "SHIPPED ON BOARD"]
+                bl_score = sum(2 for kw in bl_keywords if kw in text_upper)
+                detection_scores['BL'] += bl_score
+                
+                # D/O 키워드 점수
+                do_keywords = ["DELIVERY ORDER", "발급확인서", "FREE TIME", "화물인도지시서", "컨테이너"]
+                do_score = sum(2 for kw in do_keywords if kw in text_upper or kw in text)
+                detection_scores['DO'] += do_score
+                
+                # Packing List 키워드 점수
+                packing_keywords = ["PACKING LIST", "PACKINGLIST", "FOLIO:", "LOT NO",
+                                   "NET WEIGHT", "GROSS WEIGHT", "MAXIBAG", "MX 500", "MX500", "MXBG"]
+                packing_score = sum(2 for kw in packing_keywords if kw in text_upper)
+                detection_scores['PACKING_LIST'] += packing_score
+
+            # 2단계 결과 판정
+            max_score = max(detection_scores.values())
+            if max_score >= 4:  # 최소 2개 이상 키워드 매칭
+                best_type = max(detection_scores, key=detection_scores.get)
+                logger.info(f"[문서감지] 2단계(텍스트): {best_type} (점수: {detection_scores})")
+                return best_type
+
+            # ============================================
+            # 3단계: Gemini AI 판정 (fallback, 옵션)
+            # ============================================
+            if use_gemini_fallback and max_score < 4:
+                try:
+                    from gemini_parser import GeminiDocumentParser
+                    from core.config import GEMINI_API_KEY
+                    
+                    if GEMINI_API_KEY and GEMINI_API_KEY != 'your-api-key-here':
+                        gemini = GeminiDocumentParser(GEMINI_API_KEY)
+                        
+                        # Gemini에게 문서 유형 질문
+                        gemini_type = gemini.detect_document_type(pdf_path)
+                        
+                        if gemini_type and gemini_type != "UNKNOWN":
+                            logger.info(f"[문서감지] 3단계(Gemini): {gemini_type} ({filename})")
+                            return gemini_type
+                            
+                except (ImportError, ModuleNotFoundError) as gemini_error:
+                    logger.warning(f"[문서감지] Gemini fallback 실패: {gemini_error}")
+
+            # 모든 단계 실패
+            logger.warning(f"[문서감지] 알 수 없음: {filename} (점수: {detection_scores})")
+            return "UNKNOWN"
+
+        except (ValueError, TypeError, AttributeError) as e:
+            self.errors.append(f"문서 유형 감지 실패: {str(e)}")
+            logger.error(f"[문서감지] 오류: {e}")
+            return "UNKNOWN"
+
+    def parse(self, pdf_path: str, doc_type: str = None) -> Any:
+        """PDF 파싱 (자동 또는 지정된 유형으로)"""
+        if doc_type is None:
+            doc_type = self.detect_document_type(pdf_path)
+
+        if doc_type == "PACKING_LIST":
+            return self.parse_packing_list(pdf_path)
+        elif doc_type == "INVOICE":
+            return self.parse_invoice(pdf_path)
+        elif doc_type == "BL":
+            return self.parse_bl(pdf_path)
+        elif doc_type == "DO":
+            return self.parse_do(pdf_path)
+        else:
+            self.errors.append(f"알 수 없는 문서 유형: {doc_type}")
+            return None
+
+    def _extract_text(self, pdf_path: str) -> str:
+        """PDF에서 텍스트 추출 (v2.9.40: 안전한 파일 핸들링)"""
+        doc = None
+        try:
+            doc = fitz.open(pdf_path)
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            return text
+        finally:
+            if doc:
+                doc.close()
+
+    # =========================================================================
+    # Packing List 파서
+    # =========================================================================
+
+    def parse_packing_list(self, pdf_path: str) -> Optional[PackingListData]:
+        """Packing List PDF 파싱 (v2.5.4 - 상세 로깅)"""
+        try:
+            text = self._extract_text(pdf_path)
+            result = PackingListData()
+            result.source_file = pdf_path
+            result.parsed_at = datetime.now()
+
+            # 디버그 로그
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"[PACKING LIST] 파싱 시작: {pdf_path}")
+            logger.debug(f"[PACKING LIST] 텍스트 길이: {len(text)}")
+            logger.debug(f"[PACKING LIST] 텍스트 미리보기: {text[:500]}...")
+
+            # Folio 추출
+            folio_match = re.search(r'Folio\s*:?\s*(\d{7})', text, re.IGNORECASE)
+            if folio_match:
+                result.folio = folio_match.group(1)
+                logger.info(f"[PACKING LIST] Folio 찾음: {result.folio}")
+            else:
+                # 대체 패턴
+                folio_match = re.search(r'(\d{7})', text[:500])
+                if folio_match:
+                    result.folio = folio_match.group(1)
+                    logger.info(f"[PACKING LIST] Folio (대체): {result.folio}")
+                else:
+                    logger.warning("[PACKING LIST] Folio 못 찾음!")
+
+            # 제품 추출
+            if "LITHIUM CARBONATE" in text.upper():
+                result.product = "LITHIUM CARBONATE"
+                if "BATTERY GRADE" in text.upper():
+                    result.product += " - BATTERY GRADE"
+                if "MICRONIZED" in text.upper():
+                    result.product += " - MICRONIZED"
+                logger.info(f"[PACKING LIST] 제품: {result.product}")
+
+            # 제품 코드 추출 (개선: MIC9000.00 패턴 인식)
+            code_patterns = [
+                r'(MIC\d{4})',  # MIC9000
+                r'(CRY\d{4})',  # CRY9000
+                r'CODE\s*:?\s*(MIC\d+)',  # CODE: MIC9000
+                r'CODE\s*:?\s*([A-Z]{3}\d{4})',
+            ]
+            for pattern in code_patterns:
+                code_match = re.search(pattern, text.upper())
+                if code_match:
+                    result.product_code = code_match.group(1)
+                    logger.info(f"[PACKING LIST] 제품코드: {result.product_code}")
+                    break
+
+            # 기본값 설정 (Lithium Carbonate + 코드 못 찾으면)
+            if not result.product_code and "LITHIUM CARBONATE" in text.upper():
+                result.product_code = "MIC9000"  # 기본 코드
+                logger.info(f"[PACKING LIST] 제품코드 (기본값): {result.product_code}")
+
+            # 포장 정보 추출 (MIC9000.00/500 KG)
+            packing_match = re.search(r'(MIC\d+\.?\d*/?\.?\d*\s*KG)', text, re.IGNORECASE)
+            if packing_match:
+                result.packing = packing_match.group(1)
+
+            # 선박 추출
+            vessel_match = re.search(r'([A-Z]+\s+MAERSK\s+\d+\w*)', text, re.IGNORECASE)
+            if vessel_match:
+                result.vessel = vessel_match.group(1)
+
+            # 고객 추출
+            if "SOQUIMICH" in text.upper():
+                result.customer = "SOQUIMICH LLC"
+
+            # 목적지 추출
+            dest_match = re.search(r'DESTINATION\s*:?\s*(\w+)', text, re.IGNORECASE)
+            if dest_match:
+                result.destination = dest_match.group(1)
+            elif "GWANGYANG" in text.upper():
+                result.destination = "GWANGYANG"
+
+            # 컨테이너 및 LOT 추출
+            result.lots = self._extract_lots_from_packing_list(text)
+            result.total_lots = len(result.lots)
+            logger.info(f"[PACKING LIST] LOT 추출: {result.total_lots}개")
+
+            if result.total_lots == 0:
+                logger.warning("[PACKING LIST] ⚠️ LOT 0개! PDF가 이미지 기반일 수 있음")
+                # Gemini API 사용 제안
+                logger.info("[PACKING LIST] Gemini API 파싱 시도 권장")
+
+            # 총 중량 계산
+            if result.lots:
+                result.total_net_weight = sum(lot.get('net_weight', 0) for lot in result.lots)
+                result.total_gross_weight = sum(lot.get('gross_weight', 0) for lot in result.lots)
+            else:
+                # 대체 추출
+                net_match = re.search(r'(\d{2,3}[,.]?\d{3})\s*KG\s*Net', text, re.IGNORECASE)
+                if net_match:
+                    result.total_net_weight = float(net_match.group(1).replace(',', '').replace('.', ''))
+
+            return result
+
+        except (ValueError, TypeError, KeyError) as e:
+            self.errors.append(f"Packing List 파싱 오류: {str(e)}")
+            import logging
+            logging.getLogger(__name__).error(f"[PACKING LIST] 오류: {e}")
+            return None
+
+    def _extract_lots_from_packing_list(self, text: str) -> List[Dict]:
+        """Packing List에서 LOT 정보 추출"""
+        lots = []
+
+        # 컨테이너 번호 패턴
+        container_pattern = r'([A-Z]{4}\d{6,7}-?\d?)'
+        containers = re.findall(container_pattern, text)
+        unique_containers = list(dict.fromkeys(containers))
+
+        # LOT 번호 패턴 (10자리 숫자) - v2.9.0: 112 시작 조건 제거
+        lot_pattern = r'\b(\d{10})\b'
+        lot_numbers = re.findall(lot_pattern, text)
+        unique_lots = list(dict.fromkeys(lot_numbers))
+
+        # LOT별 데이터 생성
+        for i, lot_no in enumerate(unique_lots):
+            container = unique_containers[i % len(unique_containers)] if unique_containers else ""
+
+            lots.append({
+                'lot_no': lot_no,
+                'container_no': container,
+                'net_weight': 5001.0,  # 기본값 5.001 MT
+                'gross_weight': 5131.25,  # 기본값
+                'mxbg_pallet': 10,
+                'plastic_jars': 1,
+            })
+
+        return lots
+
+    # =========================================================================
+    # Invoice 파서
+    # =========================================================================
+
+    def parse_invoice(self, pdf_path: str) -> Optional[InvoiceData]:
+        """Invoice PDF 파싱"""
+        try:
+            text = self._extract_text(pdf_path)
+            result = InvoiceData()
+            result.source_file = pdf_path
+            result.parsed_at = datetime.now()
+
+            # Invoice 번호 추출
+            inv_match = re.search(r'N[°o]\s*(\d{5})', text)
+            if inv_match:
+                result.invoice_no = inv_match.group(1)
+
+            # 날짜 추출
+            date_match = re.search(r'FECHA/DATE\s*:?\s*(\d{2}\.\d{2}\.\d{4})', text, re.IGNORECASE)
+            if date_match:
+                try:
+                    result.invoice_date = datetime.strptime(date_match.group(1), '%d.%m.%Y').date()
+                except (ValueError, TypeError, KeyError) as e:  # 날짜 파싱 실패 무시
+                    logger.debug(f"[pdf_parser] 무시: {e}")
+
+            # 고객 정보
+            if "SOQUIMICH" in text.upper():
+                result.customer = "SOQUIMICH LLC"
+
+            customer_code_match = re.search(r'Cliente/Customer\s*(\d+)', text)
+            if customer_code_match:
+                result.customer_code = customer_code_match.group(1)
+
+            # 제품 정보
+            if "LITHIUM CARBONATE" in text.upper():
+                result.product = "LITHIUM CARBONATE - BATTERY GRADE - MICRONIZED"
+                result.product_code = "MIC9000.00"
+
+            # 수량 추출
+            qty_match = re.search(r'(\d{2,3}[,.]?\d{2})\s*T\s*MIC', text)
+            if qty_match:
+                qty_str = qty_match.group(1).replace(',', '.')
+                result.quantity_mt = float(qty_str)
+
+            # 단가 추출
+            price_match = re.search(r'(\d{1,2}[,.]?\d{3}[,.]?\d{2})\s*(?:USD)?', text)
+            if price_match:
+                price_str = price_match.group(1).replace(',', '')
+                if '.' not in price_str:
+                    price_str = price_str[:-2] + '.' + price_str[-2:]
+                result.unit_price = float(price_str)
+
+            # 총 금액 추출
+            amount_match = re.search(r'(\d{3}[,.]?\d{3}[,.]?\d{2})\s*(?:USD)?', text)
+            if amount_match:
+                amount_str = amount_match.group(1).replace(',', '')
+                if '.' not in amount_str:
+                    amount_str = amount_str[:-2] + '.' + amount_str[-2:]
+                result.total_amount = float(amount_str)
+
+            # Incoterm
+            if "CIF" in text:
+                result.incoterm = "CIF"
+            elif "FOB" in text:
+                result.incoterm = "FOB"
+
+            # 출발지/도착지
+            origin_match = re.search(r'Origen/Origin\s*(\w+)', text, re.IGNORECASE)
+            if origin_match:
+                result.origin = origin_match.group(1)
+
+            dest_match = re.search(r'Destino/Destination\s*(\w+)', text, re.IGNORECASE)
+            if dest_match:
+                result.destination = dest_match.group(1)
+
+            # 선박
+            vessel_match = re.search(r'([A-Z]+\s+MAERSK\s+\d+\w*)', text, re.IGNORECASE)
+            if vessel_match:
+                result.vessel = vessel_match.group(1)
+
+            # B/L 번호
+            bl_match = re.search(r'BL.*?(\d{9})', text, re.IGNORECASE)
+            if bl_match:
+                result.bl_no = bl_match.group(1)
+
+            # ★★★ v2.9.5: SAP 번호 추출 강화 ★★★
+            sap_patterns = [
+                r'\b(22\d{8})\b',      # 22로 시작하는 10자리
+                r'\b(2200\d{6})\b',    # 2200으로 시작하는 10자리
+            ]
+            for pattern in sap_patterns:
+                sap_match = re.search(pattern, text)
+                if sap_match:
+                    result.sap_no = sap_match.group(1)
+                    break
+
+            # LOT 번호들 추출 (10자리 숫자) - v2.9.0: 112 시작 조건 제거
+            lot_pattern = r'\b(\d{10})\b'
+            result.lots = list(dict.fromkeys(re.findall(lot_pattern, text)))
+
+            return result
+
+        except (ValueError, KeyError, TypeError) as e:
+            self.errors.append(f"Invoice 파싱 오류: {str(e)}")
+            return None
+
+    # =========================================================================
+    # B/L 파서
+    # =========================================================================
+
+    def parse_bl(self, pdf_path: str) -> Optional[BLData]:
+        """B/L PDF 파싱 (Maersk Non-Negotiable Waybill 형식)"""
+        try:
+            text = self._extract_text(pdf_path)
+            result = BLData()
+            result.source_file = pdf_path
+            result.parsed_at = datetime.now()
+
+            # B/L 번호 (여러 패턴 시도)
+            # 패턴 1: "B/L: 258468669" 또는 "B/L No. 258468669"
+            bl_match = re.search(r'B/L[:\s]*No\.?\s*(\d{9})', text, re.IGNORECASE)
+            if bl_match:
+                result.bl_no = bl_match.group(1)
+            else:
+                # 패턴 2: "B/L: 258468669" (페이지 하단)
+                bl_match = re.search(r'B/L:\s*(\d{9})', text)
+                if bl_match:
+                    result.bl_no = bl_match.group(1)
+
+            # Booking 번호
+            booking_match = re.search(r'Booking\s*No\.?\s*(\d{9})', text, re.IGNORECASE)
+            if booking_match:
+                result.booking_no = booking_match.group(1)
+                # B/L 번호가 없으면 Booking 번호 사용
+                if not result.bl_no:
+                    result.bl_no = booking_match.group(1)
+
+            # Shipper
+            shipper_match = re.search(r'Shipper.*?\n(SQM\s+SALAR\s+\w+\.?)', text, re.IGNORECASE | re.DOTALL)
+            if shipper_match:
+                result.shipper = shipper_match.group(1).strip()
+            elif "SQM SALAR" in text.upper():
+                result.shipper = "SQM SALAR SpA."
+
+            # Consignee / Notify Party
+            if "SOQUIMICH" in text.upper():
+                result.consignee = "SOQUIMICH LLC"
+                result.notify_party = "SOQUIMICH"
+
+            # 선박명
+            vessel_match = re.search(r'Vessel\s*\n?\s*([A-Z]+\s+MAERSK)', text, re.IGNORECASE)
+            if vessel_match:
+                result.vessel = vessel_match.group(1).upper()
+            else:
+                # 대체 패턴
+                vessel_match = re.search(r'([A-Z]+\s+MAERSK)\s+\d', text, re.IGNORECASE)
+                if vessel_match:
+                    result.vessel = vessel_match.group(1).upper()
+
+            # Voyage 번호
+            voyage_match = re.search(r'Voyage\s*No\.?\s*\n?\s*(\d+\w*)', text, re.IGNORECASE)
+            if voyage_match:
+                result.voyage = voyage_match.group(1)
+
+            # Port of Loading
+            pol_match = re.search(r'Port of Loading\s*\n?\s*([\w\s,]+?)(?:\n|Place)', text, re.IGNORECASE)
+            if pol_match:
+                result.port_of_loading = pol_match.group(1).strip()
+            elif "Puerto Angamos" in text:
+                result.port_of_loading = "Puerto Angamos, Chile"
+
+            # Port of Discharge / Place of Delivery
+            if "GWANGYANG" in text.upper():
+                result.port_of_discharge = "GWANGYANG, SOUTH KOREA"
+            elif "BUSAN" in text.upper():
+                result.port_of_discharge = "BUSAN, SOUTH KOREA"
+
+            # Ship Date (Shipped on Board Date)
+            ship_match = re.search(r'Shipped on Board.*?(\d{4}-\d{2}-\d{2})', text, re.IGNORECASE | re.DOTALL)
+            if ship_match:
+                try:
+                    result.ship_date = datetime.strptime(ship_match.group(1), '%Y-%m-%d').date()
+                except (ValueError, TypeError, KeyError) as e:  # 날짜 파싱 실패 무시
+                    logger.debug(f"[pdf_parser] 무시: {e}")
+
+            # Issue Date
+            issue_match = re.search(r'Date Issue.*?(\d{4}-\d{2}-\d{2})', text, re.IGNORECASE | re.DOTALL)
+            if issue_match:
+                try:
+                    result.issue_date = datetime.strptime(issue_match.group(1), '%Y-%m-%d').date()
+                except (ValueError, TypeError, KeyError) as e:  # 날짜 파싱 실패 무시
+                    logger.debug(f"[pdf_parser] 무시: {e}")
+
+            # 컨테이너 추출 (형식: FFAU4840178  ML-CL0501799  40 DRY 9'6)
+            container_pattern = r'([A-Z]{4}\d{7})\s+(ML-[A-Z]{2}\d{7})\s+(\d+\s+DRY\s+\d+[\'\"]?\d*)'
+            containers = re.findall(container_pattern, text)
+            for cont in containers:
+                result.containers.append({
+                    'container_no': cont[0],
+                    'seal_no': cont[1],
+                    'type': cont[2].strip()
+                })
+
+            # 컨테이너 수 (백업)
+            if not result.containers:
+                container_count_match = re.search(r'(\d+)\s*containers?', text, re.IGNORECASE)
+                if container_count_match:
+                    result.total_packages = int(container_count_match.group(1))
+
+            # 총 중량
+            weight_match = re.search(r'(\d{2,3}[,.]?\d{3})\s*KG\s*(?:Net|NET)', text, re.IGNORECASE)
+            if weight_match:
+                weight_str = weight_match.group(1).replace(',', '').replace('.', '')
+                result.total_weight = float(weight_str)
+
+            # SAP NO 추출
+            sap_match = re.search(r'(2200\d{6})', text)
+            if sap_match:
+                # 추가 정보로 저장 (BLData에 sap_no 필드 없으면 무시)
+                # SAP NO는 BLData 모델에 필드가 없어 무시
+                pass
+
+            # Freight 정보
+            freight_pattern = r'([A-Za-z\s]+)\s+(\d+\.?\d*)\s+Per Container\s+(\w+)\s+(\d+\.?\d*)'
+            freights = re.findall(freight_pattern, text)
+            for fr in freights:
+                result.freight_charges.append({
+                    'description': fr[0].strip(),
+                    'rate': float(fr[1]),
+                    'currency': fr[2],
+                    'amount': float(fr[3])
+                })
+
+            return result
+
+        except (ValueError, TypeError, KeyError) as e:
+            self.errors.append(f"B/L 파싱 오류: {str(e)}")
+            return None
+
+    # =========================================================================
+    # D/O 파서
+    # =========================================================================
+
+    def parse_do(self, pdf_path: str) -> Optional[DOData]:
+        """
+        D/O PDF 파싱
+
+        참고: D/O는 종종 이미지 PDF로 제공되어 OCR이 필요할 수 있습니다.
+        텍스트가 추출되지 않는 경우 기본 정보만 파일명에서 추출합니다.
+        """
+        try:
+            text = self._extract_text(pdf_path)
+            result = DOData()
+            result.source_file = pdf_path
+            result.parsed_at = datetime.now()
+
+            # 파일명에서 B/L 번호 추출 (예: MAEU258468669_DO.pdf)
+            filename = Path(pdf_path).stem
+            bl_from_filename = re.search(r'MAEU?(\d{9})', filename, re.IGNORECASE)
+            if bl_from_filename:
+                result.bl_no = bl_from_filename.group(1)
+
+            # 텍스트가 있는 경우 상세 파싱
+            if len(text) > 100:
+                # D/O 번호
+                do_match = re.search(r'D/O\s*No\.?\s*:?\s*(\w+)', text, re.IGNORECASE)
+                if do_match:
+                    result.do_no = do_match.group(1)
+
+                # B/L 번호 (텍스트에서)
+                bl_match = re.search(r'B/L\s*No\.?\s*:?\s*(MAEU\d{9}|\d{9})', text, re.IGNORECASE)
+                if bl_match:
+                    result.bl_no = bl_match.group(1).replace('MAEU', '')
+
+                # Shipper / Consignee
+                if "SQM SALAR" in text.upper():
+                    result.shipper = "SQM SALAR SPA."
+                if "SOQUIMICH" in text.upper():
+                    result.consignee = "SOQUIMICH LLC"
+
+                # 선박
+                vessel_match = re.search(r'([A-Z]+\s+MAERSK)', text, re.IGNORECASE)
+                if vessel_match:
+                    result.vessel = vessel_match.group(1).upper()
+
+                # Voyage
+                voyage_match = re.search(r'Voyage\s*(?:No\.?)?\s*:?\s*(\d+\w*)', text, re.IGNORECASE)
+                if voyage_match:
+                    result.voyage = voyage_match.group(1)
+
+                # 입항일 (여러 형식 지원)
+                arrival_patterns = [
+                    r'(?:입항일|Arrival|ETA)\s*:?\s*(\d{4}-\d{2}-\d{2})',
+                    r'(?:입항일|Arrival|ETA)\s*:?\s*(\d{4}\.\d{2}\.\d{2})',
+                    r'(?:입항일|Arrival|ETA)\s*:?\s*(\d{2}/\d{2}/\d{4})',
+                ]
+                for pattern in arrival_patterns:
+                    arrival_match = re.search(pattern, text, re.IGNORECASE)
+                    if arrival_match:
+                        date_str = arrival_match.group(1)
+                        for fmt in ['%Y-%m-%d', '%Y.%m.%d', '%d/%m/%Y']:
+                            try:
+                                result.arrival_date = datetime.strptime(date_str, fmt).date()
+                                break
+                            except (ValueError, TypeError, KeyError):  # 날짜 파싱 실패 무시
+                                continue
+                        break
+
+                # D/O 발행일
+                issue_patterns = [
+                    r'(?:발행일|Issue|Issued)\s*:?\s*(\d{4}-\d{2}-\d{2})',
+                    r'(?:발행일|Issue|Issued)\s*:?\s*(\d{4}\.\d{2}\.\d{2})',
+                ]
+                for pattern in issue_patterns:
+                    issue_match = re.search(pattern, text, re.IGNORECASE)
+                    if issue_match:
+                        date_str = issue_match.group(1)
+                        for fmt in ['%Y-%m-%d', '%Y.%m.%d']:
+                            try:
+                                result.issue_date = datetime.strptime(date_str, fmt).date()
+                                break
+                            except (ValueError, TypeError, KeyError):  # 날짜 파싱 실패 무시
+                                continue
+                        break
+
+                # 컨테이너 (여러 패턴)
+                container_patterns = [
+                    r'([A-Z]{4}\d{7})\s+([A-Z]{2}\d{7})',  # TCLU1234567 ML1234567
+                    r'([A-Z]{4}\d{7})',  # 컨테이너 번호만
+                ]
+                for pattern in container_patterns:
+                    containers = re.findall(pattern, text)
+                    if containers:
+                        for cont in containers:
+                            if isinstance(cont, tuple):
+                                result.containers.append({
+                                    'container_no': cont[0],
+                                    'seal_no': cont[1] if len(cont) > 1 else ''
+                                })
+                            else:
+                                result.containers.append({
+                                    'container_no': cont,
+                                    'seal_no': ''
+                                })
+                        break
+
+                # Free Time 정보
+                free_time_match = re.search(r'Free\s*Time.*?(\d{4}-\d{2}-\d{2})', text, re.IGNORECASE | re.DOTALL)
+                if free_time_match:
+                    result.free_time_info.append({
+                        'free_time_until': free_time_match.group(1)
+                    })
+
+            else:
+                # 텍스트가 없는 경우 (이미지 PDF) - 파일명에서 추출한 정보만 사용
+                self.warnings.append(f"D/O 파일이 이미지 PDF입니다. OCR이 필요합니다: {pdf_path}")
+
+            return result
+
+        except (ValueError, TypeError, AttributeError) as e:
+            self.errors.append(f"D/O 파싱 오류: {str(e)}")
+            return None
+
+
+# =============================================================================
+# 편의 함수
+# =============================================================================
+
+def parse_pdf(pdf_path: str, doc_type: str = None) -> Tuple[str, Any]:
+    """
+    PDF 파일을 파싱하고 결과 반환
+
+    Returns:
+        (문서유형, 파싱결과) 튜플
+    """
+    parser = PDFParser()
+
+    if doc_type is None:
+        doc_type = parser.detect_document_type(pdf_path)
+
+    result = parser.parse(pdf_path, doc_type)
+
+    return doc_type, result
+
+
+def parse_multiple_pdfs(pdf_paths: List[str]) -> Dict[str, Any]:
+    """
+    여러 PDF 파일을 파싱하고 문서 유형별로 분류
+
+    Returns:
+        {'PACKING_LIST': [...], 'INVOICE': [...], ...}
+    """
+    parser = PDFParser()
+    results = {
+        'PACKING_LIST': [],
+        'INVOICE': [],
+        'BL': [],
+        'DO': [],
+        'UNKNOWN': [],
+        'ERRORS': []
+    }
+
+    for pdf_path in pdf_paths:
+        try:
+            doc_type = parser.detect_document_type(pdf_path)
+            data = parser.parse(pdf_path, doc_type)
+
+            if data:
+                results[doc_type].append({
+                    'file': pdf_path,
+                    'data': data
+                })
+            else:
+                results['ERRORS'].append({
+                    'file': pdf_path,
+                    'errors': parser.errors.copy()
+                })
+                parser.errors.clear()
+        except (ValueError, TypeError, KeyError) as e:
+            results['ERRORS'].append({
+                'file': pdf_path,
+                'errors': [str(e)]
+            })
+
+    return results
+
+
+# =============================================================================
+# 테스트
+# =============================================================================
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) > 1:
+        pdf_path = sys.argv[1]
+        doc_type, result = parse_pdf(pdf_path)
+        logger.debug(f"문서 유형: {doc_type}")
+        logger.debug(f"파싱 결과: {result}")
+    else:
+        logger.debug("사용법: python pdf_parser.py <pdf_path>")

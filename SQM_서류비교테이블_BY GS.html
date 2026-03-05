@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SQM 선적서류 핵심 필드 비교 테이블</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap');
+
+  :root {
+    --bl:  #2563eb; --bl-bg: #eff6ff; --bl-bd: #bfdbfe;
+    --pl:  #16a34a; --pl-bg: #f0fdf4; --pl-bd: #bbf7d0;
+    --fa:  #b45309; --fa-bg: #fffbeb; --fa-bd: #fde68a;
+    --co:  #7c3aed; --co-bg: #faf5ff; --co-bd: #ddd6fe;
+    --cs:  #be185d; --cs-bg: #fdf2f8; --cs-bd: #fbcfe8;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:'Noto Sans KR', sans-serif;
+    background:#f1f5f9;
+    padding:28px 20px 48px;
+    color:#1e293b;
+  }
+
+  /* ── 페이지 컨테이너 ── */
+  .page { max-width:1200px; margin:0 auto; }
+
+  /* ── 헤더 ── */
+  .page-header {
+    background:linear-gradient(135deg,#0f2a5e 0%,#1d4ed8 55%,#3b82f6 100%);
+    border-radius:14px;
+    padding:28px 36px 24px;
+    margin-bottom:22px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    box-shadow:0 6px 28px rgba(29,78,216,.28);
+  }
+  .ph-left .eyebrow {
+    font-size:10px; font-weight:700; letter-spacing:2.5px; text-transform:uppercase;
+    color:#93c5fd; margin-bottom:6px;
+  }
+  .ph-left h1 { color:#fff; font-size:22px; font-weight:900; line-height:1.2; }
+  .ph-left h1 span { color:#93c5fd; }
+  .ph-left .sub { color:rgba(255,255,255,.65); font-size:11px; margin-top:6px; }
+  .ph-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+  .ph-badge {
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.25);
+    border-radius:20px; padding:4px 13px;
+    color:#e0f2fe; font-size:10px; font-weight:600;
+  }
+
+  /* ── doc 배지 ── */
+  .db {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:36px; height:22px; border-radius:5px;
+    font-size:9.5px; font-weight:800; letter-spacing:.3px;
+  }
+  .db-bl{background:var(--bl);color:#fff;}
+  .db-pl{background:var(--pl);color:#fff;}
+  .db-fa{background:var(--fa);color:#fff;}
+  .db-co{background:var(--co);color:#fff;}
+  .db-cs{background:var(--cs);color:#fff;}
+
+  /* ── 범례 바 ── */
+  .legend-bar {
+    display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    background:#fff; border-radius:10px; padding:10px 18px;
+    margin-bottom:18px; box-shadow:0 2px 8px rgba(0,0,0,.06);
+    font-size:10.5px;
+  }
+  .legend-bar .lbl { font-weight:700; color:#475569; margin-right:4px; }
+  .lbadge {
+    display:inline-flex; gap:4px; align-items:center;
+    padding:3px 10px; border-radius:20px; font-weight:600;
+  }
+  .lb-ok  { background:#dcfce7; color:#15803d; }
+  .lb-no  { background:#f1f5f9; color:#94a3b8; }
+  .lb-fix { background:#fee2e2; color:#dc2626; }
+  .lb-new { background:#fef9c3; color:#a16207; }
+
+  /* ── 섹션 타이틀 ── */
+  .section-hd {
+    display:flex; align-items:center; gap:8px;
+    margin:22px 0 10px; font-size:12px; font-weight:800;
+    text-transform:uppercase; letter-spacing:1.5px;
+  }
+  .section-hd::after {
+    content:''; flex:1; height:2px; background:currentColor; opacity:.12; border-radius:2px;
+  }
+  .sh-blue{color:#1d4ed8;} .sh-green{color:#16a34a;}
+  .sh-amber{color:#b45309;} .sh-purple{color:#7c3aed;}
+  .sh-rose{color:#be185d;}  .sh-slate{color:#475569;}
+
+  /* ── 카드 래퍼 ── */
+  .table-card {
+    background:#fff; border-radius:12px;
+    box-shadow:0 2px 12px rgba(0,0,0,.07);
+    overflow:hidden; margin-bottom:6px;
+  }
+
+  /* ── 메인 비교 테이블 ── */
+  table.cmp {
+    width:100%; border-collapse:collapse; font-size:11px;
+  }
+  table.cmp thead tr {
+    background:linear-gradient(90deg,#1e3a8a,#2563eb);
+  }
+  table.cmp thead th {
+    padding:10px 10px; color:#fff; font-weight:700;
+    font-size:10px; letter-spacing:.4px; text-align:left;
+    white-space:nowrap;
+  }
+  table.cmp thead th.doc-th {
+    text-align:center; min-width:110px;
+  }
+
+  /* 카테고리 구분행 */
+  table.cmp tr.cat-row td {
+    padding:7px 12px; font-size:10px; font-weight:800;
+    letter-spacing:1px; text-transform:uppercase;
+    background:#f8fafc; border-bottom:2px solid #e2e8f0;
+    color:#64748b;
+  }
+
+  table.cmp tbody tr { border-bottom:1px solid #f1f5f9; }
+  table.cmp tbody tr:hover { background:#fafbff; }
+
+  table.cmp td { padding:7px 10px; vertical-align:middle; }
+  table.cmp td.num { color:#94a3b8; font-size:10px; text-align:center; width:32px; }
+  table.cmp td.field-name { font-weight:700; color:#1e293b; font-size:11px; }
+  table.cmp td.field-name small { display:block; color:#94a3b8; font-size:9.5px; font-weight:400; margin-top:1px; font-family:monospace; }
+  table.cmp td.doc-cell { text-align:center; }
+
+  /* 값 셀 */
+  .v-ok  { color:#15803d; font-weight:700; font-size:12px; }
+  .v-no  { color:#cbd5e1; font-size:13px; }
+  .v-new { color:#d97706; font-weight:800; font-size:11px; }
+  .v-fix { color:#dc2626; font-weight:800; font-size:11px; }
+
+  /* 값 상세 */
+  .doc-val-box {
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+  }
+  .doc-val-box .icon { font-size:14px; line-height:1; }
+  .doc-val-box .detail {
+    font-size:8.5px; color:#64748b; max-width:100px;
+    text-align:center; line-height:1.3; word-break:break-word;
+  }
+  .doc-val-box .detail.hl { color:#1d4ed8; font-weight:600; }
+  .doc-val-box .detail.ok { color:#15803d; font-weight:600; }
+  .doc-val-box .detail.am { color:#b45309; }
+  .doc-val-box .detail.pu { color:#7c3aed; }
+  .doc-val-box .detail.ro { color:#be185d; }
+  .doc-val-box .detail.rd { color:#dc2626; font-weight:700; }
+
+  /* 비고 셀 */
+  td.note-cell {
+    font-size:9.5px; color:#475569; line-height:1.5;
+    max-width:200px; min-width:130px;
+  }
+  td.note-cell .tag {
+    display:inline-block; padding:1px 6px; border-radius:3px;
+    font-size:8.5px; font-weight:700; margin-bottom:2px;
+  }
+  .tag-fix { background:#fee2e2; color:#dc2626; }
+  .tag-note{ background:#fef9c3; color:#a16207; }
+  .tag-warn{ background:#fff7ed; color:#c2410c; }
+  .tag-key { background:#dbeafe; color:#1d4ed8; }
+
+  /* ── 헤더 doc 열 ── */
+  .th-bl { border-top:3px solid #2563eb; }
+  .th-pl { border-top:3px solid #16a34a; }
+  .th-fa { border-top:3px solid #b45309; }
+  .th-co { border-top:3px solid #7c3aed; }
+  .th-cs { border-top:3px solid #be185d; }
+
+  /* ── 하단 요약 카드 ── */
+  .summary-grid {
+    display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-top:16px;
+  }
+  .sum-card {
+    border-radius:10px; padding:14px 12px; text-align:center;
+  }
+  .sum-card .icon2 { font-size:22px; }
+  .sum-card .doc-name { font-size:11px; font-weight:800; margin:4px 0 2px; }
+  .sum-card .fields { font-size:20px; font-weight:900; line-height:1; }
+  .sum-card .fields-label { font-size:9px; opacity:.7; margin-top:2px; }
+  .sc-bl { background:var(--bl-bg); border:1.5px solid var(--bl-bd); color:var(--bl); }
+  .sc-pl { background:var(--pl-bg); border:1.5px solid var(--pl-bd); color:var(--pl); }
+  .sc-fa { background:var(--fa-bg); border:1.5px solid var(--fa-bd); color:var(--fa); }
+  .sc-co { background:var(--co-bg); border:1.5px solid var(--co-bd); color:var(--co); }
+  .sc-cs { background:var(--cs-bg); border:1.5px solid var(--cs-bd); color:var(--cs); }
+
+  /* ── 주의 배너 ── */
+  .alert {
+    background:linear-gradient(90deg,#fffbeb,#fff);
+    border:1px solid #fde68a; border-left:4px solid #f59e0b;
+    border-radius:0 8px 8px 0; padding:9px 14px;
+    font-size:10px; color:#92400e; margin-top:14px; line-height:1.7;
+  }
+  .alert strong { color:#b45309; }
+
+  /* ── 반응형 ── */
+  @media print {
+    body { background:#fff; padding:0; }
+    .page { max-width:100%; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ── 페이지 헤더 ── -->
+<div class="page-header">
+  <div class="ph-left">
+    <div class="eyebrow">📋 Shipping Document Cross-Reference</div>
+    <h1>SQM 선적서류 핵심 필드 <span>비교 테이블</span></h1>
+    <div class="sub">
+      B/L &nbsp;·&nbsp; Packing List &nbsp;·&nbsp; Commercial Invoice &nbsp;·&nbsp;
+      Certificate of Origin &nbsp;·&nbsp; Insurance Certificate &nbsp;|&nbsp;
+      Order 2200033057 / 2200034273
+    </div>
+  </div>
+  <div class="ph-right">
+    <div class="ph-badge">📅 검토일 2026-02-27</div>
+    <div class="ph-badge">🔴 수정 5건 &nbsp;|&nbsp; 🟡 보완 4건</div>
+    <div class="ph-badge">⚠️ CO·CS = Order 2200034273 별도건</div>
+  </div>
+</div>
+
+<!-- ── 범례 ── -->
+<div class="legend-bar">
+  <span class="lbl">범례</span>
+  <span class="lbadge lb-ok">✅ 데이터 있음</span>
+  <span class="lbadge lb-no">— 해당 없음</span>
+  <span class="lbadge lb-fix">🔴 수정됨</span>
+  <span class="lbadge lb-new">🆕 신규 필드</span>
+  &nbsp;&nbsp;
+  <span class="db db-bl">B/L</span><span style="font-size:9.5px;color:#2563eb;font-weight:600;margin-left:3px">선하증권</span>
+  &nbsp;
+  <span class="db db-pl">P/L</span><span style="font-size:9.5px;color:#16a34a;font-weight:600;margin-left:3px">포장명세서</span>
+  &nbsp;
+  <span class="db db-fa">F/A</span><span style="font-size:9.5px;color:#b45309;font-weight:600;margin-left:3px">상업송장</span>
+  &nbsp;
+  <span class="db db-co">C/O</span><span style="font-size:9.5px;color:#7c3aed;font-weight:600;margin-left:3px">원산지증명</span>
+  &nbsp;
+  <span class="db db-cs">C/S</span><span style="font-size:9.5px;color:#be185d;font-weight:600;margin-left:3px">화물보험</span>
+</div>
+
+<!-- ── 메인 테이블 ── -->
+<div class="table-card">
+<table class="cmp">
+  <thead>
+    <tr>
+      <th style="width:32px">#</th>
+      <th style="width:160px">데이터 필드</th>
+      <th class="doc-th th-bl"><span class="db db-bl">B/L</span><br><span style="font-size:9px;font-weight:400;color:#bfdbfe">선하증권</span></th>
+      <th class="doc-th th-pl"><span class="db db-pl">P/L</span><br><span style="font-size:9px;font-weight:400;color:#bbf7d0">포장명세서</span></th>
+      <th class="doc-th th-fa"><span class="db db-fa">F/A</span><br><span style="font-size:9px;font-weight:400;color:#fde68a">상업송장</span></th>
+      <th class="doc-th th-co"><span class="db db-co">C/O</span><br><span style="font-size:9px;font-weight:400;color:#ddd6fe">원산지증명</span></th>
+      <th class="doc-th th-cs"><span class="db db-cs">C/S</span><br><span style="font-size:9px;font-weight:400;color:#fbcfe8">화물보험</span></th>
+      <th>비고 / 실제 값</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <!-- ★ 핵심 식별자 -->
+    <tr class="cat-row"><td colspan="8">🔑 &nbsp;핵심 식별자</td></tr>
+
+    <tr>
+      <td class="num">1</td>
+      <td class="field-name">B/L No.<small>bl_no</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">258468669</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ro">MEDUFP963970<br>(별도건 BL)</span></div></td>
+      <td class="note-cell"><span class="tag tag-warn">⚠️주의</span> CS의 BL번호는 <strong>다른 Order(2200034273)</strong> 건의 BL임. BL 258468669≠MEDUFP963970</td>
+    </tr>
+
+    <tr>
+      <td class="num">2</td>
+      <td class="field-name">SAP Order No.<small>sap_no</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">2200033057</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ok">2200033057</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">2200033057</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-fix">🔴</span><span class="detail pu">2200034273<br>(별도건)</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-fix">🔴</span><span class="detail ro">2200034273<br>(별도건)</span></div></td>
+      <td class="note-cell"><span class="tag tag-fix">🔴수정</span> CO·CS는 <strong>2200034273</strong> 별도 Order. 파싱 매칭 시 Order번호 기준 분리 필요</td>
+    </tr>
+
+    <tr>
+      <td class="num">3</td>
+      <td class="field-name">Invoice No.<small>invoice_no</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">16130</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-fix">🔴</span><span class="detail pu">17519<br>(별도건)</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell"><span class="tag tag-fix">🔴수정</span> CO의 INVOICE NR:17519는 별도 Order 건. FA Invoice 16130과 상이</td>
+    </tr>
+
+    <tr>
+      <td class="num">4</td>
+      <td class="field-name">Folio (PL번호)<small>folio</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ok">3770868</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">P/L 고유 식별번호</td>
+    </tr>
+
+    <tr>
+      <td class="num">5</td>
+      <td class="field-name">HS Code<small>hs_code</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-new">🆕</span><span class="detail pu">2836.91</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell"><span class="tag tag-new">🆕신규</span> C/O 고유. 한-칠레 FTA 적용 세번</td>
+    </tr>
+
+    <tr>
+      <td class="num">6</td>
+      <td class="field-name">보험증서 No.<small>cert_no</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-new">🆕</span><span class="detail ro">5138268001468</span></div></td>
+      <td class="note-cell"><span class="tag tag-new">🆕신규</span> C/S 고유. Open Policy: 4035</td>
+    </tr>
+
+    <!-- ★ 당사자 정보 -->
+    <tr class="cat-row"><td colspan="8">👤 &nbsp;당사자 정보</td></tr>
+
+    <tr>
+      <td class="num">7</td>
+      <td class="field-name">Shipper (수출자)<small>shipper</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">SQM SALAR SpA</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-fix">🔴</span><span class="detail am">SQM SALAR S.A.<br>(발행자=수출자)</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail pu">SQM SALAR SPA</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ro">SQM Salar</span></div></td>
+      <td class="note-cell"><span class="tag tag-fix">🔴수정</span> FA 발행자=수출자 동일. Los Militares 4765, Santiago</td>
+    </tr>
+
+    <tr>
+      <td class="num">8</td>
+      <td class="field-name">Consignee (수입자)<small>consignee</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">SOQUIMICH LLC</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ok">SOQUIMICH LLC</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">SOQUIMICH LLC</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail pu">SOQUIMICH LLC</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">Seoul Finance Center 25B, 21F / Tax ID: 516-81-01876</td>
+    </tr>
+
+    <tr>
+      <td class="num">9</td>
+      <td class="field-name">Notify Party<small>notify_party</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">SOQUIMICH LLC</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">B/L 고유. Consignee와 동일</td>
+    </tr>
+
+    <!-- ★ 운송 정보 -->
+    <tr class="cat-row"><td colspan="8">🚢 &nbsp;운송 정보</td></tr>
+
+    <tr>
+      <td class="num">10</td>
+      <td class="field-name">선박명 (Vessel)<small>vessel</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">CHARLOTTE<br>MAERSK</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ok">CHARLOTTE<br>MAERSK 535W</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">CHARLOTTE<br>MAERSK 535W</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ro">HMM Blessing<br>(별도건)</span></div></td>
+      <td class="note-cell"><span class="tag tag-warn">⚠️주의</span> CS 선박은 HMM Blessing — 별도 Order 건의 선박</td>
+    </tr>
+
+    <tr>
+      <td class="num">11</td>
+      <td class="field-name">Voyage No.<small>voyage</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">535W</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-fix">🔴</span><span class="detail ro">0037W<br>(별도건)</span></div></td>
+      <td class="note-cell"><span class="tag tag-fix">🔴수정</span> CS: HMM Blessing<strong>0037W</strong> — 별도건 항차</td>
+    </tr>
+
+    <tr>
+      <td class="num">12</td>
+      <td class="field-name">선적항 (POL)<small>port_of_loading</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">Puerto Angamos<br>Chile</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">PUERTO<br>ANGAMOS</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ro">PUERTO<br>ANGAMOS</span></div></td>
+      <td class="note-cell">3개 서류 일치 ✅</td>
+    </tr>
+
+    <tr>
+      <td class="num">13</td>
+      <td class="field-name">양하항 (POD)<small>port_of_discharge</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">GWANGYANG<br>SOUTH KOREA</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-fix">🔴</span><span class="detail ok">GWANGYANG<br>(DESTINATION)</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">GWANGYANG<br>SOUTH KOREA</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ro">Gwangyang</span></div></td>
+      <td class="note-cell"><span class="tag tag-fix">🔴수정</span> PL의 DESTINATION:GWANGYANG → 양하항 파싱 가능 확인</td>
+    </tr>
+
+    <!-- ★ 날짜 정보 -->
+    <tr class="cat-row"><td colspan="8">📅 &nbsp;날짜 정보</td></tr>
+
+    <tr>
+      <td class="num">14</td>
+      <td class="field-name">선적일 (Ship Date)<small>ship_date</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">2025-09-06</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ro">2026-01-29<br>(별도건)</span></div></td>
+      <td class="note-cell"><span class="tag tag-warn">⚠️주의</span> CS 선적일은 <strong>다른 Order</strong> 건. BL 2025-09-06 기준</td>
+    </tr>
+
+    <tr>
+      <td class="num">15</td>
+      <td class="field-name">Invoice Date<small>invoice_date</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">2025-09-06</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">F/A 고유. BL 선적일과 동일</td>
+    </tr>
+
+    <tr>
+      <td class="num">16</td>
+      <td class="field-name">CO 발행일<small>co_issue_date</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-new">🆕</span><span class="detail pu">2026-02-03</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell"><span class="tag tag-new">🆕신규</span> C/O 고유. 서명: Daniela Díaz Solar</td>
+    </tr>
+
+    <!-- ★ 컨테이너 -->
+    <tr class="cat-row"><td colspan="8">📦 &nbsp;컨테이너</td></tr>
+
+    <tr>
+      <td class="num">17</td>
+      <td class="field-name">Container No.<small>containers</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">FFAU5355006<br>외 4개</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ok">FFAU535500-6<br>외 4개</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell"><span class="tag tag-note">🟡보완</span> PL 하이픈 표기 vs BL 무하이픈 — 파싱 시 정규화 필요</td>
+    </tr>
+
+    <tr>
+      <td class="num">18</td>
+      <td class="field-name">Seal No.<small>seal_no</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">ML-CL0501798<br>외 4개</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">B/L 고유</td>
+    </tr>
+
+    <tr>
+      <td class="num">19</td>
+      <td class="field-name">Size/Type<small>size_type</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">45G1</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">B/L 고유. 45ft High Cube Dry</td>
+    </tr>
+
+    <!-- ★ 화물 상세 -->
+    <tr class="cat-row"><td colspan="8">🔬 &nbsp;화물 정보</td></tr>
+
+    <tr>
+      <td class="num">20</td>
+      <td class="field-name">품목 (Product)<small>product</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl" style="font-size:7.5px">LITHIUM CARBONATE<br>BATTERY GRADE<br>MICRONIZED</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ok" style="font-size:7.5px">LITHIUM<br>CARBONATE</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am" style="font-size:7.5px">LC BATTERY<br>GRADE MIC</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail pu" style="font-size:7.5px">LC GRADE<br>MIC BATTERY</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ro" style="font-size:7.5px">LC BATTERY<br>GRADE MIC</span></div></td>
+      <td class="note-cell">5개 서류 전부 일치 ✅</td>
+    </tr>
+
+    <tr>
+      <td class="num">21</td>
+      <td class="field-name">총 Net Weight<small>net_weight_kg</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">100,020 kg</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ok">100,020 kg</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">100.02 TM</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">3개 서류 교차 검증 ✅ 일치</td>
+    </tr>
+
+    <tr>
+      <td class="num">22</td>
+      <td class="field-name">총 Gross Weight<small>gross_weight_kg</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">102,625 kg</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ok">102,625 kg</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">102,625 kg</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">3개 서류 교차 검증 ✅ 완벽 일치</td>
+    </tr>
+
+    <tr>
+      <td class="num">23</td>
+      <td class="field-name">Quantity (TONS)<small>quantity_mt</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">100.02 T<br>(Order 33057)</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-new">🆕</span><span class="detail pu">120.024 T<br>(Order 34273)</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell"><span class="tag tag-warn">⚠️주의</span> 수량 차이는 서로 다른 Order건 — 오류 아님</td>
+    </tr>
+
+    <tr>
+      <td class="num">24</td>
+      <td class="field-name">총 Package 수<small>total_packages</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">220 PKG<br>(44×5CTR)</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">200 MAXISACO<br>+20 Plastic Jar</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell"><span class="tag tag-note">🟡보완</span> 비고 수정: '220GT' → '220 PACKAGES'</td>
+    </tr>
+
+    <tr>
+      <td class="num">25</td>
+      <td class="field-name">총 CBM<small>total_cbm</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">100.02 CBM<br>(20.004×5)</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">B/L 고유</td>
+    </tr>
+
+    <tr>
+      <td class="num">26</td>
+      <td class="field-name">LOT No.<small>lot_no</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail ok">20개 LOT<br>(SQM 내부)</span></div></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">LOT 목록</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">PL: SQM 내부 LOT / Del No. / Al No. 포함</td>
+    </tr>
+
+    <!-- ★ 금액/보험 -->
+    <tr class="cat-row"><td colspan="8">💰 &nbsp;금액 / 보험</td></tr>
+
+    <tr>
+      <td class="num">27</td>
+      <td class="field-name">Unit Price<small>unit_price</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">USD 9,272.00<br>/TM</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">F/A 고유</td>
+    </tr>
+
+    <tr>
+      <td class="num">28</td>
+      <td class="field-name">Total Amount<small>total_amount</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">USD<br>927,385.44</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">F/A 고유. Incoterm: CIF</td>
+    </tr>
+
+    <tr>
+      <td class="num">29</td>
+      <td class="field-name">Payment Term<small>payment_term</small></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail hl">FULL<br>PREPAID</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-ok">✅</span><span class="detail am">90일<br>after Invoice</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell">BL=운임선불 / FA=상업결제 90일 (별개)</td>
+    </tr>
+
+    <tr>
+      <td class="num">30</td>
+      <td class="field-name">보험가액<small>insured_value</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-new">🆕</span><span class="detail ro">USD<br>2,595,507</span></div></td>
+      <td class="note-cell"><span class="tag tag-new">🆕신규</span> 보험료: USD 2,647.42 / ICC(A)</td>
+    </tr>
+
+    <!-- ★ FTA 정보 -->
+    <tr class="cat-row"><td colspan="8">🌍 &nbsp;FTA / 원산지</td></tr>
+
+    <tr>
+      <td class="num">31</td>
+      <td class="field-name">원산지 국가<small>country_of_origin</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-new">🆕</span><span class="detail pu">CL (Chile)</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell"><span class="tag tag-new">🆕신규</span> 한-칠레 FTA 적용</td>
+    </tr>
+
+    <tr>
+      <td class="num">32</td>
+      <td class="field-name">FTA 기준<small>fta_criterion</small></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="doc-cell"><div class="doc-val-box"><span class="icon v-new">🆕</span><span class="detail pu">B<br>(RVC:BD)</span></div></td>
+      <td class="doc-cell"><span class="v-no">—</span></td>
+      <td class="note-cell"><span class="tag tag-new">🆕신규</span> Criterion B / Build-Down 방식</td>
+    </tr>
+
+  </tbody>
+</table>
+</div><!-- /table-card -->
+
+<!-- ── 주의 배너 ── -->
+<div class="alert">
+  <strong>⚠️ [Order 혼용 주의]</strong> &nbsp;이 검토에 포함된 CO(2200034273_CO)와 CS(2200034273_CS)는 <strong>Order 2200034273</strong> 별도 건의 서류입니다.
+  BL/PL/FA(2200033057_*)는 <strong>Order 2200033057</strong> 건입니다. Shipper·Consignee·Product·선적항·양하항은 동일하나,
+  <strong>수량(100.02T vs 120.024T) · 선적일(2025-09-06 vs 2026-01-29) · BL번호 · 선박명이 상이</strong>하므로 파싱 시 Order 번호 기준으로 반드시 분리하여 매핑하세요.
+</div>
+
+<!-- ── 하단 서류별 요약 ── -->
+<div class="section-hd sh-slate" style="margin-top:18px">📊 &nbsp;서류별 파싱 필드 수 요약</div>
+<div class="summary-grid">
+  <div class="sum-card sc-bl">
+    <div class="icon2">🚢</div>
+    <div class="doc-name">B/L 선하증권</div>
+    <div class="fields">22</div>
+    <div class="fields-label">파싱 가능 필드</div>
+  </div>
+  <div class="sum-card sc-pl">
+    <div class="icon2">📦</div>
+    <div class="doc-name">P/L 포장명세서</div>
+    <div class="fields">19</div>
+    <div class="fields-label">파싱 가능 필드</div>
+  </div>
+  <div class="sum-card sc-fa">
+    <div class="icon2">🧾</div>
+    <div class="doc-name">F/A 상업송장</div>
+    <div class="fields">22</div>
+    <div class="fields-label">파싱 가능 필드</div>
+  </div>
+  <div class="sum-card sc-co">
+    <div class="icon2">🌍</div>
+    <div class="doc-name">C/O 원산지증명</div>
+    <div class="fields">10</div>
+    <div class="fields-label">파싱 가능 필드 (신규)</div>
+  </div>
+  <div class="sum-card sc-cs">
+    <div class="icon2">🛡️</div>
+    <div class="doc-name">C/S 화물보험</div>
+    <div class="fields">5</div>
+    <div class="fields-label">파싱 가능 필드 (신규)</div>
+  </div>
+</div>
+
+</div><!-- /page -->
+</body>
+</html>
