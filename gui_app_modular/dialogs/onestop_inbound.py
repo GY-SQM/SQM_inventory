@@ -7,6 +7,8 @@ SQM v3.8.4 — 원스톱 입고 팝업
 """
 import os
 import re
+import sys
+import csv
 from tkinter import messagebox as msgbox
 import time
 import tkinter as tk
@@ -48,6 +50,8 @@ PREVIEW_COLUMNS = [
     ("free_time",        "FREE TIME",        80,  "center"),
     ("warehouse",        "WH",              100,  "center"),
     ("status",           "STATUS",           80,  "center"),
+    ("qc_status",        "QC",               70,  "center"),    ("qc_reason",        "QC REASON",       320,  "w"),
+
 ]
 
 # 4종 서류 정의 (v3.8.7: 동그라미 번호 순서) — v5.7.5: Invoice/FA, Bill of Loading, Delivery Order
@@ -61,11 +65,16 @@ DOC_TYPES = [
 
 from .inbound_dialog_base import InboundDialogBase
 from .inbound_upload_mixin import InboundUploadMixin
+from .review_center import ReviewCenterDialog
 
 # v5.7.5: 진행률 팝업 조정 — 업로드2: 창·폰트 더 키움
 PROGRESS_POPUP_WIDTH = 880
 PROGRESS_POPUP_HEIGHT = 380
 PROGRESS_POPUP_CLOSE_DELAY_MS = 1600
+# 진행률 바가 파싱 중에도 경과에 따라 움직이도록 주기적으로 소폭 상승
+PROGRESS_NUDGE_INTERVAL_MS = 2000
+PROGRESS_NUDGE_STEP = 2
+PROGRESS_NUDGE_CAP = 78  # 80% 전에 멈춤 (실제 85%는 파싱 완료 시점에 설정)
 
 
 class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
@@ -110,6 +119,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._var_auto_parse_after_bundle = None
         self._var_skip_confirm_on_auto_parse = None
         self.btn_upload = None
+        self.btn_review_center = None
         self.btn_excel = None
         self.btn_undo = None
         self.btn_redo = None
@@ -288,13 +298,13 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         action_bar.pack(fill=X, pady=(2, 4))
 
         self.btn_bundle_select = ttk.Button(
-            action_bar, text="📁 4종 한 번에",
+            action_bar, text="📁 4종 한 번에(복수선택)",
             command=self._select_all_docs_from_folder, width=14
         )
         self.btn_bundle_select.pack(side=LEFT, padx=(0, 4))
         self._attach_doc_tooltip(
             self.btn_bundle_select,
-            "폴더를 한 번 선택하면 파일명 키워드로 4종 서류를 자동 매칭합니다."
+            "PDF/이미지 파일을 여러 개 선택하면 자동으로 4종(PL/INV/BL/DO)을 매칭합니다. (미선택 시 폴더 선택 폴백)"
         )
 
         self.btn_parse = ttk.Button(
@@ -400,6 +410,14 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             padx=20, pady=8, cursor='hand2', bd=0
         )
         self.btn_upload.pack(side=LEFT, padx=(5, 0))
+        # Phase B (MVP): 검수센터(드래그 ROI로 원문에서 텍스트 추출 → 값 보정)
+        self.btn_review_center = tk.Button(
+            btn_frame, text="🧪 검수센터",
+            command=self._open_review_center, state='disabled',
+            font=(_font, _btn_font_size, 'bold'), bg="#444444", fg=_btn_fg,
+            padx=16, pady=8, cursor='hand2', bd=0
+        )
+        self.btn_review_center.pack(side=LEFT, padx=(8, 0))
         self._attach_doc_tooltip(self.btn_upload,
             "미리보기 데이터를 DB에 저장합니다\n\n• 저장 후 재고리스트에 자동 반영\n• 중복 LOT는 자동 스킵\n• 저장 완료 후 재고리스트 화면 표시")
         
@@ -752,6 +770,41 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         except Exception as e:
             logger.error(f"원문 파일 열기 실패: {e}")
 
+    def _open_review_center(self) -> None:
+        """Phase B2: 검수센터 열기 (드래그 ROI / 캡처 OCR / 규칙 저장)."""
+        try:
+            if not getattr(self, "preview_data", None):
+                msgbox.showwarning("검수센터", "먼저 파싱을 진행해 주세요.")
+                return
+            doc_paths = dict(self.file_paths or {})
+
+            def _rerun_qc():
+                try:
+                    self._run_gate_validation(show_popup=False)
+                except Exception as e:
+                    logger.debug(f"rerun_qc suppressed: {e}")
+                try:
+                    if hasattr(self, "_run_cross_check"):
+                        self._cross_check_result = self._run_cross_check()
+                except Exception as e:
+                    logger.debug(f"Suppressed: {e}")
+
+            dlg = ReviewCenterDialog(
+                parent=self.dialog,
+                engine=self.engine,
+                doc_paths=doc_paths,
+                preview_data_ref=self.preview_data,
+                refresh_preview_cb=self._refresh_preview_tree_only,
+                rerun_qc_cb=_rerun_qc,
+            )
+            dlg.show()
+        except Exception as e:
+            logger.exception("검수센터 열기 실패")
+            try:
+                msgbox.showerror("검수센터 오류", str(e))
+            except Exception:
+                pass
+
     def _show_warning_with_lot_links(self, warn_msg: str) -> None:
         """LOT 불일치가 있으면 LOT 클릭으로 원문 열기 가능한 경고창 표시."""
         lot_sets = self._parse_lot_mismatch_sets()
@@ -935,7 +988,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         if getattr(self, '_progress_inline_bar', None):
             self._progress_inline_bar['value'] = 0
         if getattr(self, '_progress_inline_msg', None):
-            self._progress_inline_msg.config(text="준비 중...")
+            self._progress_inline_msg.config(text="📄 4종 서류(PL/Invoice/BL/DO) 파싱을 시작합니다...")
         if getattr(self, '_progress_inline_pct_elapsed', None):
             self._progress_inline_pct_elapsed.config(text="0%  ·  경과: 0:00")
         if getattr(self, '_progress_inline_busy', None):
@@ -1001,6 +1054,50 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 logger.debug(f"Suppressed: {e}")
         self._progress_elapsed_job = None
 
+    def _progress_nudge_tick(self) -> None:
+        """파싱 중 진행률 바가 경과에 따라 조금씩 올라가도록 (진행률과 같이 표시)"""
+        self._progress_nudge_job = None
+        try:
+            pct_var = getattr(self, 'progress_var', None)
+            if not pct_var:
+                return
+            current = int(pct_var.get())
+            if current >= PROGRESS_NUDGE_CAP:
+                return
+            new_pct = min(PROGRESS_NUDGE_CAP, current + PROGRESS_NUDGE_STEP)
+            pct_var.set(new_pct)
+            inline_bar = getattr(self, '_progress_inline_bar', None)
+            if inline_bar and inline_bar.winfo_ismapped():
+                inline_bar['value'] = new_pct
+            pct_elapsed = getattr(self, '_progress_inline_pct_elapsed', None)
+            if pct_elapsed and pct_elapsed.winfo_ismapped():
+                start = getattr(self, '_progress_start_time', None) or time.time()
+                secs = int(time.time() - start)
+                m, s = divmod(secs, 60)
+                pct_elapsed.config(text=f"{new_pct}%  ·  경과: {m}:{s:02d}")
+        except Exception as e:
+            logger.debug(f"Progress nudge tick: {e}")
+        if self.dialog and self.dialog.winfo_exists():
+            self._progress_nudge_job = self.dialog.after(
+                PROGRESS_NUDGE_INTERVAL_MS, self._progress_nudge_tick
+            )
+
+    def _start_progress_nudge(self) -> None:
+        """진행률 소폭 상승 타이머 시작 (파싱 중 바가 멈춰 보이지 않도록)"""
+        self._stop_progress_nudge()
+        if self.dialog and self.dialog.winfo_exists():
+            self._progress_nudge_job = self.dialog.after(
+                PROGRESS_NUDGE_INTERVAL_MS, self._progress_nudge_tick
+            )
+
+    def _stop_progress_nudge(self) -> None:
+        if getattr(self, '_progress_nudge_job', None) and self.dialog and self.dialog.winfo_exists():
+            try:
+                self.dialog.after_cancel(self._progress_nudge_job)
+            except (tk.TclError, ValueError):
+                pass
+        self._progress_nudge_job = None
+
     def _progress_busy_tick(self) -> None:
         """진행 중 움직임 표시 — 기존 화면(인라인) 진행 상태 영역에만 표시"""
         phase = getattr(self, '_progress_busy_phase', 0) % 4
@@ -1029,6 +1126,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         """진행률 팝업 닫기"""
         self._stop_progress_busy_animation()
         self._stop_progress_elapsed_tick()
+        self._stop_progress_nudge()
         try:
             if getattr(self, '_progress_popup', None) and self._progress_popup.winfo_exists():
                 self._progress_popup.destroy()
@@ -1037,6 +1135,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._progress_popup = None
         self._progress_popup_label = None
         self._progress_popup_bar = None
+        self._progress_nudge_job = None
         self._progress_popup_pct = None
         self._progress_popup_busy = None
         self._progress_popup_elapsed = None
@@ -1059,12 +1158,21 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     self._progress_popup_label.config(text=message)
                 if getattr(self, '_progress_popup_pct', None):
                     self._progress_popup_pct.config(text=f"{pct}%" if pct >= 0 else "—")
-            # 인라인 (미리보기 위) — 기존 화면 프로그레스 바만 사용
+            # 인라인 (미리보기 위) — 바·메시지·퍼센트·경과 동기화
             inline_bar = getattr(self, '_progress_inline_bar', None)
             inline_msg = getattr(self, '_progress_inline_msg', None)
             inline_busy = getattr(self, '_progress_inline_busy', None)
-            if inline_bar and inline_bar.winfo_ismapped():
+            pct_elapsed = getattr(self, '_progress_inline_pct_elapsed', None)
+            if inline_bar and inline_bar.winfo_exists():
                 inline_bar['value'] = max(0, min(100, pct))
+            start_ts = getattr(self, '_progress_start_time', None) or time.time()
+            secs = int(time.time() - start_ts)
+            mm, ss = divmod(secs, 60)
+            if pct_elapsed and pct_elapsed.winfo_exists():
+                pct_elapsed.config(text=f"{max(0, min(100, pct))}%  ·  경과: {mm}:{ss:02d}")
+            stopwatch = getattr(self, '_progress_inline_stopwatch', None)
+            if stopwatch and stopwatch.winfo_exists():
+                stopwatch.config(text=f"⏱ {mm:02d}:{ss:02d}")
             if inline_busy and inline_busy.winfo_ismapped():
                 relx = max(0, min(1.0, pct / 100.0))
                 if relx > 0.92:
@@ -1072,6 +1180,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 inline_busy.place(relx=relx, rely=0.5, anchor='w')
             if inline_msg and inline_msg.winfo_ismapped():
                 inline_msg.config(text=message)
+            # 진행률에 따라 바와 함께 표시: 파싱 중(85 미만)이면 주기적으로 바 소폭 상승, 완료/오류 시 nudge 중단
+            if pct >= 85 or pct >= 100 or (pct == 0 and message.strip().startswith("❌")):
+                self._stop_progress_nudge()
+            elif pct < 85:
+                self._start_progress_nudge()
             if pct >= 100 or (pct == 0 and message.strip().startswith("❌")):
                 self._stop_progress_busy_animation()
                 if inline_busy and inline_busy.winfo_ismapped():
@@ -1085,6 +1198,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     def _parse_thread(self) -> None:
         """백그라운드 파싱"""
         try:
+            self._update_progress(3, "🔌 API 연결 및 파서 준비 중...")
             from parsers.document_parser_v2 import DocumentParserV2
             self._cross_check_result = None
             
@@ -1111,6 +1225,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 self._update_progress(90, "파싱할 파일이 없습니다")
                 return
             
+            self._update_progress(8, f"📂 서류 {total}개 확인됨 — PDF 파싱을 시작합니다...")
             icons = {'PACKING_LIST': '📦', 'INVOICE': '📑', 'BL': '🚢', 'DO': '📋'}
             
             pl_result = None
@@ -1130,7 +1245,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 icon = icons.get(doc_type, '📄')
                 pct = int(10 + 70 * idx / total)
                 doc_name = doc_type_display.get(doc_type, doc_type)
-                self._update_progress(pct, f"현재 파싱 중: {doc_name} — {fname}")
+                self._update_progress(pct, f"{icon} {doc_name} 파싱 중 — {fname}")
                 self._log_safe(f"{icon} {doc_type} 파싱: {fname}")
                 
                 try:
@@ -1301,6 +1416,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             if self.btn_reset_original and self.btn_reset_original.winfo_exists():
                 self.btn_reset_original.config(state='normal' if self._original_preview_data else 'disabled')
             
+            # Phase 0-A(Part3): Gate Validation (QC 표시 + 업로드 버튼 상태 반영)
+            try:
+                self._run_gate_validation(show_popup=True)
+            except Exception as _e:
+                logger.debug(f"Gate validation skipped: {_e}")
+
             # 표시
             self._update_progress(95, "📋 미리보기 준비...")
             self._display_preview()
@@ -1317,6 +1438,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             self.btn_upload.config(state='normal')
                         else:
                             self.btn_upload.config(state='disabled')
+                    if getattr(self, 'btn_review_center', None) and self.btn_review_center.winfo_exists():
+                        if self._has_required_docs():
+                            self.btn_review_center.config(state='normal')
+                        else:
+                            self.btn_review_center.config(state='disabled')
             if self.dialog and self.dialog.winfo_exists():
                 self.dialog.after(400, _ensure_buttons_visible)
             
@@ -1403,6 +1529,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             return
         
         _lots = list(getattr(pl, 'lots', []) or [])
+        # v6.3.5: 어떤 경우에도 파싱 창 행 순서는 PL 순서(list_no) 기준. FA(Invoice)는 문서 단위 정보만 보충.
         _lots_sorted = sorted(
             enumerate(_lots, 1),
             key=lambda p: self._lot_order_key(p[1], p[0])
@@ -1425,7 +1552,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             _gw = getattr(lot, 'gross_weight_kg', None)
             row['gross_weight'] = f"{float(_gw):,.3f}" if _gw else ''
             
-            # v3.8.8: B/L ship_date 우선, Invoice 폴백 — 업로드3/4: 파싱값으로 채움 (날짜는 YYYY-MM-DD)
             if bl:
                 row['bl_no'] = self._format_bl(getattr(bl, 'bl_no', '') or '')
                 _sd = getattr(bl, 'ship_date', None)
@@ -2137,7 +2263,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
 
     def _editable_preview_columns(self) -> set:
         # No/Status는 시스템 관리 컬럼으로 편집 제외
-        return set(self._preview_col_names()) - {'no', 'status'}
+        return set(self._preview_col_names()) - {'no', 'status', 'qc_status', 'qc_reason'}
 
     def _capture_preview_anchor(self, event=None) -> None:
         if not getattr(self, 'tree', None):
@@ -2515,8 +2641,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self._update_summary()
             if self.preview_data and self._has_required_docs():
                 self.btn_upload.config(state='normal')
+                if getattr(self, 'btn_review_center', None) and self.btn_review_center.winfo_exists():
+                    self.btn_review_center.config(state='normal')
             else:
                 self.btn_upload.config(state='disabled')
+                if getattr(self, 'btn_review_center', None) and self.btn_review_center.winfo_exists():
+                    self.btn_review_center.config(state='disabled')
             if self.preview_data:
                 self.btn_excel.config(state='normal')
             self._update_filter_values_from_preview()
@@ -2531,6 +2661,189 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 return False
         return True
     
+    
+    # ═══════════════════════════════════════════════════════════
+    # Phase 0-A (Part 3) — Validation Gate + SUSPECT Routing (skeleton)
+    #   - OK / SUSPECT / ERROR 를 미리보기(QC 컬럼)로 표시
+    #   - ERROR: 업로드 버튼 비활성화(업무 하드스톱), 단 업로드 버튼에서 최종 검증도 재수행됨
+    #   - SUSPECT: 업로드는 가능(사용자 확인), 추후 Review Center(Phase B)로 연결
+    # ═══════════════════════════════════════════════════════════
+
+    def _run_gate_validation(self, *, show_popup: bool = False) -> dict:
+        """미리보기 데이터 기반 QC 검증.
+        Returns: dict(level='OK'|'SUSPECT'|'ERROR', errors=[...], warnings=[...])
+        """
+        report = {"level": "OK", "errors": [], "warnings": []}
+
+        rows = list(getattr(self, "preview_data", []) or [])
+        if not rows:
+            self._gate_report = report
+            return report
+
+        # 1) 기본값 세팅
+        for r in rows:
+            r["qc_status"] = "OK"
+            r["qc_reason"] = ""
+
+        # 2) 프리플라이트(필수필드/형식) — InboundUploadMixin에 구현된 검증을 재사용
+        try:
+            if hasattr(self, "_preflight_validate_preview_data"):
+                errs = list(self._preflight_validate_preview_data() or [])
+            else:
+                errs = []
+        except Exception as e:
+            errs = [f"검증 엔진 오류: {e}"]
+
+        # 행 번호 매핑 ("3행: ..." 형태 지원)
+        row_err_map = {}  # idx(1-based) -> [msg...]
+        for msg in errs:
+            m = re.match(r"^(\d+)행\s*:\s*(.+)$", str(msg).strip())
+            if m:
+                idx = int(m.group(1))
+                row_err_map.setdefault(idx, []).append(m.group(2))
+            else:
+                report["errors"].append(str(msg))
+
+        if errs:
+            report["level"] = "ERROR"
+            report["errors"].extend([str(x) for x in errs])
+
+            for idx, r in enumerate(rows, 1):
+                if idx in row_err_map:
+                    r["qc_status"] = "ERROR"
+                    r["qc_reason"] = "; ".join([str(x) for x in row_err_map.get(idx, [])])
+
+        # 3) 크로스 체크 결과 기반 SUSPECT 표시 (치명/경고/LOT 불일치 등)
+        try:
+            xc = getattr(self, "_cross_check_result", None)
+            mismatch = self._parse_lot_mismatch_sets() if hasattr(self, "_parse_lot_mismatch_sets") else {"invoice_only": [], "pl_only": []}
+            suspect_lots = set((mismatch.get("invoice_only") or []) + (mismatch.get("pl_only") or []))
+
+            has_critical = bool(getattr(xc, "has_critical", False))
+            has_any_mismatch = bool(suspect_lots)
+
+            if (has_critical or has_any_mismatch) and report["level"] != "ERROR":
+                report["level"] = "SUSPECT"
+
+            if has_critical:
+                report["warnings"].append(f"크로스 체크 CRITICAL {getattr(xc, 'critical_count', 0)}건")
+            if has_any_mismatch:
+                report["warnings"].append(f"LOT 불일치(Invoice Only/PL Only) {len(suspect_lots)}건")
+
+            if report["level"] == "SUSPECT":
+                for r in rows:
+                    lot = str(r.get("lot_no", "") or "").strip()
+                    if has_any_mismatch and lot in suspect_lots:
+                        r["qc_status"] = "SUSPECT"
+                        if not r.get("qc_reason"):
+                            r["qc_reason"] = "LOT 불일치"
+                    elif r.get("qc_status") == "OK":
+                        # mismatch가 없고 critical만 있는 경우: 전체를 SUSPECT로 표시
+                        if has_critical and not has_any_mismatch:
+                            r["qc_status"] = "SUSPECT"
+                            if not r.get("qc_reason"):
+                                r["qc_reason"] = "크로스체크 CRITICAL"
+        except Exception as e:
+            # 검증 실패는 SUSPECT로만 처리(업무 중단 방지)
+            if report["level"] == "OK":
+                report["level"] = "SUSPECT"
+            report["warnings"].append(f"검증(크로스체크) 스킵: {e}")
+
+        self._gate_report = report
+
+        # 4) 업로드 버튼 상태 반영 (ERROR일 때만 하드스톱)
+        try:
+            if getattr(self, "btn_upload", None) and self.btn_upload.winfo_exists():
+                if report["level"] == "ERROR":
+                    self.btn_upload.config(state="disabled")
+                else:
+                    self.btn_upload.config(state="normal" if self._has_required_docs() else "disabled")
+            if getattr(self, "btn_review_center", None) and self.btn_review_center.winfo_exists():
+                if report["level"] == "ERROR":
+                    self.btn_review_center.config(state="disabled")
+                else:
+                    self.btn_review_center.config(state="normal" if self._has_required_docs() else "disabled")
+        except Exception:
+            pass
+
+        # 5) 요약 업데이트
+        try:
+            self._update_summary()
+        except Exception:
+            pass
+
+
+        # 5-1) QC 리포트 자동 저장(운영 추적용) — 실패해도 흐름 유지
+        try:
+            self._save_qc_report(report)
+        except Exception:
+            pass
+
+        # 6) 팝업(선택)
+        if show_popup and report["level"] in ("SUSPECT", "ERROR"):
+            title = "🔎 파싱 검증 결과"
+            msg = [f"결과: {report['level']}"]
+            if report["level"] == "ERROR":
+                msg.append("")
+                msg.append("❌ 필수값/형식 오류가 있어 DB 업로드가 차단되었습니다.")
+            if report["errors"]:
+                msg.append("")
+                msg.append("오류 일부:")
+                msg.extend(report["errors"][:12])
+                if len(report["errors"]) > 12:
+                    msg.append("... (더 있음)")
+            if report["warnings"]:
+                msg.append("")
+                msg.append("경고:")
+                msg.extend(report["warnings"][:12])
+            try:
+                msgbox.showwarning(title, "\n".join(msg))
+            except Exception:
+                pass
+
+        return report
+
+
+
+    def _save_qc_report(self, report: dict) -> None:
+        """QC 결과를 CSV로 저장합니다. (운영 추적/재현용)
+        - 저장 위치: <실행폴더>/reports/YYYY-MM-DD/
+        - 파일명: inbound_qc_YYYYMMDD_HHMMSS.csv
+        """
+        try:
+            base = os.path.dirname(os.path.abspath(sys.argv[0]))
+        except Exception:
+            base = os.getcwd()
+
+        day = datetime.now().strftime("%Y-%m-%d")
+        out_dir = os.path.join(base, "reports", day)
+        os.makedirs(out_dir, exist_ok=True)
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"inbound_qc_{ts}.csv"
+        path = os.path.join(out_dir, filename)
+
+        rows = list(getattr(self, "preview_data", []) or [])
+        if not rows:
+            return
+
+        # 헤더: PREVIEW_COLUMNS + QC Reason
+        cols = [c[0] for c in PREVIEW_COLUMNS]
+        # 안전장치(구버전/이상키 대응)
+        if "qc_reason" not in cols:
+            cols.append("qc_reason")
+
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["qc_level", report.get("level", "")])
+            w.writerow(["errors"] + (report.get("errors", []) or []))
+            w.writerow(["warnings"] + (report.get("warnings", []) or []))
+            w.writerow([])
+            w.writerow([c.upper() for c in cols])
+            for r in rows:
+                w.writerow([str(r.get(c, "") or "") for c in cols])
+
+
     def _update_summary(self) -> None:
         """합계행"""
         if not self.preview_data:
@@ -2562,7 +2875,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             f"{total_tb} 톤백 | "
             f"Net {total_net:,.0f} kg | "
             f"Gross {total_gross:,.0f} kg"
-            + (f" | 파싱시간 {self._last_parse_elapsed_text}" if self._last_parse_elapsed_text else "")
+            + (self._format_qc_summary() if hasattr(self, "_format_qc_summary") else "") + (f" | 파싱시간 {self._last_parse_elapsed_text}" if self._last_parse_elapsed_text else "")
         )
     
 
@@ -2686,6 +2999,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             try:
                 if self.btn_upload and self.btn_upload.winfo_exists():
                     self.btn_upload.config(state='normal')
+                if getattr(self, 'btn_review_center', None) and self.btn_review_center.winfo_exists():
+                    self.btn_review_center.config(state='normal')
                 if self.btn_excel and self.btn_excel.winfo_exists():
                     self.btn_excel.config(state='normal')
             except (RuntimeError, ValueError) as _e:

@@ -777,14 +777,16 @@ class GeminiDocumentParser:
                 doc.close()
 
     def _extract_invoice_lots_fallback(self, text: str, sap_no: str = "") -> List[str]:
-        """긴 N° LOTES 라인에서 LOT 번호(10자리) 정규식 회수."""
+        """긴 N° LOTES 라인에서 LOT 번호(10자리) 정규식 회수.
+        반드시 'LOT번호/중량T' 형식만 추출 — 24개인데 25개 나오는 원인 제거:
+        일반 10자리 숫자(Ref.SQM, 주문번호 등)는 pure_re로 잡지 않음."""
         if not text:
             return []
         normalized = re.sub(r'[\r\n\t]+', ' ', text)
         normalized = re.sub(r'\s+', ' ', normalized)
         anchor_re = re.compile(r'(N\s*[°ºo]?\s*LOTES?\s*:?)', re.IGNORECASE)
+        # LOT 형식만: 10자리숫자 + / + 중량(숫자,유럽식) + T (예: 1126010240/5,001T)
         weighted_re = re.compile(r'\b(\d{10})\s*/\s*\d[\d\.,]*\s*T\b', re.IGNORECASE)
-        pure_re = re.compile(r'\b(\d{10})\b')
         out = []
         seen = set()
         sap_clean = str(sap_no or '').strip()
@@ -797,7 +799,8 @@ class GeminiDocumentParser:
             )
             if stop:
                 block = block[:stop.start()]
-            candidates = weighted_re.findall(block) or pure_re.findall(block)
+            # 24개인데 25개 파싱 방지: 형식 없는 10자리 숫자(pure_re) 사용 금지 → weighted_re만 사용
+            candidates = weighted_re.findall(block)
             for lot_no in candidates:
                 lot_no = str(lot_no).strip()
                 if not lot_no or lot_no == sap_clean or lot_no in seen:
@@ -833,12 +836,14 @@ class GeminiDocumentParser:
     def parse_packing_list(self, pdf_path: str) -> PackingListResult:
         """
         Packing List PDF를 Gemini로 파싱
-        
+
         Args:
             pdf_path: PDF 파일 경로
-        
+
         Returns:
             PackingListResult: 파싱 결과
+
+        Phase A: 24개 검증은 parsers.pl_lot_parser / lot_parser_fix 사용.
         """
         result = PackingListResult()
 
@@ -851,11 +856,11 @@ class GeminiDocumentParser:
                 result.error_message = "PDF 이미지 변환 실패"
                 return result
 
-            # 프롬프트 (v5.5.2: 강제 스키마 — 오직 JSON만, 설명/마크다운/코드블럭 금지, lots 필수)
+            # 프롬프트: 테이블 행 수 = lots 개수, 한 번에 누락 없이 (재시도 없음)
             prompt = """오직 JSON만 출력하세요. 설명·마크다운·코드블럭(```) 표시 금지. 반드시 lots 배열을 포함하고, 각 lot에는 lot_no, mxbg, net_weight_kg가 필수입니다.
 
 이 Packing List 문서를 분석하여 아래 JSON 형식으로 정확히 추출해주세요.
-표에 LIST 1, 2, ... 20처럼 여러 행이 있으면 반드시 그 행 수만큼 모두 추출하세요. (예: 20행이면 lots 배열에 20개 항목)
+★ 필수: 표의 LIST 컬럼(1, 2, 3, … N) 행 수 N과 동일하게 lots 배열도 정확히 N개를 반환하세요. 24행이면 24개, 한 행도 누락·추가하지 마세요.
 
 숫자 형식 주의 (★중요★):
 - 유럽식 표기 (5.131,250 = 5131.250)를 숫자로 변환
@@ -1042,7 +1047,14 @@ JSON만 출력하세요."""
 
             # v2.5.8: 제품명 로깅
             logger.info(f"[GeminiParser] Packing List 완료: {len(result.lots)} LOT, {result.total_net_weight_kg:,.0f}kg, 제품: {result.product or '(없음)'}")
-            # 1페이지뿐인데 20개 미만이면 누락 가능성 경고 (원본이 20행인 경우)
+            # Phase A: 24개 검증 (pl_lot_parser)
+            try:
+                from parsers.pl_lot_parser import validate_pl_lots
+                ok, msg = validate_pl_lots(result.lots, expected_count=24)
+                if not ok:
+                    logger.warning(f"[GeminiParser] PL 검증: {msg}")
+            except Exception as _e:
+                logger.debug(f"Suppressed: {_e}")
             if len(images) == 1 and len(result.lots) < 20 and len(result.lots) >= 19:
                 logger.warning(f"[GeminiParser] PL 1페이지인데 {len(result.lots)}개만 추출됨 — 원본에 20행이 있다면 응답 잘림 또는 모델 누락일 수 있음. 로그/raw 응답 확인 권장.")
 
@@ -1130,63 +1142,17 @@ JSON만 출력하세요."""
                 except (ValueError, TypeError):
                     result.package_count = 0
                 result.package_type = str(data.get('package_type', '') or '')
-                result.lot_numbers = [str(x).strip() for x in (data.get('lot_numbers', []) or []) if str(x).strip()]
                 result.success = bool(result.sap_no)
 
-            # Invoice 추가 페이지 LOT 추출 (PL과 동일한 다중 페이지 보강)
-            if result.success and len(images) > 1:
-                prompt_continuation = """오직 JSON만 출력하세요. 설명·마크다운·코드블럭(```) 금지.
-이 Invoice의 이어지는 페이지입니다. 이 페이지에 있는 LOT 번호만 추출하세요.
-LOT 형식은 "LOT번호/중량T" 이며 LOT 번호(숫자)만 반환하세요.
-{"lot_numbers": ["1125072729", "1125072730"]}
-JSON만 출력하세요."""
-                seen_lots = set(result.lot_numbers)
-                for page_idx in range(1, len(images)):
-                    try:
-                        page_text = self._call_gemini(prompt_continuation, images[page_idx])
-                        page_data = self._extract_json(page_text)
-                        if not page_data:
-                            continue
-                        page_lots = page_data.get("lot_numbers")
-                        if not isinstance(page_lots, list):
-                            continue
-                        added = 0
-                        for raw_lot in page_lots:
-                            lot_no = str(raw_lot).strip()
-                            if not lot_no:
-                                continue
-                            if lot_no in seen_lots:
-                                continue
-                            seen_lots.add(lot_no)
-                            result.lot_numbers.append(lot_no)
-                            added += 1
-                        if added:
-                            logger.info(f"[GeminiParser] Invoice 추가 페이지 {page_idx + 1}: LOT {added}개 추가")
-                    except (ValueError, TypeError, KeyError) as page_err:
-                        logger.warning(f"[GeminiParser] Invoice 페이지 {page_idx + 1} LOT 추출 실패: {page_err}")
-
-            # Fallback: 긴 "N° LOTES" 라인 누락 보강 (Gemini 일부 누락 시)
+            # Phase A: Invoice LOT — parsers.lot_parser_fix 사용 (24개 검증, 루비 인라인 로직 제거)
             try:
-                fallback_text = self._extract_pdf_text(pdf_path)
-                fallback_lots = self._extract_invoice_lots_fallback(fallback_text, sap_no=result.sap_no)
-                if fallback_lots:
-                    before = len(result.lot_numbers)
-                    seen = set(str(x).strip() for x in result.lot_numbers if str(x).strip())
-                    for lot_no in fallback_lots:
-                        if lot_no in seen:
-                            continue
-                        seen.add(lot_no)
-                        result.lot_numbers.append(lot_no)
-                    added = len(result.lot_numbers) - before
-                    if added > 0:
-                        logger.info(f"[GeminiParser] Invoice LOT fallback 보강: +{added}개 (총 {len(result.lot_numbers)}개)")
-                if fallback_text and result.lot_numbers:
-                    ordered = self._order_lot_numbers_by_text(fallback_text, result.lot_numbers)
-                    if ordered != result.lot_numbers:
-                        result.lot_numbers = ordered
-                        logger.info("[GeminiParser] Invoice LOT 원문 순서 정렬 적용")
-            except (ValueError, TypeError, KeyError, RuntimeError) as fb_err:
-                logger.warning(f"[GeminiParser] Invoice LOT fallback 보강 실패(무시): {fb_err}")
+                from parsers.lot_parser_fix import reconcile_invoice_lots_from_pdf
+                gemini_lots = [str(x).strip() for x in (data.get('lot_numbers', []) or []) if str(x).strip()] if data else []
+                result.lot_numbers = reconcile_invoice_lots_from_pdf(pdf_path, result.sap_no, gemini_lots)
+            except Exception as e:
+                logger.warning(f"[GeminiParser] lot_parser_fix 연동 실패, Gemini LOT 사용: {e}")
+                raw = [str(x).strip() for x in (data.get('lot_numbers', []) or []) if str(x).strip()] if data else []
+                result.lot_numbers = list(dict.fromkeys(raw))
 
             logger.info(f"[GeminiParser] Invoice 완료: SAP={result.sap_no}, LOT={len(result.lot_numbers)}개")
 

@@ -128,7 +128,7 @@ class InvoiceMixin:
         if hasattr(result, 'supplier'):
             result.supplier = getattr(gemini_result, 'supplier', '') or ''
 
-        # LOT 목록 (Gemini: lots / OpenAI: lot_numbers)
+        # LOT 목록: Phase A에서 gemini_parser가 lot_parser_fix로 확정한 결과 그대로 사용 (루비 dedupe 제거)
         lots = getattr(gemini_result, 'lots', []) or getattr(gemini_result, 'lot_numbers', []) or []
         result.lot_numbers = [str(x).strip() for x in lots if str(x).strip()]
 

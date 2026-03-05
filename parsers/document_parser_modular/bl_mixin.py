@@ -67,6 +67,9 @@ class BLMixin:
         if not bl_no:
             raise RuntimeError("[BL] BL 번호 파싱 실패(좌표 기반 단독 모드)")
 
+        # v6.3.5.A: 2줄 BL(영문 prefix + 숫자) 결합 후처리
+        bl_no = self._merge_two_line_bl_if_needed(words, bl_no)
+
         result = BLData()
         result.source_file = pdf_path
         result.parsed_at = datetime.now()
@@ -183,6 +186,95 @@ class BLMixin:
             if self._looks_like_bl(token):
                 return token
         return ""
+
+    
+    # ─────────────────────────────────────────────────────────────
+    # v6.3.5.A (RUBI): 선사별 BL 포맷 대응 강화
+    # - Maersk 등 2줄 BL: (영문 prefix 3~4자리) + (숫자 토큰) 결합 지원
+    # - 기존 추출 로직은 유지하고, "후처리 결합"만 추가(안전)
+    # ─────────────────────────────────────────────────────────────
+    
+    def _is_letters_only_prefix(self, token: str) -> bool:
+        t = self._norm(token)
+        return bool(t) and t.isalpha() and 3 <= len(t) <= 4
+    
+    def _merge_two_line_bl_if_needed(self, words: List[Dict], bl_no: str) -> str:
+        """BL 번호가 숫자만 잡히는 경우, 인접 라인의 영문 prefix를 찾아 결합한다.
+        - 대표 케이스: MAEU\n2637... → MAEU2637...
+        """
+        t = self._norm(bl_no)
+        if not t:
+            return ""
+        # 이미 영문+숫자 혼합이면 그대로
+        if re.search(r"[A-Z]", t) and re.search(r"\d", t):
+            return t
+        # 숫자만 있는 경우에만 결합 시도
+        if not t.isdigit() or len(t) < 6:
+            return t
+    
+        # 1) 동일 토큰(숫자)의 좌표 후보를 찾고, 바로 윗줄 prefix를 탐색
+        digit_words = []
+        for w in (words or []):
+            try:
+                if self._norm(w.get("text", "")) == t:
+                    digit_words.append(w)
+            except Exception:
+                continue
+        if not digit_words:
+            return t
+    
+        # 우상단/상단 후보 우선
+        def _rank(dw):
+            page = int(dw.get("page", 0) or 0)
+            top = float(dw.get("top", 99999.0) or 99999.0)
+            x0 = float(dw.get("x0", 0.0) or 0.0)
+            width = float(dw.get("width", 1.0) or 1.0)
+            height = float(dw.get("height", 1.0) or 1.0)
+            top_band = 0 if top <= height * 0.25 else 1
+            right_band = 0 if x0 >= width * 0.55 else 1
+            return (page, top_band, right_band, top, -x0)
+    
+        digit_words = sorted(digit_words, key=_rank)
+        dw = digit_words[0]
+        page = int(dw.get("page", 0) or 0)
+        top = float(dw.get("top", 0.0) or 0.0)
+        x0 = float(dw.get("x0", 0.0) or 0.0)
+        x1 = float(dw.get("x1", x0) or x0)
+    
+        # 2) 같은 페이지에서, 바로 위쪽(짧은 거리) + x 대역 유사한 prefix 탐색
+        prefix_candidates = []
+        for w in (words or []):
+            try:
+                if int(w.get("page", 0) or 0) != page:
+                    continue
+                wt = self._norm(w.get("text", ""))
+                if not self._is_letters_only_prefix(wt):
+                    continue
+                wtop = float(w.get("top", 0.0) or 0.0)
+                # 위쪽에 있어야 함 (너무 멀면 제외)
+                dy = top - wtop
+                if dy <= 0 or dy > 40:
+                    continue
+                wx0 = float(w.get("x0", 0.0) or 0.0)
+                wx1 = float(w.get("x1", wx0) or wx0)
+                # x 대역이 비슷해야 함(정렬된 2줄)
+                if abs(wx0 - x0) > 80 and abs(wx1 - x1) > 80:
+                    continue
+                prefix_candidates.append((dy, -wx0, wt))
+            except Exception:
+                continue
+    
+        if not prefix_candidates:
+            return t
+    
+        prefix = sorted(prefix_candidates, key=lambda x: (x[0], x[1]))[0][2]
+        merged = f"{prefix}{t}"
+        # merged도 BL로 보이면 채택
+        if self._looks_like_bl(merged):
+            return merged
+        return t
+
+
 
     def _parse_date_from_text(self, text: str):
         from utils.date_utils import normalize_date

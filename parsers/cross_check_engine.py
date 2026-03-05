@@ -353,7 +353,10 @@ class CrossCheckEngine:
         if inv_count != pl_count:
             diff = abs(inv_count - pl_count)
             level = CheckLevel.CRITICAL if diff >= 3 else CheckLevel.WARNING
-            result.add("LOT 개수", level, f"Invoice {inv_count}개 vs Packing List {pl_count}개 (차이: {diff}개)", {"Invoice": f"{inv_count}개", "Packing List": f"{pl_count}개"})
+            msg = f"Invoice {inv_count}개 vs Packing List {pl_count}개 (차이: {diff}개)"
+            if diff <= 2:
+                msg += " — 원문 FA/PL이 동일 개수인데 파서가 1~2행 누락·중복했을 수 있습니다. 원문과 대조해 보세요."
+            result.add("LOT 개수", level, msg, {"Invoice": f"{inv_count}개", "Packing List": f"{pl_count}개"})
 
     def _check_lot_numbers(self, result, invoice, pl):
         inv_lots = set(str(x).strip() for x in (getattr(invoice, "lot_numbers", []) or []) if str(x).strip()) if invoice else set()
