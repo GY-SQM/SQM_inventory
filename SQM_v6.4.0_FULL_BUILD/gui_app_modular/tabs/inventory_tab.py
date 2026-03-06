@@ -107,9 +107,9 @@ class InventoryTabMixin:
         self._inv_view_mode = tk.StringVar(value='lot')  # 호환성 유지
 
         # ═══════════════════════════════════════════════════════
-        # v4.0.6: 헤더 필터 바
+        # 헤더 정렬+필터: 상단 필터 메뉴 제거, 차트 헤더 열마다 정렬(▲▼)+리스트박스
         # ═══════════════════════════════════════════════════════
-        from ..utils.tree_enhancements import HeaderFilterBar, apply_striped_rows, TreeviewTotalFooter
+        from ..utils.tree_enhancements import HeaderSortFilterRow, apply_striped_rows, TreeviewTotalFooter
         
         _is_dark_filter = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         inv_filter_cols = [
@@ -120,16 +120,11 @@ class InventoryTabMixin:
             ('product',      'PRODUCT',    160),
             ('status',       'STATUS',      90),
         ]
-        self._inv_filter_bar = HeaderFilterBar(
-            self._inv_recovery_container, None, inv_filter_cols,
-            on_filter=self._on_inv_filter_apply,
-            is_dark=_is_dark_filter,
-            date_from_var=self._date_from_var,
-            date_to_var=self._date_to_var,
-            container_suffix_var=getattr(self, '_container_suffix_var', None),
-            on_container_suffix_toggle=getattr(self, '_on_container_suffix_toggle', None),
-        )
-        self._inv_filter_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+        # 트리 생성 전에 필터/정렬 바만 생성해 두고, 트리 생성 후 연결·pack
+        self._inv_filter_bar = None
+        self._inv_header_row = None
+        self._inv_header_row_place = ttk.Frame(self._inv_recovery_container)
+        self._inv_header_row_place.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
 
         # v5.0.2: 컬럼 토글 바 (v8.7.0: 전체 19열 + 기본표시여부 반영)
         try:
@@ -274,9 +269,32 @@ class InventoryTabMixin:
         # 테마 색상
         self._apply_inventory_theme_colors()
 
-        # v4.0.6: 필터바에 treeview 연결
-        self._inv_filter_bar.tree = self.tree_inventory
-        
+        # 헤더 열 정렬+리스트박스 (상단 필터 메뉴 대체)
+        inv_filter_cols = [
+            ('lot_no', 'LOT NO', 120), ('sap_no', 'SAP NO', 120), ('bl_no', 'BL NO', 140),
+            ('container_no', 'CONTAINER', 130), ('product', 'PRODUCT', 160), ('status', 'STATUS', 90),
+        ]
+        def _on_inv_header_sort(col_id):
+            self._sort_treeview(self.tree_inventory, col_id)
+            if getattr(self, '_inv_header_row', None):
+                self._inv_header_row.set_sort(col_id, self._sort_reverse)
+
+        from ..utils.tree_enhancements import HeaderSortFilterRow
+        self._inv_header_row = HeaderSortFilterRow(
+            self._inv_header_row_place,
+            self.tree_inventory,
+            inv_filter_cols,
+            on_filter=self._on_inv_filter_apply,
+            on_sort=_on_inv_header_sort,
+            is_dark=_is_dark_tv,
+            date_from_var=self._date_from_var,
+            date_to_var=self._date_to_var,
+            container_suffix_var=getattr(self, '_container_suffix_var', None),
+            on_container_suffix_toggle=getattr(self, '_on_container_suffix_toggle', None),
+        )
+        self._inv_header_row.pack(fill=X)
+        self._inv_filter_bar = self._inv_header_row
+
         # v5.0.2: 컬럼 토글바에 treeview 연결 (v8.7.0: 초기 displaycolumns 적용)
         if hasattr(self, '_inv_toggle_bar') and self._inv_toggle_bar:
             self._inv_toggle_bar.tree = self.tree_inventory
@@ -732,10 +750,13 @@ class InventoryTabMixin:
         return result
 
     def _set_parsing_preview_data(self, data) -> None:
-        """파싱 미리보기 데이터 설정/해제. None이면 DB 기준으로 복원."""
+        """파싱 미리보기 데이터 설정/해제. None이면 창을 비우고, 파싱 결과만 올 때만 표시."""
         self._parsing_preview_data = data
         if isinstance(data, list) and len(data) > 0:
             self._blank_inventory_until_first_parse = False
+        else:
+            # 파싱 전/해제 시: 기존 데이터 clear, 파싱 결과만 보여줌
+            self._blank_inventory_until_first_parse = True
         self._refresh_inventory()
 
     def _reset_inventory_view_for_new_inbound(self) -> None:

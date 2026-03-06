@@ -318,6 +318,168 @@ class HeaderFilterBar:
             self.filter_combos[col_id]['values'] = all_values
 
 
+class HeaderSortFilterRow:
+    """
+    차트(트리) 헤더 열마다 정렬(오름/내림) + 리스트 목록 상자(콤보)를 넣은 한 줄.
+    상단 필터 메뉴 없이, 헤더에 통합.
+
+    - 각 열: 컬럼명 + 정렬 표시(▲/▼) + 콤보(전체/값 목록)
+    - 헤더 클릭 시 정렬, 콤보 선택 시 필터 적용
+    - get_filters(), update_filter_values(), filter_vars, filter_combos — HeaderFilterBar와 호환
+    """
+
+    def __init__(self, parent, tree, columns: List[Tuple[str, str, int]],
+                 on_filter: Callable, on_sort: Callable[[str], None],
+                 is_dark: bool = False,
+                 date_from_var=None, date_to_var=None,
+                 container_suffix_var=None, on_container_suffix_toggle=None):
+        """
+        Args:
+            parent: 부모 위젯
+            tree: Treeview (컬럼 폭 참조용)
+            columns: [(col_id, label, width), ...] — 필터/정렬할 컬럼들
+            on_filter: 필터 변경 시 콜백
+            on_sort: 헤더 클릭 시 콜백 on_sort(col_id)
+            date_from_var, date_to_var, container_suffix_var, on_container_suffix_toggle: 선택
+        """
+        import tkinter as tk
+        from tkinter import ttk
+
+        self.tree = tree
+        self.on_filter = on_filter
+        self.on_sort = on_sort
+        self.filter_vars = {}
+        self.filter_combos = {}
+        self._sort_labels = {}
+        self._sort_column = None
+        self._sort_reverse = False
+        self._date_from_var = date_from_var
+        self._date_to_var = date_to_var
+
+        self.frame = ttk.Frame(parent, padding=(2, 2))
+        self._cells_frame = ttk.Frame(self.frame)
+        self._cells_frame.pack(fill=tk.X)
+
+        for col_id, label, width in columns:
+            cell = ttk.Frame(self._cells_frame)
+            cell.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 2))
+
+            # 컬럼명 + 클릭 시 정렬
+            lbl = ttk.Label(cell, text=label, font=('맑은 고딕', 9, 'bold'))
+            lbl.pack(side=tk.LEFT, padx=(2, 0))
+            lbl.bind('<Button-1>', lambda e, c=col_id: self._on_header_click(c))
+            try:
+                from .ui_constants import apply_tooltip
+                apply_tooltip(lbl, f"클릭: 오름차순/내림차순 정렬")
+            except Exception:
+                pass
+
+            sort_lbl = ttk.Label(cell, text="", font=('맑은 고딕', 9), width=2)
+            sort_lbl.pack(side=tk.LEFT)
+            sort_lbl.bind('<Button-1>', lambda e, c=col_id: self._on_header_click(c))
+            self._sort_labels[col_id] = sort_lbl
+
+            var = tk.StringVar(value="전체")
+            combo = ttk.Combobox(
+                cell, textvariable=var, values=["전체"], state="readonly",
+                width=max(width // 10, 6)
+            )
+            combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
+            combo.bind('<<ComboboxSelected>>', lambda e: self.on_filter())
+            self.filter_vars[col_id] = var
+            self.filter_combos[col_id] = combo
+
+        # 하위호환: lot_combo, sap_combo 등 별칭
+        self.lot_combo = self.filter_combos.get('lot_no')
+        self.sap_combo = self.filter_combos.get('sap_no')
+        self.bl_combo = self.filter_combos.get('bl_no')
+        self.container_combo = self.filter_combos.get('container_no')
+        self.product_combo = self.filter_combos.get('product')
+
+        # 기간·컨테이너 구분 (선택)
+        opt_frame = ttk.Frame(self.frame)
+        opt_frame.pack(fill=tk.X, pady=(4, 0))
+        if date_from_var is not None and date_to_var is not None:
+            ttk.Label(opt_frame, text="기간:").pack(side=tk.LEFT, padx=(0, 2))
+            ttk.Entry(opt_frame, textvariable=date_from_var, width=11).pack(side=tk.LEFT, padx=2)
+            _btn_cal_from = ttk.Button(opt_frame, text="📅", width=2,
+                command=lambda: show_date_calendar(
+                    self.frame.winfo_toplevel(), date_from_var.get(),
+                    lambda ymd: (date_from_var.set(ymd), self.on_filter())))
+            _btn_cal_from.pack(side=tk.LEFT, padx=(0, 4))
+            ttk.Label(opt_frame, text=" ~ ").pack(side=tk.LEFT)
+            ttk.Entry(opt_frame, textvariable=date_to_var, width=11).pack(side=tk.LEFT, padx=2)
+            _btn_cal_to = ttk.Button(opt_frame, text="📅", width=2,
+                command=lambda: show_date_calendar(
+                    self.frame.winfo_toplevel(), date_to_var.get(),
+                    lambda ymd: (date_to_var.set(ymd), self.on_filter())))
+            _btn_cal_to.pack(side=tk.LEFT, padx=(0, 8))
+        if container_suffix_var is not None and on_container_suffix_toggle is not None:
+            ttk.Checkbutton(
+                opt_frame, text="📦 컨테이너 구분(-1,-2)",
+                variable=container_suffix_var, command=on_container_suffix_toggle
+            ).pack(side=tk.LEFT, padx=(0, 4))
+        ttk.Button(opt_frame, text="✖ 초기화", width=8, command=self._reset_filters).pack(side=tk.LEFT, padx=4)
+
+    def _on_header_click(self, col_id: str) -> None:
+        prev = self._sort_column
+        self._sort_column = col_id
+        self._sort_reverse = not self._sort_reverse if prev == col_id else False
+        self._update_sort_indicators()
+        if self.on_sort:
+            self.on_sort(col_id)
+
+    def _update_sort_indicators(self) -> None:
+        for cid, lbl in self._sort_labels.items():
+            if cid == self._sort_column:
+                lbl.config(text="▼" if self._sort_reverse else "▲")
+            else:
+                lbl.config(text="")
+
+    def set_sort(self, col_id: str, reverse: bool) -> None:
+        """외부에서 정렬 상태 동기화 시 호출."""
+        self._sort_column = col_id
+        self._sort_reverse = bool(reverse)
+        self._update_sort_indicators()
+
+    def pack(self, **kwargs):
+        self.frame.pack(**kwargs)
+
+    def pack_forget(self):
+        self.frame.pack_forget()
+
+    def _reset_filters(self) -> None:
+        for var in self.filter_vars.values():
+            var.set("전체")
+        if getattr(self, '_date_from_var', None) is not None:
+            self._date_from_var.set("")
+        if getattr(self, '_date_to_var', None) is not None:
+            self._date_to_var.set("")
+        self.on_filter()
+
+    def get_filters(self) -> dict:
+        result = {}
+        for col_id, var in self.filter_vars.items():
+            val = var.get()
+            if val and val != "전체":
+                result[col_id] = val
+        return result
+
+    def update_filter_values(self, col_id: str, values: List[str]) -> None:
+        if col_id not in self.filter_combos:
+            return
+        seen = set()
+        str_vals = []
+        for v in values:
+            if v is None:
+                continue
+            v_str = str(v).strip()
+            if v_str and v_str not in seen:
+                seen.add(v_str)
+                str_vals.append(v_str)
+        self.filter_combos[col_id]['values'] = ["전체"] + sorted(str_vals)
+
+
 class FooterTotalBar:
     """
     Treeview 하단 합계 바

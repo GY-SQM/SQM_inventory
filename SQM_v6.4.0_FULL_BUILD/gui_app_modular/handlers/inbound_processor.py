@@ -18,18 +18,26 @@ logger = logging.getLogger(__name__)
 
 
 class InboundProcessorMixin:
-    """입고 처리 Mixin — v5.6.5 단일 경로"""
+    """입고 처리 Mixin — v5.6.5 단일 경로. 추가 입고 반복 시 직전 파싱 방식(빠른 폴더/파일 하나씩) 유지."""
 
     # ══════════════════════════════════════════════════════════
     # 유일한 PDF 입고 진입점
     # ══════════════════════════════════════════════════════════
 
-    def _on_pdf_inbound(self, initial_files: dict = None) -> None:
+    def _on_pdf_inbound(
+        self,
+        initial_files: dict = None,
+        auto_start_parse: bool = False,
+        skip_parse_confirm: bool = False,
+    ) -> None:
         """v5.6.5: PDF 입고 — OneStopInboundDialog
 
         FA + PL + BL 필수 (Gate-1), DO 선택.
         initial_files: {'DO': 경로} 등 드래그앤드롭/캡처 이미지 사전 지정.
+        auto_start_parse / skip_parse_confirm: 추가 입고 반복 시 직전 방식 복원용.
         """
+        self._last_inbound_used_quick_folder = False
+        self._last_inbound_folder = None
         self._log("")
         self._log(f"{'=' * 50}")
         self._log("📥 PDF 입고 (원스톱)")
@@ -43,16 +51,29 @@ class InboundProcessorMixin:
                 log_fn=self._log,
                 app=self
             )
-            dialog.show(initial_files=initial_files or {})
+            dialog.show(
+                initial_files=initial_files or {},
+                auto_start_parse=auto_start_parse,
+                skip_parse_confirm=skip_parse_confirm,
+            )
         except (ImportError, ModuleNotFoundError) as e:
             self._log(f"❌ 원스톱 입고 오류: {e}")
             logger.error(f"원스톱 입고 오류: {e}", exc_info=True)
 
-    def _on_pdf_inbound_quick_folder(self) -> None:
-        """빠른 PDF 스캔(폴더): 폴더 1회 선택으로 4종 서류 자동 탐지 후 즉시 파싱."""
-        folder = filedialog.askdirectory(parent=self.root, title="빠른 PDF 스캔 폴더 선택")
+    def _on_pdf_inbound_quick_folder(self, initial_dir: str = None) -> None:
+        """빠른 PDF 스캔(폴더): 폴더 1회 선택으로 4종 서류 자동 탐지 후 즉시 파싱.
+        initial_dir: 추가 입고 반복 시 직전 폴더를 기본으로 열 때 사용.
+        """
+        folder = filedialog.askdirectory(
+            parent=self.root,
+            title="빠른 PDF 스캔 폴더 선택",
+            initialdir=initial_dir or getattr(self, "_last_inbound_folder", None) or None,
+        )
         if not folder:
             return
+
+        self._last_inbound_used_quick_folder = True
+        self._last_inbound_folder = folder
 
         try:
             file_names = os.listdir(folder)
@@ -136,8 +157,15 @@ class InboundProcessorMixin:
     # ══════════════════════════════════════════════════════════
 
     def _on_onestop_inbound(self) -> None:
-        """[하위호환] → _on_pdf_inbound"""
-        self._on_pdf_inbound()
+        """추가 입고 포함: 직전에 사용한 파싱 방식(빠른 폴더 / 파일 하나씩)을 그대로 따라감."""
+        if getattr(self, "_last_inbound_used_quick_folder", False):
+            last_dir = getattr(self, "_last_inbound_folder", None)
+            if last_dir and os.path.isdir(last_dir):
+                self._on_pdf_inbound_quick_folder(initial_dir=last_dir)
+            else:
+                self._on_pdf_inbound_quick_folder()
+        else:
+            self._on_pdf_inbound()
 
     def _on_sequential_inbound(self) -> None:
         """[하위호환] → _on_pdf_inbound"""
