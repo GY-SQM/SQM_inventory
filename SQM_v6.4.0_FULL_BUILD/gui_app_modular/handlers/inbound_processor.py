@@ -100,98 +100,30 @@ class InboundProcessorMixin:
             logger.error(f"원스톱 입고 오류: {e}", exc_info=True)
 
     def _collect_candidate_files(self, folder: str) -> list[str]:
-        """v6.4.2: 1차 현재 폴더 탐색 → PDF/이미지 없으면 하위 1단계 폴더 자동 재탐색.
+        """위임 → InboundDocDetector.collect_candidate_files()"""
+        return self._doc_detector().collect_candidate_files(folder)
 
-        반환: 발견된 파일 전체 경로 목록 (빈 리스트이면 탐색 실패)
-        """
-        ext_allow = {".pdf", ".png", ".jpg", ".jpeg"}
 
-        def _files_in(d: str) -> list[str]:
-            try:
-                return [
-                    os.path.join(d, n) for n in os.listdir(d)
-                    if os.path.isfile(os.path.join(d, n))
-                    and os.path.splitext(n)[1].lower() in ext_allow
-                ]
-            except Exception:
-                return []
+    def _detect_inbound_docs_from_folder(
+        self, folder: str, file_names: list[str]
+    ) -> dict:
+        """위임 → InboundDocDetector.detect_from_folder()"""
+        return self._doc_detector().detect_from_folder(folder, file_names)
 
-        # 1차: 선택 폴더 직접 탐색
-        files = _files_in(folder)
-        if files:
-            self._log(f"📂 탐색 위치 (직접): {folder}  ({len(files)}개)")
-            return files
 
-        # 2차: 하위 1단계 폴더 탐색
-        self._log("🔍 현재 폴더에 파일 없음 → 하위 폴더 자동 탐색 중...")
-        try:
-            subdirs = [
-                os.path.join(folder, n) for n in os.listdir(folder)
-                if os.path.isdir(os.path.join(folder, n))
-            ]
-        except Exception:
-            return []
+    def _detect_by_pdf_text(
+        self, pdf_paths: list, missing_types: list
+    ) -> dict:
+        """위임 → InboundDocDetector.detect_by_pdf_text()"""
+        return self._doc_detector().detect_by_pdf_text(pdf_paths, missing_types)
 
-        for sub in sorted(subdirs, reverse=True):  # 최신 폴더 우선
-            sub_files = _files_in(sub)
-            if sub_files:
-                self._log(f"📂 탐색 위치 (하위): {sub}  ({len(sub_files)}개)")
-                return sub_files
+    def _doc_detector(self):
+        """InboundDocDetector 인스턴스 (lazy init, log_fn 바인딩)."""
+        if not hasattr(self, '_cached_doc_detector'):
+            from ..handlers.inbound_doc_detector import InboundDocDetector
+            self._cached_doc_detector = InboundDocDetector(log_fn=self._log)
+        return self._cached_doc_detector
 
-        return []
-
-    def _detect_inbound_docs_from_folder(self, folder: str, file_names: list[str]) -> dict:
-        """파일명 키워드 기반 서류 자동 매칭(PL/INV/BL/DO) — v6.4.0: 선사 패턴 보강.
-
-        탐지 우선순위:
-          1) 파일명 키워드 포함 여부 (대소문자 무시)
-          2) 동일 유형 후보 여러 개 → 가장 최근 수정 파일
-          3) 하위 폴더 탐색 없음 (1단계만)
-        """
-        # v6.4.1: 키워드 검사는 _ → 공백 치환 후 수행되므로
-        #         "2200034276_BL.pdf" → "2200034276 bl pdf" → " bl " 공백 경계로 매칭
-        keyword_map = {
-            "PACKING_LIST": [
-                "packing", "packlist", "p l", " pl ", "포장", "명세서",
-            ],
-            "INVOICE": [
-                "invoice", "inv ", " inv", " fa ", "fa ", "송장", "화인보이스",
-            ],
-            "BL": [
-                "seawaybill", "sea waybill", "billoflading", "bill of lading",
-                "b/l", " bl ", " bl.", "선하증권", "선하",
-                # 선사별 고유 BL 번호 패턴
-                "medu", "maeu", "maersk", "hmm", "cma", "cgmu", "one ",
-            ],
-            "DO": [
-                "delivery", "d/o", " do ", " do.", "인도", "delivery order",
-                "인도지시서",
-            ],
-        }
-        ext_allow = {".pdf", ".png", ".jpg", ".jpeg"}
-        bucket = {k: [] for k in keyword_map}
-
-        for name in file_names:
-            path = os.path.join(folder, name)
-            if not os.path.isfile(path):
-                continue
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in ext_allow:
-                continue
-            # 공백 경계 매칭: " bl " 처럼 단어 경계로 검사하기 위해 앞뒤 공백 추가
-            key_name = " " + re.sub(r"[\s_\-\.]+", " ", name.lower()) + " "
-            for doc_type, keys in keyword_map.items():
-                if any(k in key_name for k in keys):
-                    score = os.path.getmtime(path)
-                    bucket[doc_type].append((score, path))
-
-        detected = {}
-        for doc_type, candidates in bucket.items():
-            if not candidates:
-                continue
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            detected[doc_type] = candidates[0][1]
-        return detected
 
     # ══════════════════════════════════════════════════════════
     # 하위 호환 래퍼 — 기존 코드(메뉴/단축키/D&D)에서 호출 유지

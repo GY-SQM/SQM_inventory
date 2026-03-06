@@ -192,9 +192,16 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
+        # v6.5.0: 최대화 대신 적당한 크기로 시작
         try:
-            self.dialog.state('zoomed')  # v5.9.9: 항상 최대화로 시작
-        except tk.TclError:
+            sw = self.parent.winfo_screenwidth()
+            sh = self.parent.winfo_screenheight()
+            w = min(1100, int(sw * 0.72))
+            h = min(780, int(sh * 0.82))
+            x = (sw - w) // 2
+            y = max(30, (sh - h) // 2)
+            self.dialog.geometry(f"{w}x{h}+{x}+{y}")
+        except Exception:
             self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
             center_dialog(self.dialog, self.parent)
         self.dialog.protocol("WM_DELETE_WINDOW", self._on_cancel)
@@ -299,9 +306,23 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self.parse_hint.grid(row=0, column=6, padx=(2, 4), sticky='w')
         self._update_parse_hint()
         
-        # v6.4.0: 빠른 폴더 스캔 — 팝업이 완전히 그려진 후 자동 파싱 시작
+        # v6.5.0: 빠른 폴더 스캔 자동 파싱 — 3단계 안전 타이밍
+        #   1) update_idletasks() — 모든 pending UI 이벤트 즉시 처리
+        #   2) after_idle()       — 이벤트 루프가 완전히 idle 상태 확인
+        #   3) after(500)         — Windows 렌더링 여유 시간 500ms 확보
         if getattr(self, '_auto_start_parse', False):
-            self.dialog.after(400, self._start_parsing)
+            def _deferred_start():
+                try:
+                    if self.dialog and self.dialog.winfo_exists():
+                        self._log("⚡ 자동 파싱 시작 (빠른 스캔 모드)")
+                        self.dialog.after(500, self._start_parsing)
+                except Exception as _e:
+                    logger.warning("자동 파싱 예약 실패: %s", _e)
+            try:
+                self.dialog.update_idletasks()
+                self.dialog.after_idle(_deferred_start)
+            except Exception:
+                pass
 
         # ── v6.4.0: 선사 뱃지 행 (BL 파싱 후 선사 정보 표시) ──────────────
         _carrier_row = ttk.Frame(main)
@@ -371,8 +392,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         # 2. 미리보기 테이블 (v5.9.9: 폰트 20% 축소 — 14pt→11pt, 13pt→10pt)
         # ═══════════════════════════════════════════════════════════
         # v5.7.5: "업로드 2" 삭제 — "(확인 후 업로드)" 문구 제거
+        # v6.5.0: 미리보기 테이블 — 기본 숨김, 파싱 완료 후 토글 버튼으로 표시
+        self._tree_frame_visible = False
         tree_frame = ttk.LabelFrame(main, text="📊 미리보기 (스케일링·처리된 데이터)", padding=4)
-        tree_frame.pack(fill=BOTH, expand=YES, pady=(0, 3))
+        self._tree_frame = tree_frame  # 토글용 참조 저장
+        # 기본은 숨김 — pack하지 않음 (파싱 완료 후 _show_preview_table()로 표시)
         
         import tkinter.font as tkfont
         preview_font = tkfont.Font(family='맑은 고딕', size=11)
@@ -1070,13 +1094,18 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self._capture_original_preview_state()
             self._sort_col = None
             self._sort_desc = False
-            self._update_sort_headings()
+            # v6.5.0: tkinter UI는 메인 스레드에서만 호출 — after(0)으로 위임
+            if self.dialog and self.dialog.winfo_exists():
+                self.dialog.after(0, self._update_sort_headings)
             self._update_filter_values_from_preview()
             if self.btn_reset_original and self.btn_reset_original.winfo_exists():
                 self.btn_reset_original.config(state='normal' if self._original_preview_data else 'disabled')
             
             # 표시
             self._update_progress(95, "📋 미리보기 준비...")
+            # v6.5.0: 파싱 완료 시 미리보기 테이블 표시
+            if self.dialog and self.dialog.winfo_exists():
+                self.dialog.after(0, self._show_preview_table)
             self._display_preview()
             # 파싱 완료 후 DB 업로드·Excel 버튼이 반드시 보이도록 폴백 (순차 삽입 완료 전에도 활성화)
             _preview_len = len(self.preview_data)
@@ -1739,6 +1768,26 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._refresh_preview_tree_only()
         self._update_summary()
         self._push_preview_to_main()
+
+    def _show_preview_table(self) -> None:
+        """v6.5.0: 파싱 완료 후 미리보기 테이블 표시."""
+        if getattr(self, "_tree_frame_visible", False):
+            return
+        try:
+            self._tree_frame.pack(fill=BOTH, expand=YES, pady=(0, 3))
+            self._tree_frame_visible = True
+        except Exception:
+            pass
+
+    def _hide_preview_table(self) -> None:
+        """v6.5.0: 미리보기 테이블 숨김."""
+        if not getattr(self, "_tree_frame_visible", False):
+            return
+        try:
+            self._tree_frame.pack_forget()
+            self._tree_frame_visible = False
+        except Exception:
+            pass
 
     def _update_sort_headings(self) -> None:
         if not getattr(self, 'tree', None):
