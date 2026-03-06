@@ -129,6 +129,9 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         # v6.4.0: 빠른 PDF 스캔 자동 파싱 플래그 (show() 호출 전 기본값)
         self._auto_start_parse   = False
         self._skip_parse_confirm = False
+        # v6.4.0 PATCH_PACKAGE: compact 모드 — 원스톱 창은 작게, 파싱 결과는 메인 창에만 표시
+        self.compact_mode = True
+        self._compact_tree_frame = None
     
     def show(
         self,
@@ -188,24 +191,29 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         """원스톱 입고 팝업 생성"""
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📥 입고 — SQM v6.2.3")
-        self.dialog.minsize(720, 520)
         apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
-        # v6.5.0: 최대화 대신 적당한 크기로 시작
-        try:
-            sw = self.parent.winfo_screenwidth()
-            sh = self.parent.winfo_screenheight()
-            w = min(1100, int(sw * 0.72))
-            h = min(780, int(sh * 0.82))
-            x = (sw - w) // 2
-            y = max(30, (sh - h) // 2)
-            self.dialog.geometry(f"{w}x{h}+{x}+{y}")
-        except Exception:
-            self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
+        if getattr(self, 'compact_mode', False):
+            self.dialog.geometry("1180x220")
+            self.dialog.minsize(1080, 200)
+            self.dialog.resizable(True, False)
             center_dialog(self.dialog, self.parent)
+        else:
+            self.dialog.minsize(720, 520)
+            try:
+                sw = self.parent.winfo_screenwidth()
+                sh = self.parent.winfo_screenheight()
+                w = min(1100, int(sw * 0.72))
+                h = min(780, int(sh * 0.82))
+                x = (sw - w) // 2
+                y = max(30, (sh - h) // 2)
+                self.dialog.geometry(f"{w}x{h}+{x}+{y}")
+            except Exception:
+                self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
+                center_dialog(self.dialog, self.parent)
+            setup_dialog_geometry_persistence(self.dialog, "onestop_inbound_dialog", self.parent)
         self.dialog.protocol("WM_DELETE_WINDOW", self._on_cancel)
-        setup_dialog_geometry_persistence(self.dialog, "onestop_inbound_dialog", self.parent)
         
         main = ttk.Frame(self.dialog, padding=6)
         main.pack(fill=BOTH, expand=YES)
@@ -389,82 +397,74 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._progress_inline_pct_elapsed.pack(side=tk.RIGHT)
         
         # ═══════════════════════════════════════════════════════════
-        # 2. 미리보기 테이블 (v5.9.9: 폰트 20% 축소 — 14pt→11pt, 13pt→10pt)
+        # 2. 미리보기 테이블 — compact_mode에서는 생성 생략, 결과는 메인 창에만 표시
         # ═══════════════════════════════════════════════════════════
-        # v5.7.5: "업로드 2" 삭제 — "(확인 후 업로드)" 문구 제거
-        # v6.5.0: 미리보기 테이블 — 기본 숨김, 파싱 완료 후 토글 버튼으로 표시
-        self._tree_frame_visible = False
-        tree_frame = ttk.LabelFrame(main, text="📊 미리보기 (스케일링·처리된 데이터)", padding=4)
-        self._tree_frame = tree_frame  # 토글용 참조 저장
-        # 기본은 숨김 — pack하지 않음 (파싱 완료 후 _show_preview_table()로 표시)
-        
-        import tkinter.font as tkfont
-        preview_font = tkfont.Font(family='맑은 고딕', size=11)
-        heading_font = tkfont.Font(family='맑은 고딕', size=10, weight='bold')
-        row_height = preview_font.metrics('linespace') + 6
-        
         _tree_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
-        _tree_fg = ThemeColors.get('text_primary', _tree_dark)
-        style = ttk.Style()
-        style.configure('Preview.Treeview',
-                        font=('맑은 고딕', 11),
-                        rowheight=row_height,
-                        foreground=_tree_fg,
-                        fieldbackground=ThemeColors.get('bg_card', _tree_dark))
-        style.configure('Preview.Treeview.Heading',
-                        font=('맑은 고딕', 10, 'bold'))
-        
-        columns = tuple(col[0] for col in PREVIEW_COLUMNS)
-        self.tree = ttk.Treeview(
-            tree_frame, columns=columns, show="headings",
-            height=18, selectmode='extended',
-            style='Preview.Treeview'
-        )
-        # 자체 편집/붙여넣기/Undo-Redo 로직 사용(전역 editable 훅 중복 방지)
-        self.tree._disable_global_editable = True
-        self.tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _tree_dark), foreground=_tree_fg)
-        self.tree.tag_configure('even', background=ThemeColors.get('bg_card', _tree_dark), foreground=_tree_fg)
-        self.tree.tag_configure('edited', background=ThemeColors.get('warning', _tree_dark), foreground=_tree_fg)
-        self.tree.tag_configure('xc_critical', background='#FFCDD2', foreground='#B71C1C')
-        self.tree.tag_configure('xc_warning', background='#FFE0B2', foreground='#E65100')
-        self.tree.tag_configure('xc_info', background='#FFF3CD', foreground='#795548')
-        
-        for col_id, header, width, anchor in PREVIEW_COLUMNS:
-            self.tree.heading(col_id, text=header, command=lambda c=col_id: self._toggle_preview_sort(c))
-            self.tree.column(col_id, width=width, anchor=anchor, minwidth=35)
-        
-        scrollbar_y = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree.yview)
-        scrollbar_x = ttk.Scrollbar(tree_frame, orient=HORIZONTAL, command=self.tree.xview)
-        self.tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
-        
-        scrollbar_x.pack(side=BOTTOM, fill=X)
-        self.tree.pack(side=LEFT, fill=BOTH, expand=YES)
-        scrollbar_y.pack(side=RIGHT, fill=Y)
-        self._setup_preview_edit_bindings()
-        
-        # v5.8.9: 컨테이너 번호 접미사(-숫자) 표시 옵션
         self._var_show_container_suffix = tk.BooleanVar(value=False)
-        chk_container = ttk.Checkbutton(
-            tree_frame, text="컨테이너 번호 접미사(-숫자) 표시",
-            variable=self._var_show_container_suffix,
-            command=self._on_toggle_container_suffix
-        )
-        chk_container.pack(anchor='w', padx=4, pady=(2, 0))
-
-        # 컬럼 필터 바(콤보 목록 검색)
-        self.filter_bar = HeaderFilterBar(
-            main, self.tree,
-            filter_columns=[
-                ('sap_no', 'SAP', 120),
-                ('bl_no', 'BL', 120),
-                ('container_no', 'CONTAINER', 120),
-                ('product', 'PRODUCT', 140),
-                ('status', 'STATUS', 90),
-            ],
-            on_filter=self._on_change_preview_filter,
-            is_dark=_tree_dark
-        )
-        self.filter_bar.pack(fill=X, pady=(2, 2))
+        if not getattr(self, 'compact_mode', False):
+            self._tree_frame_visible = False
+            tree_frame = ttk.LabelFrame(main, text="📊 미리보기 (스케일링·처리된 데이터)", padding=4)
+            self._tree_frame = tree_frame
+            import tkinter.font as tkfont
+            preview_font = tkfont.Font(family='맑은 고딕', size=11)
+            heading_font = tkfont.Font(family='맑은 고딕', size=10, weight='bold')
+            row_height = preview_font.metrics('linespace') + 6
+            _tree_fg = ThemeColors.get('text_primary', _tree_dark)
+            style = ttk.Style()
+            style.configure('Preview.Treeview',
+                            font=('맑은 고딕', 11),
+                            rowheight=row_height,
+                            foreground=_tree_fg,
+                            fieldbackground=ThemeColors.get('bg_card', _tree_dark))
+            style.configure('Preview.Treeview.Heading',
+                            font=('맑은 고딕', 10, 'bold'))
+            columns = tuple(col[0] for col in PREVIEW_COLUMNS)
+            self.tree = ttk.Treeview(
+                tree_frame, columns=columns, show="headings",
+                height=18, selectmode='extended',
+                style='Preview.Treeview'
+            )
+            self.tree._disable_global_editable = True
+            self.tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _tree_dark), foreground=_tree_fg)
+            self.tree.tag_configure('even', background=ThemeColors.get('bg_card', _tree_dark), foreground=_tree_fg)
+            self.tree.tag_configure('edited', background=ThemeColors.get('warning', _tree_dark), foreground=_tree_fg)
+            self.tree.tag_configure('xc_critical', background='#FFCDD2', foreground='#B71C1C')
+            self.tree.tag_configure('xc_warning', background='#FFE0B2', foreground='#E65100')
+            self.tree.tag_configure('xc_info', background='#FFF3CD', foreground='#795548')
+            for col_id, header, width, anchor in PREVIEW_COLUMNS:
+                self.tree.heading(col_id, text=header, command=lambda c=col_id: self._toggle_preview_sort(c))
+                self.tree.column(col_id, width=width, anchor=anchor, minwidth=35)
+            scrollbar_y = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree.yview)
+            scrollbar_x = ttk.Scrollbar(tree_frame, orient=HORIZONTAL, command=self.tree.xview)
+            self.tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
+            scrollbar_x.pack(side=BOTTOM, fill=X)
+            self.tree.pack(side=LEFT, fill=BOTH, expand=YES)
+            scrollbar_y.pack(side=RIGHT, fill=Y)
+            self._setup_preview_edit_bindings()
+            chk_container = ttk.Checkbutton(
+                tree_frame, text="컨테이너 번호 접미사(-숫자) 표시",
+                variable=self._var_show_container_suffix,
+                command=self._on_toggle_container_suffix
+            )
+            chk_container.pack(anchor='w', padx=4, pady=(2, 0))
+            self.filter_bar = HeaderFilterBar(
+                main, self.tree,
+                filter_columns=[
+                    ('sap_no', 'SAP', 120),
+                    ('bl_no', 'BL', 120),
+                    ('container_no', 'CONTAINER', 120),
+                    ('product', 'PRODUCT', 140),
+                    ('status', 'STATUS', 90),
+                ],
+                on_filter=self._on_change_preview_filter,
+                is_dark=_tree_dark
+            )
+            self.filter_bar.pack(fill=X, pady=(2, 2))
+        else:
+            self.tree = None
+            self.filter_bar = None
+            self._tree_frame = None
+            self._tree_frame_visible = False
         
         # ═══════════════════════════════════════════════════════════
         # 4. 하단 한 줄 — 업로드5: 폰트 통일(15), 업로드6: 합계 가운데 배치
@@ -980,7 +980,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     self._merge_results(inv_result, pl_result, bl_result, do_result)
                     if self.dialog and self.dialog.winfo_exists():
                         self.dialog.after(0, lambda: self._push_preview_to_main())
-                        self.dialog.after(0, lambda: self._refresh_preview_tree_only())
+                        if not getattr(self, 'compact_mode', False):
+                            self.dialog.after(0, lambda: self._refresh_preview_tree_only())
             
             # 병합
             self._update_progress(85, "📊 데이터 병합 중...")
@@ -1082,7 +1083,10 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 # GUI 경고
                 def _show_warn():
                     from ..utils.custom_messagebox import CustomMessageBox
-                    CustomMessageBox.warning(None, "파싱 결과 확인", _warn_msg, parent=self.dialog)
+                    try:
+                        CustomMessageBox.showwarning(self.dialog, "파싱 결과 확인", _warn_msg)
+                    except Exception as e:
+                        logger.warning(f"파싱 결과 경고창 표시 실패: {e}")
                 if self.dialog and self.dialog.winfo_exists():
                     self.dialog.after(500, _show_warn)
             
@@ -1095,16 +1099,16 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self._sort_col = None
             self._sort_desc = False
             # v6.5.0: tkinter UI는 메인 스레드에서만 호출 — after(0)으로 위임
-            if self.dialog and self.dialog.winfo_exists():
-                self.dialog.after(0, self._update_sort_headings)
-            self._update_filter_values_from_preview()
-            if self.btn_reset_original and self.btn_reset_original.winfo_exists():
-                self.btn_reset_original.config(state='normal' if self._original_preview_data else 'disabled')
+            if not getattr(self, 'compact_mode', False):
+                if self.dialog and self.dialog.winfo_exists():
+                    self.dialog.after(0, self._update_sort_headings)
+                self._update_filter_values_from_preview()
+                if self.btn_reset_original and self.btn_reset_original.winfo_exists():
+                    self.btn_reset_original.config(state='normal' if self._original_preview_data else 'disabled')
             
             # 표시
             self._update_progress(95, "📋 미리보기 준비...")
-            # v6.5.0: 파싱 완료 시 미리보기 테이블 표시
-            if self.dialog and self.dialog.winfo_exists():
+            if not getattr(self, 'compact_mode', False) and self.dialog and self.dialog.winfo_exists():
                 self.dialog.after(0, self._show_preview_table)
             self._display_preview()
             # 파싱 완료 후 DB 업로드·Excel 버튼이 반드시 보이도록 폴백 (순차 삽입 완료 전에도 활성화)
@@ -1770,7 +1774,9 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._push_preview_to_main()
 
     def _show_preview_table(self) -> None:
-        """v6.5.0: 파싱 완료 후 미리보기 테이블 표시."""
+        """v6.5.0: 파싱 완료 후 미리보기 테이블 표시. compact_mode에서는 no-op."""
+        if getattr(self, 'compact_mode', False) or not getattr(self, '_tree_frame', None):
+            return
         if getattr(self, "_tree_frame_visible", False):
             return
         try:
@@ -1780,7 +1786,9 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             pass
 
     def _hide_preview_table(self) -> None:
-        """v6.5.0: 미리보기 테이블 숨김."""
+        """v6.5.0: 미리보기 테이블 숨김. compact_mode에서는 no-op."""
+        if getattr(self, 'compact_mode', False) or not getattr(self, '_tree_frame', None):
+            return
         if not getattr(self, "_tree_frame_visible", False):
             return
         try:
@@ -1790,7 +1798,9 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             pass
 
     def _update_sort_headings(self) -> None:
-        if not getattr(self, 'tree', None):
+        if getattr(self, 'compact_mode', False):
+            return
+        if not getattr(self, 'tree', None) or not self.tree.winfo_exists():
             return
         for col_id, header, _w, _a in PREVIEW_COLUMNS:
             suffix = ""
@@ -2259,6 +2269,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     
     def _refresh_preview_tree_only(self) -> None:
         """미리보기 테이블만 현재 preview_data로 갱신 (요약/버튼/팝업 없음). 파싱 중 실시간 표시용."""
+        if getattr(self, 'compact_mode', False):
+            return
         if not getattr(self, 'tree', None) or not self.tree.winfo_exists():
             return
         for item in self.tree.get_children():
@@ -2328,12 +2340,9 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self.tree.insert('', END, iid=str(src_idx), values=values, tags=(tag,))
 
     def _display_preview(self) -> None:
-        """미리보기 테이블 표시 — 한 번에가 아니라 순차적으로 행 추가 (보기 편하게)"""
+        """미리보기 테이블 표시 — 한 번에가 아니라 순차적으로 행 추가 (보기 편하게). compact_mode에서는 메인 창만 갱신."""
         def _update():
-            if not self.tree:
-                return
             self._push_preview_to_main()
-            self._refresh_preview_tree_only()
             self._update_summary()
             if self.preview_data and self._has_required_docs():
                 self.btn_upload.config(state='normal')
@@ -2341,6 +2350,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 self.btn_upload.config(state='disabled')
             if self.preview_data:
                 self.btn_excel.config(state='normal')
+            if getattr(self, 'compact_mode', False):
+                return
+            if not getattr(self, 'tree', None) or not self.tree.winfo_exists():
+                return
+            self._refresh_preview_tree_only()
             self._update_filter_values_from_preview()
 
         if self.dialog and self.dialog.winfo_exists():
