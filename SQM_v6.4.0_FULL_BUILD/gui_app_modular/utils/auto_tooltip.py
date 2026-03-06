@@ -1,0 +1,194 @@
+# -*- coding: utf-8 -*-
+"""전역 자동 툴팁 유틸 (메뉴/팝업 공통)."""
+
+import re
+import tkinter as tk
+from tkinter import ttk
+
+from .ui_constants import apply_tooltip
+
+
+def _clean_label(label: str) -> str:
+    text = str(label or "")
+    text = re.sub(r"[\u2460-\u2473]", "", text)  # ①② 같은 번호 문자 제거
+    text = re.sub(r"[^\w\s가-힣/+().,\-]", " ", text)  # 이모지/특수기호 제거
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _fit_120(text: str) -> str:
+    t = (text or "").strip()
+    if len(t) <= 120:
+        return t
+    return t[:117].rstrip() + "..."
+
+
+def build_tooltip_text(label: str, widget_class: str = "") -> str:
+    """라벨/위젯명을 바탕으로 120자 이내 툴팁 생성."""
+    s = _clean_label(label).lower()
+    if "pdf" in s and ("입고" in s or "스캔" in s):
+        return _fit_120("PDF 서류를 분석해 LOT/SAP/BL을 채웁니다. 예: PL+Invoice+BL 선택 후 파싱→미리보기 확인.")
+    if "빠른 pdf" in s or ("폴더" in s and "스캔" in s):
+        return _fit_120("폴더 1회 선택으로 4종 서류를 자동 탐지합니다. 예: 파일명에 pl/invoice/bl/do 포함 후 즉시 파싱.")
+    if "db 업로드" in s:
+        return _fit_120("미리보기 데이터를 DB에 저장합니다. 예: 오류 행 수정 후 DB 업로드를 눌러 재고 리스트로 반영.")
+    if "엑셀" in s or "excel" in s:
+        return _fit_120("현재 결과를 엑셀로 내보냅니다. 예: 필터 적용 상태로 내보내기 후 거래처 공유 파일로 사용.")
+    if "파싱" in s:
+        return _fit_120("선택 문서를 읽어 표 데이터를 생성합니다. 예: 파싱 시작→누락 경고 확인→미리보기에서 값 점검.")
+    if "재고" in s:
+        return _fit_120("재고 목록/통계를 조회합니다. 예: 필터를 선택해 AVAILABLE/PICKED/SOLD 상태별 수량을 비교.")
+    if "출고" in s:
+        return _fit_120("출고 흐름을 실행합니다. 예: 배정→스캔검증→확정 순서로 진행하고 오류 행은 먼저 정정.")
+    if "백업" in s or "복원" in s:
+        return _fit_120("DB 보호 작업입니다. 예: 작업 전 백업 생성 후 문제 시 복원으로 이전 상태를 즉시 되돌립니다.")
+    if "도움말" in s or "설명서" in s:
+        return _fit_120("사용 가이드를 엽니다. 예: 처음 사용자라면 단축키/업무 순서 문서를 먼저 확인하세요.")
+    if "필터" in s:
+        return _fit_120("조회 조건을 적용합니다. 예: SAP/BL/상태를 선택해 필요한 행만 남기고 업로드 정확도를 높입니다.")
+    if "treeview" in widget_class.lower():
+        return _fit_120("표 데이터를 선택/편집할 수 있습니다. 예: 더블클릭 편집, Ctrl+C/V 붙여넣기로 대량 수정.")
+    if "combobox" in widget_class.lower():
+        return _fit_120("목록에서 값을 선택합니다. 예: LOT를 고른 뒤 실제수량(kg)을 입력해 검증 상태를 업데이트.")
+    if "entry" in widget_class.lower() or "text" in widget_class.lower():
+        return _fit_120("값을 입력하는 칸입니다. 예: YYYY-MM-DD 형식 날짜 또는 숫자만 입력 후 적용 버튼 클릭.")
+    base = _clean_label(label) or "이 항목"
+    return _fit_120(f"{base} 기능을 실행합니다. 예: 클릭 후 표시되는 안내 순서대로 확인·저장하면 됩니다.")
+
+
+def apply_auto_tooltip(widget, label: str = "") -> None:
+    """위젯에 자동 생성 툴팁 적용."""
+    if getattr(widget, "_auto_tooltip_bound", False):
+        return
+    cls = widget.winfo_class() if hasattr(widget, "winfo_class") else ""
+    text = build_tooltip_text(label or getattr(widget, "cget", lambda *_: "")("text"), cls)
+    apply_tooltip(widget, text)
+    widget._auto_tooltip_bound = True
+
+
+def apply_auto_tooltips_in(container) -> None:
+    """컨테이너 하위의 인터랙티브 위젯에 자동 툴팁 적용."""
+    if not container or not hasattr(container, "winfo_children"):
+        return
+    target_types = (
+        tk.Button, ttk.Button, tk.Menubutton, ttk.Menubutton,
+        tk.Entry, ttk.Entry, ttk.Combobox, ttk.Checkbutton,
+        ttk.Radiobutton, ttk.Treeview, tk.Text, tk.Listbox,
+        tk.Label, ttk.Label,
+    )
+    stack = [container]
+    while stack:
+        w = stack.pop()
+        try:
+            children = w.winfo_children()
+            stack.extend(children)
+            if isinstance(w, target_types):
+                label = ""
+                try:
+                    label = w.cget("text")
+                except Exception:
+                    label = ""
+                apply_auto_tooltip(w, label)
+        except Exception:
+            continue
+
+
+class MenuTooltipManager:
+    """tk.Menu 항목 hover 시 툴팁 표시."""
+
+    def __init__(self, root):
+        self.root = root
+        self._tip = None
+        self._menus = set()
+
+    def attach(self, menu: tk.Menu) -> None:
+        if not menu or menu in self._menus:
+            return
+        self._menus.add(menu)
+        menu.bind("<<MenuSelect>>", lambda e, m=menu: self._on_select(m), add="+")
+        menu.bind("<Unmap>", lambda _e: self._hide(), add="+")
+        menu.bind("<Destroy>", lambda _e: self._hide(), add="+")
+
+    def _on_select(self, menu: tk.Menu) -> None:
+        try:
+            idx = menu.index("active")
+            if idx is None:
+                self._hide()
+                return
+            label = str(menu.entrycget(idx, "label") or "").strip()
+            if not label:
+                self._hide()
+                return
+            text = build_tooltip_text(label, "Menu")
+            self._show(text)
+        except Exception:
+            self._hide()
+
+    def _show(self, text: str) -> None:
+        self._hide()
+        tip = tk.Toplevel(self.root)
+        tip.wm_overrideredirect(True)
+        x = self.root.winfo_pointerx() + 14
+        y = self.root.winfo_pointery() + 16
+        tip.wm_geometry(f"+{x}+{y}")
+        lbl = tk.Label(
+            tip,
+            text=_fit_120(text),
+            justify="left",
+            bg="#1f2937",
+            fg="#f8fafc",
+            relief="solid",
+            borderwidth=1,
+            padx=8,
+            pady=4,
+            font=("맑은 고딕", 9),
+        )
+        lbl.pack()
+        self._tip = tip
+
+    def _hide(self) -> None:
+        if self._tip and self._tip.winfo_exists():
+            self._tip.destroy()
+        self._tip = None
+
+
+def install_global_auto_tooltips(root) -> None:
+    """메인/팝업 창 생성 시 자동 툴팁 부착."""
+    if not root or getattr(root, "_auto_tooltip_installed", False):
+        return
+    root._auto_tooltip_installed = True
+
+    menu_mgr = MenuTooltipManager(root)
+    root._menu_tooltip_manager = menu_mgr
+
+    # 생성되는 모든 Menu에 자동 hover 툴팁 부착
+    if not getattr(tk.Menu, "_auto_tooltip_patched", False):
+        _orig_menu_init = tk.Menu.__init__
+
+        def _patched_menu_init(self, *args, **kwargs):
+            _orig_menu_init(self, *args, **kwargs)
+            try:
+                mgr = getattr(root, "_menu_tooltip_manager", None)
+                if mgr:
+                    mgr.attach(self)
+            except Exception:
+                pass
+
+        tk.Menu.__init__ = _patched_menu_init
+        tk.Menu._auto_tooltip_patched = True
+
+    def _scan(widget):
+        try:
+            apply_auto_tooltips_in(widget)
+            # 기존에 생성된 메뉴들도 재부착 시도
+            try:
+                if isinstance(widget, tk.Menu):
+                    menu_mgr.attach(widget)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    root.bind_all("<Map>", lambda e: root.after(100, lambda: _scan(e.widget)), add="+")
+    root.bind_all("<Enter>", lambda e: root.after(0, lambda: _scan(e.widget)), add="+")
+    root.after(400, lambda: _scan(root))

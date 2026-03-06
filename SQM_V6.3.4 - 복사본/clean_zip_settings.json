@@ -1,0 +1,53 @@
+{
+  "exclude_dirs": [
+    "__pycache__",
+    ".git",
+    ".svn",
+    ".hg",
+    ".vscode",
+    ".idea",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    "node_modules",
+    "__MACOSX",
+    ".eggs",
+    "*.egg-info",
+    "venv",
+    ".venv",
+    "env",
+    "build",
+    "dist",
+    "backup",
+    "backups",
+    "bak"
+  ],
+  "exclude_extensions": [
+    ".csv",
+    ".db-shm",
+    ".docx",
+    ".example",
+    ".log",
+    ".md",
+    ".patch",
+    ".rst",
+    ".sql",
+    ".txt",
+    ".yml"
+  ],
+  "exclude_files": [
+    "Thumbs.db",
+    ".DS_Store",
+    "desktop.ini",
+    ".gitignore",
+    ".gitattributes"
+  ],
+  "exclude_patterns": [
+    "*~",
+    "*.bak*",
+    "#*#",
+    "._*"
+  ],
+  "exclude_paths": [],
+  "max_file_size_mb": 50.0
+}
