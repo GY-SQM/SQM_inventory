@@ -16,7 +16,6 @@ import tkinter as tk
 from ..utils.ui_constants import CustomMessageBox, ThemeColors
 from typing import Dict, Callable
 from utils.ui_debug import log_ui_event, safe_widget_bg  # v5.3.6
-from ..utils.auto_tooltip import apply_auto_tooltip, MenuTooltipManager
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +78,6 @@ class CustomMenuBar:
         # 메뉴 버튼들 저장
         self.menu_buttons: Dict[str, ttk.Menubutton] = {}
         self.menus: Dict[str, tk.Menu] = {}
-        self._menu_tooltip_manager = MenuTooltipManager(parent)
         
         # 메뉴 구성
         self._create_menus()
@@ -169,6 +167,7 @@ class CustomMenuBar:
             FILE_MENU_INBOUND_RETURN_SUB_ITEMS,
             FILE_MENU_EXPORT_ITEMS,
             FILE_MENU_BACKUP_ITEMS,
+            FILE_MENU_AI_TOOLS_ITEMS,
         )
         
         # =====================================================
@@ -303,11 +302,20 @@ class CustomMenuBar:
         self._add_separator(tools_menu)
         
         # v4.1.2: Gemini AI — 항상 표시 (API 키 없으면 설정 안내)
+        # v6.4.0: 선사 BL 등록 도구 추가
         api_sub = self._add_submenu(tools_menu, "🤖 AI 어시스턴트")
         if HAS_GEMINI:
             self.app._gemini_var = self.tk.BooleanVar(value=getattr(self.app, 'use_gemini', False))
             self._add_checkbutton(api_sub, "API 사용", self.app._gemini_var, self.app._toggle_gemini)
             self._add_separator(api_sub)
+        # BL 선사 도구 (v6.4.0 registry 기반, optional)
+        for _lbl, _mth, *_ in FILE_MENU_AI_TOOLS_ITEMS:
+            self._add_command(
+                api_sub, _lbl,
+                getattr(self.app, _mth, None) or
+                (lambda m=_mth: self._safe_call(m) if hasattr(self, '_safe_call') else None)
+            )
+        self._add_separator(api_sub)
         self._add_command(api_sub, "💬 AI 채팅", self.app._open_ai_chat)
         self._add_command(api_sub, "⚙️ API 설정", self.app._show_api_settings)
         self._add_command(api_sub, "🔬 API 테스트", self.app._test_gemini_api_connection)
@@ -505,7 +513,6 @@ class CustomMenuBar:
         )
         btn.pack(side=LEFT)
         btn._menu_active = False  # v5.3.5
-        apply_auto_tooltip(btn, label)
 
         
         # 호버 효과 (v5.0.9: 안전한 색상 복구)
@@ -554,7 +561,6 @@ class CustomMenuBar:
         # 저장
         self.menu_buttons[label] = btn
         self.menus[label] = menu
-        self._menu_tooltip_manager.attach(menu)
         
         return menu
     
@@ -582,7 +588,6 @@ class CustomMenuBar:
                                activebackground=self.DROPDOWN_ACTIVE_BG,
                                activeforeground=self.DROPDOWN_ACTIVE_FG)
         parent_menu.add_cascade(label=label, menu=submenu, font=self.DROPDOWN_FONT)
-        self._menu_tooltip_manager.attach(submenu)
         return submenu
     
     def _add_separator(self, menu: 'tk.Menu') -> None:

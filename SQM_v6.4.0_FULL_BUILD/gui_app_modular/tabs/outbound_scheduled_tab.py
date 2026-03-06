@@ -11,7 +11,7 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
 from tkinter import END
-from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options, get_status_display
+from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options, get_status_display, setup_dialog_geometry_persistence
 import logging
 
 logger = logging.getLogger(__name__)
@@ -214,10 +214,9 @@ class OutboundScheduledTabMixin:
             rows = []
         popup = tk.Toplevel(self.root)
         popup.title("📦 톤백포함 — 전체 LOT 톤백 예정/이력")
-        popup.geometry(DialogSize.get_geometry(self.root, 'large'))
         apply_modal_window_options(popup)
         popup.transient(self.root)
-        center_dialog(popup, self.root)
+        setup_dialog_geometry_persistence(popup, "tonbag_outbound_status_popup", self.root, "large")
         is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         bg = ThemeColors.get('bg_card', is_dark)
         fg = ThemeColors.get('text_primary', is_dark)
@@ -387,10 +386,9 @@ class OutboundScheduledTabMixin:
 
         popup = tk.Toplevel(self.root)
         popup.title(f"출고 이력 — {lot_no}")
-        popup.geometry(DialogSize.get_geometry(self.root, 'large'))
         apply_modal_window_options(popup)
         popup.transient(self.root)
-        center_dialog(popup, self.root)
+        setup_dialog_geometry_persistence(popup, "lot_outbound_history_popup", self.root, "large")
 
         is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         bg = ThemeColors.get('bg_card', is_dark)

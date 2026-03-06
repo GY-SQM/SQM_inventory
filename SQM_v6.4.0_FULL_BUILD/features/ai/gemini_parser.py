@@ -200,7 +200,6 @@ class PackingListResult:
     lots: List[LOTItem] = field(default_factory=list)
     total_net_weight_kg: float = 0.0
     total_gross_weight_kg: float = 0.0
-    duplicate_skipped_lot_nos: List[str] = field(default_factory=list)
     raw_response: str = ""
     error_message: str = ""
 
@@ -265,6 +264,10 @@ class BLResult:
     eta: str = ""
     raw_response: str = ""
     error_message: str = ""
+    # v6.4.0: 선사 정보 (bl_carrier_registry 통합)
+    carrier_id: str = ""          # 예: "MSC", "MAERSK"
+    carrier_name: str = ""        # 예: "Mediterranean Shipping Company"
+    bl_equals_booking_no: bool = False  # Maersk처럼 BL No == Booking No인 경우 True
 
 
 @dataclass
@@ -757,96 +760,6 @@ class GeminiDocumentParser:
 
         return {}
 
-    def _extract_pdf_text(self, pdf_path: str) -> str:
-        """PyMuPDF로 PDF 전체 텍스트 추출."""
-        doc = None
-        try:
-            doc = fitz.open(pdf_path)
-            chunks = []
-            for page in doc:
-                try:
-                    chunks.append(page.get_text("text") or "")
-                except (ValueError, TypeError, AttributeError) as _e:
-                    logger.debug(f"Suppressed: {_e}")
-            return "\n".join(chunks)
-        except (ValueError, TypeError, RuntimeError) as e:
-            logger.warning(f"[GeminiParser] Invoice fallback 텍스트 추출 실패: {e}")
-            return ""
-        finally:
-            if doc:
-                doc.close()
-
-    def _extract_pl_lots_regex(self, text: str) -> List[str]:
-        """PL 텍스트에서 10자리 LOT 번호를 정규식으로 추출 (ground-truth).
-
-        v6.3.5: PL hallucination 필터용.
-        PL 테이블 구조: LIST N | CONTAINER | LOT_NO(10자리) | ...
-        LOT_NO는 1126/1125 등으로 시작하는 10자리 숫자.
-        SAP NO(22로 시작), 컨테이너(MSMU/HLXU 등)는 자동 제외.
-        """
-        if not text:
-            return []
-        lot_re = re.compile(r'\b(1\d{9})\b')
-        seen: set = set()
-        out: List[str] = []
-        for m in lot_re.finditer(text):
-            lot_no = m.group(1).strip()
-            if not lot_no or lot_no in seen:
-                continue
-            seen.add(lot_no)
-            out.append(lot_no)
-        return out
-
-    def _extract_invoice_lots_fallback(self, text: str, sap_no: str = "") -> List[str]:
-        """긴 N° LOTES 라인에서 LOT 번호(10자리) 정규식 회수."""
-        if not text:
-            return []
-        normalized = re.sub(r'[\r\n\t]+', ' ', text)
-        normalized = re.sub(r'\s+', ' ', normalized)
-        anchor_re = re.compile(r'(N\s*[°ºo]?\s*LOTES?\s*:?)', re.IGNORECASE)
-        weighted_re = re.compile(r'\b(\d{10})\s*/\s*\d[\d\.,]*\s*T\b', re.IGNORECASE)
-        pure_re = re.compile(r'\b(\d{10})\b')
-        out = []
-        seen = set()
-        sap_clean = str(sap_no or '').strip()
-
-        for m in anchor_re.finditer(normalized):
-            block = normalized[m.end(): m.end() + 2200]
-            stop = re.search(
-                r'\b(BL[-\s]*AWB|Ref\.?\s*SQM|Our\s+Order|NET\s+WEIGHT|GROSS\s+WEIGHT|TOTAL\s+AMOUNT|INCOTERM)\b',
-                block, re.IGNORECASE
-            )
-            if stop:
-                block = block[:stop.start()]
-            candidates = weighted_re.findall(block) or pure_re.findall(block)
-            for lot_no in candidates:
-                lot_no = str(lot_no).strip()
-                if not lot_no or lot_no == sap_clean or lot_no in seen:
-                    continue
-                seen.add(lot_no)
-                out.append(lot_no)
-        return out
-
-    def _order_lot_numbers_by_text(self, text: str, lot_numbers: List[str]) -> List[str]:
-        """LOT 번호를 원문 등장 순서대로 재정렬."""
-        if not text or not lot_numbers:
-            return lot_numbers or []
-        unique_in_input_order = []
-        seen = set()
-        for lot_no in lot_numbers:
-            ln = str(lot_no).strip()
-            if not ln or ln in seen:
-                continue
-            seen.add(ln)
-            unique_in_input_order.append(ln)
-        indexed = []
-        for idx, ln in enumerate(unique_in_input_order):
-            pos = text.find(ln)
-            # 원문에서 못 찾은 값은 뒤로 보내되, 기존 입력 순서는 유지
-            indexed.append((pos if pos >= 0 else 10**9 + idx, idx, ln))
-        indexed.sort(key=lambda x: (x[0], x[1]))
-        return [x[2] for x in indexed]
-
     # =========================================================================
     # Packing List 파싱
     # =========================================================================
@@ -956,25 +869,16 @@ class GeminiDocumentParser:
 
             seen_lot_nos = set()
             seen_fingerprints = set()
-            duplicate_hits_first_page = 0
-            duplicate_lot_nos = set()
-
-            def append_lot(lot_data: dict, from_continuation_page: bool = False, log_duplicate: bool = True) -> bool:
-                nonlocal duplicate_hits_first_page
+            def append_lot(lot_data: dict, from_continuation_page: bool = False) -> None:
                 lot_no = str(lot_data.get('lot_no', '')).strip()
                 fp = _make_lot_fingerprint(lot_data)
                 if fp and fp in seen_fingerprints:
-                    if log_duplicate:
-                        page_label = "연속페이지" if from_continuation_page else "1페이지"
-                        logger.warning(
-                            f"[GeminiParser] PL 행 중복 감지({page_label}) -> 스킵: "
-                            f"lot_no={lot_no or '-'}, fp={fp}"
-                        )
-                    if not from_continuation_page:
-                        duplicate_hits_first_page += 1
-                    if lot_no:
-                        duplicate_lot_nos.add(lot_no)
-                    return False
+                    page_label = "연속페이지" if from_continuation_page else "1페이지"
+                    logger.warning(
+                        f"[GeminiParser] PL 행 중복 감지({page_label}) -> 스킵: "
+                        f"lot_no={lot_no or '-'}, fp={fp}"
+                    )
+                    return
                 if fp:
                     seen_fingerprints.add(fp)
                 if lot_no:
@@ -991,39 +895,10 @@ class GeminiDocumentParser:
                     al_no=str(lot_data.get('al_no', ''))
                 )
                 result.lots.append(lot)
-                return True
 
             # 1페이지/연속페이지 공통: fingerprint 기반 중복 제거
             for lot_data in data.get('lots', []):
                 append_lot(lot_data, from_continuation_page=False)
-
-            # 1페이지에서 중복 스킵이 발생하면 최대 2회 재시도해 누락 행 복구를 시도한다.
-            # Gemini 응답이 호출마다 미세하게 달라질 수 있어, 1차에서 빠진 행이 2~3차에서 보완되는 경우가 있다.
-            if duplicate_hits_first_page > 0:
-                recovered_total = 0
-                for attempt in range(1, 3):
-                    try:
-                        logger.warning(
-                            f"[GeminiParser] PL 1페이지 중복 스킵 {duplicate_hits_first_page}건 감지 — "
-                            f"누락 복구 재시도 {attempt}/2"
-                        )
-                        retry_text = self._call_gemini(prompt, images[0])
-                        retry_data = self._extract_json(retry_text)
-                        retry_lots = retry_data.get('lots', []) if isinstance(retry_data, dict) else []
-                        recovered = 0
-                        for lot_data in retry_lots:
-                            if isinstance(lot_data, dict) and append_lot(
-                                lot_data, from_continuation_page=False, log_duplicate=False
-                            ):
-                                recovered += 1
-                        recovered_total += recovered
-                        if recovered > 0:
-                            logger.info(f"[GeminiParser] PL 재시도 복구: +{recovered} LOT")
-                            break
-                    except (ValueError, TypeError, KeyError, IndexError) as _e:
-                        logger.warning(f"[GeminiParser] PL 재시도 복구 실패(무시): {_e}")
-                if recovered_total == 0:
-                    logger.warning("[GeminiParser] PL 재시도에서도 누락 복구가 되지 않았습니다.")
 
             # 다중 페이지: 2페이지부터 추가 LOT 추출 (20개 롯트 등이 2페이지에 나뉠 경우 누락 방지)
             prompt_continuation = """오직 JSON만 출력하세요. 설명·마크다운·코드블럭(```) 금지.
@@ -1056,50 +931,6 @@ JSON만 출력하세요."""
                     lot.list_no = idx
                 result.total_net_weight_kg = sum(lot.net_weight_kg for lot in result.lots)
                 result.total_gross_weight_kg = sum(lot.gross_weight_kg for lot in result.lots)
-            if duplicate_lot_nos:
-                result.duplicate_skipped_lot_nos = sorted(duplicate_lot_nos)
-
-            # ── v6.3.5 FIX: PL hallucination 필터 + 누락 보강
-            #    Gemini가 실제 PL에 없는 LOT를 만들거나 누락시킬 수 있음
-            try:
-                pl_fallback_text = self._extract_pdf_text(pdf_path)
-                pl_regex_lots = self._extract_pl_lots_regex(pl_fallback_text)
-                if pl_regex_lots:
-                    pl_regex_set = set(pl_regex_lots)
-                    original_lot_nos = [lot.lot_no for lot in result.lots]
-
-                    # ★ hallucination 필터: Gemini LOT 중 정규식에 없는 것 제거
-                    hallucinated = [l for l in original_lot_nos if l and l not in pl_regex_set]
-                    if hallucinated:
-                        logger.warning(
-                            f"[GeminiParser] PL hallucination 필터: {len(hallucinated)}개 제거 "
-                            f"(원문에 없는 LOT: {hallucinated})"
-                        )
-                        result.lots = [lot for lot in result.lots if lot.lot_no in pl_regex_set]
-                        # rows도 동기화
-                        valid_set = {lot.lot_no for lot in result.lots}
-
-                    # ★ 누락 보강: 정규식에만 있고 Gemini가 빠뜨린 LOT 경고
-                    gemini_lot_nos = {lot.lot_no for lot in result.lots if lot.lot_no}
-                    missed = [l for l in pl_regex_lots if l not in gemini_lot_nos]
-                    if missed:
-                        logger.warning(
-                            f"[GeminiParser] PL 누락 경고: Gemini가 {len(missed)}개 미추출 "
-                            f"(원문에는 있음: {missed[:10]}{'...' if len(missed)>10 else ''}). "
-                            f"재파싱 또는 수동 확인 권장."
-                        )
-
-                    # ★ list_no 재부여 (필터 후 순번 연속화)
-                    for idx, lot in enumerate(result.lots, 1):
-                        lot.list_no = idx
-
-                    logger.info(
-                        f"[GeminiParser] PL hallucination 검증 완료: "
-                        f"원문 {len(pl_regex_lots)}개, Gemini {len(original_lot_nos)}개 → "
-                        f"최종 {len(result.lots)}개"
-                    )
-            except (ValueError, TypeError, KeyError, RuntimeError) as pl_fb_err:
-                logger.warning(f"[GeminiParser] PL hallucination 필터 실패(무시): {pl_fb_err}")
 
             result.success = len(result.lots) > 0
 
@@ -1228,46 +1059,6 @@ JSON만 출력하세요."""
                     except (ValueError, TypeError, KeyError) as page_err:
                         logger.warning(f"[GeminiParser] Invoice 페이지 {page_idx + 1} LOT 추출 실패: {page_err}")
 
-            # ── v6.3.5 FIX: N° LOTES 정규식을 ground-truth로 사용
-            #    Gemini hallucination 필터 + 누락 보강 + 원문 순서 정렬
-            try:
-                fallback_text = self._extract_pdf_text(pdf_path)
-                fallback_lots = self._extract_invoice_lots_fallback(fallback_text, sap_no=result.sap_no)
-                if fallback_lots:
-                    fallback_set = set(fallback_lots)
-                    before = len(result.lot_numbers)
-
-                    # ★ hallucination 필터: Gemini 결과 중 정규식에 없는 LOT 제거
-                    gemini_filtered = [l for l in result.lot_numbers if l in fallback_set]
-                    removed = before - len(gemini_filtered)
-                    if removed > 0:
-                        logger.warning(
-                            f"[GeminiParser] Invoice hallucination 필터: {removed}개 제거 "
-                            f"(Gemini에만 있고 원문에 없는 LOT: "
-                            f"{[l for l in result.lot_numbers if l not in fallback_set]})"
-                        )
-
-                    # ★ 누락 보강: 정규식에만 있는 LOT 추가
-                    seen_final = set(gemini_filtered)
-                    for lot_no in fallback_lots:
-                        if lot_no not in seen_final:
-                            gemini_filtered.append(lot_no)
-                            seen_final.add(lot_no)
-                    added = len(gemini_filtered) - len(fallback_lots) + len(fallback_lots) - before
-                    if added > 0:
-                        logger.info(f"[GeminiParser] Invoice LOT fallback 보강: +{added}개")
-
-                    result.lot_numbers = gemini_filtered
-
-                # ★ 원문 등장 순서(N° LOTES 라인)대로 재정렬
-                if fallback_text and result.lot_numbers:
-                    ordered = self._order_lot_numbers_by_text(fallback_text, result.lot_numbers)
-                    if ordered != result.lot_numbers:
-                        result.lot_numbers = ordered
-                        logger.info("[GeminiParser] Invoice LOT 원문 순서 정렬 적용")
-            except (ValueError, TypeError, KeyError, RuntimeError) as fb_err:
-                logger.warning(f"[GeminiParser] Invoice LOT fallback 보강 실패(무시): {fb_err}")
-
             logger.info(f"[GeminiParser] Invoice 완료: SAP={result.sap_no}, LOT={len(result.lot_numbers)}개")
 
         except (ValueError, TypeError, KeyError) as e:
@@ -1284,18 +1075,52 @@ JSON만 출력하세요."""
         """
         B/L (Bill of Lading) PDF를 Gemini로 파싱
         멀티페이지 지원 (3페이지까지 분석)
+
+        v6.4.0: 선사별 템플릿 레지스트리 통합
+          ① pdfplumber로 텍스트 추출 → 선사 자동 탐지 (점수제)
+          ② 선사별 정규식으로 BL No 1차 추출 (Gemini 없이 0.01초)
+          ③ 선사별 힌트 포함 Gemini 프롬프트 사용
+          ④ BL No: 정규식 결과 우선, Gemini 보조
+          ⑤ result에 carrier_id/carrier_name/bl_equals_booking_no 저장
         """
         result = BLResult()
 
         try:
             logger.info(f"[GeminiParser] B/L 파싱 시작: {pdf_path}")
 
+            # ── v6.4.0 ①②: 선사 탐지 + BL No 정규식 1차 추출 ──
+            _pages_text: list = []
+            _tmpl = None
+            _bl_no_regex = ""
+            try:
+                import pdfplumber as _pdfplumber
+                with _pdfplumber.open(pdf_path) as _p:
+                    _pages_text = [(pg.extract_text() or "") for pg in _p.pages[:3]]
+                if _pages_text:
+                    from features.ai.bl_carrier_registry import (
+                        detect_carrier, extract_bl_no_by_template, build_bl_prompt
+                    )
+                    _tmpl = detect_carrier(_pages_text[0])
+                    if _tmpl:
+                        _bl_no_regex = extract_bl_no_by_template(_pages_text, _tmpl)
+                        logger.info(
+                            f"[GeminiParser] 선사={_tmpl.carrier_name}, "
+                            f"BL_regex={_bl_no_regex!r}"
+                        )
+            except Exception as _reg_e:
+                logger.debug(f"[GeminiParser] 레지스트리 탐지 실패(무시): {_reg_e}")
+
             images = self._pdf_to_images(pdf_path)
             if not images:
                 result.error_message = "PDF 이미지 변환 실패"
                 return result
 
-            prompt = """이 B/L(선하증권/NON-NEGOTIABLE WAYBILL) 문서를 분석하여 아래 JSON 형식으로 추출해주세요.
+            # ── v6.4.0 ③: 선사별 힌트 포함 프롬프트 생성 ──
+            try:
+                from features.ai.bl_carrier_registry import build_bl_prompt
+                prompt = build_bl_prompt(_tmpl)
+            except Exception:
+                prompt = """이 B/L(선하증권/NON-NEGOTIABLE WAYBILL) 문서를 분석하여 아래 JSON 형식으로 추출해주세요.
 
 **중요 추출 규칙:**
 1. B/L No는 문서 상단 "B/L No." 필드 (예: 258468669)
@@ -1385,9 +1210,35 @@ JSON만 출력하세요."""
             result.sap_no = sap_no
             result.containers = all_containers
             result.container_numbers = [c.container_no for c in all_containers]
+
+            # ── v6.4.0 ④: BL No 최종 결정 (정규식 우선) ──
+            if _bl_no_regex:
+                if result.bl_no and result.bl_no != _bl_no_regex:
+                    logger.warning(
+                        f"[GeminiParser] BL No 불일치: "
+                        f"regex={_bl_no_regex!r} vs gemini={result.bl_no!r} "
+                        "→ 정규식 결과 사용 (신뢰도 높음)"
+                    )
+                result.bl_no = _bl_no_regex
+
+            # ── v6.4.0 ⑤: 선사 정보 저장 ──
+            if _tmpl:
+                result.carrier_id          = _tmpl.carrier_id
+                result.carrier_name        = _tmpl.carrier_name
+                result.bl_equals_booking_no = _tmpl.bl_equals_booking_no
+            else:
+                result.carrier_id          = "UNKNOWN"
+                result.carrier_name        = ""
+                result.bl_equals_booking_no = False
+
             result.success = bool(result.bl_no)
 
-            logger.info(f"[GeminiParser] B/L 완료: BL={result.bl_no}, SAP={result.sap_no}, 컨테이너 {len(result.containers)}개")
+            logger.info(
+                f"[GeminiParser] B/L 완료: "
+                f"선사={result.carrier_name or '?':}, "
+                f"BL={result.bl_no}, SAP={result.sap_no}, "
+                f"컨테이너 {len(result.containers)}개"
+            )
 
         except (ValueError, TypeError, KeyError) as e:
             result.error_message = str(e)

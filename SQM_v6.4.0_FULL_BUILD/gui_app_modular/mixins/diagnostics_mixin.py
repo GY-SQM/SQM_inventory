@@ -102,12 +102,11 @@ class DiagnosticsMixin:
     def _show_action_log(self) -> None:
         """작업 로그 표시"""
         from ..utils.constants import BOTH, END, VERTICAL, tk, ttk
-        from ..utils.ui_constants import DialogSize, center_dialog
+        from ..utils.ui_constants import setup_dialog_geometry_persistence
         dialog = tk.Toplevel(self.root)
         dialog.title("📋 작업 로그")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
         dialog.transient(self.root)
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "action_log_dialog", self.root, "medium")
 
         # 텍스트 영역
         frame = ttk.Frame(dialog)

@@ -31,6 +31,7 @@ try:
         apply_modal_window_options,
         apply_tooltip,
         center_dialog,
+        setup_dialog_geometry_persistence,
     )
 except ImportError:
     # 독립 실행 시 폴백
@@ -38,6 +39,7 @@ except ImportError:
     Spacing = type('Spacing', (), {'XS': 4, 'SM': 8, 'MD': 16, 'LG': 24})()
     FontScale = None
     center_dialog = None
+    setup_dialog_geometry_persistence = None
     apply_tooltip = lambda w, t: None
     apply_modal_window_options = lambda w: None
 
@@ -124,15 +126,19 @@ class ShortcutGuideDialog:
         # 대화상자 생성
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("⌨️ 단축키 가이드")
-
-        # === UI 통일성: 다이얼로그 크기 표준화 (Phase4) ===
-        if DialogSize:
-            self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
-        else:
-            self.dialog.geometry("750x700")
-
-        apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
+        if setup_dialog_geometry_persistence:
+            setup_dialog_geometry_persistence(self.dialog, "shortcut_guide_dialog", self.parent, "large")
+        else:
+            if DialogSize:
+                self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
+            else:
+                self.dialog.geometry("750x700")
+            apply_modal_window_options(self.dialog)
+            if center_dialog:
+                center_dialog(self.dialog, self.parent)
+            else:
+                self._center_dialog_window()
 
         # 아이콘 (있으면)
         try:
@@ -142,12 +148,6 @@ class ShortcutGuideDialog:
 
         # 컨텐츠 구성
         self._create_widgets(fonts)
-
-        # === UI 통일성: 중앙 배치 ===
-        if center_dialog:
-            center_dialog(self.dialog, self.parent)
-        else:
-            self._center_dialog_window()
 
         # ESC로 닫기
         self.dialog.bind("<Escape>", lambda e: self.dialog.destroy())
@@ -450,17 +450,17 @@ LIFO 방식으로 자동 출고됩니다.
         """마법사 표시"""
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("환영합니다")
-        if DialogSize and center_dialog:
+        self.dialog.transient(self.parent)
+        self.dialog.grab_set()
+        if setup_dialog_geometry_persistence:
+            setup_dialog_geometry_persistence(self.dialog, "welcome_wizard_dialog", self.parent, "medium")
+        elif DialogSize and center_dialog:
             self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
             apply_modal_window_options(self.dialog)
-            self.dialog.transient(self.parent)
-            self.dialog.grab_set()
             center_dialog(self.dialog, self.parent)
         else:
             self.dialog.geometry("550x400")
             apply_modal_window_options(self.dialog)
-            self.dialog.transient(self.parent)
-            self.dialog.grab_set()
             self.dialog.update_idletasks()
             x = (self.dialog.winfo_screenwidth() // 2) - 275
             y = (self.dialog.winfo_screenheight() // 2) - 200
@@ -593,15 +593,16 @@ class FeedbackDialog:
         """대화상자 표시"""
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("💬 피드백 / 문제 신고")
-        if DialogSize and center_dialog:
+        self.dialog.transient(self.parent)
+        if setup_dialog_geometry_persistence:
+            setup_dialog_geometry_persistence(self.dialog, "feedback_dialog", self.parent, "medium")
+        elif DialogSize and center_dialog:
             self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
             apply_modal_window_options(self.dialog)
-            self.dialog.transient(self.parent)
             center_dialog(self.dialog, self.parent)
         else:
             self.dialog.geometry("500x400")
             apply_modal_window_options(self.dialog)
-            self.dialog.transient(self.parent)
             self.dialog.update_idletasks()
             x = (self.dialog.winfo_screenwidth() // 2) - 250
             y = (self.dialog.winfo_screenheight() // 2) - 200

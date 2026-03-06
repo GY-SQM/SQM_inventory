@@ -6,7 +6,6 @@ SQM v3.8.4 — 원스톱 입고 팝업
 작성일: 2025-02-06
 """
 import os
-import re
 from tkinter import messagebox as msgbox
 import time
 import tkinter as tk
@@ -19,8 +18,12 @@ from copy import deepcopy
 # 비즈니스 기본값
 from core.constants import DEFAULT_WAREHOUSE
 
-from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog, apply_modal_window_options
+from ..utils.ui_constants import (
+    ThemeColors, DialogSize, center_dialog, apply_modal_window_options,
+    setup_dialog_geometry_persistence,
+)
 from core.types import safe_float
+from ..utils.tree_enhancements import HeaderFilterBar
 
 # v5.8.7: DatePicker 달력 UI — gui_bootstrap 통일 (ttkbootstrap.DateEntry, 없으면 텍스트 입력 폴백)
 from ..utils.gui_bootstrap import DateEntry, HAS_DATEENTRY
@@ -28,15 +31,16 @@ from ..utils.gui_bootstrap import DateEntry, HAS_DATEENTRY
 logger = logging.getLogger(__name__)
 
 
-# 미리보기 컬럼 정의 — 업로드3: 전 컬럼 가운데 정렬
+# 미리보기 컬럼 정의 — 종전 4개 파일 입고 테이블(재고 탭)과 동일한 열 순서
 PREVIEW_COLUMNS = [
     ("no",               "NO",               50,  "center"),
+    ("lot_no",           "LOT NO",          110,  "center"),
     ("sap_no",           "SAP NO",          110,  "center"),
     ("bl_no",            "BL NO",           150,  "center"),
-    ("container_no",     "CONTAINER",       130,  "center"),
     ("product",          "PRODUCT",         180,  "center"),
+    ("status",           "STATUS",           80,  "center"),
+    ("container_no",     "CONTAINER",       130,  "center"),
     ("product_code",     "CODE",            100,  "center"),
-    ("lot_no",           "LOT NO",          110,  "center"),
     ("lot_sqm",          "LOT SQM",          80,  "center"),
     ("mxbg_pallet",      "MXBG",             70,  "center"),
     ("net_weight",       "NET(Kg)",          90,  "center"),
@@ -47,7 +51,6 @@ PREVIEW_COLUMNS = [
     ("con_return",       "CON RETURN",       95,  "center"),
     ("free_time",        "FREE TIME",        80,  "center"),
     ("warehouse",        "WH",              100,  "center"),
-    ("status",           "STATUS",           80,  "center"),
 ]
 
 # 4종 서류 정의 (v3.8.7: 동그라미 번호 순서) — v5.7.5: Invoice/FA, Bill of Loading, Delivery Order
@@ -106,9 +109,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self.tree = None
         self.btn_parse = None
         self.btn_reparse = None
-        self.btn_bundle_select = None
-        self._var_auto_parse_after_bundle = None
-        self._var_skip_confirm_on_auto_parse = None
         self.btn_upload = None
         self.btn_excel = None
         self.btn_undo = None
@@ -126,20 +126,30 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._sort_desc = False
         self._view_indices = []
         self._original_preview_data = []
-        self._auto_start_parse = False
+        # v6.4.0: 빠른 PDF 스캔 자동 파싱 플래그 (show() 호출 전 기본값)
+        self._auto_start_parse   = False
         self._skip_parse_confirm = False
     
-    def show(self, initial_files: dict = None, auto_start_parse: bool = False, skip_parse_confirm: bool = False) -> None:
+    def show(
+        self,
+        initial_files: dict = None,
+        auto_start_parse: bool = False,
+        skip_parse_confirm: bool = False,
+    ) -> None:
         """팝업 표시.
-
-        Args:
-            initial_files: {'DO': 경로} 등 사전 지정 파일
-            auto_start_parse: 팝업 오픈 직후 자동 파싱 시작
-            skip_parse_confirm: 자동 파싱 시 확인 팝업 생략
+        initial_files      : { 'DO': 경로 } 등 드래그앤드롭/캡처 이미지 사전 지정.
+        auto_start_parse   : True 이면 팝업이 열리자마자 파싱 자동 시작 (빠른 폴더 스캔).
+        skip_parse_confirm : True 이면 파싱 시작 확인 팝업 생략.
         """
-        self._initial_files = initial_files or {}
-        self._auto_start_parse = bool(auto_start_parse)
+        self._initial_files      = initial_files or {}
+        self._auto_start_parse   = bool(auto_start_parse)
         self._skip_parse_confirm = bool(skip_parse_confirm)
+        logger.info(
+            "OneStopInboundDialog.show(files=%s, auto_start=%s, skip_confirm=%s)",
+            list((initial_files or {}).keys()),
+            auto_start_parse,
+            skip_parse_confirm,
+        )
         # 초기 파일이 있으면 해당 폴더를 다음 파일 선택의 시작 폴더로 사용
         try:
             for _p in self._initial_files.values():
@@ -150,24 +160,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         break
         except Exception as e:
             logger.debug(f"초기 폴더 경로 설정 무시: {e}")
-        # 새 세트 시작 전 메인 업로드2(파싱 미리보기) 화면은 항상 비운다.
-        self._clear_preview_from_main()
         self._create_dialog()
-        if self._auto_start_parse and self.file_paths:
-            self.dialog.after(250, self._start_parsing)
-
-    def _apply_initial_files(self) -> None:
-        """초기 전달 파일을 UI/내부 상태에 반영."""
-        if not getattr(self, "_initial_files", None):
-            return
-        for doc_type, path in self._initial_files.items():
-            if doc_type not in self.file_labels or not path:
-                continue
-            if not os.path.exists(path):
-                continue
-            self.file_paths[doc_type] = path
-            self.file_labels[doc_type].configure(text=os.path.basename(path))
-            self.check_labels[doc_type].configure(text="☑")
     
     def _attach_doc_tooltip(self, widget, text: str):
         """v3.8.9: 문서 위젯에 툴팁 추가"""
@@ -195,36 +188,34 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         """원스톱 입고 팝업 생성"""
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📥 입고 — SQM v6.2.3")
-        self.dialog.minsize(700, 320)
+        self.dialog.minsize(720, 520)
         apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
         try:
-            # 컴팩트 창: 업로드3 위치 느낌(메인 우상단)에 배치
-            self.dialog.geometry("820x360")
-            self.dialog.update_idletasks()
-            px = self.parent.winfo_rootx()
-            py = self.parent.winfo_rooty()
-            pw = self.parent.winfo_width()
-            x = px + max(0, pw - 840)
-            y = py + 78
-            self.dialog.geometry(f"820x360+{x}+{y}")
-        except Exception:
-            self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
+            self.dialog.state('zoomed')  # v5.9.9: 항상 최대화로 시작
+        except tk.TclError:
+            self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
             center_dialog(self.dialog, self.parent)
         self.dialog.protocol("WM_DELETE_WINDOW", self._on_cancel)
+        setup_dialog_geometry_persistence(self.dialog, "onestop_inbound_dialog", self.parent)
         
         main = ttk.Frame(self.dialog, padding=6)
         main.pack(fill=BOTH, expand=YES)
         
         # ═══════════════════════════════════════════════════════════
-        # 1. 상단: 4종 서류 선택(2x2) + 실행 버튼(가시성 개선)
+        # 1. 상단: 4종 서류 + 파싱 버튼 (1줄 균등 배치)
         # ═══════════════════════════════════════════════════════════
-        file_frame = ttk.LabelFrame(main, text="📄 서류 선택", padding=6)
+        file_frame = ttk.Frame(main)
         file_frame.pack(fill=X, pady=(0, 4))
-        for i in range(2):
+        
+        # 7열 그리드: [①PL][②INV][③BL][④DO] [파싱][다시파싱][힌트]
+        for i in range(4):
             file_frame.columnconfigure(i, weight=1, uniform='doc')
-
+        file_frame.columnconfigure(4, weight=0)  # 파싱 버튼
+        file_frame.columnconfigure(5, weight=0)  # 다시 파싱 버튼
+        file_frame.columnconfigure(6, weight=0)  # 힌트
+        
         short_names = {
             'PACKING_LIST': '① Packing List',
             'INVOICE':      '② Invoice, FA',
@@ -242,92 +233,105 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         
         _os_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
         for idx, (doc_type, doc_name, required) in enumerate(DOC_TYPES):
-            row = idx // 2
-            col = idx % 2
             cell = ttk.Frame(file_frame)
-            cell.grid(row=row, column=col, sticky='ew', padx=3, pady=3)
+            cell.grid(row=0, column=idx, sticky='ew', padx=(0, 2))
             
             _cell_fg = ThemeColors.get('text_primary', _os_dark)
-            top = ttk.Frame(cell)
-            top.pack(fill=X)
-            lbl = ttk.Label(
-                top, text=short_names.get(doc_type, ''),
-                font=('맑은 고딕', 11, 'bold'),
-                foreground=_cell_fg
-            )
-            lbl.pack(side=LEFT, padx=(2, 4))
+            # 서류명
+            lbl = ttk.Label(cell, text=short_names.get(doc_type, ''),
+                      font=('맑은 고딕', 14, 'bold'),
+                      foreground=_cell_fg)
+            lbl.pack(side=LEFT, padx=(2, 2))
             self._attach_doc_tooltip(lbl, _tooltips.get(doc_type, ''))
-
-            btn_sel = tk.Button(
-                top, text="📂 선택",
-                command=lambda dt=doc_type: self._select_file(dt),
-                font=('맑은 고딕', 10, 'bold'),
-                bg=ThemeColors.get('btn_neutral', _os_dark), fg=ThemeColors.get('badge_text', _os_dark),
-                padx=6, pady=2, cursor='hand2', bd=0
-            )
-            btn_sel.pack(side=RIGHT, padx=(0, 2))
+            
+            # 📂 폴더선택 버튼
+            btn_sel = tk.Button(cell, text="📂",
+                                command=lambda dt=doc_type: self._select_file(dt),
+                                font=('', 13), bg=ThemeColors.get('btn_neutral', _os_dark), fg=ThemeColors.get('badge_text', _os_dark),
+                                padx=4, pady=1, cursor='hand2', bd=0)
+            btn_sel.pack(side=LEFT, padx=(0, 2))
             _req = '(필수)' if required else '(선택)'
             self._attach_doc_tooltip(btn_sel, f"클릭하여 {doc_name} 파일 선택 {_req}")
-
-            check_label = ttk.Label(top, text="☐", font=('맑은 고딕', 11, 'bold'))
-            check_label.pack(side=RIGHT, padx=(0, 6))
+            
+            # 체크 표시
+            check_label = ttk.Label(cell, text="☐", font=('', 15))
+            check_label.pack(side=LEFT, padx=(0, 2))
             self.check_labels[doc_type] = check_label
-
-            file_label = ttk.Label(
-                cell, text="", foreground=_cell_fg,
-                font=('맑은 고딕', 10), anchor='w'
-            )
-            file_label.pack(fill=X, padx=(2, 2), pady=(1, 0))
+            
+            # 파일명 (동그라미 서류명과 같은 색)
+            file_label = ttk.Label(cell, text="", foreground=_cell_fg,
+                                   font=('맑은 고딕', 12), anchor='w')
+            file_label.pack(side=LEFT, fill=X, expand=True, padx=(0, 2))
             self.file_labels[doc_type] = file_label
 
         # 드래그앤드롭/캡처 이미지 등 초기 파일 지정
-        self._apply_initial_files()
-
-        # 실행 컨트롤 바 (업로드4 과밀 해소)
-        action_bar = ttk.Frame(main)
-        action_bar.pack(fill=X, pady=(2, 4))
-
-        self.btn_bundle_select = ttk.Button(
-            action_bar, text="📁 4종 한 번에",
-            command=self._select_all_docs_from_folder, width=14
-        )
-        self.btn_bundle_select.pack(side=LEFT, padx=(0, 4))
-        self._attach_doc_tooltip(
-            self.btn_bundle_select,
-            "폴더를 한 번 선택하면 파일명 키워드로 4종 서류를 자동 매칭합니다."
-        )
-
+        for doc_type, path in getattr(self, '_initial_files', {}).items():
+            if doc_type in self.file_labels and path:
+                self.file_paths[doc_type] = path
+                self.file_labels[doc_type].configure(text=os.path.basename(path))
+                self.check_labels[doc_type].configure(text="☑")
+        
+        # [파싱 시작] 버튼
         self.btn_parse = ttk.Button(
-            action_bar, text="▶ 파싱 시작",
+            file_frame, text="▶ 파싱 시작",
             command=self._start_parsing,
             state='disabled', width=10
         )
-        self.btn_parse.pack(side=LEFT, padx=(0, 4))
+        self.btn_parse.grid(row=0, column=4, padx=(6, 2))
         self._attach_doc_tooltip(self.btn_parse,
             "선택한 서류를 분석합니다\n\n• Packing List → LOT, 수량, 중량 추출\n• Invoice, FA → SAP번호, 금액 추출\n• Bill of Loading → BL번호, 선박, 일정 추출\n• Delivery Order → 인도장소, Free Time 추출")
 
         self.btn_reparse = ttk.Button(
-            action_bar, text="↻ 다시 파싱",
+            file_frame, text="↻ 다시 파싱",
             command=self._reparse_with_current_files,
             state='disabled', width=10
         )
-        self.btn_reparse.pack(side=LEFT, padx=(0, 8))
+        self.btn_reparse.grid(row=0, column=5, padx=(0, 2))
         self._attach_doc_tooltip(
             self.btn_reparse,
             "이미 선택한 동일 파일로 재파싱합니다.\n파일을 다시 선택하지 않아도 됩니다."
         )
         
         self.parse_hint = ttk.Label(
-            action_bar, text="",
-            foreground=ThemeColors.get('text_primary', _os_dark), font=('맑은 고딕', 10, 'bold')
+            file_frame, text="",
+            foreground='white', font=('맑은 고딕', 12)
         )
-        self.parse_hint.pack(side=LEFT, padx=(4, 0))
+        self.parse_hint.grid(row=0, column=6, padx=(2, 4), sticky='w')
         self._update_parse_hint()
-
-        # 자동 파싱 옵션은 기능만 유지(체크 UI 제거)
-        self._var_auto_parse_after_bundle = tk.BooleanVar(value=True)
-        self._var_skip_confirm_on_auto_parse = tk.BooleanVar(value=True)
         
+        # v6.4.0: 빠른 폴더 스캔 — 팝업이 완전히 그려진 후 자동 파싱 시작
+        if getattr(self, '_auto_start_parse', False):
+            self.dialog.after(400, self._start_parsing)
+
+        # ── v6.4.0: 선사 뱃지 행 (BL 파싱 후 선사 정보 표시) ──────────────
+        _carrier_row = ttk.Frame(main)
+        _carrier_row.pack(fill=X, pady=(0, 2))
+        _os_dark2 = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
+        ttk.Label(
+            _carrier_row,
+            text="🚢 선사:",
+            font=('맑은 고딕', 12, 'bold'),
+            foreground=ThemeColors.get('text_primary', _os_dark2)
+        ).pack(side=LEFT, padx=(4, 4))
+        # 뱃지 라벨 — BL 파싱 완료 후 _update_carrier_badge()로 갱신
+        self._carrier_label = tk.Label(
+            _carrier_row,
+            text="  (BL 파싱 전)  ",
+            font=('맑은 고딕', 12, 'bold'),
+            fg="#888888",
+            bg=("#2b2b2b" if _os_dark2 else "#f0f0f0"),
+            relief="flat", padx=8, pady=2, bd=0
+        )
+        self._carrier_label.pack(side=LEFT, padx=(0, 8))
+        # 선사별 색상 안내 (마우스오버 툴팁)
+        self._attach_doc_tooltip(
+            self._carrier_label,
+            "BL 파싱 후 선사 정보가 자동으로 표시됩니다.\n"
+            "  MSC    → 파란색 뱃지\n"
+            "  Maersk → 초록색 뱃지\n"
+            "  HMM    → 빨간색 뱃지\n"
+            "  기타   → 회색 뱃지"
+        )
         # v5.7.5: 프로그레스 (팝업 + 인라인)
         self.progress_var = tk.DoubleVar(value=0)
         self.status_var = tk.StringVar(value="")
@@ -358,26 +362,92 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._progress_inline_busy = ttk.Label(self._progress_bar_container, text="진행 중 ●", font=('맑은 고딕', 10),
                                                foreground=ThemeColors.get('statusbar_icon_warn', _pop_dark))
         self._progress_inline_busy.place(relx=0, rely=0.5, anchor='w')
-        self._progress_inline_stopwatch = ttk.Label(
-            self._progress_inline_frame,
-            text="⏱ 00:00",
-            font=('맑은 고딕', 11, 'bold'),
-            foreground=ThemeColors.get('statusbar_progress', _pop_dark)
-        )
-        self._progress_inline_stopwatch.pack(anchor='w', pady=(2, 0))
         _row2 = ttk.Frame(self._progress_inline_frame)
         _row2.pack(fill=X)
         self._progress_inline_pct_elapsed = ttk.Label(_row2, text="", font=('맑은 고딕', 10), foreground=ThemeColors.get('text_secondary', _pop_dark))
         self._progress_inline_pct_elapsed.pack(side=tk.RIGHT)
         
+        # ═══════════════════════════════════════════════════════════
+        # 2. 미리보기 테이블 (v5.9.9: 폰트 20% 축소 — 14pt→11pt, 13pt→10pt)
+        # ═══════════════════════════════════════════════════════════
+        # v5.7.5: "업로드 2" 삭제 — "(확인 후 업로드)" 문구 제거
+        tree_frame = ttk.LabelFrame(main, text="📊 미리보기 (스케일링·처리된 데이터)", padding=4)
+        tree_frame.pack(fill=BOTH, expand=YES, pady=(0, 3))
+        
+        import tkinter.font as tkfont
+        preview_font = tkfont.Font(family='맑은 고딕', size=11)
+        heading_font = tkfont.Font(family='맑은 고딕', size=10, weight='bold')
+        row_height = preview_font.metrics('linespace') + 6
+        
         _tree_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
+        _tree_fg = ThemeColors.get('text_primary', _tree_dark)
+        style = ttk.Style()
+        style.configure('Preview.Treeview',
+                        font=('맑은 고딕', 11),
+                        rowheight=row_height,
+                        foreground=_tree_fg,
+                        fieldbackground=ThemeColors.get('bg_card', _tree_dark))
+        style.configure('Preview.Treeview.Heading',
+                        font=('맑은 고딕', 10, 'bold'))
+        
+        columns = tuple(col[0] for col in PREVIEW_COLUMNS)
+        self.tree = ttk.Treeview(
+            tree_frame, columns=columns, show="headings",
+            height=18, selectmode='extended',
+            style='Preview.Treeview'
+        )
+        # 자체 편집/붙여넣기/Undo-Redo 로직 사용(전역 editable 훅 중복 방지)
+        self.tree._disable_global_editable = True
+        self.tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _tree_dark), foreground=_tree_fg)
+        self.tree.tag_configure('even', background=ThemeColors.get('bg_card', _tree_dark), foreground=_tree_fg)
+        self.tree.tag_configure('edited', background=ThemeColors.get('warning', _tree_dark), foreground=_tree_fg)
+        self.tree.tag_configure('xc_critical', background='#FFCDD2', foreground='#B71C1C')
+        self.tree.tag_configure('xc_warning', background='#FFE0B2', foreground='#E65100')
+        self.tree.tag_configure('xc_info', background='#FFF3CD', foreground='#795548')
+        
+        for col_id, header, width, anchor in PREVIEW_COLUMNS:
+            self.tree.heading(col_id, text=header, command=lambda c=col_id: self._toggle_preview_sort(c))
+            self.tree.column(col_id, width=width, anchor=anchor, minwidth=35)
+        
+        scrollbar_y = ttk.Scrollbar(tree_frame, orient=VERTICAL, command=self.tree.yview)
+        scrollbar_x = ttk.Scrollbar(tree_frame, orient=HORIZONTAL, command=self.tree.xview)
+        self.tree.configure(yscrollcommand=scrollbar_y.set, xscrollcommand=scrollbar_x.set)
+        
+        scrollbar_x.pack(side=BOTTOM, fill=X)
+        self.tree.pack(side=LEFT, fill=BOTH, expand=YES)
+        scrollbar_y.pack(side=RIGHT, fill=Y)
+        self._setup_preview_edit_bindings()
+        
+        # v5.8.9: 컨테이너 번호 접미사(-숫자) 표시 옵션
+        self._var_show_container_suffix = tk.BooleanVar(value=False)
+        chk_container = ttk.Checkbutton(
+            tree_frame, text="컨테이너 번호 접미사(-숫자) 표시",
+            variable=self._var_show_container_suffix,
+            command=self._on_toggle_container_suffix
+        )
+        chk_container.pack(anchor='w', padx=4, pady=(2, 0))
+
+        # 컬럼 필터 바(콤보 목록 검색)
+        self.filter_bar = HeaderFilterBar(
+            main, self.tree,
+            filter_columns=[
+                ('sap_no', 'SAP', 120),
+                ('bl_no', 'BL', 120),
+                ('container_no', 'CONTAINER', 120),
+                ('product', 'PRODUCT', 140),
+                ('status', 'STATUS', 90),
+            ],
+            on_filter=self._on_change_preview_filter,
+            is_dark=_tree_dark
+        )
+        self.filter_bar.pack(fill=X, pady=(2, 2))
         
         # ═══════════════════════════════════════════════════════════
         # 4. 하단 한 줄 — 업로드5: 폰트 통일(15), 업로드6: 합계 가운데 배치
         # [엑셀][DB 업로드]  (합계: ... 가운데)  [취소]
         # ═══════════════════════════════════════════════════════════
         btn_frame = ttk.Frame(main)
-        btn_frame.pack(side=BOTTOM, fill=X, pady=(8, 0))
+        btn_frame.pack(fill=X, pady=(8, 0))
         
         _font = getattr(self, '_toolbar_font', '맑은 고딕') if hasattr(self, '_toolbar_font') else '맑은 고딕'
         _btn_font_size = 15
@@ -393,6 +463,37 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         )
         self.btn_excel.pack(side=LEFT, padx=(0, 5))
 
+        self.btn_undo = tk.Button(
+            btn_frame, text="↶ 되돌리기",
+            command=self._undo_preview_edit, state='disabled',
+            font=(_font, 11, 'bold'), bg=ThemeColors.get('btn_neutral', _tree_dark), fg=_btn_fg,
+            padx=10, pady=6, cursor='hand2', bd=0
+        )
+        self.btn_undo.pack(side=LEFT, padx=(5, 0))
+        self.btn_redo = tk.Button(
+            btn_frame, text="↷ 다시실행",
+            command=self._redo_preview_edit, state='disabled',
+            font=(_font, 11, 'bold'), bg=ThemeColors.get('btn_neutral', _tree_dark), fg=_btn_fg,
+            padx=10, pady=6, cursor='hand2', bd=0
+        )
+        self.btn_redo.pack(side=LEFT, padx=(5, 0))
+
+        self.btn_reset_original = tk.Button(
+            btn_frame, text="⟲ 원본 초기화",
+            command=self._reset_preview_to_original, state='disabled',
+            font=(_font, 11, 'bold'), bg=ThemeColors.get('btn_neutral', _tree_dark), fg=_btn_fg,
+            padx=10, pady=6, cursor='hand2', bd=0
+        )
+        self.btn_reset_original.pack(side=LEFT, padx=(5, 0))
+
+        self._var_upload_by_view_order = tk.BooleanVar(value=False)
+        chk_upload_order = ttk.Checkbutton(
+            btn_frame,
+            text="DB 업로드 시 현재 정렬/필터 순서 적용",
+            variable=self._var_upload_by_view_order
+        )
+        chk_upload_order.pack(side=LEFT, padx=(8, 0))
+        
         self.btn_upload = tk.Button(
             btn_frame, text="📤 DB 업로드",
             command=self._on_upload, state='disabled',
@@ -404,7 +505,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             "미리보기 데이터를 DB에 저장합니다\n\n• 저장 후 재고리스트에 자동 반영\n• 중복 LOT는 자동 스킵\n• 저장 완료 후 재고리스트 화면 표시")
         
         self.summary_var = tk.StringVar(value="")
-        self._last_parse_elapsed_text = ""
         _summary_lbl = ttk.Label(btn_frame, textvariable=self.summary_var,
                                 font=('맑은 고딕', 13, 'bold'),
                                 foreground=ThemeColors.get('statusbar_progress', _tree_dark))
@@ -457,13 +557,13 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             ok = CustomMessageBox.askyesno(
                 self.dialog,
                 "재파싱 확인",
-                "기존 파싱 결과를 덮어쓰고 재파싱합니다.\n\n계속하시겠습니까?"
+                "기존 미리보기 결과를 덮어쓰고 재파싱합니다.\n\n계속하시겠습니까?"
             )
         except (ImportError, ModuleNotFoundError):
             from tkinter import messagebox as msgbox
             ok = msgbox.askyesno(
                 "재파싱 확인",
-                "기존 파싱 결과를 덮어쓰고 재파싱합니다.\n\n계속하시겠습니까?"
+                "기존 미리보기 결과를 덮어쓰고 재파싱합니다.\n\n계속하시겠습니까?"
             )
         if not ok:
             return
@@ -522,314 +622,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         
         # 파싱 버튼 활성화 조건: PL 필수
         self._update_parse_hint()
-
-    def _detect_inbound_docs_local(self, folder: str, file_names: list) -> dict:
-        """팝업 내부용 4종 서류 자동 탐지(파일명 키워드)."""
-        keyword_map = {
-            "PACKING_LIST": ["packing", "pl", "포장", "명세서"],
-            "INVOICE": ["invoice", "fa", "송장"],
-            "BL": ["seawaybill", "sea waybill", "billoflading", "bill of lading", "b/l", "bl", "선하"],
-            "DO": ["delivery", "d/o", "do", "인도"],
-        }
-        ext_allow = {".pdf", ".png", ".jpg", ".jpeg"}
-        bucket = {k: [] for k in keyword_map}
-        for name in file_names:
-            path = os.path.join(folder, name)
-            if not os.path.isfile(path):
-                continue
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in ext_allow:
-                continue
-            key_name = re.sub(r"[\s_\-]+", " ", name.lower())
-            for doc_type, keys in keyword_map.items():
-                if any(k in key_name for k in keys):
-                    bucket[doc_type].append((os.path.getmtime(path), path))
-        detected = {}
-        for doc_type, candidates in bucket.items():
-            if not candidates:
-                continue
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            detected[doc_type] = candidates[0][1]
-        return detected
-
-    def _detect_inbound_docs_from_paths(self, file_paths: list) -> dict:
-        """파일 다중선택 결과(경로 목록)에서 4종 자동 매칭."""
-        keyword_map = {
-            "PACKING_LIST": ["packing", "pl", "포장", "명세서"],
-            "INVOICE": ["invoice", "fa", "송장"],
-            "BL": ["seawaybill", "sea waybill", "billoflading", "bill of lading", "b/l", "bl", "선하"],
-            "DO": ["delivery", "d/o", "do", "인도"],
-        }
-        ext_allow = {".pdf", ".png", ".jpg", ".jpeg"}
-        bucket = {k: [] for k in keyword_map}
-        for path in file_paths or []:
-            if not path or not os.path.isfile(path):
-                continue
-            name = os.path.basename(path)
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in ext_allow:
-                continue
-            key_name = re.sub(r"[\s_\-]+", " ", name.lower())
-            for doc_type, keys in keyword_map.items():
-                if any(k in key_name for k in keys):
-                    bucket[doc_type].append((os.path.getmtime(path), path))
-        detected = {}
-        for doc_type, candidates in bucket.items():
-            if not candidates:
-                continue
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            detected[doc_type] = candidates[0][1]
-        return detected
-
-    def _select_all_docs_from_folder(self) -> None:
-        """4종 자동 매핑: 파일 다중선택 우선, 취소 시 폴더 선택 fallback."""
-        initial_dir = self._last_selected_dir if self._last_selected_dir and os.path.isdir(self._last_selected_dir) else None
-        selected_files = ()
-        try:
-            selected_files = filedialog.askopenfilenames(
-                parent=self.dialog,
-                title="4종 서류 파일 선택 (복수선택)",
-                initialdir=initial_dir,
-                filetypes=[
-                    ("지원 파일", "*.pdf *.png *.jpg *.jpeg"),
-                    ("PDF files", "*.pdf"),
-                    ("Image files", "*.png *.jpg *.jpeg"),
-                    ("All files", "*.*"),
-                ],
-            )
-        except Exception as e:
-            logger.warning(f"4종 파일 다중선택 창 오류(폴더 선택으로 전환): {e}")
-        detected = self._detect_inbound_docs_from_paths(list(selected_files or []))
-        if not detected:
-            folder = filedialog.askdirectory(
-                parent=self.dialog,
-                title="4종 서류 폴더 선택",
-                initialdir=initial_dir,
-            )
-            if not folder:
-                return
-            try:
-                file_names = os.listdir(folder)
-            except Exception as e:
-                from ..utils.custom_messagebox import CustomMessageBox
-                CustomMessageBox.showerror(self.dialog, "폴더 읽기 실패", str(e))
-                return
-            if not file_names:
-                return
-            if self.app and hasattr(self.app, "_detect_inbound_docs_from_folder"):
-                detected = self.app._detect_inbound_docs_from_folder(folder, file_names)
-            else:
-                detected = self._detect_inbound_docs_local(folder, file_names)
-            self._last_selected_dir = folder
-        elif selected_files:
-            first_dir = os.path.dirname(selected_files[0])
-            if first_dir and os.path.isdir(first_dir):
-                self._last_selected_dir = first_dir
-        if not detected:
-            return
-        _is_dark = ThemeColors.is_dark_theme(getattr(self.parent, 'current_theme', 'flatly'))
-        _fg = ThemeColors.get('text_primary', _is_dark)
-        for doc_type, file_path in detected.items():
-            if doc_type not in self.file_labels:
-                continue
-            self.file_paths[doc_type] = file_path
-            self.file_labels[doc_type].config(text=os.path.basename(file_path), foreground=_fg)
-            self.check_labels[doc_type].config(text="✅")
-            self._log(f"📂 {doc_type}: {os.path.basename(file_path)}")
-        self._log_selected_doc_paths()
-        missing_required = [k for k in ("PACKING_LIST", "INVOICE", "BL") if k not in detected]
-        if missing_required:
-            from ..utils.custom_messagebox import CustomMessageBox
-            miss_txt = ", ".join(missing_required)
-            CustomMessageBox.showwarning(self.dialog, "일부 서류 미탐지", f"자동 탐지 누락: {miss_txt}")
-        self._update_parse_hint()
-        if self._var_auto_parse_after_bundle and self._var_auto_parse_after_bundle.get():
-            self.dialog.after(120, self._start_parsing_after_bundle)
-
-    def _start_parsing_after_bundle(self) -> None:
-        """4종 일괄 선택 직후 자동 파싱."""
-        if not self.dialog or not self.dialog.winfo_exists():
-            return
-        if 'PACKING_LIST' not in self.file_paths:
-            return
-        if self.btn_parse and self.btn_parse.instate(['disabled']):
-            return
-        self._skip_parse_confirm = bool(
-            self._var_skip_confirm_on_auto_parse and self._var_skip_confirm_on_auto_parse.get()
-        )
-        # 사용자 요청: 4종 자동 파싱이어도 D/O 미첨부 시에는
-        # 기존과 동일한 "입고 서류 확인" 안내를 파싱 전에 반드시 보여준다.
-        if 'DO' not in self.file_paths:
-            self._skip_parse_confirm = False
-        self._start_parsing()
-
-    def _log_selected_doc_paths(self) -> None:
-        """선택된 4종 경로를 한 번에 출력."""
-        lines = ["📌 선택 파일 경로(4종)"]
-        for key in ("PACKING_LIST", "INVOICE", "BL", "DO"):
-            path = str(self.file_paths.get(key, "") or "").strip()
-            if path:
-                lines.append(f"  - {key}: {path}")
-            else:
-                lines.append(f"  - {key}: (미선택)")
-        self._log_safe("\n".join(lines))
-
-    def _build_crosscheck_guidance(self, xc) -> str:
-        """크로스체크 불일치 시 의심 원인/체크리스트 안내."""
-        if not xc or bool(getattr(xc, 'is_clean', True)):
-            return ""
-        items = list(getattr(xc, 'items', []) or [])
-        fields = {str(getattr(i, 'field_name', '') or '').strip() for i in items}
-        has_lot_mismatch = (
-            "LOT 개수" in fields
-            or "LOT 번호 (PL Only)" in fields
-            or "LOT 번호 (Invoice Only)" in fields
-        )
-        if not has_lot_mismatch:
-            return ""
-        return (
-            "🧭 의심 원인(자동 분석)\n"
-            "- 문서 불일치: PL/Invoice/BL이 같은 선적 세트가 아닐 수 있습니다.\n"
-            "- 추출 누락: Invoice 또는 PL에서 일부 LOT가 OCR/API 파싱에 누락됐을 수 있습니다.\n"
-            "\n"
-            "✅ 바로 확인 체크리스트\n"
-            "1) 선택한 파일 3종의 SAP NO/선적번호/폴더명이 동일한지 확인\n"
-            "2) Invoice 원문 LOT 목록이 PL LOT 개수와 일치하는지 확인\n"
-            "3) 팝업에 표시된 PL Only / Invoice Only LOT를 원문에서 직접 대조\n"
-            "4) 스캔 품질(회전/잘림/저해상도) 문제면 PDF 원본으로 재선택 후 재파싱\n"
-            "5) 동일 증상이 반복되면 해당 서류 세트만 분리해 1건 단독 파싱"
-        )
-
-    def _parse_lot_mismatch_sets(self) -> dict:
-        """크로스체크 결과에서 Invoice/PL 전용 LOT 목록 추출.
-        v6.3.5: cross_check 메시지 순서(PL list_no 기준)를 그대로 유지.
-        """
-        out = {"invoice_only": [], "pl_only": []}
-        xc = getattr(self, "_cross_check_result", None)
-        if not xc:
-            return out
-        lot_re = re.compile(r"\b\d{10}\b")
-        try:
-            for item in list(getattr(xc, "items", []) or []):
-                field = str(getattr(item, "field_name", "") or "").strip()
-                msg = str(getattr(item, "message", "") or "")
-                # ★ message 원문 순서 그대로 추출 (cross_check_engine이 이미 PL list_no 정렬)
-                lots = list(dict.fromkeys(lot_re.findall(msg)))
-                if not lots:
-                    continue
-                if field == "LOT 번호 (Invoice Only)":
-                    out["invoice_only"].extend(lots)
-                elif field == "LOT 번호 (PL Only)":
-                    out["pl_only"].extend(lots)
-        except Exception as e:
-            logger.debug(f"LOT 불일치 목록 추출 스킵: {e}")
-        # ★ 순서 유지 (중복 제거만)
-        out["invoice_only"] = list(dict.fromkeys(out["invoice_only"]))
-        out["pl_only"] = list(dict.fromkeys(out["pl_only"]))
-        return out
-
-    def _open_source_doc_for_lot(self, doc_type: str, lot_no: str) -> None:
-        """LOT 클릭 시 해당 원문 파일 열기."""
-        # 클릭 즉시 LOT 번호를 클립보드에 복사
-        try:
-            if self.dialog and self.dialog.winfo_exists():
-                self.dialog.clipboard_clear()
-                self.dialog.clipboard_append(str(lot_no))
-        except Exception as e:
-            logger.debug(f"LOT 클립보드 복사 스킵: {e}")
-
-        path = str(self.file_paths.get(doc_type, "") or "").strip()
-        if not path or not os.path.exists(path):
-            try:
-                from ..utils.custom_messagebox import CustomMessageBox
-                CustomMessageBox.showwarning(self.dialog, "원문 파일 없음", f"{doc_type} 원문 파일을 찾을 수 없습니다.\nLOT: {lot_no}")
-            except Exception:
-                pass
-            return
-        try:
-            if hasattr(os, "startfile"):
-                os.startfile(path)
-            else:
-                import subprocess
-                subprocess.Popen([path], shell=True)
-            self._log_safe(f"📂 원문 열기: {doc_type} (LOT {lot_no}) / 클립보드 복사 완료")
-        except Exception as e:
-            logger.error(f"원문 파일 열기 실패: {e}")
-
-    def _show_warning_with_lot_links(self, warn_msg: str) -> None:
-        """LOT 불일치가 있으면 LOT 클릭으로 원문 열기 가능한 경고창 표시."""
-        lot_sets = self._parse_lot_mismatch_sets()
-        has_links = bool(lot_sets["invoice_only"] or lot_sets["pl_only"])
-        if not has_links:
-            from ..utils.custom_messagebox import CustomMessageBox
-            CustomMessageBox.showwarning(self.dialog, "파싱 결과 확인", warn_msg)
-            return
-
-        popup = tk.Toplevel(self.dialog)
-        popup.title("파싱 결과 확인")
-        popup.transient(self.dialog)
-        popup.grab_set()
-        apply_modal_window_options(popup)
-        popup.geometry("620x520")
-        try:
-            center_dialog(popup, self.dialog)
-        except Exception as e:
-            logger.debug(f"경고창 중앙정렬 스킵: {e}")
-
-        frame = ttk.Frame(popup, padding=10)
-        frame.pack(fill=BOTH, expand=YES)
-
-        ttk.Label(
-            frame,
-            text="⚠️ 불일치 서류의 LOT만 표시합니다. LOT 클릭 시 원문 열기 + 번호 자동 복사",
-            font=('맑은 고딕', 10, 'bold')
-        ).pack(anchor='w', pady=(0, 6))
-
-        mismatch_lines = []
-        for ln in str(warn_msg or "").splitlines():
-            s = ln.strip()
-            if not s:
-                continue
-            if ("LOT 개수" in s) or ("LOT 번호 (Invoice Only)" in s) or ("LOT 번호 (PL Only)" in s):
-                mismatch_lines.append(s)
-        if not mismatch_lines:
-            mismatch_lines = ["LOT 불일치가 감지되었습니다. 아래 목록을 확인하세요."]
-
-        txt = tk.Text(frame, height=4, wrap='word')
-        txt.pack(fill=X, pady=(0, 8))
-        txt.insert('1.0', "\n".join(mismatch_lines))
-        txt.configure(state='disabled')
-
-        lots_wrap = ttk.Frame(frame)
-        lots_wrap.pack(fill=BOTH, expand=YES)
-
-        if lot_sets["invoice_only"]:
-            inv_box = ttk.LabelFrame(lots_wrap, text="Invoice Only LOT (클릭 시 Invoice 열기)", padding=6)
-            inv_box.pack(fill=X, pady=(0, 8))
-            for seq, lot in enumerate(lot_sets["invoice_only"], 1):
-                # v6.3.5: Invoice 원문 순서 순번 표시
-                btn_text = f"{seq}. {lot}"
-                tk.Button(
-                    inv_box, text=btn_text,
-                    command=lambda l=lot: self._open_source_doc_for_lot("INVOICE", l),
-                    bg="#d97706", fg="white", activebackground="#b45309", activeforeground="white",
-                    relief='flat', padx=8, pady=3, cursor='hand2'
-                ).pack(side=LEFT, padx=3, pady=2)
-
-        if lot_sets["pl_only"]:
-            pl_box = ttk.LabelFrame(lots_wrap, text="PL Only LOT (클릭 시 Packing List 열기)", padding=6)
-            pl_box.pack(fill=X, pady=(0, 8))
-            for seq, lot in enumerate(lot_sets["pl_only"], 1):
-                # v6.3.5: ★ PL list_no 순번 표시 (cross_check_engine이 PL 순서로 정렬 후 전달)
-                btn_text = f"{seq}. {lot}"
-                tk.Button(
-                    pl_box, text=btn_text,
-                    command=lambda l=lot: self._open_source_doc_for_lot("PACKING_LIST", l),
-                    bg="#1d4ed8", fg="white", activebackground="#1e40af", activeforeground="white",
-                    relief='flat', padx=8, pady=3, cursor='hand2'
-                ).pack(side=LEFT, padx=3, pady=2)
-
-        ttk.Button(frame, text="확인", command=popup.destroy).pack(anchor='e')
     
     # ═══════════════════════════════════════════════════════════
     # 파싱
@@ -837,18 +629,10 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     
     def _start_parsing(self) -> None:
         """v3.8.9: 파싱 시작 — 입고 서류 현황 안내 후 진행 확인"""
-        self._last_parse_elapsed_text = ""
-        # 한 세트 파싱 시작 시 이전 업로드2 표시를 먼저 클리어
-        self._clear_preview_from_main()
-        # 두 번째 파싱부터도 시작 순간 기존 표시 데이터가 남지 않도록 즉시 반영
-        if getattr(self, 'app', None) and hasattr(self.app, '_set_parsing_preview_data'):
-            try:
-                self.app._set_parsing_preview_data(None)
-                if hasattr(self.app, 'root') and self.app.root and self.app.root.winfo_exists():
-                    self.app.root.update_idletasks()
-            except Exception as e:
-                logger.debug(f"파싱 시작 전 메인 미리보기 즉시 클리어 스킵: {e}")
-        self._reset_parse_state_for_new_run()
+        # v6.4.0: auto_start_parse 모드 — 버튼 강제 활성화 후 실행
+        if getattr(self, '_auto_start_parse', False):
+            if self.btn_parse and str(self.btn_parse.cget('state')) == 'disabled':
+                self.btn_parse.config(state='normal')
         # 들어온 서류 / 빠진 서류 분류
         received = []
         missing = []
@@ -879,21 +663,19 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         lines.append("\n진행할까요?")
         msg = "\n".join(lines)
         
-        proceed = True
-        if not self._skip_parse_confirm:
+        # v6.4.0: skip_parse_confirm=True (빠른 폴더 스캔) 이면 확인 팝업 생략
+        if not getattr(self, '_skip_parse_confirm', False):
             from ..utils.custom_messagebox import CustomMessageBox
             proceed = CustomMessageBox.askyesno(
                 self.dialog,
                 "입고 서류 확인",
                 msg
             )
-        self._skip_parse_confirm = False
-        if not proceed:
-            return
+            if not proceed:
+                return
         
         if missing:
             self._update_progress(0, f"ℹ️ {', '.join(missing)} 미선택 — 해당 정보 생략")
-        self._log_selected_doc_paths()
         
         self.btn_parse.config(state='disabled')
         if self.btn_reparse:
@@ -905,33 +687,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             daemon=True
         )
         thread.start()
-
-    def _reset_parse_state_for_new_run(self) -> None:
-        """재파싱/재실행 시 이전 상태 잔존으로 인한 누락을 방지."""
-        self.parsed_results = {}
-        self.preview_data = []
-        self._original_preview_data = []
-        self._cross_check_result = None
-        self._edited_rows = set()
-        self._undo_stack = []
-        self._redo_stack = []
-        self._view_indices = []
-        self._sort_col = None
-        self._sort_desc = False
-        self._preview_anchor = (0, 0)
-        try:
-            if self.filter_bar:
-                self.filter_bar._reset_filters()
-        except Exception as e:
-            logger.debug(f"필터 초기화 스킵: {e}")
-        try:
-            if self.tree and self.tree.winfo_exists():
-                for item in self.tree.get_children():
-                    self.tree.delete(item)
-        except Exception as e:
-            logger.debug(f"미리보기 초기화 스킵: {e}")
-        self._update_summary()
-        self._update_undo_redo_buttons()
     
     def _show_progress_inline(self) -> None:
         """진행 상태를 미리보기 위 인라인 영역에만 표시 (팝업 없음, 움직임 표시 포함)"""
@@ -951,8 +706,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         if getattr(self, '_progress_inline_busy', None):
             self._progress_inline_busy.config(text="진행 중 ●")
             self._progress_inline_busy.place(relx=0, rely=0.5, anchor='w')
-        if getattr(self, '_progress_inline_stopwatch', None):
-            self._progress_inline_stopwatch.config(text="⏱ 00:00")
         self._start_progress_elapsed_tick()
         self._start_progress_busy_animation()
 
@@ -989,10 +742,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             pct = getattr(self, 'progress_var', None)
             pct_val = int(pct.get()) if pct else 0
             pct_elapsed.config(text=f"{pct_val}%  ·  {elapsed_text}")
-        stopwatch = getattr(self, '_progress_inline_stopwatch', None)
-        if stopwatch and stopwatch.winfo_ismapped():
-            mm, ss = divmod(secs, 60)
-            stopwatch.config(text=f"⏱ {mm:02d}:{ss:02d}")
         self._progress_elapsed_job = self.dialog.after(1000, self._progress_elapsed_tick) if self.dialog and self.dialog.winfo_exists() else None
 
     def _start_progress_elapsed_tick(self) -> None:
@@ -1113,6 +862,15 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
 
             parser = DocumentParserV2(gemini_api_key=gemini_key)
             
+            # v6.4.0: 파싱 시작 시 선사 뱃지 초기화
+            if hasattr(self, '_carrier_label') and self._carrier_label:
+                try:
+                    self._carrier_label.config(
+                        text="  ⏳ 파싱 중...  ",
+                        fg="#FFFFFF", bg="#AAAAAA"
+                    )
+                except Exception:
+                    pass
             # 파싱 순서: PL → Invoice → BL → DO
             parse_order = ['PACKING_LIST', 'INVOICE', 'BL', 'DO']
             to_parse = [(dt, self.file_paths[dt]) for dt in parse_order if dt in self.file_paths]
@@ -1162,7 +920,24 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         bl_result = parser.parse_bl(file_path)
                         self.parsed_results['bl'] = bl_result
                         if bl_result:
-                            self._log_safe(f"  ✅ B/L: {getattr(bl_result, 'bl_no', '')}, Containers: {getattr(bl_result, 'total_containers', 0)}")
+                            # v6.4.0: 선사 뱃지 표시
+                            _carrier_id   = getattr(bl_result, 'carrier_id', '')
+                            _carrier_name = getattr(bl_result, 'carrier_name', '')
+                            if _carrier_id and _carrier_id != 'UNKNOWN':
+                                _badge = f"[선사: {_carrier_name or _carrier_id}]"
+                            else:
+                                _badge = "[선사: 미확인]"
+                            self._log_safe(
+                                f"  ✅ B/L: {getattr(bl_result, 'bl_no', '')} "
+                                f"{_badge}  "
+                                f"Containers: {getattr(bl_result, 'total_containers', 0)}"
+                            )
+                            # 선사 뱃지를 UI 레이블에도 업데이트
+                            if self.dialog and self.dialog.winfo_exists():
+                                self.dialog.after(
+                                    0,
+                                    lambda b=_badge: self._update_carrier_badge(b)
+                                )
                     
                     elif doc_type == 'DO':
                         do_result = parser.parse_do(file_path)
@@ -1243,13 +1018,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             _warnings = []
             if not pl_result or not getattr(pl_result, 'lots', None):
                 _warnings.append("⚠️ Packing List: LOT 정보 추출 실패")
-            else:
-                dup_lots = list(getattr(pl_result, 'duplicate_skipped_lot_nos', []) or [])
-                if dup_lots:
-                    preview = ", ".join(dup_lots[:10])
-                    if len(dup_lots) > 10:
-                        preview += f" 외 {len(dup_lots) - 10}건"
-                    _warnings.append(f"⚠️ Packing List: 중복으로 스킵된 LOT {len(dup_lots)}건 — {preview}")
             if not inv_result or not getattr(inv_result, 'sap_no', None):
                 _warnings.append("⚠️ Invoice: SAP번호 추출 실패 — 수동 입력 필요")
             if not bl_result or not getattr(bl_result, 'bl_no', None):
@@ -1283,18 +1051,14 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     self._log_safe("✅ 4종 서류 크로스 체크 통과 — 불일치 없음")
             except (ImportError, Exception) as e:
                 logger.debug(f"[CrossCheck] 원스톱 크로스 체크 스킵: {e}")
-
-            _guide = self._build_crosscheck_guidance(getattr(self, '_cross_check_result', None))
-            if _guide:
-                _warnings.append("")
-                _warnings.append(_guide)
             
             if _warnings:
                 _warn_msg = "\n".join(_warnings)
                 self._log_safe(f"\n{'='*40}\n{_warn_msg}\n{'='*40}")
                 # GUI 경고
                 def _show_warn():
-                    self._show_warning_with_lot_links(_warn_msg)
+                    from ..utils.custom_messagebox import CustomMessageBox
+                    CustomMessageBox.warning(None, "파싱 결과 확인", _warn_msg, parent=self.dialog)
                 if self.dialog and self.dialog.winfo_exists():
                     self.dialog.after(500, _show_warn)
             
@@ -1332,7 +1096,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             
             elapsed_sec = time.time() - getattr(self, '_progress_start_time', time.time())
             elapsed_str = f"{elapsed_sec:.1f}초" if elapsed_sec < 60 else f"{int(elapsed_sec // 60)}분 {elapsed_sec % 60:.0f}초"
-            self._last_parse_elapsed_text = elapsed_str
             self._update_progress(100, f"✅ 파싱 완료 — {len(self.preview_data)}개 LOT ({elapsed_str})")
             self._log_safe(f"✅ 파싱 완료: {len(self.preview_data)} LOT, {total}종 서류 (경과: {elapsed_str})")
         
@@ -2572,7 +2335,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             f"{total_tb} 톤백 | "
             f"Net {total_net:,.0f} kg | "
             f"Gross {total_gross:,.0f} kg"
-            + (f" | 파싱시간 {self._last_parse_elapsed_text}" if self._last_parse_elapsed_text else "")
         )
     
 
@@ -2703,6 +2465,38 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         if self.dialog and self.dialog.winfo_exists():
             self.dialog.after(0, _u)
     
+    # ─────────────────────────────────────────────────────────────
+    # v6.4.0: 선사 뱃지 UI 업데이트
+    # ─────────────────────────────────────────────────────────────
+    def _update_carrier_badge(self, badge_text: str) -> None:
+        """
+        BL 파싱 후 선사 뱃지를 입고 다이얼로그 BL 버튼 아래 라벨에 표시.
+        badge_text 예시: "[선사: Mediterranean Shipping Company]"
+        선사별 전경색(fg) + 배경색(bg) 적용.
+        """
+        try:
+            if not hasattr(self, '_carrier_label') or self._carrier_label is None:
+                return  # 위젯 미생성 시 무시 (로그에는 이미 출력됨)
+            # 선사별 (전경색, 배경색) 매핑
+            _style_map = {
+                "MSC":     ("#FFFFFF", "#0066CC"),  # 흰 글씨 / MSC 블루
+                "MAERSK":  ("#FFFFFF", "#009B77"),  # 흰 글씨 / Maersk 그린
+                "HMM":     ("#FFFFFF", "#E63946"),  # 흰 글씨 / HMM 레드
+                "CMA_CGM": ("#FFFFFF", "#E07B39"),  # 흰 글씨 / CMA 오렌지
+                "ONE":     ("#FFFFFF", "#E91B8B"),  # 흰 글씨 / ONE 핑크
+            }
+            _carrier_id = ""
+            bl_r = self.parsed_results.get('bl')
+            if bl_r:
+                _carrier_id = getattr(bl_r, 'carrier_id', '')
+            _fg, _bg = _style_map.get(_carrier_id, ("#333333", "#DDDDDD"))  # 기본 회색
+            self._carrier_label.config(
+                text=f"  {badge_text}  ",
+                fg=_fg, bg=_bg
+            )
+        except Exception as _e:
+            logger.debug(f"[CarrierBadge] UI 업데이트 실패(무시): {_e}")
+
     def _enable_parse_btn(self):
         def _u():
             if self.dialog and self.dialog.winfo_exists():

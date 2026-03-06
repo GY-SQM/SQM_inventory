@@ -19,11 +19,13 @@ try:
         apply_modal_window_options,
         center_dialog,
     )
+    from gui_app_modular.utils.ui_constants import setup_dialog_geometry_persistence
 except ImportError:
     DialogSize = None
     center_dialog = None
     apply_modal_window_options = None
     CustomMessageBox = None
+    setup_dialog_geometry_persistence = None
 
 try:
     from gui_app_modular.utils.theme_colors import ThemeColors
@@ -65,16 +67,18 @@ class ManualInboundPreviewDialog:
 
         self.popup = tk.Toplevel(parent)
         self.popup.title(f"📝 수동입고 미리보기 ({len(rows_valid)}건)")
-        if DialogSize:
-            self.popup.geometry(DialogSize.get_geometry(parent, 'large'))
-        else:
-            self.popup.geometry("1000x550")
-        if apply_modal_window_options:
-            apply_modal_window_options(self.popup)
         self.popup.transient(parent)
         self.popup.grab_set()
-        if center_dialog:
-            center_dialog(self.popup, parent)
+        if setup_dialog_geometry_persistence:
+            setup_dialog_geometry_persistence(self.popup, "inbound_preview_dialog", parent, "large")
+        elif DialogSize:
+            self.popup.geometry(DialogSize.get_geometry(parent, 'large'))
+            if apply_modal_window_options:
+                apply_modal_window_options(self.popup)
+            if center_dialog:
+                center_dialog(self.popup, parent)
+        else:
+            self.popup.geometry("1000x550")
         self.popup.configure(bg=bg)
 
         # ═══ 안내 ═══

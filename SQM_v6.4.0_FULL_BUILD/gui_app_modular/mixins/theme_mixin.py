@@ -217,7 +217,7 @@ class ThemeMixin:
     def _show_theme_selector(self) -> None:
         """Show theme selection dialog"""
         from ..utils.constants import tk, ttk, HAS_TTKBOOTSTRAP, BOTH, X, LEFT, RIGHT, END
-        from ..utils.ui_constants import DialogSize, Spacing, FontScale, center_dialog
+        from ..utils.ui_constants import DialogSize, Spacing, FontScale, center_dialog, setup_dialog_geometry_persistence
         
         if not HAS_TTKBOOTSTRAP:
 
@@ -234,11 +234,9 @@ class ThemeMixin:
         # === UI 통일성: 다이얼로그 크기 표준화 (medium) ===
         dialog = tk.Toplevel(self.root)
         dialog.title("Select Theme")
-        
-        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
         dialog.transient(self.root)
         dialog.grab_set()
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "theme_select_dialog", self.root, "medium")
         
         # === UI 통일성: 간격 표준화 ===
         # Current theme

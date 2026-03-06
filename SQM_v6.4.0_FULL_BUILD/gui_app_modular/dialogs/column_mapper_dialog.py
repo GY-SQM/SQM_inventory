@@ -16,12 +16,14 @@ try:
         DialogSize,
         apply_modal_window_options,
         center_dialog,
+        setup_dialog_geometry_persistence,
     )
 except ImportError as _e:
     logger.debug(f"column_mapper_dialog: {_e}")
     DialogSize = None
     center_dialog = None
     apply_modal_window_options = lambda w: None
+    setup_dialog_geometry_persistence = None
 
 
 # SQM 필수/선택 필드 정의
@@ -52,16 +54,17 @@ class ColumnMapperDialog:
 
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("📋 컬럼 매핑 - Excel → SQM")
-        if DialogSize and center_dialog:
-            self.dialog.geometry(DialogSize.get_geometry(parent, 'medium'))
-        else:
-            self.dialog.geometry("750x550")
-        apply_modal_window_options(self.dialog)
         self.dialog.minsize(500, 400)
         self.dialog.transient(parent)
         self.dialog.grab_set()
-        if center_dialog:
+        if setup_dialog_geometry_persistence:
+            setup_dialog_geometry_persistence(self.dialog, "column_mapper_dialog", parent, "medium")
+        elif DialogSize and center_dialog:
+            self.dialog.geometry(DialogSize.get_geometry(parent, 'medium'))
+            apply_modal_window_options(self.dialog)
             center_dialog(self.dialog, parent)
+        else:
+            self.dialog.geometry("750x550")
 
         self._build_ui()
         self._auto_map()

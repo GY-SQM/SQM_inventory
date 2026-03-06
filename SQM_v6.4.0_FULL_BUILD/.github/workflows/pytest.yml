@@ -1,0 +1,103 @@
+# .github/workflows/pytest.yml
+# SQM 재고관리 시스템 — GitHub Actions CI
+# pytest 자동 실행: push / PR → main, develop
+#
+# 커버리지:
+#   - 기존 62개 테스트 (gemini_parser 31 + cross_check 13 + onestop_inbound 18)
+#   - 신규 20개 테스트 (bl_carrier_registry — MSC/Maersk 실제 PDF 검증)
+#   - 총 82개 테스트
+
+name: SQM pytest CI
+
+on:
+  push:
+    branches: [ main, develop, "release/**" ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: pytest ${{ matrix.python-version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ windows-latest, ubuntu-latest ]
+        python-version: [ "3.12" ]
+
+    steps:
+      # ── 1. 체크아웃 ───────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Python 설정 ────────────────────────────────────
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # ── 3. 의존성 설치 ────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov
+          pip install pdfplumber openpyxl pandas
+          pip install ttkbootstrap pillow reportlab
+          # Gemini (API 키 없으면 테스트 자동 skip)
+          pip install google-generativeai || true
+
+      # ── 4. 환경 변수 (GitHub Secrets) ─────────────────────
+      - name: Set environment variables
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: echo "GEMINI_API_KEY=$GEMINI_API_KEY" >> $GITHUB_ENV
+        shell: bash
+        continue-on-error: true
+
+      # ── 5. pytest 실행 ────────────────────────────────────
+      - name: Run pytest
+        run: |
+          python -m pytest tests/ \
+            --tb=short \
+            -q \
+            --strict-markers \
+            -v \
+            --cov=. \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --ignore=tests/test_integration \
+            -m "not slow and not api and not gui"
+        env:
+          PYTHONPATH: .
+
+      # ── 6. 선사 테스트만 별도 실행 (BL PDF 없으면 skip) ──
+      - name: Run carrier tests
+        run: |
+          python -m pytest tests/test_bl_carrier_registry.py \
+            -v \
+            --tb=short \
+            -m "carrier"
+        env:
+          PYTHONPATH: .
+        continue-on-error: true   # BL 샘플 PDF 없으면 T18~T20 skip — CI 실패 안 함
+
+      # ── 7. 커버리지 업로드 (Codecov, 선택) ───────────────
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+        continue-on-error: true
+
+      # ── 8. 테스트 결과 요약 ───────────────────────────────
+      - name: Test summary
+        if: always()
+        run: |
+          echo "========================================="
+          echo " SQM pytest CI 결과 요약"
+          echo "  OS: ${{ matrix.os }}"
+          echo "  Python: ${{ matrix.python-version }}"
+          echo "  대상: tests/ (82개 기준)"
+          echo "========================================="

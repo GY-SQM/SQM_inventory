@@ -9,7 +9,7 @@ Keyboard shortcuts and hotkey handling
 """
 
 import logging
-from ..utils.ui_constants import CustomMessageBox, DialogSize, center_dialog, apply_modal_window_options
+from ..utils.ui_constants import CustomMessageBox, DialogSize, center_dialog, apply_modal_window_options, setup_dialog_geometry_persistence
 from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
@@ -170,23 +170,6 @@ class KeyBindingsMixin:
     def _on_force_quit(self, event=None) -> None:
         """강제 종료 (Ctrl+Q)"""
         try:
-            # 강제 종료 경로에서도 승인되지 않은 Allocation 대기건 자동 정리
-            try:
-                if hasattr(self, 'engine') and self.engine and hasattr(self.engine, 'clear_pending_allocation_on_exit'):
-                    clear_res = self.engine.clear_pending_allocation_on_exit()
-                    if isinstance(clear_res, dict) and clear_res.get('cleared', 0):
-                        self._log(f"🧹 강제종료 시 승인대기 자동 정리: {clear_res.get('cleared', 0)}건")
-            except Exception as _e:
-                logger.debug(f"Force quit allocation clear: {_e}")
-
-            # 강제 종료 경로에서도 파싱 임시 미리보기 정리
-            try:
-                if hasattr(self, '_set_parsing_preview_data'):
-                    self._set_parsing_preview_data(None)
-                elif hasattr(self, '_parsing_preview_data'):
-                    self._parsing_preview_data = None
-            except Exception as _e:
-                logger.debug(f"Force quit preview clear: {_e}")
             self.root.quit()
             self.root.destroy()
         except Exception as e:
@@ -301,8 +284,7 @@ v2.9.91 - SQM Inventory System
         apply_modal_window_options(popup)
         popup.transient(self.root)
         popup.grab_set()
-        popup.geometry(DialogSize.get_geometry(self.root, 'small'))
-        center_dialog(popup, self.root)
+        setup_dialog_geometry_persistence(popup, "test_db_reset_dialog", self.root, "small")
         frame = ttk.Frame(popup, padding=20)
         frame.pack(fill=tk.BOTH, expand=True)
         ttk.Label(frame, text="테스트용 데이터베이스를 초기화합니다.\n모든 재고·톤백·출고 데이터가 삭제됩니다.",
@@ -347,11 +329,18 @@ v2.9.91 - SQM Inventory System
         if not os.path.isfile(path):
             self._log("⚠️ DB 파일이 없습니다.")
             return
+        # v6.3.5: close() → close_all()
+        # 이유: threading.local()로 스레드마다 독립 연결이 생성됨
+        #       close()는 호출 스레드(메인) 연결만 닫아 다른 스레드 연결이
+        #       파일을 열고 있으면 Windows WinError 32가 발생
+        #       close_all()은 전체 연결 + WAL checkpoint를 수행
         try:
-            if hasattr(self.engine, 'db') and hasattr(self.engine.db, 'close'):
-                self.engine.db.close()
+            if hasattr(self.engine, 'db') and hasattr(self.engine.db, 'close_all'):
+                self.engine.db.close_all()
+            elif hasattr(self.engine, 'db') and hasattr(self.engine.db, 'close'):
+                self.engine.db.close()  # fallback
         except Exception as e:
-            logger.debug(f"DB close: {e}")
+            logger.debug(f"DB close_all: {e}")
 
         backup_dir = os.path.join(os.path.dirname(path), 'backups')
         os.makedirs(backup_dir, exist_ok=True)
@@ -372,14 +361,26 @@ v2.9.91 - SQM Inventory System
             f"{path}.checksum",
         ]
         remove_errors = []
+        import time
         for target in cleanup_targets:
             if not os.path.exists(target):
                 continue
-            try:
-                os.remove(target)
-                self._log(f"🧹 삭제: {target}")
-            except OSError as e:
-                remove_errors.append((target, str(e)))
+            # v6.3.5: 삭제 실패 시 0.5초 대기 후 1회 재시도
+            # (백그라운드 스레드가 연결 종료 완료를 기다리는 시간)
+            last_err = None
+            for attempt in range(2):
+                try:
+                    os.remove(target)
+                    self._log(f"🧹 삭제: {target}")
+                    last_err = None
+                    break
+                except OSError as e:
+                    last_err = e
+                    if attempt == 0:
+                        logger.debug(f"DB 삭제 실패(0.5초 대기 후 재시도): {target}")
+                        time.sleep(0.5)
+            if last_err:
+                remove_errors.append((target, str(last_err)))
         if remove_errors:
             first_target, first_err = remove_errors[0]
             self._log(f"❌ DB 파일 삭제 실패: {first_target} / {first_err}")

@@ -12,7 +12,10 @@ import sqlite3
 import logging
 import tkinter as tk
 from tkinter import ttk
-from ..utils.ui_constants import ThemeColors, Spacing, FontScale, FontStyle, get_font_scale, DialogSize, center_dialog, apply_modal_window_options
+from ..utils.ui_constants import (
+    ThemeColors, Spacing, FontScale, FontStyle, get_font_scale, DialogSize,
+    center_dialog, apply_modal_window_options, setup_dialog_geometry_persistence,
+)
 from utils.ui_debug import log_ui_event, safe_widget_bg  # v5.3.6
 
 logger = logging.getLogger(__name__)
@@ -65,31 +68,27 @@ class ToolbarMixin:
         return f" {icon} [{count}]"
 
     def _load_toolbar_colors(self) -> None:
-        """v6.3.2-colorful: 다크/라이트 반응형 컬러풀 팔레트."""
-        is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'darkly'))
-        if is_dark:
-            self._tb_bg = '#1a1a2e'          # 딥 다크 퍼플 (네이비 탈피)
-            self._tb_sep = '#3d3d5c'         # 보라 구분선
-            self._tb_fg_normal = '#c0c0d0'   # 밝은 라벤더 그레이
-            self._tb_fg_active = '#ffffff'   # 활성 텍스트
-            self._tb_fg_hover = '#e0b0ff'    # 호버: 밝은 보라 (파랑 탈피!)
-            self._tb_hover_bg = '#2a2a4a'    # 호버 배경
-            self._tb_underline_color = '#a78bfa'  # 밝은 바이올렛 강조
-        else:
-            self._tb_bg = '#1f2937'          # 다크 그레이
-            self._tb_sep = '#4b5563'         # 구분선
-            self._tb_fg_normal = '#d1d5db'   # 밝은 그레이
-            self._tb_fg_active = '#ffffff'   # 활성 텍스트
-            self._tb_fg_hover = '#fbbf24'    # 호버: 골드! (파랑 탈피)
-            self._tb_hover_bg = '#374151'    # 호버 배경
-            self._tb_underline_color = '#f59e0b'  # 앰버 강조
-
-    def _mark_toolbar_widget(self, widget) -> None:
-        """테마 리프레시가 덮어쓰지 않도록 툴바 위젯 마킹."""
+        """ThemeColors 단일 소스 — 툴바는 항상 다크 스타일 (Phase2/5)"""
         try:
-            widget._keep_colorful_theme = True
-        except Exception:
-            pass
+            import ttkbootstrap as ttk_bs
+            sc = ttk_bs.Style().colors
+            _dark = True
+            self._tb_bg = ThemeColors.get('statusbar_bg', _dark)
+            self._tb_sep = ThemeColors.get('border', _dark)
+            self._tb_fg_normal = ThemeColors.get('text_secondary', _dark)
+            self._tb_fg_active = ThemeColors.get('statusbar_fg', _dark)
+            self._tb_fg_hover = ThemeColors.get('text_primary', _dark)
+            self._tb_hover_bg = ThemeColors.get('bg_hover', _dark)
+            self._tb_underline_color = str(sc.info) if getattr(sc, 'info', None) else ThemeColors.get('info', _dark)
+        except (ValueError, TypeError, KeyError, AttributeError, tk.TclError):
+            _dark = True
+            self._tb_bg = ThemeColors.get('statusbar_bg', _dark)
+            self._tb_sep = ThemeColors.get('border', _dark)
+            self._tb_fg_normal = ThemeColors.get('text_secondary', _dark)
+            self._tb_fg_active = ThemeColors.get('statusbar_fg', _dark)
+            self._tb_fg_hover = ThemeColors.get('text_primary', _dark)
+            self._tb_hover_bg = ThemeColors.get('bg_hover', _dark)
+            self._tb_underline_color = ThemeColors.get('info', _dark)
 
     def _setup_toolbar(self) -> None:
         self._toolbar_font = _pick_font(self.root)
@@ -104,17 +103,14 @@ class ToolbarMixin:
 
         self._toolbar_container = tk.Frame(self.root)
         self._toolbar_container.pack(fill='x')
-        self._mark_toolbar_widget(self._toolbar_container)
 
         # Row1: 메뉴 버튼 (Phase3: Spacing 8px 그리드)
         self._row1 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=Spacing.XS)
         self._row1.pack(fill='x')
-        self._mark_toolbar_widget(self._row1)
         
         # Row1: 오른쪽 액션(새로고침/버전 배지)
         self._right_actions = tk.Frame(self._row1, bg=self._tb_bg)
         self._right_actions.pack(side='right', padx=Spacing.MD)
-        self._mark_toolbar_widget(self._right_actions)
         self._build_refresh_button(self._right_actions)
 
         # v4.0.0: 오른쪽 버전 배지 (Phase3: FontScale body/heading)
@@ -122,28 +118,21 @@ class ToolbarMixin:
             from version import __version__, APP_NAME
             ver_frame = tk.Frame(self._right_actions, bg=self._tb_bg)
             ver_frame.pack(side='left', padx=(Spacing.SM, 0))
-            self._mark_toolbar_widget(ver_frame)
             _vf = self._tb_font_scale
-            lbl_app = tk.Label(ver_frame, text=f"📦 {APP_NAME}", bg=self._tb_bg, fg='#38bdf8',
-                               font=_vf.body(bold=True))
-            lbl_app.pack(side='left')
-            self._mark_toolbar_widget(lbl_app)
-            lbl_ver = tk.Label(ver_frame, text=f"  v{__version__}", bg=self._tb_bg, fg='#fbbf24',
-                               font=_vf.heading())
-            lbl_ver.pack(side='left')
-            self._mark_toolbar_widget(lbl_ver)
+            tk.Label(ver_frame, text=f"📦 {APP_NAME}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_progress'),
+                     font=_vf.body(bold=True)).pack(side='left')
+            tk.Label(ver_frame, text=f"  v{__version__}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_icon_warn', True),
+                     font=_vf.heading()).pack(side='left')
         except (ImportError, ModuleNotFoundError) as _e:
             logger.debug(f'Suppressed: {_e}')
         # Row2: 탭 버튼 (v3.8.9: 항상 표시)
         self._row2 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=Spacing.XS)
         self._row2.pack(fill='x')
-        self._mark_toolbar_widget(self._row2)
         self._row2_visible = True
 
         # v3.8.9: 메뉴 버튼 — 왼쪽 정렬, 최대 너비 제한
         self._menu_frame = tk.Frame(self._row1, bg=self._tb_bg)
         self._menu_frame.pack(side='left', fill='x')
-        self._mark_toolbar_widget(self._menu_frame)
 
         # === 7개 메뉴 버튼 (균등) ===
         self._all_menu_btns = []
@@ -153,12 +142,10 @@ class ToolbarMixin:
         # 구분선
         self._sep_line = tk.Frame(self._row2, bg=self._tb_sep, height=1)
         self._sep_line.pack(fill='x', padx=Spacing.SM, pady=(0, Spacing.XS))
-        self._mark_toolbar_widget(self._sep_line)
 
         # === 탭 전환 (Row2에 고정, 왼쪽 정렬) ===
         self._sec_tabs = tk.Frame(self._row2, bg=self._tb_bg)
         self._sec_tabs.pack(side='left', padx=Spacing.SM)
-        self._mark_toolbar_widget(self._sec_tabs)
         self._build_tab_buttons()
 
         # v3.8.9: overflow 체크 비활성화 (탭은 항상 row2에 고정)
@@ -175,21 +162,12 @@ class ToolbarMixin:
     def _create_menu(self, parent=None) -> 'tk.Menu':
         """간격 넓은 팝업 메뉴 생성 (v3.8.4)"""
         # v5.4.1: 드롭다운 메뉴 색상(라이트/다크) 강제 고정 — Windows tk_popup 리셋 방지
-        # 컬러풀 고정: 메뉴도 테마와 무관하게 진한 배경 유지
-        # v6.3.2-colorful: 메뉴 색상 테마 반응형
-        is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'darkly'))
-        if is_dark:
-            menu_bg = '#1a1a2e'       # 딥 다크 퍼플
-            menu_fg = '#e2e8f0'
-            menu_abg = '#7c3aed'      # 보라 활성배경 (파랑 탈피)
-            menu_afg = '#ffffff'
-            menu_dis = '#64748b'
-        else:
-            menu_bg = '#1f2937'
-            menu_fg = '#f3f4f6'
-            menu_abg = '#d97706'      # 앰버 활성배경
-            menu_afg = '#ffffff'
-            menu_dis = '#9ca3af'
+        is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+        menu_bg = ThemeColors.get('bg_card', is_dark)
+        menu_fg = ThemeColors.get('text_primary', is_dark)
+        menu_abg = ThemeColors.get('bg_hover', is_dark)
+        menu_afg = ThemeColors.get('text_primary', is_dark)
+        menu_dis = ThemeColors.get('text_muted', is_dark)
         f = self._toolbar_font
         p = parent or self.root
         _menu_font = self._tb_font_scale.get_font(FontStyle.SUBTITLE)
@@ -257,13 +235,11 @@ class ToolbarMixin:
                           anchor='center', justify='center',
                           padx=Spacing.SM, pady=Spacing.SM, cursor='hand2')
             btn.pack(side='left', padx=Spacing.XS)
-            self._mark_toolbar_widget(btn)
 
             # 밑줄 인디케이터 (숨긴 상태로 생성)
             underline = tk.Frame(btn, height=2, bg=self._tb_underline_color)
             btn._underline = underline
             btn._menu_active = False
-            self._mark_toolbar_widget(underline)
 
             menu = builder()
             try:
@@ -304,7 +280,6 @@ class ToolbarMixin:
                 padx=Spacing.SM, pady=Spacing.XS, cursor='hand2'
             )
             btn.pack(side='left')
-            self._mark_toolbar_widget(btn)
             btn.bind('<Button-1>', lambda e: self._refresh_all_data())
             btn.bind('<Enter>', lambda e: btn.config(fg=self._tb_fg_hover))
             btn.bind('<Leave>', lambda e: btn.config(fg=self._tb_fg_normal))
@@ -350,11 +325,14 @@ class ToolbarMixin:
                     m.add_cascade(label=f"  {label}{badge}", menu=return_sub)
                 else:
                     m.add_command(label=f"  {label}", command=lambda mn=method_name: self._safe_call(mn))
-        except ImportError:
+        except Exception as _e2:  # v6.4.0: ImportError → Exception
+            import logging as _lg2
+            _lg2.getLogger(__name__).warning(f"[toolbar] 입고 메뉴 registry 로드 실패 → fallback: {_e2}")
             self._add_menu_items(m, [
-                ('📄 PDF 스캔 입고', lambda: self._safe_call('_on_pdf_inbound')),
-                ('📊 엑셀 파일 수동 입고', lambda: self._safe_call('_bulk_import_inventory_simple')),
-                ('📂 반품 입고 (Excel)', lambda: self._safe_call('_on_return_inbound_upload')),
+                ('📄 PDF 스캔 입고',          lambda: self._safe_call('_on_pdf_inbound')),
+                ('⚡ 빠른 PDF 스캔 (폴더)',   lambda: self._safe_call('_on_pdf_inbound_quick_folder')),
+                ('📊 엑셀 파일 수동 입고',    lambda: self._safe_call('_bulk_import_inventory_simple')),
+                ('📂 반품 입고 (Excel)',       lambda: self._safe_call('_on_return_inbound_upload')),
                 None,
             ])
             return_sub = self._create_menu()
@@ -368,7 +346,9 @@ class ToolbarMixin:
         return m
 
     def _build_outbound_menu(self) -> 'tk.Menu':
-        """v6.0.2: 출고 드롭다운 — menu_registry 기반 (Picking List·바코드·Sales Order 포함, 누락 방지)"""
+        """v6.0.2: 출고 드롭다운 — menu_registry 기반
+        v6.4.0: except Exception으로 확장 (ImportError 외 오류도 안전 처리)
+        """
         m = self._create_menu()
         items = []
         try:
@@ -383,10 +363,17 @@ class ToolbarMixin:
                     continue
                 items.append((label, lambda mn=method_name: self._safe_call(mn)))
             self._add_menu_items(m, items)
-        except ImportError:
+        except Exception as _e:  # v6.4.0: ImportError → Exception
+            import logging as _lg
+            _lg.getLogger(__name__).warning(
+                f"[toolbar] 출고 메뉴 registry 로드 실패 → fallback: {_e}"
+            )
             self._add_menu_items(m, [
                 ('📋 Allocation 입력 (파일 / 붙여넣기)', lambda: self._safe_call('_on_allocation_input_unified')),
                 ('📋 Picking List 업로드 (PDF)', lambda: self._safe_call('_on_picking_list_upload')),
+                (None, None),
+                ('📤 빠른 출고 (붙여넣기)', lambda: self._safe_call('_on_quick_outbound_paste')),
+                ('🚀 S1 원스톱 출고', lambda: self._safe_call('_on_s1_onestop_outbound')),
             ])
         return m
 
@@ -429,6 +416,23 @@ class ToolbarMixin:
         m.add_cascade(label="  🔐 백업", menu=bak)
         m.add_separator()
         # v5.5.3: Gemini API (설정/도구에서 이동)
+        # v6.4.0: BL 선사 도구 서브메뉴
+        try:
+            from ..menu_registry import FILE_MENU_AI_TOOLS_ITEMS as _ai_items
+            _bl_sub = self._create_menu(m)
+            for _entry in _ai_items:
+                if _entry is None:
+                    _bl_sub.add_separator()
+                    continue
+                _lbl, _mth = _entry[0], _entry[1]
+                _bl_sub.add_command(
+                    label=f"  {_lbl}",
+                    command=lambda mn=_mth: self._safe_call(mn)
+                )
+            m.add_cascade(label="  🚢 BL 선사 도구", menu=_bl_sub)
+            m.add_separator()
+        except Exception:
+            pass  # registry 미배포 시 조용히 생략
         try:
             from ..utils.constants import HAS_GEMINI
             if HAS_GEMINI:
@@ -583,20 +587,17 @@ class ToolbarMixin:
         for key, text, tip in tab_defs:
             wrapper = tk.Frame(self._sec_tabs, bg=self._tb_bg)
             wrapper.pack(side='left', padx=Spacing.XS)
-            self._mark_toolbar_widget(wrapper)
 
             btn = tk.Label(wrapper, text=text, font=_tab_font,
                           bg=self._tb_bg, fg=self._tb_fg_normal,
                           anchor='center', justify='center',
                           padx=Spacing.SM, pady=Spacing.XS, cursor='hand2')
             btn.pack()
-            self._mark_toolbar_widget(btn)
 
             # 밑줄 (비활성 시 숨김)
             underline = tk.Frame(wrapper, height=2, bg=self._tb_underline_color)
             btn._underline = underline
             btn._wrapper = wrapper
-            self._mark_toolbar_widget(underline)
 
             btn.bind('<Button-1>', lambda e, k=key: self._switch_tab(k))
             btn.bind('<Enter>', lambda e, b=btn, k=key: self._tab_hover_enter(b, k))
@@ -693,6 +694,7 @@ class ToolbarMixin:
         popup.transient(self.root)
         popup.grab_set()
         center_dialog(popup, self.root)
+        setup_dialog_geometry_persistence(popup, "search_popup_dialog", self.root)
 
         main = tk.Frame(popup, padx=Spacing.LG, pady=Spacing.MD)
         main.pack(fill='both', expand=True)

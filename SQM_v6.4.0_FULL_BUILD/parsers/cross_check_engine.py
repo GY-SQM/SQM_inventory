@@ -253,8 +253,29 @@ class CrossCheckEngine:
             if val:
                 sources[name] = val
                 normalized[name] = _normalize_bl(val)
-        if len(set(normalized.values())) > 1:
-            result.add("B/L No", CheckLevel.WARNING, "B/L No 불일치 (정규화 후에도 상이)", sources)
+
+        if len(set(normalized.values())) <= 1:
+            return  # 모두 일치
+
+        # v6.4.0: Maersk bl_equals_booking_no=True → BL==Booking No 정상, 경고 생략
+        if bl is not None and getattr(bl, "bl_equals_booking_no", False):
+            bl_val   = _normalize_bl(_safe_str(bl, "bl_no"))
+            book_val = _normalize_bl(_safe_str(bl, "booking_no"))
+            if bl_val and book_val and bl_val == book_val:
+                logger.info(
+                    f"[CrossCheck] {getattr(bl, 'carrier_name', 'Maersk')} "
+                    f"BL No({bl_val}) == Booking No → 정상, 경고 생략"
+                )
+                # 나머지 서류(Invoice, D/O)와만 비교
+                other = {k: v for k, v in normalized.items() if k != "Booking No"}
+                if len(set(other.values())) <= 1:
+                    return
+                result.add("B/L No", CheckLevel.WARNING,
+                           "B/L No 불일치 (정규화 후에도 상이)",
+                           {k: sources[k] for k in other})
+                return
+
+        result.add("B/L No", CheckLevel.WARNING, "B/L No 불일치 (정규화 후에도 상이)", sources)
 
     def _check_vessel(self, result, invoice, pl, bl, do):
         sources, vessels = {}, []
@@ -358,44 +379,19 @@ class CrossCheckEngine:
     def _check_lot_numbers(self, result, invoice, pl):
         inv_lots = set(str(x).strip() for x in (getattr(invoice, "lot_numbers", []) or []) if str(x).strip()) if invoice else set()
         pl_lots = set()
-        # v6.3.5: PL list_no 순서 맵 구축 (순번 기반 정렬용)
-        pl_lot_order: dict = {}
         if pl and getattr(pl, "lots", None):
             for lot in pl.lots:
-                lot_no = (getattr(lot, "lot_no", "") or "").strip()
-                if lot_no:
-                    pl_lots.add(lot_no)
-                    try:
-                        pl_lot_order[lot_no] = int(getattr(lot, "list_no", 0) or 0)
-                    except (ValueError, TypeError):
-                        pl_lot_order[lot_no] = 0
-        # Invoice 원문 순서 맵 (lot_numbers 리스트 인덱스)
-        inv_lot_order: dict = {}
-        if invoice and getattr(invoice, "lot_numbers", None):
-            for idx, lot_no in enumerate(invoice.lot_numbers):
-                lot_no = str(lot_no).strip()
-                if lot_no and lot_no not in inv_lot_order:
-                    inv_lot_order[lot_no] = idx
+                lot_no = getattr(lot, "lot_no", "") or ""
+                if lot_no.strip():
+                    pl_lots.add(lot_no.strip())
         if not inv_lots or not pl_lots:
             return
         only_in_inv = inv_lots - pl_lots
         only_in_pl = pl_lots - inv_lots
         if only_in_inv:
-            # Invoice 원문 순서대로 정렬
-            inv_sorted = sorted(only_in_inv, key=lambda x: inv_lot_order.get(x, 99999))
-            result.add(
-                "LOT 번호 (Invoice Only)", CheckLevel.WARNING,
-                f"Invoice에만 있는 LOT: {', '.join(inv_sorted)}",
-                {"Invoice에만 존재": ", ".join(inv_sorted)}
-            )
+            result.add("LOT 번호 (Invoice Only)", CheckLevel.WARNING, f"Invoice에만 있는 LOT: {', '.join(sorted(only_in_inv))}", {"Invoice에만 존재": ", ".join(sorted(only_in_inv))})
         if only_in_pl:
-            # ★ PL list_no 순서대로 정렬
-            pl_sorted = sorted(only_in_pl, key=lambda x: pl_lot_order.get(x, 99999))
-            result.add(
-                "LOT 번호 (PL Only)", CheckLevel.WARNING,
-                f"Packing List에만 있는 LOT: {', '.join(pl_sorted)}",
-                {"Packing List에만 존재": ", ".join(pl_sorted)}
-            )
+            result.add("LOT 번호 (PL Only)", CheckLevel.WARNING, f"Packing List에만 있는 LOT: {', '.join(sorted(only_in_pl))}", {"Packing List에만 존재": ", ".join(sorted(only_in_pl))})
 
     def _check_duplicate_lots(self, result, pl):
         if not pl or not getattr(pl, "lots", None):

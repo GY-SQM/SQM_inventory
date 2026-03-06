@@ -15,6 +15,7 @@ from ..utils.ui_constants import (
     DialogSize,
     ThemeColors,
     center_dialog,
+    setup_dialog_geometry_persistence,
 )
 
 logger = logging.getLogger(__name__)
@@ -320,9 +321,8 @@ class StatusBarMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Module Status")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         dialog.transient(self.root)
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "module_status_dialog", self.root, "small")
 
         # Summary
         ttk.Label(dialog,

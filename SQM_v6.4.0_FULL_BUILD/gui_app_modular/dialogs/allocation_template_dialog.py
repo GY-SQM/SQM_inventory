@@ -34,6 +34,7 @@ try:
         ThemeColors,
         apply_modal_window_options,
         center_dialog,
+        setup_dialog_geometry_persistence,
     )
     _HAS_UI_UTILS = True
 except ImportError:
@@ -276,18 +277,19 @@ class AllocationTemplateDialog:
 
         self.dialog = tk.Toplevel(parent)
         self.dialog.title('📋 Allocation 양식 미리보기')
+        self.dialog.configure(bg=C_BG)
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
 
-        if _HAS_UI_UTILS:
+        if _HAS_UI_UTILS and setup_dialog_geometry_persistence:
+            setup_dialog_geometry_persistence(self.dialog, "allocation_template_dialog", parent, "large")
+        elif _HAS_UI_UTILS:
             self.dialog.geometry(DialogSize.get_geometry(parent, 'large'))
             apply_modal_window_options(self.dialog)
             center_dialog(self.dialog, parent)
         else:
             self.dialog.geometry('1100x680')
             self.dialog.resizable(True, True)
-
-        self.dialog.configure(bg=C_BG)
-        self.dialog.transient(parent)
-        self.dialog.grab_set()
 
         self._build_ui()
         self._load_tab(0)

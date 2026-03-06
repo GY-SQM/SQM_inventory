@@ -18,6 +18,7 @@ from ..utils.ui_constants import (
     apply_modal_window_options,
     center_dialog,
     get_status_display,
+    setup_dialog_geometry_persistence,
 )
 
 logger = logging.getLogger(__name__)
@@ -238,11 +239,10 @@ class ContextMenuMixin:
         # Create edit dialog
         dialog = tk.Toplevel(self.root)
         dialog.title(f"Edit LOT: {lot_no}")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
         apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "context_edit_lot_dialog", self.root, "medium")
 
         # Form frame
         form_frame = ttk.Frame(dialog, padding=10)
@@ -477,11 +477,10 @@ class ContextMenuMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title("상태 변경")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "context_status_change_dialog", self.root, "small")
 
         ttk.Label(dialog, text=f"LOT: {lot_no}, 톤백: {sub_lt_display}").pack(pady=10)
         ttk.Label(dialog, text=f"현재: {current_status_display}").pack()
@@ -582,11 +581,10 @@ class ContextMenuMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title(f"📅 LOT 히스토리 — {lot_no}")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
         apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "context_lot_history_dialog", self.root, "medium")
 
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         _bg = ThemeColors.get('bg_card', _is_dark)

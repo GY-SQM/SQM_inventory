@@ -9,7 +9,7 @@ import getpass
 import logging
 from datetime import datetime
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, setup_dialog_geometry_persistence
 import tkinter as tk
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ class AllocationApprovalDialog:
         is_dark = ThemeColors.is_dark_theme(getattr(self.app, "current_theme", "flatly"))
         win.configure(bg=ThemeColors.get("bg_card", is_dark))
         win.transient(self.root)
-        win.geometry("1320x640")
+        setup_dialog_geometry_persistence(win, "allocation_approval_queue", self.root, "large")
 
         frame = ttk.Frame(win)
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)
@@ -344,7 +344,7 @@ class AllocationApprovalDialog:
         is_dark = ThemeColors.is_dark_theme(getattr(self.app, "current_theme", "flatly"))
         win.configure(bg=ThemeColors.get("bg_card", is_dark))
         win.transient(self.root)
-        win.geometry("1080x560")
+        setup_dialog_geometry_persistence(win, "allocation_approval_history", self.root, "large")
 
         frame = ttk.Frame(win)
         frame.pack(fill=BOTH, expand=True, padx=8, pady=8)

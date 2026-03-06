@@ -42,6 +42,11 @@ except Exception:
     load_rules = None
     extract_text_by_rule = None
 
+try:
+    from ..utils.ui_constants import setup_dialog_geometry_persistence
+except Exception:
+    setup_dialog_geometry_persistence = None
+
 
 class ReviewCenterDialog:
     """검수센터 UI"""
@@ -87,8 +92,11 @@ class ReviewCenterDialog:
 
         self.win = tk.Toplevel(self.parent)
         self.win.title("🧪 검수센터 (Review Center)")
-        self.win.geometry("1200x760")
         self.win.minsize(900, 600)
+        if setup_dialog_geometry_persistence:
+            setup_dialog_geometry_persistence(self.win, "review_center", self.parent, "large")
+        else:
+            self.win.geometry("1200x760")
 
         self._build_ui()
         self._open_doc(self.var_doc.get())

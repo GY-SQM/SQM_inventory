@@ -14,7 +14,7 @@ SQM v3.9.1 — 재고 현황 탭 (18열 + 체크박스 열선택)
 import sqlite3
 import tkinter as tk
 from tkinter import ttk
-from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options, get_status_display
+from ..utils.ui_constants import ThemeColors, Spacing, DialogSize, center_dialog, apply_modal_window_options, get_status_display, setup_dialog_geometry_persistence
 from ..utils.constants import BOTH, YES, X, Y, LEFT, RIGHT, VERTICAL
 import logging
 from datetime import datetime, timedelta
@@ -67,24 +67,35 @@ class InventoryTabMixin:
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         _inv_bg = ThemeColors.get('bg_secondary', _is_dark)
 
-        # v7.0: 판매가능 탭 제목
+        # v7.0: 판매가능 탭 제목 + LOT/톤백 전환 (가독성: 폰트 확대)
         _title_frame = ttk.Frame(self.tab_inventory)
-        _title_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
-        ttk.Label(_title_frame, text="판매가능 LOT 리스트", style='Subtitle.TLabel' if hasattr(ttk.Style(), 'configure') else None).pack(side=LEFT)
+        _title_frame.pack(fill=X, padx=Spacing.SM, pady=(Spacing.SM, Spacing.XS))
+        _title_font = ('맑은 고딕', 12, 'bold')
+        ttk.Label(_title_frame, text="판매가능 LOT 리스트", font=_title_font).pack(side=LEFT)
 
-        # LOT 리스트 / 톤백 리스트 전환 (v7.0: 재고 리스트 → LOT 리스트 명칭)
+        # LOT 리스트 / 톤백 리스트 전환 — 같은 탭에서 LOT 단위 ↔ 톤백 단위 화면 전환 (가독성: 라디오 폰트 확대)
         self._inv_view_switch_var = tk.StringVar(value='recovery')
         self._inv_show_all_tonbags = False  # v7.0: [전체 톤백 펼치기] 시 True
         inv_switch_frame = ttk.Frame(self.tab_inventory)
-        inv_switch_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
-        ttk.Radiobutton(
+        inv_switch_frame.pack(fill=X, padx=Spacing.SM, pady=(Spacing.XS, Spacing.SM))
+        _radio_style = None
+        try:
+            _s = ttk.Style()
+            _s.configure('InvSwitch.TRadiobutton', font=('맑은 고딕', 11))
+            _radio_style = 'InvSwitch.TRadiobutton'
+        except Exception:
+            pass
+        _kw = {'style': _radio_style} if _radio_style else {}
+        rb_lot = ttk.Radiobutton(
             inv_switch_frame, text="📦 LOT 리스트", variable=self._inv_view_switch_var, value='recovery',
-            command=self._on_inv_view_switch
-        ).pack(side=LEFT, padx=Spacing.XS)
-        ttk.Radiobutton(
+            command=self._on_inv_view_switch, **_kw
+        )
+        rb_lot.pack(side=LEFT, padx=(0, Spacing.MD))
+        rb_tonbag = ttk.Radiobutton(
             inv_switch_frame, text="🎒 톤백 리스트", variable=self._inv_view_switch_var, value='tonbag',
-            command=self._on_inv_view_switch
-        ).pack(side=LEFT, padx=Spacing.XS)
+            command=self._on_inv_view_switch, **_kw
+        )
+        rb_tonbag.pack(side=LEFT, padx=(0, Spacing.XS))
 
         # 재고 뷰 컨테이너 (필터/토글/버튼/스플릿 패널)
         self._inv_recovery_container = ttk.Frame(self.tab_inventory)
@@ -126,26 +137,28 @@ class InventoryTabMixin:
         self._inv_header_row_place = ttk.Frame(self._inv_recovery_container)
         self._inv_header_row_place.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
 
-        # v5.0.2: 컬럼 토글 바 (v8.7.0: 전체 19열 + 기본표시여부 반영)
+        # v5.0.2: 컬럼 토글 바 — 판매가능 탭에서는 위 메뉴 제거 요청으로 미표시 (트리만 헤더 정렬+필터)
         try:
             from ..utils.column_toggle import ColumnToggleBar
             toggleable_cols = [(c[0], c[1], c[4]) for c in INVENTORY_COLUMNS]
             self._inv_toggle_bar = ColumnToggleBar(
                 self._inv_recovery_container,
-                None,  # Treeview는 나중에 연결
+                None,
                 toggleable_cols,
                 is_dark=_is_dark_filter
             )
-            self._inv_toggle_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+            # self._inv_toggle_bar.pack(...) — 상단 UI 제거로 비표시
         except (ImportError, Exception) as e:
             logger.debug(f"컬럼 토글바 생성 실패: {e}")
             self._inv_toggle_bar = None
-        
-        # 재고 탭 Excel 내보내기 + v7.0 2단계: [전체 톤백 펼치기] 버튼
+
+        # Excel 내보내기·전체 톤백 버튼 — 판매가능 탭 상단 UI 제거로 비표시 (메뉴에서 사용 가능)
+        self._inv_btn_frame = None
         try:
             from ..utils.ui_constants import apply_tooltip
             inv_btn_frame = ttk.Frame(self._inv_recovery_container)
-            inv_btn_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+            # inv_btn_frame.pack(...) — 상단 UI 제거로 비표시
+            self._inv_btn_frame = inv_btn_frame
             btn_inv_export = ttk.Button(
                 inv_btn_frame, text="📥 Excel 내보내기",
                 command=lambda: self._on_export_click(option=3)
@@ -169,7 +182,8 @@ class InventoryTabMixin:
             self._inv_recovery_container,
             detail_title="🎒 톤백 상세 (선택 LOT)",
             master_weight=3,
-            detail_weight=1
+            detail_weight=1,
+            master_minsize=200,
         )
         self._inv_split_panel.pack(fill=BOTH, expand=YES, padx=Spacing.XS, pady=Spacing.XS)
 
@@ -291,6 +305,7 @@ class InventoryTabMixin:
             date_to_var=self._date_to_var,
             container_suffix_var=getattr(self, '_container_suffix_var', None),
             on_container_suffix_toggle=getattr(self, '_on_container_suffix_toggle', None),
+            show_opt_row=True,
         )
         self._inv_header_row.pack(fill=X)
         self._inv_filter_bar = self._inv_header_row
@@ -594,10 +609,9 @@ class InventoryTabMixin:
         
         dlg = tk.Toplevel(self.root)
         dlg.title(f"🎒 톤백 상세 — {lot_no}")
-        dlg.geometry(DialogSize.get_geometry(self.root, 'medium'))
         apply_modal_window_options(dlg)
         dlg.transient(self.root)
-        center_dialog(dlg, self.root)
+        setup_dialog_geometry_persistence(dlg, "tonbag_detail_dialog", self.root, "medium")
         
         cols = ('sub_lt', 'weight', 'status', 'location', 'picked_to', 'outbound_date')
         tree = _ttk.Treeview(dlg, columns=cols, show='headings', height=15)
@@ -656,10 +670,9 @@ class InventoryTabMixin:
         
         dlg = tk.Toplevel(self.root)
         dlg.title(f"📊 LOT 이력 — {lot_no}")
-        dlg.geometry(DialogSize.get_geometry(self.root, 'medium'))
         apply_modal_window_options(dlg)
         dlg.transient(self.root)
-        center_dialog(dlg, self.root)
+        setup_dialog_geometry_persistence(dlg, "lot_history_dialog", self.root, "medium")
         
         cols = ('type', 'qty', 'customer', 'date', 'created')
         tree = _ttk.Treeview(dlg, columns=cols, show='headings', height=12)
@@ -750,7 +763,7 @@ class InventoryTabMixin:
         return result
 
     def _set_parsing_preview_data(self, data) -> None:
-        """파싱 미리보기 데이터 설정/해제. None이면 창을 비우고, 파싱 결과만 올 때만 표시."""
+        """파싱 미리보기 데이터 설정/해제. None이면 창을 비우고, 파싱 결과만 올 때만 표시. PL list_no 순서 유지(정렬하지 않음)."""
         self._parsing_preview_data = data
         if isinstance(data, list) and len(data) > 0:
             self._blank_inventory_until_first_parse = False
@@ -1001,8 +1014,11 @@ class InventoryTabMixin:
             if hasattr(self, '_inv_total_footer') and self._inv_total_footer:
                 self._inv_total_footer.update_totals()
 
-            # v3.9.9: 빈 상태 안내 — 비표시 (사용자 요청)
-            self._hide_empty_state_hint()
+            # 빈 목록일 때 안내 메시지 표시 (목록이 안 보이는 것이 아님을 안내)
+            if len(self.tree_inventory.get_children()) == 0:
+                self._show_empty_state_hint()
+            else:
+                self._hide_empty_state_hint()
             
             # v3.8.7: 재고 탭 하단 통계 갱신
             self._refresh_inv_stats()
@@ -1214,8 +1230,34 @@ class InventoryTabMixin:
                 tree.heading(c_id, text=c_label)
     
 
+    def _show_empty_state_hint(self) -> None:
+        """표시할 데이터가 없을 때 안내 라벨 표시 (목록 영역은 보이지만 비어 있음을 안내)."""
+        self._hide_empty_state_hint()
+        if not hasattr(self, '_inv_tree_frame') or not self._inv_tree_frame.winfo_exists():
+            return
+        try:
+            _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
+            _fg = ThemeColors.get('text_primary', _is_dark)
+            _msg = (
+                "표시할 데이터가 없습니다. "
+                "입고 파싱을 실행했거나 DB에 판매가능(AVAILABLE) 데이터가 있으면 여기에 표시됩니다. "
+                "필터/기간을 완화해 보세요."
+            )
+            self._empty_hint = tk.Label(
+                self._inv_tree_frame,
+                text=_msg,
+                font=('맑은 고딕', 10),
+                fg=_fg,
+                bg=ThemeColors.get('bg_card', _is_dark),
+                wraplength=500,
+            )
+            self._empty_hint.pack(side=tk.TOP, fill=tk.X, pady=20, padx=10)
+        except Exception as e:
+            logger.debug(f"빈 상태 안내 표시 실패: {e}")
+            self._empty_hint = None
+
     def _hide_empty_state_hint(self) -> None:
-        """v3.9.9: 빈 상태 안내 숨김"""
+        """빈 상태 안내 숨김"""
         if hasattr(self, '_empty_hint') and self._empty_hint:
             try:
                 self._empty_hint.destroy()

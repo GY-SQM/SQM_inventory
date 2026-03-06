@@ -39,20 +39,18 @@ FILE_MENU_INBOUND_RETURN_SUB_ITEMS = [
 # 출고 서브메뉴에 들어갈 항목 (순서 유지)
 FILE_MENU_OUTBOUND_ITEMS = [
     ("📋 Allocation 입력 (파일/붙여넣기)", "_on_allocation_input_unified"),
-    ("📄 Allocation 양식 미리보기", "_show_allocation_template_preview", True),   # v6.3.3 RUBI
     ("✅ Allocation 승인 대기", "_show_allocation_approval_queue", True),
     ("📜 승인 이력(조회)", "_show_allocation_approval_history", True),
     ("📌 예약 반영(승인분)", "_apply_approved_allocation", True),
     None,  # 구분선
     ("📋 Picking List 업로드 (PDF)", "_on_picking_list_upload"),
     ("📊 바코드 스캔 업로드 (CSV/Excel)", "_on_barcode_scan_upload"),
-    ("📟 실시간 바코드 스캔 (Enter)", "_on_barcode_live_scan"),
     ("🔁 Swap 리포트 (기간/필터)", "_show_swap_report_dialog", True),
     ("📊 Sales Order 업로드 (Excel)", "_on_sales_order_upload", True),  # optional
     ("📋 출고 현황 조회", "_show_outbound_history", True),
-    ("🔄 반송 출고 현황", "_show_return_export_history", True),   # v6.3.3 RUBI
     None,  # 구분선
     ("📤 빠른 출고 (붙여넣기)", "_on_quick_outbound_paste"),
+    ("🚀 S1 원스톱 출고", "_on_s1_onestop_outbound"),
     None,  # 구분선
     ("📋 판매 배정 탭으로 이동 (취소 버튼은 탭에서 사용)", "_on_go_allocation_tab"),
 ]
@@ -72,4 +70,12 @@ FILE_MENU_BACKUP_ITEMS = [
     ("💾 백업 생성", "_on_backup_click"),
     ("🔄 복원", "_on_restore_click"),
     ("📋 백업 목록", "_show_backup_list"),
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI 파싱 도구 메뉴 항목 (🤖 AI 어시스턴트 서브메뉴) — v6.4.0
+# ─────────────────────────────────────────────────────────────────────────────
+FILE_MENU_AI_TOOLS_ITEMS = [
+    ('🚢 선사 BL 등록 도구', '_on_bl_carrier_register', True),
+    ('🔬 선사 패턴 분석',    '_on_bl_carrier_analyze',  True),
 ]

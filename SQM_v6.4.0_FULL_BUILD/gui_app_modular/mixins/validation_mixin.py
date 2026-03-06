@@ -31,11 +31,12 @@ class ValidationMixin:
         """Show validation result dialog"""
         from ..utils.constants import tk, ttk, filedialog
         from ..utils.constants import BOTH, LEFT, RIGHT, X, Y, VERTICAL, END, W
+        from ..utils.ui_constants import setup_dialog_geometry_persistence
         
         dialog = tk.Toplevel(self.root)
         dialog.title(f"Validation: {title}")
-        dialog.geometry("800x600")
         dialog.transient(self.root)
+        setup_dialog_geometry_persistence(dialog, "validation_result_dialog", self.root, "large")
         
         # Summary frame
         summary_frame = ttk.LabelFrame(dialog, text="Summary")

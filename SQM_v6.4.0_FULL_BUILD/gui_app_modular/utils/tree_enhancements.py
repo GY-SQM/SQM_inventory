@@ -332,7 +332,8 @@ class HeaderSortFilterRow:
                  on_filter: Callable, on_sort: Callable[[str], None],
                  is_dark: bool = False,
                  date_from_var=None, date_to_var=None,
-                 container_suffix_var=None, on_container_suffix_toggle=None):
+                 container_suffix_var=None, on_container_suffix_toggle=None,
+                 show_opt_row: bool = True):
         """
         Args:
             parent: 부모 위젯
@@ -341,6 +342,7 @@ class HeaderSortFilterRow:
             on_filter: 필터 변경 시 콜백
             on_sort: 헤더 클릭 시 콜백 on_sort(col_id)
             date_from_var, date_to_var, container_suffix_var, on_container_suffix_toggle: 선택
+            show_opt_row: False면 기간/초기화 행 미표시 (헤더 열+목록상자만)
         """
         import tkinter as tk
         from tkinter import ttk
@@ -382,12 +384,17 @@ class HeaderSortFilterRow:
             var = tk.StringVar(value="전체")
             combo = ttk.Combobox(
                 cell, textvariable=var, values=["전체"], state="readonly",
-                width=max(width // 10, 6)
+                width=max(width // 6, 14)
             )
             combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(2, 0))
             combo.bind('<<ComboboxSelected>>', lambda e: self.on_filter())
             self.filter_vars[col_id] = var
             self.filter_combos[col_id] = combo
+            try:
+                from .ui_constants import apply_tooltip
+                apply_tooltip(combo, f"목록에서 선택해 {label} 필터")
+            except Exception:
+                pass
 
         # 하위호환: lot_combo, sap_combo 등 별칭
         self.lot_combo = self.filter_combos.get('lot_no')
@@ -396,30 +403,32 @@ class HeaderSortFilterRow:
         self.container_combo = self.filter_combos.get('container_no')
         self.product_combo = self.filter_combos.get('product')
 
-        # 기간·컨테이너 구분 (선택)
-        opt_frame = ttk.Frame(self.frame)
-        opt_frame.pack(fill=tk.X, pady=(4, 0))
-        if date_from_var is not None and date_to_var is not None:
-            ttk.Label(opt_frame, text="기간:").pack(side=tk.LEFT, padx=(0, 2))
-            ttk.Entry(opt_frame, textvariable=date_from_var, width=11).pack(side=tk.LEFT, padx=2)
-            _btn_cal_from = ttk.Button(opt_frame, text="📅", width=2,
+        # 기간·컨테이너 구분 (선택) — show_opt_row=False면 미표시
+        self._opt_frame = ttk.Frame(self.frame)
+        if show_opt_row:
+            self._opt_frame.pack(fill=tk.X, pady=(4, 0))
+        if show_opt_row and date_from_var is not None and date_to_var is not None:
+            ttk.Label(self._opt_frame, text="기간:").pack(side=tk.LEFT, padx=(0, 2))
+            ttk.Entry(self._opt_frame, textvariable=date_from_var, width=11).pack(side=tk.LEFT, padx=2)
+            _btn_cal_from = ttk.Button(self._opt_frame, text="📅", width=2,
                 command=lambda: show_date_calendar(
                     self.frame.winfo_toplevel(), date_from_var.get(),
                     lambda ymd: (date_from_var.set(ymd), self.on_filter())))
             _btn_cal_from.pack(side=tk.LEFT, padx=(0, 4))
-            ttk.Label(opt_frame, text=" ~ ").pack(side=tk.LEFT)
-            ttk.Entry(opt_frame, textvariable=date_to_var, width=11).pack(side=tk.LEFT, padx=2)
-            _btn_cal_to = ttk.Button(opt_frame, text="📅", width=2,
+            ttk.Label(self._opt_frame, text=" ~ ").pack(side=tk.LEFT)
+            ttk.Entry(self._opt_frame, textvariable=date_to_var, width=11).pack(side=tk.LEFT, padx=2)
+            _btn_cal_to = ttk.Button(self._opt_frame, text="📅", width=2,
                 command=lambda: show_date_calendar(
                     self.frame.winfo_toplevel(), date_to_var.get(),
                     lambda ymd: (date_to_var.set(ymd), self.on_filter())))
             _btn_cal_to.pack(side=tk.LEFT, padx=(0, 8))
-        if container_suffix_var is not None and on_container_suffix_toggle is not None:
+        if show_opt_row and container_suffix_var is not None and on_container_suffix_toggle is not None:
             ttk.Checkbutton(
-                opt_frame, text="📦 컨테이너 구분(-1,-2)",
+                self._opt_frame, text="📦 컨테이너 구분(-1,-2)",
                 variable=container_suffix_var, command=on_container_suffix_toggle
             ).pack(side=tk.LEFT, padx=(0, 4))
-        ttk.Button(opt_frame, text="✖ 초기화", width=8, command=self._reset_filters).pack(side=tk.LEFT, padx=4)
+        if show_opt_row:
+            ttk.Button(self._opt_frame, text="✖ 초기화", width=8, command=self._reset_filters).pack(side=tk.LEFT, padx=4)
 
     def _on_header_click(self, col_id: str) -> None:
         prev = self._sort_column

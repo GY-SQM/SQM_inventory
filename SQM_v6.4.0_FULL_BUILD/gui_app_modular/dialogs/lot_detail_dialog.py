@@ -18,6 +18,7 @@ from ..utils.ui_constants import (
     apply_tooltip,
     center_dialog,
     get_status_display,
+    setup_dialog_geometry_persistence,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,11 +89,9 @@ class LotDetailDialogMixin:
 
         popup = tk.Toplevel(self.root)
         popup.title(f"LOT 상세 추적 - {lot_no}")
-        popup.geometry(DialogSize.get_geometry(self.root, 'large'))
-        apply_modal_window_options(popup)
         popup.transient(self.root)
         popup.grab_set()
-        center_dialog(popup, self.root)
+        setup_dialog_geometry_persistence(popup, "lot_detail_dialog", self.root, "large")
         popup.configure(bg=bg)
 
         # ═══════════════════════════════════════════

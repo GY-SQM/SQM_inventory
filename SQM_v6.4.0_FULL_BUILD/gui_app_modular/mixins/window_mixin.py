@@ -161,35 +161,30 @@ class WindowMixin:
         
         # Confirm exit
         if CustomMessageBox.askyesno(self.root, "Exit", "Exit application?"):
-            # 종료 시 승인되지 않은 Allocation 대기건 자동 정리
-            try:
-                if hasattr(self, 'engine') and self.engine and hasattr(self.engine, 'clear_pending_allocation_on_exit'):
-                    clear_res = self.engine.clear_pending_allocation_on_exit()
-                    if isinstance(clear_res, dict) and clear_res.get('cleared', 0):
-                        self._log(f"🧹 종료 시 승인대기 자동 정리: {clear_res.get('cleared', 0)}건")
-            except (ValueError, TypeError, AttributeError) as e:
-                logger.debug(f"종료 시 승인대기 정리 스킵: {e}")
-
             # v3.6.2: 자동 새로고침 타이머 정리
             if hasattr(self, '_stop_auto_refresh'):
                 try:
                     self._stop_auto_refresh()
                 except (ValueError, TypeError, AttributeError) as e:
                     logger.debug(f"{type(e).__name__}: {e}")
-
-            # 원스톱 파싱 임시 미리보기는 종료 시 반드시 정리
-            try:
-                if hasattr(self, '_set_parsing_preview_data'):
-                    self._set_parsing_preview_data(None)
-                elif hasattr(self, '_parsing_preview_data'):
-                    self._parsing_preview_data = None
-            except (ValueError, TypeError, AttributeError) as e:
-                logger.debug(f"종료 시 파싱 임시데이터 정리 무시: {e}")
             
             # Cleanup
+            # v6.3.5: close_all() 사용 — 모든 스레드 연결 + WAL checkpoint
+            # (close()는 메인 스레드만 닫아 WAL 파일이 남을 수 있음)
             try:
                 if hasattr(self, 'engine') and self.engine:
-                    self.engine.close()
+                    # 자동 백업 스케줄러 먼저 중지
+                    if hasattr(self, 'auto_backup_scheduler') and self.auto_backup_scheduler:
+                        try:
+                            self.auto_backup_scheduler.stop()
+                        except Exception as _e:
+                            logger.debug(f"auto_backup stop: {_e}")
+                    # close_all: 전체 스레드 연결 + WAL checkpoint(TRUNCATE)
+                    if hasattr(self.engine, 'db') and hasattr(self.engine.db, 'close_all'):
+                        self.engine.db.close_all()
+                        logger.info("[_on_closing] DB close_all 완료")
+                    else:
+                        self.engine.close()  # fallback
             except (ValueError, TypeError, AttributeError) as e:
                 logger.warning(f"Engine close error: {e}")
             

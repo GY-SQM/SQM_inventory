@@ -172,6 +172,22 @@ class AutoBackupScheduler:
             self._log(f"⏰ 자동 백업 오류: {e}")
             logger.error(f"자동 백업 오류: {e}", exc_info=True)
 
+        # v6.3.5: WAL PASSIVE checkpoint — 백업 직후 WAL 파일 내용을 main DB에 병합
+        # PASSIVE: 쓰기 중인 트랜잭션을 차단하지 않으므로 성능 영향 없음
+        # 효과: WAL 파일이 무한히 커지는 것을 방지 → 다음 백업 파일 크기 안정화
+        try:
+            if (
+                hasattr(self, 'engine') and self.engine
+                and hasattr(self.engine, 'db') and self.engine.db
+                and hasattr(self.engine.db, '_local')
+                and hasattr(self.engine.db._local, 'conn')
+                and self.engine.db._local.conn
+            ):
+                self.engine.db._local.conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+                logger.debug("[AutoBackup] WAL checkpoint(PASSIVE) 완료")
+        except Exception as _wal_e:
+            logger.debug(f"[AutoBackup] WAL checkpoint 실패(무시): {_wal_e}")
+
         # 다음 백업 예약
         interval_ms = self._config['interval_minutes'] * 60 * 1000
         self._schedule_next(interval_ms)

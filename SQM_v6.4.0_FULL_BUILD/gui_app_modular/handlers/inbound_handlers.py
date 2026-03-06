@@ -60,9 +60,8 @@ class ImportHandlersMixin:
             UPLOAD_CHOICE_HEADER,
             UPLOAD_CHOICE_PASTE,
             UPLOAD_CHOICE_UPLOAD,
-            DialogSize,
             apply_modal_window_options,
-            center_dialog,
+            setup_dialog_geometry_persistence,
         )
         result = [None]
         win = tk.Toplevel(self.root)
@@ -70,9 +69,8 @@ class ImportHandlersMixin:
         apply_modal_window_options(win)
         win.transient(self.root)
         win.grab_set()
-        win.geometry(DialogSize.get_geometry(self.root, 'small'))
         win.minsize(400, 280)
-        center_dialog(win, self.root)
+        setup_dialog_geometry_persistence(win, "inbound_upload_choice_dialog", self.root, "small")
         f = ttk.Frame(win, padding=(20, 20, 20, 32))
         f.pack(fill=tk.BOTH, expand=True)
         ttk.Label(f, text=UPLOAD_CHOICE_HEADER, font=('맑은 고딕', 12, 'bold')).pack(anchor='w', pady=(0, 12))

@@ -19,6 +19,7 @@ from ..utils.ui_constants import (
     DialogSize,
     ThemeColors,
     center_dialog,
+    setup_dialog_geometry_persistence,
 )
 
 logger = logging.getLogger(__name__)
@@ -130,12 +131,11 @@ class BackupHandlersMixin:
 
         backups.sort(key=lambda x: x['mtime'], reverse=True)
 
-        # Create dialog (Phase4: DialogSize)
+        # Create dialog (Phase4: 크기 저장/복원)
         dialog = tk.Toplevel(self.root)
         dialog.title("Backup List")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'medium'))
         dialog.transient(self.root)
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "backup_list_dialog", self.root, "medium")
 
         # Treeview
         columns = ('name', 'size', 'date')
@@ -356,10 +356,9 @@ class BackupHandlersMixin:
 
             dialog = tk.Toplevel(self.root)
             dialog.title("📊 DB 구조 정보")
-            dialog.geometry(DialogSize.get_geometry(self.root, 'large'))
             dialog.transient(self.root)
             dialog.grab_set()
-            center_dialog(dialog, self.root)
+            setup_dialog_geometry_persistence(dialog, "db_structure_dialog", self.root, "large")
 
             _bh_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
             _h_bg = ThemeColors.get('statusbar_bg', _bh_dark)

@@ -17,7 +17,7 @@ import json
 import shutil
 from datetime import datetime, date, timedelta
 
-from ..utils.ui_constants import CustomMessageBox, ThemeColors, apply_tooltip
+from ..utils.ui_constants import CustomMessageBox, ThemeColors, apply_tooltip, setup_dialog_geometry_persistence
 from utils.path_utils import get_app_base_dir
 logger = logging.getLogger(__name__)
 
@@ -153,8 +153,8 @@ class OutboundHandlersMixin:
         note_col = "user_note" if "user_note" in cols else ("event_data" if "event_data" in cols else "payload")
         dialog = tk.Toplevel(self.root)
         dialog.title("감사 로그")
-        dialog.geometry("920x520")
         dialog.transient(self.root)
+        setup_dialog_geometry_persistence(dialog, "audit_log_dialog", self.root, "large")
 
         top = ttk.Frame(dialog)
         top.pack(fill=X, padx=8, pady=6)
@@ -1038,9 +1038,9 @@ class OutboundHandlersMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title("Simple Outbound")
-        dialog.geometry("700x600")
         dialog.transient(self.root)
         dialog.grab_set()
+        setup_dialog_geometry_persistence(dialog, "simple_outbound_dialog", self.root, "medium")
 
         main_frame = ttk.Frame(dialog, padding=10)
         main_frame.pack(fill=BOTH, expand=True)
@@ -2161,6 +2161,7 @@ class OutboundHandlersMixin:
         d.title("📟 실시간 바코드 스캔 (Phase4: 스캔=즉시 확정)")
         d.transient(self.root)
         d.grab_set()
+        setup_dialog_geometry_persistence(d, "barcode_live_scan_dialog", self.root, "medium")
 
         rows_confirmed = []
         var_status = tk.StringVar(value="대기: 바코드를 스캔하면 Enter로 입력됩니다.")
@@ -2266,12 +2267,7 @@ class OutboundHandlersMixin:
         ent.bind("<Return>", _confirm_from_entry)
         ent.bind("<KP_Enter>", _confirm_from_entry)
 
-        try:
-            d.geometry("650x520")
-            d.update_idletasks()
-        except Exception:
-            pass
-
+        d.update_idletasks()
 
     def _query_swap_report_rows(
         self,
@@ -2386,6 +2382,7 @@ class OutboundHandlersMixin:
         dlg.title("🔁 Swap 리포트")
         dlg.transient(self.root)
         dlg.grab_set()
+        setup_dialog_geometry_persistence(dlg, "swap_report_dialog", self.root, "large")
         frm = ttk.Frame(dlg, padding=10)
         frm.pack(fill=tk.BOTH, expand=True)
 

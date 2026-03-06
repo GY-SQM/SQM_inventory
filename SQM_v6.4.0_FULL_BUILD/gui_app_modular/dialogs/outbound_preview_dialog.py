@@ -38,7 +38,7 @@ class OutboundPreviewDialogMixin:
             Spacing,
             ThemeColors,
             apply_modal_window_options,
-            center_dialog,
+            setup_dialog_geometry_persistence,
         )
 
         # === UI 통일성: 폰트 스케일 ===
@@ -52,14 +52,12 @@ class OutboundPreviewDialogMixin:
         current_theme = getattr(self, 'current_theme', 'flatly')
         is_dark = ThemeColors.is_dark_theme(current_theme)
 
-        # === UI 통일성: 다이얼로그 크기 표준화 (large) ===
+        # === UI 통일성: 다이얼로그 크기 표준화 + 직전 크기 복원 ===
         dialog = tk.Toplevel(self.root)
         dialog.title("Outbound Preview")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'large'))
-        apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "outbound_preview_dialog", self.root, "large")
 
         # === UI 통일성: 간격 표준화 ===
         # Summary frame
@@ -232,9 +230,6 @@ class OutboundPreviewDialogMixin:
         ttk.Button(btn_frame, text="Cancel", command=dialog.destroy, width=10).pack(
             side=RIGHT, padx=Spacing.XS
         )
-
-        # === UI 통일성: 중앙 배치 ===
-        center_dialog(dialog, self.root)
 
         # ESC로 닫기
         dialog.bind('<Escape>', lambda e: dialog.destroy())

@@ -69,15 +69,14 @@ class DOUpdateDialog:
             ThemeColors,
             apply_modal_window_options,
             center_dialog,
+            setup_dialog_geometry_persistence,
         )
 
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📋 D/O 후속 연결 — SQM v6.2.3")
-        self.dialog.geometry(DialogSize.get_geometry(self.parent, 'medium'))
-        apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
-        center_dialog(self.dialog, self.parent)
+        setup_dialog_geometry_persistence(self.dialog, "do_update_dialog", self.parent, "medium")
 
         _is_dark = ThemeColors.is_dark_theme(
             getattr(self.app, 'current_theme', 'flatly') if self.app else 'flatly')

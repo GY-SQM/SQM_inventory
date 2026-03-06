@@ -460,3 +460,149 @@ Open settings.ini now?
                     return parts[0]
 
         return container_no
+
+    # ─────────────────────────────────────────────────────────────────────
+    # v6.4.0: BL 선사 도구 메뉴 핸들러
+    # ─────────────────────────────────────────────────────────────────────
+    def _on_bl_carrier_register(self) -> None:
+        """🚢 선사 BL 등록 도구 — BL PDF 드래그 → 선사 탐지 → 패턴 분석 결과 표시"""
+        import tkinter as _tk
+        import tkinter.filedialog as _fd
+        import tkinter.scrolledtext as _st
+        import subprocess, sys, os, threading
+
+        parent = getattr(self, 'root', getattr(self, 'parent', None))
+        dlg = _tk.Toplevel(parent)
+        dlg.title("🚢 선사 BL 등록 도구  —  SQM v6.4.0")
+        dlg.geometry("820x600")
+        dlg.resizable(True, True)
+        try:
+            dlg.transient(parent)
+            dlg.grab_set()
+        except Exception:
+            pass
+
+        _tk.Label(
+            dlg,
+            text=("BL PDF를 선택하면 선사 자동 탐지 + BL No 정규식 분석 결과를 보여줍니다.\n"
+                  "결과 하단의 코드를 features/ai/bl_carrier_registry.py에 붙여넣으면 신규 선사 등록 완료."),
+            font=("맑은 고딕", 11), wraplength=780, justify="left"
+        ).pack(pady=(10, 4), padx=12, anchor="w")
+
+        btn_frame = _tk.Frame(dlg)
+        btn_frame.pack(fill="x", padx=12, pady=(0, 6))
+
+        result_box = _st.ScrolledText(dlg, font=("Consolas", 11), wrap="word", height=28)
+        result_box.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+
+        def _run(pdf_path):
+            result_box.after(0, lambda: result_box.delete("1.0", "end"))
+            result_box.after(0, lambda: result_box.insert("end", f"분析 중: {pdf_path}\n{'─'*60}\n"))
+            try:
+                tool_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    '..', '..', 'tools', 'bl_carrier_update_tool.py'
+                )
+                tool_path = os.path.normpath(tool_path)
+                if os.path.exists(tool_path):
+                    res = subprocess.run(
+                        [sys.executable, tool_path, pdf_path],
+                        capture_output=True, text=True, encoding='utf-8', errors='replace',
+                        timeout=60
+                    )
+                    out = res.stdout or "(출력 없음)"
+                    if res.stderr:
+                        out += f"\n[STDERR]\n{res.stderr}"
+                else:
+                    # 직접 실행 fallback
+                    import io as _io, sys as _sys
+                    sys.path.insert(0, os.path.join(os.path.dirname(tool_path)))
+                    from bl_carrier_update_tool import run_analysis as _ra
+                    buf = _io.StringIO()
+                    old = _sys.stdout; _sys.stdout = buf
+                    _ra(pdf_path)
+                    _sys.stdout = old
+                    out = buf.getvalue()
+            except Exception as e:
+                out = f"❌ 오류: {e}"
+            result_box.after(0, lambda o=out: result_box.insert("end", o))
+
+        def _select():
+            pdf_path = _fd.askopenfilename(
+                parent=dlg, title="BL PDF 선택",
+                filetypes=[("PDF 파일", "*.pdf"), ("모든 파일", "*.*")]
+            )
+            if not pdf_path:
+                return
+            result_box.delete("1.0", "end")
+            result_box.insert("end", "⏳ 분석 중...\n")
+            dlg.update_idletasks()
+            threading.Thread(target=_run, args=(pdf_path,), daemon=True).start()
+
+        _tk.Button(
+            btn_frame, text="📂 BL PDF 선택", command=_select,
+            font=("맑은 고딕", 12, "bold"), bg="#0066CC", fg="white",
+            padx=12, pady=4, cursor="hand2", bd=0
+        ).pack(side="left", padx=(0, 8))
+        _tk.Button(
+            btn_frame, text="🗑️ 지우기",
+            command=lambda: result_box.delete("1.0", "end"),
+            font=("맑은 고딕", 11), padx=8, pady=4, cursor="hand2"
+        ).pack(side="left")
+        _tk.Button(
+            btn_frame, text="✕ 닫기", command=dlg.destroy,
+            font=("맑은 고딕", 11), padx=8, pady=4, cursor="hand2"
+        ).pack(side="right")
+
+    def _on_bl_carrier_analyze(self) -> None:
+        """🔬 BL 선사 레지스트리 현황 표시"""
+        import tkinter as _tk
+        import tkinter.scrolledtext as _st
+
+        parent = getattr(self, 'root', getattr(self, 'parent', None))
+        dlg = _tk.Toplevel(parent)
+        dlg.title("🔬 BL 선사 레지스트리 현황  —  SQM v6.4.0")
+        dlg.geometry("700x450")
+        dlg.resizable(True, True)
+        try:
+            dlg.transient(parent)
+            dlg.grab_set()
+        except Exception:
+            pass
+
+        _tk.Label(
+            dlg, text="현재 등록된 선사 목록 및 BL 파싱 규칙 요약",
+            font=("맑은 고딕", 12, "bold")
+        ).pack(pady=(10, 4), padx=12, anchor="w")
+
+        box = _st.ScrolledText(dlg, font=("Consolas", 11), wrap="word", height=22)
+        box.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+
+        try:
+            from features.ai.bl_carrier_registry import get_carrier_summary, CARRIER_TEMPLATES
+            box.insert("end", get_carrier_summary() + "\n\n")
+            box.insert("end", "─" * 60 + "\n")
+            box.insert("end", "선사별 상세 규칙:\n\n")
+            for cid, tmpl in CARRIER_TEMPLATES.items():
+                ok = "✅ 실제 PDF 검증됨" if cid in ("MSC", "MAERSK") else "⚠️ 샘플 미검증"
+                box.insert("end",
+                    f"[{cid}] {tmpl.carrier_name}\n"
+                    f"  탐지 키워드 : {tmpl.detect_keywords}\n"
+                    f"  BL No 정규식: {tmpl.bl_extract_pattern}\n"
+                    f"  검색 범위   : {tmpl.bl_page_scope}\n"
+                    f"  BL=Booking  : {tmpl.bl_equals_booking_no}\n"
+                    f"  상태        : {ok}\n\n"
+                )
+        except ImportError:
+            box.insert("end",
+                "⚠️ bl_carrier_registry.py 를 찾을 수 없습니다.\n"
+                "features/ai/bl_carrier_registry.py 가 배포됐는지 확인하세요."
+            )
+        except Exception as e:
+            box.insert("end", f"❌ 오류: {e}")
+
+        _tk.Button(
+            dlg, text="✕ 닫기", command=dlg.destroy,
+            font=("맑은 고딕", 11), padx=12, pady=4, cursor="hand2"
+        ).pack(pady=(0, 8))
+

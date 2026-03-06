@@ -77,6 +77,7 @@ class TestRunnerDialog:
                 FontScale,
                 Spacing,
                 center_dialog,
+                setup_dialog_geometry_persistence,
             )
         except ImportError:
             import tkinter as tk
@@ -84,15 +85,19 @@ class TestRunnerDialog:
             Spacing = type("S", (), {"MD": 16, "SM": 8})()
             FontScale = None
             center_dialog = lambda w, x, y: None
+            setup_dialog_geometry_persistence = None
         self._tk = tk
 
         self.win = tk.Toplevel(self.parent)
         self.win.title("🧪 단위 테스트")
-        try:
-            self.win.geometry(DialogSize.get_geometry(self.parent, 'medium'))
-        except (NameError, AttributeError):
-            self.win.geometry("700x500")
         self.win.minsize(400, 300)
+        if setup_dialog_geometry_persistence:
+            setup_dialog_geometry_persistence(self.win, "test_runner_dialog", self.parent, "medium")
+        else:
+            try:
+                self.win.geometry(DialogSize.get_geometry(self.parent, 'medium'))
+            except (NameError, AttributeError):
+                self.win.geometry("700x500")
 
         f = ttk.Frame(self.win, padding=Spacing.MD)
         f.pack(fill=tk.BOTH, expand=True)
@@ -110,10 +115,11 @@ class TestRunnerDialog:
         self._text.config(yscrollcommand=sb.set)
         sb.config(command=self._text.yview)
 
-        try:
-            center_dialog(self.win, self.parent)
-        except (TypeError, NameError) as e:
-            logger.debug(f"Suppressed: {e}")
+        if not setup_dialog_geometry_persistence:
+            try:
+                center_dialog(self.win, self.parent)
+            except (TypeError, NameError) as e:
+                logger.debug(f"Suppressed: {e}")
         self._text.config(state=tk.NORMAL)
         self._text.insert(tk.END, "Run 버튼을 눌러 tests/ 디렉터리 단위 테스트를 실행하세요.\n")
         self._text.config(state="disabled")

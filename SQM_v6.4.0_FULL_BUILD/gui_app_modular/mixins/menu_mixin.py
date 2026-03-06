@@ -15,7 +15,6 @@ import configparser
 import sqlite3
 
 from ..utils.ui_constants import CustomMessageBox
-from ..utils.auto_tooltip import MenuTooltipManager
 logger = logging.getLogger(__name__)
 
 
@@ -119,14 +118,12 @@ class MenuMixin:
         
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
-        menu_tooltip_manager = MenuTooltipManager(self.root)
         
         # =====================================================
         # 파일 메뉴
         # =====================================================
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="파일", menu=file_menu)
-        menu_tooltip_manager.attach(file_menu)
         
         from ..menu_registry import (
             FILE_MENU_INBOUND_ITEMS,
@@ -144,7 +141,6 @@ class MenuMixin:
         # 출고 서브메뉴 — menu_registry 단일 소스 (Picking List 등 누락 방지)
         outbound_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="📤 출고", menu=outbound_menu)
-        menu_tooltip_manager.attach(outbound_menu)
         for entry in FILE_MENU_OUTBOUND_ITEMS:
             if entry is None:
                 outbound_menu.add_separator()
@@ -161,7 +157,6 @@ class MenuMixin:
         
         self.recent_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="📂 최근 파일", menu=self.recent_menu)
-        menu_tooltip_manager.attach(self.recent_menu)
         self._update_recent_files_menu()
         
         file_menu.add_separator()
@@ -170,7 +165,6 @@ class MenuMixin:
         _font = ('맑은 고딕', 14)
         upload_menu = tk.Menu(file_menu, tearoff=0, font=_font)
         file_menu.add_cascade(label="📥 업로드 메뉴", menu=upload_menu)
-        menu_tooltip_manager.attach(upload_menu)
         for entry in FILE_MENU_INBOUND_ITEMS:
             if entry is None:
                 upload_menu.add_separator()
@@ -200,7 +194,6 @@ class MenuMixin:
         if callable(_return_cmd):
             return_sub = tk.Menu(upload_menu, tearoff=0, font=_font)
             upload_menu.add_cascade(label=return_label, menu=return_sub, font=_font)
-            menu_tooltip_manager.attach(return_sub)
             for sub_label, mode in FILE_MENU_INBOUND_RETURN_SUB_ITEMS:
                 return_sub.add_command(label="  " + sub_label, command=lambda md=mode: _return_cmd(md), font=_font)
         else:
@@ -212,7 +205,6 @@ class MenuMixin:
         
         export_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="💾 내보내기  (Ctrl+E)", menu=export_menu)
-        menu_tooltip_manager.attach(export_menu)
         for label, option in FILE_MENU_EXPORT_ITEMS:
             export_menu.add_command(label=label, command=lambda op=option: self._on_export_click(op))
         
@@ -220,7 +212,6 @@ class MenuMixin:
         
         backup_menu = tk.Menu(file_menu, tearoff=0)
         file_menu.add_cascade(label="🔐 백업  (Ctrl+B)", menu=backup_menu)
-        menu_tooltip_manager.attach(backup_menu)
         for label, method_name in FILE_MENU_BACKUP_ITEMS:
             cmd = getattr(self, method_name, None)
             if callable(cmd):
@@ -234,7 +225,6 @@ class MenuMixin:
         # =====================================================
         report_top_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="보고서", menu=report_top_menu)
-        menu_tooltip_manager.attach(report_top_menu)
         report_top_menu.add_command(label="📄 거래 명세서", command=self._generate_invoice_pdf)
         report_top_menu.add_command(label="📦 재고 현황", command=self._generate_inventory_pdf)
         report_top_menu.add_command(label="📈 입출고 내역", command=self._generate_transaction_pdf)
@@ -245,7 +235,6 @@ class MenuMixin:
         # =====================================================
         tools_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="도구", menu=tools_menu)
-        menu_tooltip_manager.attach(tools_menu)
         
         # v5.9.0: 컨테이너 구분 → 필터바 초기화 옆으로 이동 (변수만 초기화)
         if not hasattr(self, '_container_suffix_var'):
@@ -258,7 +247,6 @@ class MenuMixin:
         
         pdf_menu = tk.Menu(tools_menu, tearoff=0)
         tools_menu.add_cascade(label="📄 PDF/이미지 변환", menu=pdf_menu)
-        menu_tooltip_manager.attach(pdf_menu)
         pdf_menu.add_command(label="→ Excel", command=self._convert_pdf_to_excel)
         pdf_menu.add_command(label="→ Word", command=self._convert_pdf_to_word)
         pdf_menu.add_separator()
@@ -268,7 +256,6 @@ class MenuMixin:
         
         report_menu = tk.Menu(tools_menu, tearoff=0)
         tools_menu.add_cascade(label="📋 PDF 보고서", menu=report_menu)
-        menu_tooltip_manager.attach(report_menu)
         report_menu.add_command(label="📦 재고 현황", command=self._generate_inventory_pdf)
         report_menu.add_command(label="📈 입출고 내역", command=self._generate_transaction_pdf)
         report_menu.add_command(label="🔖 LOT 상세", command=self._generate_lot_detail_pdf)
@@ -277,7 +264,6 @@ class MenuMixin:
         if HAS_GEMINI:
             api_menu = tk.Menu(tools_menu, tearoff=0)
             tools_menu.add_cascade(label="🤖 Gemini", menu=api_menu)
-            menu_tooltip_manager.attach(api_menu)
             self._gemini_var = tk.BooleanVar(value=getattr(self, 'use_gemini', False))
             api_menu.add_checkbutton(label="API 사용", variable=self._gemini_var, command=self._toggle_gemini)
             api_menu.add_separator()
@@ -289,7 +275,6 @@ class MenuMixin:
         if HAS_DB_PROTECTION:
             db_menu = tk.Menu(tools_menu, tearoff=0)
             tools_menu.add_cascade(label="🛡️ DB 보호", menu=db_menu)
-            menu_tooltip_manager.attach(db_menu)
             db_menu.add_command(label="🔍 무결성 검증", command=self._verify_db_integrity)
             db_menu.add_command(label="📋 작업 로그", command=self._show_action_log)
             db_menu.add_command(label="💾 로그 내보내기", command=self._export_action_log)
@@ -310,7 +295,6 @@ class MenuMixin:
             tools_menu.add_separator()
             adv_menu = tk.Menu(tools_menu, tearoff=0)
             tools_menu.add_cascade(label="✨ 고급", menu=adv_menu)
-            menu_tooltip_manager.attach(adv_menu)
             adv_menu.add_command(label="🔬 입고 검증", command=self._dry_run_inbound)
             adv_menu.add_command(label="🔬 출고 검증", command=self._dry_run_outbound)
             adv_menu.add_separator()
@@ -322,7 +306,6 @@ class MenuMixin:
         # =====================================================
         view_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="보기", menu=view_menu)
-        menu_tooltip_manager.attach(view_menu)
         view_menu.add_command(label="🔄 새로고침 (F5)", command=self._refresh_inventory)
         view_menu.add_separator()
         view_menu.add_command(label="📦 판매가능", command=lambda: self.notebook.select(0))
@@ -341,7 +324,6 @@ class MenuMixin:
         if HAS_FEATURES_V2:
             v2_menu = tk.Menu(menubar, tearoff=0)
             menubar.add_cascade(label="🚀 v2.7", menu=v2_menu)
-            menu_tooltip_manager.attach(v2_menu)
             v2_menu.add_command(label="⚠️ 재고 경고", command=self._show_stock_alerts)
             v2_menu.add_command(label="📦 배치 출고", command=self._show_batch_outbound)
             v2_menu.add_command(label="📈 출고 예측", command=self._show_outbound_prediction)
@@ -358,7 +340,6 @@ class MenuMixin:
         # =====================================================
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="도움말", menu=help_menu)
-        menu_tooltip_manager.attach(help_menu)
         help_menu.add_command(label="⌨️ 단축키", command=self._show_shortcuts)
         help_menu.add_command(label="📖 설명서", command=self._show_manual)
         help_menu.add_separator()
@@ -389,25 +370,102 @@ F5        새로고침
         CustomMessageBox.showinfo(self.root, "⌨️ 단축키", shortcuts_text)
     
     def _show_about(self) -> None:
-        """프로그램 정보"""
-        from ..utils.constants import __version__, APP_NAME
-        
-        about_text = f"""
-{APP_NAME}
-버전: {__version__}
+        """v6.4.0: 버전 정보 + CHANGELOG 탭 다이얼로그"""
+        import tkinter as _tk
+        from tkinter import ttk as _ttk
+        import tkinter.scrolledtext as _st
+        import os as _os
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-GY Logistics 재고 관리 시스템
+        try:
+            from ..utils.constants import __version__, APP_NAME
+        except ImportError:
+            __version__, APP_NAME = "6.4.0", "SQM 재고관리"
 
-• 입고/출고 자동화
-• PDF 문서 파싱
-• Excel 내보내기
-• 실시간 재고 추적
-━━━━━━━━━━━━━━━━━━━━━━━━━━
+        _is_dark = getattr(self, 'current_theme', 'flatly') in ('darkly', 'cyborg', 'vapor', 'solar')
 
-개발: Ruby
-        """
-        CustomMessageBox.showinfo(self.root, "ℹ️ 프로그램 정보", about_text)
+        dlg = _tk.Toplevel(self.root)
+        dlg.title(f"ℹ️ {APP_NAME}  v{__version__}")
+        dlg.geometry("680x520")
+        dlg.resizable(True, True)
+        try:
+            dlg.transient(self.root)
+            dlg.grab_set()
+        except Exception:
+            pass
+
+        nb = _ttk.Notebook(dlg)
+        nb.pack(fill="both", expand=True, padx=8, pady=8)
+
+        # ── 탭1: 버전 정보 ──────────────────────────────────
+        tab_info = _ttk.Frame(nb)
+        nb.add(tab_info, text="  ℹ️ 버전 정보  ")
+
+        info_box = _st.ScrolledText(
+            tab_info, font=("맑은 고딕", 12), wrap="word",
+            height=20, relief="flat", padx=12, pady=8
+        )
+        info_box.pack(fill="both", expand=True)
+        info_box.insert("end",
+            f"{APP_NAME}\n"
+            f"버전: {__version__}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "(주)지와이로지스  광양 물류창고\n\n"
+            "주요 기능:\n"
+            "  • LOT 기반 탄산리튬 · 황산니켈 재고 관리\n"
+            "  • PDF 4종 서류 AI 파싱 (Gemini Vision)\n"
+            "  • BL 선사별 파싱 레지스트리 (MSC · Maersk · HMM · CMA · ONE)\n"
+            "  • 입고/출고 원스톱 워크플로우\n"
+            "  • Excel 내보내기 · 바코드 스캔 검증\n"
+            "  • 감사 추적 (audit_log 전체 기록)\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "개발: Ruby  |  기동님 SQM 프로젝트\n"
+            "pytest: 82/82 PASS  |  Python 3.12+\n"
+        )
+        info_box.config(state="disabled")
+
+        # ── 탭2: CHANGELOG ──────────────────────────────────
+        tab_cl = _ttk.Frame(nb)
+        nb.add(tab_cl, text="  📋 CHANGELOG  ")
+
+        cl_box = _st.ScrolledText(
+            tab_cl, font=("Consolas", 11), wrap="word",
+            height=20, relief="flat", padx=12, pady=8
+        )
+        cl_box.pack(fill="both", expand=True)
+
+        # CHANGELOG.md 파일 탐색 (실행 파일 기준 2단계 위)
+        _cl_paths = [
+            _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                         '..', '..', '..', 'CHANGELOG.md'),
+            _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                         '..', '..', 'CHANGELOG.md'),
+            _os.path.join(_os.getcwd(), 'CHANGELOG.md'),
+        ]
+        _cl_text = None
+        for _p in _cl_paths:
+            _p = _os.path.normpath(_p)
+            if _os.path.exists(_p):
+                try:
+                    _cl_text = open(_p, encoding='utf-8').read()
+                    break
+                except Exception:
+                    pass
+
+        if _cl_text:
+            cl_box.insert("end", _cl_text)
+        else:
+            cl_box.insert("end",
+                "CHANGELOG.md 파일을 찾을 수 없습니다.\n\n"
+                "프로젝트 루트 디렉토리에 CHANGELOG.md 를 배치하세요.\n"
+                "(SQM_v640_FINAL_ALL_v2.zip 포함됨)"
+            )
+        cl_box.config(state="disabled")
+
+        # ── 닫기 버튼 ────────────────────────────────────────
+        _tk.Button(
+            dlg, text="  ✕ 닫기  ", command=dlg.destroy,
+            font=("맑은 고딕", 11), padx=10, pady=4, cursor="hand2"
+        ).pack(pady=(0, 8))
     
     def _show_manual(self) -> None:
         """사용 설명서 표시"""

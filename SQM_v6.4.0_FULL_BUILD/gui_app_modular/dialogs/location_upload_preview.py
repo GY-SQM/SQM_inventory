@@ -19,6 +19,7 @@ from ..utils.ui_constants import (
     ThemeColors,
     apply_modal_window_options,
     center_dialog,
+    setup_dialog_geometry_persistence,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,14 +47,12 @@ class LocationUploadPreviewDialog:
         self.on_confirm = on_confirm
         self.on_cancel = on_cancel
 
-        # 다이얼로그 생성 (Phase4: DialogSize)
+        # 다이얼로그 생성 (Phase4: DialogSize + 직전 크기 복원)
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("📍 톤백 위치 업로드 미리보기")
-        self.dialog.geometry(DialogSize.get_geometry(parent, 'large'))
-        apply_modal_window_options(self.dialog)
         self.dialog.transient(parent)
         self.dialog.grab_set()
-        center_dialog(self.dialog, parent)
+        setup_dialog_geometry_persistence(self.dialog, "location_upload_preview", parent, "large")
         # Esc·창 닫기(X)로도 닫히도록 (모달이 자동으로 사라지지 않아 불편함 해소)
         self.dialog.bind('<Escape>', lambda e: self._on_cancel_click())
         self.dialog.protocol('WM_DELETE_WINDOW', self._on_cancel_click)

@@ -142,6 +142,9 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
         # A1: 스레드 안전성 - 쓰기 락
         self._write_lock = threading.RLock()
         self._local = threading.local()  # 스레드별 연결 저장
+        # v6.3.5: 모든 스레드 연결 추적 (close_all용)
+        self._all_connections: list = []
+        self._all_connections_lock = threading.Lock()
 
         self._connection = None
         self._cursor = None
@@ -192,6 +195,9 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
                 check_same_thread=False  # A1: 스레드 안전성 핵심
             )
             self._local.conn.row_factory = sqlite3.Row
+            # v6.3.5: 전체 연결 목록에 등록 (close_all 대상)
+            with self._all_connections_lock:
+                self._all_connections.append(self._local.conn)
 
             # A3: Foreign Key 활성화
             self._local.conn.execute("PRAGMA foreign_keys=ON")
@@ -587,6 +593,46 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
     # v5.9.0 P0-7: _TransactionContext 제거 — L212의 @contextmanager transaction()이
     # HardStopException 보호를 포함한 유일한 구현.
     # 기존 _TransactionContext는 HardStop 보호 없이 transaction()을 덮어쓰고 있었음.
+
+    def close_all(self) -> None:
+        """v6.3.5: 모든 스레드 연결 종료 + WAL checkpoint.
+
+        threading.local()로 스레드마다 독립 연결이 생성되므로
+        close()는 호출 스레드 연결만 닫음.
+        close_all()은 _all_connections 전체를 닫아
+        Windows WinError 32(파일 잠금)없이 DB 삭제를 가능하게 함.
+        """
+        import gc
+        # 1) WAL checkpoint: WAL 내용 main DB 병합 후 잠금 해제
+        try:
+            if hasattr(self._local, 'conn') and self._local.conn:
+                self._local.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                logger.info("[Database.close_all] WAL checkpoint(TRUNCATE) 완료")
+        except Exception as _e:
+            logger.debug(f"[Database.close_all] WAL checkpoint 실패(무시): {_e}")
+
+        # 2) 등록된 모든 스레드 연결 종료
+        with self._all_connections_lock:
+            conns = list(self._all_connections)
+            self._all_connections.clear()
+        closed = 0
+        for conn in conns:
+            try:
+                if conn:
+                    conn.close()
+                    closed += 1
+            except Exception as _e:
+                logger.debug(f"[Database.close_all] 연결 종료 예외(무시): {_e}")
+        logger.info(f"[Database.close_all] {closed}개 연결 종료")
+
+        # 3) thread-local 참조 제거
+        if hasattr(self._local, 'conn'):
+            self._local.conn = None
+        self._cursor = None
+        self._connection = None
+
+        # 4) GC 강제 실행 — Python 내부 순환참조 정리
+        gc.collect()
 
     def close(self) -> None:
         """

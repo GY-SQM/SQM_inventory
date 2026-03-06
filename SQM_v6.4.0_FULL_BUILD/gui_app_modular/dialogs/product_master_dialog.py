@@ -178,6 +178,10 @@ def show_product_master_dialog(app) -> None:
         from tkinter import ttk, messagebox
     except ImportError:
         return
+    try:
+        from gui_app_modular.utils.ui_constants import setup_dialog_geometry_persistence
+    except ImportError:
+        setup_dialog_geometry_persistence = None
 
     engine = getattr(app, 'engine', None)
     if not engine:
@@ -187,13 +191,17 @@ def show_product_master_dialog(app) -> None:
     db = engine.db
     ensure_product_master_table(db)
 
+    root = getattr(app, 'root', app)
     # ─── 메인 윈도우 ───
     dlg = tk.Toplevel(app)
     dlg.title("📦 제품 마스터 관리")
-    dlg.geometry("780x520")
     dlg.resizable(True, True)
     dlg.transient(app)
     dlg.grab_set()
+    if setup_dialog_geometry_persistence:
+        setup_dialog_geometry_persistence(dlg, "product_master_dialog", root, "medium")
+    else:
+        dlg.geometry("780x520")
 
     # ─── 상단 설명 ───
     header = ttk.Frame(dlg, padding=8)

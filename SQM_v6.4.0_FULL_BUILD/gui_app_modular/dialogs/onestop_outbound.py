@@ -39,7 +39,7 @@ import json
 import openpyxl  # 필수 (pip install openpyxl)
 HAS_OPENPYXL = True
 
-from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog, apply_modal_window_options, CustomMessageBox
+from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog, apply_modal_window_options, CustomMessageBox, setup_dialog_geometry_persistence
 
 logger = logging.getLogger(__name__)
 
@@ -260,10 +260,9 @@ class S1OneStopOutboundDialog:
         """다이얼로그 표시"""
         self.win = tk.Toplevel(self.root)
         self.win.title("🚀 S1 원스톱 출고 — v6.3.1")
-        self.win.geometry("960x720")
         self.win.transient(self.root)
         self.win.grab_set()
-        center_dialog(self.win, self.root)
+        setup_dialog_geometry_persistence(self.win, "onestop_outbound_dialog", self.root, "large")
         self._is_dark = self._detect_dark_mode()
         if ThemeAware:
             try:
@@ -1478,10 +1477,9 @@ class S1OneStopOutboundDialog:
         """수량 부족 사유 선택 다이얼로그"""
         dlg = tk.Toplevel(self.win)
         dlg.title(f"⚠️ 사유 선택 — {batch['lot_no']}")
-        dlg.geometry("450x280")
         dlg.transient(self.win)
         dlg.grab_set()
-        center_dialog(dlg, self.win)
+        setup_dialog_geometry_persistence(dlg, "onestop_outbound_review_dialog", self.win, "small")
 
         ttk.Label(dlg, text=f"LOT: {batch['lot_no']}", font=("맑은 고딕", 11, "bold")).pack(pady=8)
         ttk.Label(dlg, text=f"요청: {batch['request_qty_kg']:,.0f} kg  →  실제: {batch['actual_qty_kg']:,.0f} kg  "
@@ -1713,9 +1711,8 @@ class S1OneStopOutboundDialog:
         """감사 로그 조회 Toplevel 팝업"""
         dlg = tk.Toplevel(self.win)
         dlg.title("📋 감사 로그 — audit_log")
-        dlg.geometry("900x520")
         dlg.transient(self.win)
-        center_dialog(dlg, self.win)
+        setup_dialog_geometry_persistence(dlg, "onestop_outbound_audit_log", self.win, "large")
 
         # ── 상단: 필터 바 ──
         filter_fr = ttk.LabelFrame(dlg, text="필터")

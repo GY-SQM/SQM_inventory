@@ -1,9 +1,31 @@
 # -*- coding: utf-8 -*-
-__version__ = '6.3.3'
+__version__ = '6.4.0'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {
-    '6.3.3': '🚀 v6.3.3: 통합 리포지토리 최종 병합 릴리즈 — main 브랜치 동기화 및 안정화 버전',
+    '6.4.0': (
+        '🚀 v6.4.0: BL 선사별 파싱 완전 통합 + Python 3.14 호환 + WinError32 완전 수정\n'
+        '  [BL 파싱] bl_carrier_registry.py 신규 — 선사 자동 탐지(점수제) · 선사별 정규식 BL No 추출 · Gemini 힌트 커스터마이징\n'
+        '  [MSC]    SEA WAYBILL No. 라인에서 MEDUFP... 형식 정규식 추출 (Rider Page 오탐 차단)\n'
+        '  [Maersk] B/L No. 라벨 기반 추출 · BL No==Booking No 정상 플래그(bl_equals_booking_no) 크로스체크 경고 생략\n'
+        '  [UI]     BL 파싱 후 입고 다이얼로그에 [선사: MSC/Maersk/...] 뱃지 표시 (선사별 색상 적용)\n'
+        '  [호환]   Python 3.14 tkinter TclError: unknown option "-minsize" 수정 (split_panel.py pane() 분리)\n'
+        '  [DB]     WinError32 완전 수정 — close_all()+WAL checkpoint+gc.collect()+os.remove 재시도\n'
+        '  [자동화] 신규 선사 추가 = CARRIER_TEMPLATES 딕셔너리 항목 1개 추가만으로 완료\n'
+        '  [검증]   MSC/Maersk 실제 BL PDF 테스트 100% 통과\n'
+        '  적용 파일: bl_carrier_registry.py(신규) · gemini_parser.py · cross_check_engine.py · '
+        'split_panel.py · database.py · keybindings_mixin.py · window_mixin.py · engine.py · auto_backup.py'
+    ),
+    '6.3.5': (
+        '🛡️ v6.3.5: LOT 파싱 BUG 1~6 수정 + 단위테스트 62개 + WinError32 초기 수정\n'
+        '  BUG-1: Invoice LOT Hallucination 필터 (28→24개)\n'
+        '  BUG-2: PL LOT Hallucination 필터\n'
+        '  BUG-3: LOT 불일치 PL list_no 순서 정렬 + 순번 표시\n'
+        '  BUG-4: PL 25개 오파싱 방지 (lot_no 1차 방어선)\n'
+        '  BUG-5: 거짓 중복 경고 (is_retry 파라미터)\n'
+        '  BUG-6: 재시도 조건 과민(_RETRY_THRESHOLD=3)\n'
+        '  pytest 62/62 PASS (gemini_parser 31 + cross_check 13 + onestop_inbound 18)'
+    ),
     '6.3.1': '🚀 v6.3.1: S1 출고 안정화 — 근거문서 보관/정리(90일), 감사 로그 뷰어·CSV, 미매칭/실행 감사 이벤트 및 중복 톤백 가드 추가',
     '6.2.9': '✅ v6.2.9: 테스트 스위트 최종 통합 — parser/load/coverage 보강, requirements.txt 추가로 API 프로덕션 테스트 조건 정리, 전체 pytest 통과 기준 확정',
     '6.2.8': '🧩 v6.2.8: v627 패치 통합 릴리스 — Stage1~4 안전/정리/테스트·엔진 보강 적용, Debug 6Fails 패치 반영(구버전 테스트 정리·notifications 스텁·핵심 테스트 안정화), 릴리스 준비 정리',

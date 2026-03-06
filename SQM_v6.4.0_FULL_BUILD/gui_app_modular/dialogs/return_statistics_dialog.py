@@ -20,10 +20,12 @@ try:
         apply_modal_window_options,
         center_dialog,
     )
+    from gui_app_modular.utils.ui_constants import setup_dialog_geometry_persistence
 except ImportError:
     DialogSize = center_dialog = apply_modal_window_options = None
     DateEntry = None
     HAS_DATEENTRY = False
+    setup_dialog_geometry_persistence = None
 
 try:
     from gui_app_modular.utils.custom_messagebox import CustomMessageBox
@@ -57,16 +59,18 @@ class ReturnStatisticsDialog:
 
         popup = tk.Toplevel(parent)
         popup.title("📊 반품 사유 통계")
-        if DialogSize:
-            popup.geometry(DialogSize.get_geometry(parent, 'large'))
-        else:
-            popup.geometry("900x600")
-        if apply_modal_window_options:
-            apply_modal_window_options(popup)
         popup.transient(parent)
         popup.grab_set()
-        if center_dialog:
-            center_dialog(popup, parent)
+        if setup_dialog_geometry_persistence:
+            setup_dialog_geometry_persistence(popup, "return_statistics_dialog", parent, "large")
+        elif DialogSize:
+            popup.geometry(DialogSize.get_geometry(parent, 'large'))
+            if apply_modal_window_options:
+                apply_modal_window_options(popup)
+            if center_dialog:
+                center_dialog(popup, parent)
+        else:
+            popup.geometry("900x600")
         popup.configure(bg=self.bg)
         self.popup = popup
 

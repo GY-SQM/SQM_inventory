@@ -183,14 +183,13 @@ class DragDropMixin:
     def _show_excel_import_options(self, file_path: str) -> None:
         """v3.9.9: Excel 파일 처리 옵션 (한글화)"""
         from ..utils.constants import tk, ttk, X
-        from ..utils.ui_constants import ThemeColors, DialogSize, center_dialog
+        from ..utils.ui_constants import ThemeColors, setup_dialog_geometry_persistence
 
         dialog = tk.Toplevel(self.root)
         dialog.title("📥 Excel 파일 처리")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         dialog.transient(self.root)
         dialog.grab_set()
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "excel_import_options_dialog", self.root, "small")
         
         _is_dark = ThemeColors.is_dark_theme(getattr(self, 'current_theme', 'flatly'))
         _bg = ThemeColors.get('bg_card', _is_dark)
@@ -241,13 +240,12 @@ class DragDropMixin:
         """Show options for batch Excel import"""
         from ..utils.constants import tk, ttk
         
-        from ..utils.ui_constants import DialogSize, center_dialog
+        from ..utils.ui_constants import setup_dialog_geometry_persistence
         dialog = tk.Toplevel(self.root)
         dialog.title("Batch Excel Import")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         dialog.transient(self.root)
         dialog.grab_set()
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "batch_excel_import_dialog", self.root, "small")
         
         ttk.Label(dialog, text=f"{len(files)} Excel files selected",
                   font=('', 13, 'bold')).pack(pady=10)

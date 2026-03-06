@@ -411,14 +411,13 @@ class TonbagTabMixin:
         from ..utils.constants import tk, ttk
         from ..utils.ui_constants import Spacing
         
-        from ..utils.ui_constants import DialogSize, center_dialog, apply_modal_window_options
+        from ..utils.ui_constants import DialogSize, center_dialog, apply_modal_window_options, setup_dialog_geometry_persistence
         dialog = tk.Toplevel(self.root)
         dialog.title(f"일괄 출고 - {len(tonbag_list)}개 톤백")
-        dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         apply_modal_window_options(dialog)
         dialog.transient(self.root)
         dialog.grab_set()
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "batch_tonbag_outbound_dialog", self.root, "small")
         
         # 톤백 목록 표시
         ttk.Label(dialog, text=f"선택된 톤백: {len(tonbag_list)}개", 
@@ -983,7 +982,7 @@ class TonbagTabMixin:
         """수동 출고 다이얼로그"""
         from ..utils.constants import tk, ttk
         from ..utils.ui_constants import (
-            DialogSize, Spacing, FontScale, center_dialog, apply_modal_window_options
+            DialogSize, Spacing, FontScale, center_dialog, apply_modal_window_options, setup_dialog_geometry_persistence
         )
         
         # === UI 통일성: 폰트 스케일 ===
@@ -993,14 +992,12 @@ class TonbagTabMixin:
             dpi = 96
         fonts = FontScale(dpi)
         
-        # === UI 통일성: 다이얼로그 크기 표준화 (small) ===
+        # === UI 통일성: 다이얼로그 크기 저장/복원 ===
         dialog = tk.Toplevel(self.root)
         dialog.title(f"수동 출고 - {lot_no}/{sub_lt}")
-        
-        dialog.geometry(DialogSize.get_geometry(self.root, 'small'))
         dialog.transient(self.root)
         dialog.grab_set()
-        center_dialog(dialog, self.root)
+        setup_dialog_geometry_persistence(dialog, "manual_tonbag_outbound_dialog", self.root, "small")
         
         # === UI 통일성: 간격 표준화 ===
         # 정보 표시

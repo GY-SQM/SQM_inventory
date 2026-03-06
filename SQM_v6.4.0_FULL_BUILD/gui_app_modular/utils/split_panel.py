@@ -22,12 +22,16 @@ class MasterDetailSplitPanel(ttk.Frame):
     """
 
     def __init__(self, parent, detail_title: str = "상세", master_weight: int = 3,
-                 detail_weight: int = 1, **kwargs):
+                 detail_weight: int = 1,
+                 master_minsize: int = 0, detail_minsize: int = 0,
+                 **kwargs):
         super().__init__(parent, **kwargs)
 
         self._detail_title = detail_title
         self._master_weight = master_weight
         self._detail_weight = detail_weight
+        self._master_minsize = master_minsize
+        self._detail_minsize = detail_minsize
         self._detail_collapsed = False
         self._saved_detail_weight = detail_weight
 
@@ -35,8 +39,19 @@ class MasterDetailSplitPanel(ttk.Frame):
         self._paned = ttk.PanedWindow(self, orient='vertical')
 
         # 마스터 영역 컨테이너
+        # v6.4.0 FIX: ttk.PanedWindow.add()는 minsize 미지원 (Python 3.14 TclError)
+        #             add() 후 pane()으로 별도 설정
         self._master_container = ttk.Frame(self._paned)
         self._paned.add(self._master_container, weight=master_weight)
+        if master_minsize > 0:
+            try:
+                self._paned.pane(self._master_container, minsize=master_minsize)
+            except Exception:
+                try:
+                    if hasattr(self._paned, 'paneconfigure'):
+                        self._paned.paneconfigure(self._master_container, minsize=master_minsize)
+                except Exception as _e:
+                    logger.debug(f"master_minsize 설정 실패(무시): {_e}")
 
         # 상세 영역: 헤더바(제목+접기버튼) + 본문
         self._detail_wrapper = ttk.Frame(self._paned)
@@ -72,6 +87,11 @@ class MasterDetailSplitPanel(ttk.Frame):
         self._btn_expand.pack(padx=8, pady=6)
 
         self._paned.add(self._detail_wrapper, weight=detail_weight)
+        if detail_minsize > 0:
+            try:
+                self._paned.pane(self._detail_wrapper, minsize=detail_minsize)
+            except Exception as _e:
+                logger.debug(f"detail_minsize 설정 실패(무시): {_e}")
 
         self._paned.pack(fill='both', expand=True)
 

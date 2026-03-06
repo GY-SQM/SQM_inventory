@@ -50,18 +50,16 @@ class InboundHistoryDialog:
     def _create_dialog(self) -> None:
         from ..utils.constants import BOTH, LEFT, RIGHT, W, X, Y, tk, ttk
         from ..utils.ui_constants import (
-            DialogSize,
             apply_modal_window_options,
             center_dialog,
+            setup_dialog_geometry_persistence,
         )
 
         self.dialog = tk.Toplevel(self.parent)
         self.dialog.title("📋 입고현황 조회")
-        self.dialog.geometry(DialogSize.get_geometry(self.parent, 'large'))
-        apply_modal_window_options(self.dialog)
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
-        center_dialog(self.dialog, self.parent)
+        setup_dialog_geometry_persistence(self.dialog, "inbound_history_dialog", self.parent, "large")
 
         # 일부 Tk/ttk 조합에서 LabelFrame의 padding 옵션이 오류를 내므로
         # 내부 Frame에 여백을 주는 방식으로 호환성을 확보한다.

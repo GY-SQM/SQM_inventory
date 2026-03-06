@@ -344,9 +344,19 @@ class SQMInventoryEngineV3(
         return status
 
     def close(self) -> None:
-        """Close engine"""
+        """Close engine.
+        v6.3.5: close_all() 우선 사용 — WAL checkpoint + 전 스레드 연결 종료.
+        """
         if getattr(self, 'db', None):
-            self.db.close()
+            # close_all 우선: 전체 스레드 연결 + WAL checkpoint(TRUNCATE)
+            if hasattr(self.db, 'close_all'):
+                try:
+                    self.db.close_all()
+                except Exception as _e:
+                    logger.debug(f"db.close_all 실패(무시): {_e}")
+                    self.db.close()  # fallback
+            else:
+                self.db.close()
         if hasattr(self, 'engine') and self.engine:
             self.engine.dispose()
         logger.info("SQMInventoryEngineV3 closed")

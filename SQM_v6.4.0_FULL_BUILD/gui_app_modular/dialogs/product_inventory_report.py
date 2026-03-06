@@ -32,13 +32,22 @@ def show_product_inventory_report(app) -> None:
         messagebox.showerror("오류", "제품 마스터 모듈을 찾을 수 없습니다.")
         return
 
+    try:
+        from gui_app_modular.utils.ui_constants import setup_dialog_geometry_persistence
+    except ImportError:
+        setup_dialog_geometry_persistence = None
+
+    root = getattr(app, 'root', app)
     # ─── 메인 윈도우 ───
     dlg = tk.Toplevel(app)
     dlg.title("📊 제품별 재고 현황 리포트")
-    dlg.geometry("900x500")
     dlg.resizable(True, True)
     dlg.transient(app)
     dlg.grab_set()
+    if setup_dialog_geometry_persistence:
+        setup_dialog_geometry_persistence(dlg, "product_inventory_report", root, "large")
+    else:
+        dlg.geometry("900x500")
 
     # ─── 상단 ───
     header = ttk.Frame(dlg, padding=8)
