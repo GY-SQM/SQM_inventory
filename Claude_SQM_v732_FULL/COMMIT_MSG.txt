@@ -1,0 +1,33 @@
+feat(v7.2.0): 입고 파싱 템플릿 관리 시스템 완전 구현
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SQM v7.2.0 — 입고 파싱 템플릿 관리 (Inbound Parse Template)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+■ 핵심 기능
+
+1. DB 테이블 신규 생성: inbound_template
+   - 기본정보: template_id / carrier_id / bag_weight_kg / product_hint
+   - 파싱설정: lot_no_pattern / sap_no_pattern / weight_format / lot_total_formula
+   - Gemini힌트: 문서별 커스텀 힌트 (PackingList/Invoice/BL)
+   - 필드ON/OFF: use_invoice_no / use_vessel / use_incoterm / use_unit_price
+                 use_origin / use_del_no / use_al_no / use_free_time
+   - 기본 preset 2개: UNKNOWN_500 / UNKNOWN_1000
+
+2. 템플릿 관리 다이얼로그 신규: inbound_template_dialog.py
+   - 5탭 편집: 기본정보 / 파싱설정 / Gemini힌트 / 필드설정 / 메모
+   - 신규추가 / 저장 / 삭제 (기본 preset 보호)
+
+3. OnestopInbound 상단 템플릿 콤보박스 + 단가 뱃지
+   - bag_weight_kg 파싱 파이프라인 전체 자동 주입
+
+4. build_rule_result() expected_per_bag 파라미터
+   - 1000kg 톤백 500kg 오계산 버그 근본 해결
+   - 편차 ±5% 초과 시 template_override 강제 적용
+
+5. PackingListResult.bag_weight_kg 필드 추가
+   gemini_parser/packing_mixin parse_packing_list(bag_weight_kg) 추가
+
+6. 메뉴: 입고 → 📝 입고 파싱 템플릿 관리
+
+■ 테스트: 406 passed, 6 skipped ✅

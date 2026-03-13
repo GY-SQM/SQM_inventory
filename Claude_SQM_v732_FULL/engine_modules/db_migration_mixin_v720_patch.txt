@@ -1,0 +1,2 @@
+패치 목표:
+_migrate_v720_inbound_template() 내 CREATE TABLE 재작성 (11컬럼)

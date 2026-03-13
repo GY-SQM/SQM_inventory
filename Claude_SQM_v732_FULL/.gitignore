@@ -1,0 +1,62 @@
+# ─── Python 컴파일 캐시 ────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# ─── 가상환경 ───────────────────────────────────────────
+.venv/
+venv/
+env/
+.env
+
+# ─── SQM 운영 DB (고객 데이터 보호) ────────────────────
+data/db/*.db
+data/db/*.db-shm
+data/db/*.db-wal
+*.db
+*.db-shm
+*.db-wal
+
+# ─── SQM 설정 (API Key 보호) ──────────────────────────
+# settings.ini에 API Key가 있을 경우 주석 해제:
+# settings.ini
+security/allowed_macs.json
+security/allowed_pcs.json
+
+# ─── 로그 / 임시 파일 ───────────────────────────────────
+logs/
+*.log
+*.tmp
+*.bak
+output/
+outputs/
+
+# ─── ZIP / 배포 산출물 ──────────────────────────────────
+*.zip
+*.tar.gz
+dist/
+build/
+
+# ─── pytest / coverage ──────────────────────────────────
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ─── IDE ────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ─── OS ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── 테스트 임시 DB ─────────────────────────────────────
+data/test_*.db
+data/test_*.db-shm
+data/test_*.db-wal

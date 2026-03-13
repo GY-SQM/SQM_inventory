@@ -1,0 +1,7 @@
+SQM Stage 2 Patch Notes
+=======================
+- 기존 계산식 공식화: (LOT 총무게 - sample 1kg) / mxbg_pallet
+- 500kg 해석 상태: confirmed
+- 1000kg 해석 상태: pending_confirmation
+- 샘플 규칙: 1kg, S00 유지
+- 신규 helper: engine_modules/tonbag_weight_rules.py
