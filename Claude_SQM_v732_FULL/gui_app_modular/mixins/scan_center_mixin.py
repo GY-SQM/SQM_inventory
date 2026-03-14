@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — 스캔 커맨드 센터 Mixin
+SQM v7.3.2.1 — 스캔 커맨드 센터 Mixin
 =====================================
 Picked 탭 내 스캔 제어 패널 + 톤백 상세 + PDA 모드.
 """
 import logging
-import tkinter as tk
-from tkinter import ttk
+from ..utils.constants import tk
+from ..utils.constants import ttk
 
 from ..utils.ui_constants import ThemeColors, Spacing, center_dialog, apply_tooltip
 from ..utils.db_helper import fetchone, fetchall

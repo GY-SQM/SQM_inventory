@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-__version__ = '7.3.2'
+__version__ = '7.3.2.1'
 APP_NAME = 'SQM 재고관리 시스템'
 APP_NAME_EN = 'SQM Inventory Management System'
 VERSION_HISTORY = {

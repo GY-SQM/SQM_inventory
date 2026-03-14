@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — ProButton Widget
+SQM v7.3.2.1 — ProButton Widget
 ==============================
 계층화된 버튼 시스템 (Primary / Secondary / Danger / Ghost 등)
 - hover 시 배경색 전환
@@ -19,7 +19,7 @@ SQM v7.3.2 — ProButton Widget
       {"text": "출고", "variant": "outbound", "icon": "📤", "command": fn2},
   ])
 """
-import tkinter as tk
+from .constants import tk
 from typing import Optional, Callable
 
 

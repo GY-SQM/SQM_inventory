@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — 실시간 바코드 스캔 세션 Mixin
+SQM v7.3.2.1 — 실시간 바코드 스캔 세션 Mixin
 =============================================
 모달 스캔 세션: 바코드 입력 → 중복 체크 → DB 검증 → LOT 매칭 → 진행률 표시.
 """
 import logging
-import tkinter as tk
-from tkinter import ttk
+from ..utils.constants import tk
+from ..utils.constants import ttk
 from datetime import datetime
 
 from ..utils.ui_constants import ThemeColors, Spacing, center_dialog

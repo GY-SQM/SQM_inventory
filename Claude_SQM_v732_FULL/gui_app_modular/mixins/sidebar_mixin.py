@@ -3,7 +3,7 @@
 SQM Inventory - Sidebar Navigation Mixin
 =========================================
 
-v7.3.2 - Left navigation sidebar replacing notebook tab headers.
+v7.3.2.1 - Left navigation sidebar replacing notebook tab headers.
 
 Provides a sleek left-side navigation panel (140px) with:
 - SQM logo at top
@@ -19,8 +19,8 @@ Usage:
 """
 
 import logging
-import tkinter as tk
-from tkinter import ttk
+from ..utils.constants import tk
+from ..utils.constants import ttk
 
 from ..utils.ui_constants import ThemeColors, Spacing
 
@@ -176,7 +176,7 @@ class SidebarMixin:
             # Bottom status label
             self._sidebar_status_lbl = tk.Label(
                 self._sidebar_frame,
-                text="v7.3.2",
+                text="v7.3.2.1",
                 font=('맑은 고딕', 8),
                 fg=palette['fg_normal'],
                 bg=palette['bg'],

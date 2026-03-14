@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — DB Helper
+SQM v7.3.2.1 — DB Helper
 ========================
 스캔/출고 Mixin용 공통 DB 접근 헬퍼.
 기존 engine과 독립적으로 sqlite3 직접 접근 가능.

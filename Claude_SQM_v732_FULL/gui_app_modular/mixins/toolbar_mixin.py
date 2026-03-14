@@ -1,16 +1,15 @@
 # -*- coding: utf-8 -*-
 from ..utils.custom_messagebox import CustomMessageBox
 """
-SQM v7.3.2 — 커스텀 타이틀바 + 분리 메뉴
+SQM v7.3.2.1 — 커스텀 타이틀바 + 분리 메뉴
 ==========================================
 커스텀 타이틀바: 왼쪽 메뉴 + 오른쪽 회사명·창 컨트롤 (1줄 통합)
 입고/출고 메뉴 분리
 """
 import sqlite3
 import logging
-import tkinter as tk
-from tkinter import ttk
 from ..utils.ui_constants import ThemeColors, Spacing, FontScale, FontStyle, get_font_scale, DialogSize, center_dialog, apply_modal_window_options
+from ..utils.constants import tk, tkfont, ttk
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +17,8 @@ FONT_CANDIDATES = ['NanumSquare', 'NanumSquareRound', '나눔스퀘어', 'Malgun
 
 
 def _pick_font(root) -> str:
-    import tkinter.font as tkfont
+    if tkfont is None:
+        return '맑은 고딕'
     available = tkfont.families()
     for f in FONT_CANDIDATES:
         if f in available:
@@ -1325,11 +1325,12 @@ class ToolbarMixin:
 
     def _change_font_size(self, size: int):
         try:
-            import tkinter.font as tkfont
+            if tkfont is None:
+                raise RuntimeError("tkfont unavailable")
             for name in ["TkDefaultFont", "TkTextFont"]:
                 tkfont.nametofont(name).configure(size=size)
             self._log(f"🔤 글꼴 크기: {size}pt")
-        except (RuntimeError, ValueError) as e:
+        except (RuntimeError, ValueError, AttributeError) as e:
             logger.error(f"글꼴 크기: {e}")
 
     def _create_search_btn_style(self, font_family: str) -> str:

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — 출고 사전 확인 게이트 Mixin
+SQM v7.3.2.1 — 출고 사전 확인 게이트 Mixin
 ==========================================
 4-checkbox gate widget: 모든 항목 체크 시 확인 버튼 활성화.
 """
 import logging
-import tkinter as tk
-from tkinter import ttk
+from ..utils.constants import tk
+from ..utils.constants import ttk
 
 from ..utils.ui_constants import ThemeColors, Spacing
 

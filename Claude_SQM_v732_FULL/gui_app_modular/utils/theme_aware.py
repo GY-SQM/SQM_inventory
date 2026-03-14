@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — theme_aware.py (테마 가시성 근본 해결)
+SQM v7.3.2.1 — theme_aware.py (테마 가시성 근본 해결)
 =====================================================
 ★ 3가지 근본 원인을 한번에 수정:
   1. ttk.Label hardcoded foreground → 테마 반응형 색상 제공
@@ -24,8 +24,8 @@ SQM v7.3.2 — theme_aware.py (테마 가시성 근본 해결)
   safe_red = ThemeAware.safe_color('#dc2626')  # 다크면 밝은 빨강 반환
 """
 import logging
-import tkinter as tk
-from tkinter import ttk
+from .constants import tk
+from .constants import ttk
 
 logger = logging.getLogger(__name__)
 

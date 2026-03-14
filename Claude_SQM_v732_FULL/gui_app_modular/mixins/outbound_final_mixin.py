@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — 출고 확정 (PICKED->SOLD) 최종 처리 Mixin
+SQM v7.3.2.1 — 출고 확정 (PICKED->SOLD) 최종 처리 Mixin
 =======================================================
 Preflight 검증 → CONFIRM 다이얼로그 → 원자적 트랜잭션 실행.
 """
 import logging
-import tkinter as tk
+from ..utils.constants import tk
 from datetime import datetime
 
 from ..utils.ui_constants import ThemeColors
@@ -22,7 +22,7 @@ class OutboundFinalMixin:
         try:
             lot_no, tb_count = self._get_selected_lot_info()
             if not lot_no:
-                from tkinter import messagebox
+                from ..utils.constants import messagebox
                 messagebox.showwarning(
                     "출고 확정",
                     "출고 확정할 LOT를 선택하세요.",
@@ -32,7 +32,7 @@ class OutboundFinalMixin:
             # 사전 검증
             ok, msg = self._preflight_check(lot_no, tb_count)
             if not ok:
-                from tkinter import messagebox
+                from ..utils.constants import messagebox
                 messagebox.showerror(
                     "사전 검증 실패",
                     f"출고 확정 불가:\n{msg}",
@@ -59,7 +59,7 @@ class OutboundFinalMixin:
                     customer=customer,
                     callback=None)
             else:
-                from tkinter import messagebox
+                from ..utils.constants import messagebox
                 confirmed = messagebox.askyesno(
                     "출고 확정",
                     f"LOT {lot_no}를 출고 확정하시겠습니까?\n"
@@ -72,7 +72,7 @@ class OutboundFinalMixin:
             # 실행
             result = self._execute_outbound_finalize(lot_no)
             if result.get('success'):
-                from tkinter import messagebox
+                from ..utils.constants import messagebox
                 messagebox.showinfo(
                     "출고 확정 완료",
                     f"LOT {lot_no} 출고 확정 완료.\n"
@@ -88,7 +88,7 @@ class OutboundFinalMixin:
                         except Exception:
                             pass
             else:
-                from tkinter import messagebox
+                from ..utils.constants import messagebox
                 messagebox.showerror(
                     "출고 확정 실패",
                     f"처리 중 오류:\n{result.get('error', '알 수 없는 오류')}",

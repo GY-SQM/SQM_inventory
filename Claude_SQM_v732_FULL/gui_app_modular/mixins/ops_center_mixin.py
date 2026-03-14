@@ -3,7 +3,7 @@
 SQM Inventory - Ops Center KPI Dashboard Mixin
 ================================================
 
-v7.3.2 - Real-time KPI card panels for operational overview.
+v7.3.2.1 - Real-time KPI card panels for operational overview.
 
 Provides three horizontally arranged metric cards:
   1. 재고 현황  (Inventory status — AVAILABLE / RESERVED / PICKED counts)
@@ -23,8 +23,8 @@ Usage:
 """
 
 import logging
-import tkinter as tk
-from tkinter import ttk
+from ..utils.constants import tk
+from ..utils.constants import ttk
 
 from ..utils.ui_constants import ThemeColors, Spacing
 from ..utils.db_helper import fetchall

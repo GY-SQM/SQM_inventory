@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — 스캔 탭
+SQM v7.3.2.1 — 스캔 탭
 =====================
 바코드 입력 → 조회 → 출고 확정/배정 취소. 이력 20건 표시.
 """
 import logging
-import tkinter as tk
-from tkinter import ttk
+from ..utils.constants import tk
+from ..utils.constants import ttk
 
 from ..utils.constants import BOTH, YES, LEFT, RIGHT, X, Y, VERTICAL
 from ..utils.ui_constants import ThemeColors, Spacing, apply_tooltip
@@ -265,13 +265,13 @@ class ScanTabMixin:
             status = str(row.get('status', '')).upper()
 
             if status != 'PICKED':
-                from tkinter import messagebox
+                from ..utils.constants import messagebox
                 messagebox.showwarning("출고 확정",
                                        "PICKED 상태의 톤백만 출고 확정 가능합니다.",
                                        parent=getattr(self, 'root', None))
                 return
 
-            from tkinter import messagebox
+            from ..utils.constants import messagebox
             if not messagebox.askyesno("출고 확정",
                                         f"톤백 {uid}을 출고 확정(SOLD)하시겠습니까?",
                                         parent=getattr(self, 'root', None)):
@@ -316,7 +316,7 @@ class ScanTabMixin:
             uid = row.get('tonbag_uid', '')
             lot_no = row.get('lot_no', '')
 
-            from tkinter import messagebox
+            from ..utils.constants import messagebox
             if not messagebox.askyesno("배정 취소",
                                         f"톤백 {uid}의 배정을 취소하시겠습니까?",
                                         parent=getattr(self, 'root', None)):
@@ -412,7 +412,7 @@ class ScanTabMixin:
             else:
                 msg = "\n".join(result.get("errors", ["알 수 없는 오류"]))
                 self._add_scan_history(uid, lot_no, 'ERROR', 'LOT연결실패', 'err')
-                from tkinter import messagebox
+                from ..utils.constants import messagebox
                 messagebox.showwarning("LOT 예약 연결 실패", msg,
                                        parent=getattr(self, 'root', None))
         except Exception as e:
@@ -454,7 +454,7 @@ class ScanTabMixin:
             else:
                 msg = "\n".join(result.get("errors", ["알 수 없는 오류"]))
                 self._add_scan_history(uid, lot_no, 'ERROR', 'PICK실패', 'err')
-                from tkinter import messagebox
+                from ..utils.constants import messagebox
                 messagebox.showwarning("LOT 즉시 PICKED 실패", msg,
                                        parent=getattr(self, 'root', None))
         except Exception as e:

@@ -86,8 +86,8 @@ def get_engine():
 
 app = FastAPI(
     title="SQM 재고관리 API",
-    description="SQM Inventory Management System REST API (v7.3.2)",
-    version="7.3.2",
+    description="SQM Inventory Management System REST API (v7.3.2.1)",
+    version="7.3.2.1",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -231,7 +231,7 @@ def health_check():
         logger.debug(f"[Health] DB 체크 실패: {e}")
     return HealthResponse(
         status="ok" if db_ok else "degraded",
-        version="7.3.2",
+        version="7.3.2.1",
         timestamp=datetime.now().isoformat(),
         db_connected=db_ok,
     )

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — Windows 11 DWM 스타일링
+SQM v7.3.2.1 — Windows 11 DWM 스타일링
 =====================================
 - 둥근 모서리 (DwmSetWindowAttribute DWMWA_WINDOW_CORNER_PREFERENCE)
 - 다크 타이틀바 (DWMWA_USE_IMMERSIVE_DARK_MODE)

@@ -15,6 +15,7 @@ import configparser
 import sqlite3
 
 from ..utils.ui_constants import CustomMessageBox
+from ..utils.constants import scrolledtext, tk, ttk
 logger = logging.getLogger(__name__)
 
 
@@ -361,18 +362,18 @@ F5        새로고침
     
     def _show_about(self) -> None:
         """v6.4.0: 버전 정보 + CHANGELOG 탭 다이얼로그"""
-        import tkinter as _tk
-        from tkinter import ttk as _ttk
-        import tkinter.scrolledtext as _st
         import os as _os
 
         try:
             from ..utils.constants import __version__, APP_NAME
         except ImportError:
-            __version__, APP_NAME = "7.3.2", "SQM 재고관리"
+            __version__, APP_NAME = "7.3.2.1", "SQM 재고관리"
+
+        if tk is None or scrolledtext is None:
+            return
 
 
-        dlg = _tk.Toplevel(self.root)
+        dlg = tk.Toplevel(self.root)
         dlg.title(f"ℹ️ {APP_NAME}  v{__version__}")
         dlg.geometry("680x520")
         dlg.resizable(True, True)
@@ -382,14 +383,14 @@ F5        새로고침
         except Exception:
             pass
 
-        nb = _ttk.Notebook(dlg)
+        nb = ttk.Notebook(dlg)
         nb.pack(fill="both", expand=True, padx=8, pady=8)
 
         # ── 탭1: 버전 정보 ──────────────────────────────────
-        tab_info = _ttk.Frame(nb)
+        tab_info = ttk.Frame(nb)
         nb.add(tab_info, text="  ℹ️ 버전 정보  ")
 
-        info_box = _st.ScrolledText(
+        info_box = scrolledtext.ScrolledText(
             tab_info, font=("맑은 고딕", 12), wrap="word",
             height=20, relief="flat", padx=12, pady=8
         )
@@ -413,10 +414,10 @@ F5        새로고침
         info_box.config(state="disabled")
 
         # ── 탭2: CHANGELOG ──────────────────────────────────
-        tab_cl = _ttk.Frame(nb)
+        tab_cl = ttk.Frame(nb)
         nb.add(tab_cl, text="  📋 CHANGELOG  ")
 
-        cl_box = _st.ScrolledText(
+        cl_box = scrolledtext.ScrolledText(
             tab_cl, font=("Consolas", 11), wrap="word",
             height=20, relief="flat", padx=12, pady=8
         )
@@ -451,7 +452,7 @@ F5        새로고침
         cl_box.config(state="disabled")
 
         # ── 닫기 버튼 ────────────────────────────────────────
-        _tk.Button(
+        tk.Button(
             dlg, text="  ✕ 닫기  ", command=dlg.destroy,
             font=("맑은 고딕", 11), padx=10, pady=4, cursor="hand2"
         ).pack(pady=(0, 8))

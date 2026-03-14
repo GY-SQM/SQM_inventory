@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — 공통 데코레이터
+SQM v7.3.2.1 — 공통 데코레이터
 ================================
 · safe_call    : 예외를 logger.error로 잡고 None 반환
 · db_operation : DB 작업용 예외 핸들러 + 로깅
@@ -23,7 +23,7 @@ SQM v7.3.2 — 공통 데코레이터
 """
 import functools
 import logging
-import tkinter.messagebox as _mb
+from .constants import messagebox as _mb
 
 logger = logging.getLogger(__name__)
 

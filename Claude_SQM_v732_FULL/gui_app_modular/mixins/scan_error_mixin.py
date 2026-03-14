@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — 스캔 오류 분류/처리 Mixin
+SQM v7.3.2.1 — 스캔 오류 분류/처리 Mixin
 ========================================
 ERR_DUP, ERR_WRONG_LOT, ERR_UNKNOWN, ERR_STATUS, ERR_DB 분류 및 배너 표시.
 """
 import logging
-import tkinter as tk
-from tkinter import ttk
+from ..utils.constants import tk
+from ..utils.constants import ttk
 from datetime import datetime
 
 from ..utils.ui_constants import ThemeColors, Spacing, center_dialog
@@ -126,7 +126,7 @@ class ScanErrorMixin:
             if self._scan_error_count >= 5:
                 root = parent or getattr(self, 'root', None)
                 if root:
-                    from tkinter import messagebox
+                    from ..utils.constants import messagebox
                     messagebox.showerror(
                         "스캔 차단",
                         f"연속 오류 {self._scan_error_count}회 발생.\n"

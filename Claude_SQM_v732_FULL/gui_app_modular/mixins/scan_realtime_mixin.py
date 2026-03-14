@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — 실시간 스캔 대시보드 Mixin
+SQM v7.3.2.1 — 실시간 스캔 대시보드 Mixin
 =========================================
 행 색상 적용, 알림 배너, 통계 패널, 실시간 업데이트.
 """
 import logging
-import tkinter as tk
-from tkinter import ttk
+from ..utils.constants import tk
+from ..utils.constants import ttk
 
 from ..utils.ui_constants import ThemeColors, Spacing
 from ..utils.db_helper import fetchone, fetchall

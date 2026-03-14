@@ -1,6 +1,6 @@
 """GUI tabs module
 v5.5.3 P8: SearchTab, AdvancedTabs, PivotTab 제거 (죽은 코드)
-v7.3.2: ScanTabMixin 추가
+v7.3.2.1: ScanTabMixin 추가
 """
 
 from .allocation_tab import AllocationTabMixin

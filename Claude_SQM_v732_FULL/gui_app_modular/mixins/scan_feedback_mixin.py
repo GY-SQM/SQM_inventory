@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-SQM v7.3.2 — 스캔 피드백 (바코드 조회) 패널 Mixin
+SQM v7.3.2.1 — 스캔 피드백 (바코드 조회) 패널 Mixin
 ===================================================
 바코드 입력 → 즉시 톤백 정보 조회 및 색상 코드 표시.
 """
 import logging
-import tkinter as tk
-from tkinter import ttk
+from ..utils.constants import tk
+from ..utils.constants import ttk
 
 from ..utils.ui_constants import ThemeColors, Spacing, center_dialog
 from ..utils.db_helper import fetchone, fetchall
