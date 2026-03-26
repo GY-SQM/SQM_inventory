@@ -1,0 +1,369 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-03-26T03:35:32.738Z",
+  "activeFeatures": [
+    "engine_modules",
+    "parsers",
+    "Claude_SQM_v855",
+    "document_parser_modular",
+    "gui_app_modular",
+    "mixins",
+    "handlers",
+    "inventory_modular",
+    "api"
+  ],
+  "primaryFeature": "engine_modules",
+  "features": {
+    "engine_modules": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T00:09:52.648Z",
+        "lastUpdated": "2026-03-26T02:59:39.318Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\engine_modules\\tonbag_weight_rules.py"
+    },
+    "parsers": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T00:11:53.075Z",
+        "lastUpdated": "2026-03-26T01:40:30.972Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\parsers\\picking_list_parser.py"
+    },
+    "Claude_SQM_v855": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T00:16:03.190Z",
+        "lastUpdated": "2026-03-26T02:42:09.635Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\config_logging.py"
+    },
+    "document_parser_modular": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T00:20:49.502Z",
+        "lastUpdated": "2026-03-26T01:40:15.710Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\parsers\\document_parser_modular\\bl_mixin.py"
+    },
+    "gui_app_modular": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T00:34:52.628Z",
+        "lastUpdated": "2026-03-26T00:35:05.214Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\gui_app_modular\\preparse_review_dialog.py"
+    },
+    "mixins": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T00:42:07.054Z",
+        "lastUpdated": "2026-03-26T00:42:20.569Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\gui_app_modular\\mixins\\theme_mixin.py"
+    },
+    "handlers": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T01:45:19.295Z",
+        "lastUpdated": "2026-03-26T01:45:19.295Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\gui_app_modular\\handlers\\export_handlers.py"
+    },
+    "inventory_modular": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T01:45:26.228Z",
+        "lastUpdated": "2026-03-26T02:59:38.359Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\engine_modules\\inventory_modular\\base.py"
+    },
+    "api": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T03:31:04.750Z",
+        "lastUpdated": "2026-03-26T03:35:32.738Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\api\\main.py"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-03-25T07:54:42.379Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-03-26T03:35:32.738Z"
+  },
+  "history": [
+    {
+      "timestamp": "2026-03-26T00:09:52.648Z",
+      "feature": "engine_modules",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:11:53.075Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:12:02.262Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:12:17.000Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:12:22.686Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:12:41.056Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:16:03.190Z",
+      "feature": "Claude_SQM_v855",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:16:12.915Z",
+      "feature": "Claude_SQM_v855",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:20:49.502Z",
+      "feature": "document_parser_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:34:52.628Z",
+      "feature": "gui_app_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:35:05.214Z",
+      "feature": "gui_app_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:41:18.912Z",
+      "feature": "Claude_SQM_v855",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:42:07.054Z",
+      "feature": "mixins",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:42:16.099Z",
+      "feature": "mixins",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T00:42:20.569Z",
+      "feature": "mixins",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T01:40:15.710Z",
+      "feature": "document_parser_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T01:40:30.972Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T01:45:19.295Z",
+      "feature": "handlers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T01:45:26.228Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T01:46:28.378Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T01:46:49.451Z",
+      "feature": "Claude_SQM_v855",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T01:47:06.914Z",
+      "feature": "Claude_SQM_v855",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T02:42:09.635Z",
+      "feature": "Claude_SQM_v855",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T02:59:38.360Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T02:59:39.318Z",
+      "feature": "engine_modules",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:31:04.751Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:31:14.486Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:34:14.416Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:34:23.795Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:34:33.583Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:34:45.825Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:34:53.659Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:35:03.418Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:35:07.662Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:35:14.922Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:35:21.801Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T03:35:32.738Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    }
+  ]
+}

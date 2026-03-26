@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.claude/settings.local.json
+
+# 로컬/민감 데이터 (저장소에 포함하지 않음)
+*.db
+*.log
+debug-*.log
+logs/
+desktop.ini
+REPORTS/
+*.zip
