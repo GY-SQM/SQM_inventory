@@ -295,7 +295,7 @@ def step3_picking(engine):
                         engine.db.execute(
                             """INSERT OR IGNORE INTO picking_table
                                (lot_no, picking_no, sales_order_no, outbound_id,
-                                qty_mt, is_sample, customer, status, created_at)
+                                qty_mt, is_sample, customer, status, picking_date)
                                VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?)""",
                             (lot_no, picking_no, sales_order, outbound_id,
                              qty_val / 1000 if not is_sample else 0.001,
@@ -383,6 +383,22 @@ def step4_outbound(engine):
         )
         if picked:
             logger.info(f'잔여 PICKED 톤백 {len(picked)}개 직접 출고 전환')
+            # 트랜잭션 전에 allocation_plan 매핑 캐시 구축
+            _ap_cache = {}
+            try:
+                _ap_rows = engine.db.fetchall(
+                    "SELECT lot_no, sale_ref, customer, picking_no FROM allocation_plan"
+                )
+                for _apr in (_ap_rows or []):
+                    _ln = _apr.get('lot_no') if isinstance(_apr, dict) else _apr[0]
+                    _ap_cache[_ln] = {
+                        'sale_ref': (_apr.get('sale_ref') if isinstance(_apr, dict) else _apr[1]) or '',
+                        'customer': (_apr.get('customer') if isinstance(_apr, dict) else _apr[2]) or '',
+                        'picking_no': (_apr.get('picking_no') if isinstance(_apr, dict) else _apr[3]) or '',
+                    }
+            except Exception:
+                pass
+            logger.info(f'  allocation_plan 캐시: {len(_ap_cache)} LOTs')
             with engine.db.transaction():
                 for tb in picked:
                     tb_id = tb.get('id') if isinstance(tb, dict) else tb[0]
@@ -395,17 +411,25 @@ def step4_outbound(engine):
                         (now, now, tb_id),
                     )
 
+                    # sold_table에 sale_ref 매칭 (캐시에서)
+                    _ap_info = _ap_cache.get(lot_no, {})
+                    _sale_ref = _ap_info.get('sale_ref', '')
+                    _customer = _ap_info.get('customer', '')
+                    _picking_no = _ap_info.get('picking_no', '')
                     try:
+                        _wt = float(tb.get('weight') if isinstance(tb, dict) else tb[3])
                         engine.db.execute(
                             """INSERT OR IGNORE INTO sold_table
-                               (lot_no, sub_lt, tonbag_uid, weight_kg, is_sample,
-                                outbound_date, status, created_at)
-                               VALUES (?, ?, ?, ?, ?, ?, 'OUTBOUND', ?)""",
+                               (lot_no, sub_lt, tonbag_uid, sold_qty_kg, sold_qty_mt,
+                                is_sample, sales_order_no, customer, picking_no,
+                                delivery_date, status, created_at)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OUTBOUND', ?)""",
                             (lot_no,
                              tb.get('sub_lt') if isinstance(tb, dict) else tb[2],
                              tb.get('tonbag_uid') if isinstance(tb, dict) else tb[4],
-                             tb.get('weight') if isinstance(tb, dict) else tb[3],
+                             _wt, _wt / 1000,
                              tb.get('is_sample') if isinstance(tb, dict) else tb[5],
+                             _sale_ref, _customer, _picking_no,
                              today, now),
                         )
                     except Exception:
@@ -439,6 +463,27 @@ def step5_reports(engine):
     logger.info('=' * 70)
     logger.info('STEP 5: 보고서 생성')
     logger.info('=' * 70)
+
+    # sold_table에 allocation_plan 데이터 보강 (sales_order_no, customer 등)
+    try:
+        with engine.db.transaction():
+            engine.db.execute("""
+                UPDATE sold_table SET
+                    sales_order_no = (SELECT ap.sale_ref FROM allocation_plan ap
+                                      WHERE ap.lot_no = sold_table.lot_no LIMIT 1),
+                    customer = (SELECT ap.customer FROM allocation_plan ap
+                                WHERE ap.lot_no = sold_table.lot_no LIMIT 1),
+                    picking_no = (SELECT ap.picking_no FROM allocation_plan ap
+                                  WHERE ap.lot_no = sold_table.lot_no LIMIT 1),
+                    sap_no = (SELECT i.sap_no FROM inventory i
+                              WHERE i.lot_no = sold_table.lot_no LIMIT 1),
+                    bl_no = (SELECT i.bl_no FROM inventory i
+                             WHERE i.lot_no = sold_table.lot_no LIMIT 1)
+                WHERE sales_order_no IS NULL OR sales_order_no = ''
+            """)
+        logger.info('sold_table 보강 완료 (sales_order_no, customer, sap_no, bl_no)')
+    except Exception as e:
+        logger.error(f'sold_table 보강 실패: {e}')
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
