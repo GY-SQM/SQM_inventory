@@ -46,6 +46,7 @@ import logging
 import os
 import sqlite3
 
+from ..utils.excel_file_helper import open_file_default
 from ..utils.ui_constants import CustomMessageBox, apply_modal_window_options
 
 # v6.8.6: STATUS 상수 전역 import (L599 undefined name 수정)
@@ -498,6 +499,7 @@ class AdvancedDialogsMixin:
                         cell.border = thin
                 wb.save(file_path)
                 CustomMessageBox.showinfo(dialog, "완료", f"반품 양식 저장 완료\n\n{file_path}\n\n재고 리스트와 동일 형식 + 반품수량·사유. 필수만 채우면 됩니다.")
+                open_file_default(file_path)
                 self._log(f"📥 반품 양식 다운로드: {file_path}")
             except (FileNotFoundError, OSError, PermissionError) as e:
                 CustomMessageBox.showerror(dialog, "오류", f"파일 저장 실패: {e}")
@@ -1457,6 +1459,7 @@ class AdvancedDialogsMixin:
                     f"건수: {len(movements)}건\n"
                     f"총량: {total_kg/1000:.3f} MT\n\n"
                     f"파일: {save_path}")
+                open_file_default(save_path)
 
             except ImportError:
                 CustomMessageBox.showerror(dialog, "오류", "openpyxl이 필요합니다.")
@@ -1984,6 +1987,7 @@ class AdvancedDialogsMixin:
                 if _mb:
                     _mb.showinfo(dialog, '저장 완료',
                                  f'Excel 저장 완료:\n{save_path}')
+                open_file_default(save_path)
             except Exception as e:
                 logger.error(f"[반송출고현황] Excel 저장 오류: {e}")
                 if _mb:

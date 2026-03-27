@@ -14,6 +14,7 @@ from engine_modules.constants import CUSTOMER_PRESETS  # v6.7.3
 import tkinter as tk
 from collections import Counter
 from tkinter import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y, filedialog, ttk
+from gui_app_modular.utils.excel_file_helper import open_file_default
 
 from ..utils.ui_constants import (
     CustomMessageBox,
@@ -1558,6 +1559,7 @@ class AllocationDialog:
                         ])
                     wb.save(fpath)
                     CustomMessageBox.showinfo(status_win, "저장 완료", f"Excel 저장 완료\n{fpath}")
+                    open_file_default(fpath)
                 except Exception as e:
                     logger.error(f"예약 현황 Excel 저장 오류: {e}", exc_info=True)
                     CustomMessageBox.showerror(status_win, "저장 실패", str(e))
