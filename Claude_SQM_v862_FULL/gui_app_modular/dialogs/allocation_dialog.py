@@ -464,7 +464,15 @@ class AllocationDialog:
         self.parsed_rows = result.rows if result else []
         self.tree.delete(*self.tree.get_children())
 
+        # v8.6.3: 본품→샘플 정렬 + 구분자 행 삽입
+        _sample_separator_inserted = False
         for i, row in enumerate(self.parsed_rows):
+            _is_samp = getattr(row, 'is_sample', False)
+            if _is_samp and not _sample_separator_inserted:
+                self.tree.insert('', END, values=(
+                    '── 샘플 ──', '', '', '', '', '', '', '', '',
+                ), tags=('separator',))
+                _sample_separator_inserted = True
             vals = (
                 getattr(row, 'lot_no', ''),
                 getattr(row, 'sap_no', ''),
@@ -474,9 +482,16 @@ class AllocationDialog:
                 getattr(row, 'sale_ref', ''),
                 str(getattr(row, 'outbound_date', '') or ''),
                 getattr(row, 'warehouse', ''),
-                'PENDING',
+                'SAMPLE' if _is_samp else 'PENDING',
             )
             self.tree.insert('', END, values=vals)
+        try:
+            _dk = is_dark()
+            self.tree.tag_configure('separator',
+                                    background=ThemeColors.get('bg_hover', _dk),
+                                    foreground=ThemeColors.get('accent', _dk))
+        except Exception:
+            pass
 
         header = result.header if result else None
         customer = getattr(header, 'customer', '?') if header else '?'
@@ -504,9 +519,23 @@ class AllocationDialog:
             self._alloc_total_footer.update_totals()
 
     def _fill_tree_from_parsed_rows(self):
-        """parsed_rows( dict 리스트 )로 트리 채우기. show_with_data용."""
+        """parsed_rows( dict 리스트 )로 트리 채우기. show_with_data용.
+        v8.6.3: 본품→샘플 정렬 + 구분자 행 삽입."""
         self.tree.delete(*self.tree.get_children())
-        for i, row in enumerate(self.parsed_rows):
+        # 본품 먼저, 샘플 나중 정렬
+        _sorted = sorted(self.parsed_rows, key=lambda r: (
+            1 if (r.get('is_sample', False) if hasattr(r, 'get') else getattr(r, 'is_sample', False)) else 0,
+            (r.get('lot_no', '') if hasattr(r, 'get') else getattr(r, 'lot_no', '')),
+        ))
+        _sample_sep = False
+        for i, row in enumerate(_sorted):
+            _is_samp = (row.get('is_sample', False) if hasattr(row, 'get')
+                        else getattr(row, 'is_sample', False))
+            if _is_samp and not _sample_sep:
+                self.tree.insert('', END, values=(
+                    '── 샘플 ──', '', '', '', '', '', '', '', '',
+                ), tags=('separator',))
+                _sample_sep = True
             if hasattr(row, 'get'):
                 vals = (
                     str(row.get('lot_no', '')),
@@ -517,7 +546,7 @@ class AllocationDialog:
                     str(row.get('sale_ref', '')),
                     str(row.get('outbound_date', '') or ''),
                     str(row.get('warehouse', '')),
-                    'PENDING',
+                    'SAMPLE' if _is_samp else 'PENDING',
                 )
             else:
                 vals = (
@@ -529,9 +558,16 @@ class AllocationDialog:
                     getattr(row, 'sale_ref', ''),
                     str(getattr(row, 'outbound_date', '') or ''),
                     getattr(row, 'warehouse', ''),
-                    'PENDING',
+                    'SAMPLE' if _is_samp else 'PENDING',
                 )
             self.tree.insert('', END, values=vals)
+        try:
+            _dk = is_dark()
+            self.tree.tag_configure('separator',
+                                    background=ThemeColors.get('bg_hover', _dk),
+                                    foreground=ThemeColors.get('accent', _dk))
+        except Exception:
+            pass
         if getattr(self, '_alloc_total_footer', None):
             self._alloc_total_footer.update_totals()
 
