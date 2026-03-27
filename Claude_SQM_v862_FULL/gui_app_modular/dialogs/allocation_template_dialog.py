@@ -72,14 +72,16 @@ _SONG_COLUMNS = [
 ]
 
 _SONG_ROWS = [
-    # (Product, SAP NO, Date in stock, QTY, Lot No, WH, Customs, SOLD TO, SALE REF, GW)
+    # v8.6.3: 본품 먼저, 샘플 나중 (톤백/샘플 분리 표시)
+    # ── 본품 (톤백) ──
     ('MIC9000',        '2200032713', '2025-09-05', '5',     '1125062056', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '5.13'),
-    ('MIC9000 sample', '2200032713', '2025-09-05', '0.001', '1125062056', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '0.00125'),
     ('MIC9000',        '2200032713', '2025-09-05', '5',     '1125062057', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '5.13'),
-    ('MIC9000 sample', '2200032713', '2025-09-05', '0.001', '1125062057', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '0.00125'),
     ('MIC9000',        '2200032991', '2025-09-09', '5',     '1125070745', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '5.13'),
-    ('MIC9000 sample', '2200032991', '2025-09-09', '0.001', '1125070745', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '0.00125'),
     ('MIC9000',        '2200032712', '2025-09-18', '5',     '1125070924', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '5.13'),
+    # ── 샘플 ──
+    ('MIC9000 sample', '2200032713', '2025-09-05', '0.001', '1125062056', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '0.00125'),
+    ('MIC9000 sample', '2200032713', '2025-09-05', '0.001', '1125062057', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '0.00125'),
+    ('MIC9000 sample', '2200032991', '2025-09-09', '0.001', '1125070745', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '0.00125'),
     ('MIC9000 sample', '2200032712', '2025-09-18', '0.001', '1125070924', 'GY', 'uncleared', 'LBM AP - January 550MT Semarang', '2903', '0.00125'),
 ]
 
@@ -90,13 +92,16 @@ _WOO_COLUMNS = [
 ]
 
 _WOO_ROWS = [
+    # v8.6.3: 본품 먼저, 샘플 나중 (톤백/샘플 분리 표시)
+    # ── 본품 (톤백) ──
     ('MIC9000',        '2200032902', '2025-10-13', '5',     '1125080535', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '5',     '5.13', ''),
-    ('MIC9000 Sample', '2200032902', '2025-10-13', '0.001', '1125080535', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '0.001', '0.00125', ''),
     ('MIC9000',        '2200032902', '2025-10-13', '5',     '1125080539', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '5',     '5.13', ''),
-    ('MIC9000 Sample', '2200032902', '2025-10-13', '0.001', '1125080539', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '0.001', '0.00125', ''),
     ('MIC9000',        '2200033015', '2025-10-13', '5',     '1125080713', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '5',     '5.13', ''),
-    ('MIC9000 Sample', '2200033015', '2025-10-13', '0.001', '1125080713', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '0.001', '0.00125', ''),
     ('MIC9000',        '2200032904', '2025-10-14', '5',     '1125081218', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '5',     '5.13', ''),
+    # ── 샘플 ──
+    ('MIC9000 Sample', '2200032902', '2025-10-13', '0.001', '1125080535', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '0.001', '0.00125', ''),
+    ('MIC9000 Sample', '2200032902', '2025-10-13', '0.001', '1125080539', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '0.001', '0.00125', ''),
+    ('MIC9000 Sample', '2200033015', '2025-10-13', '0.001', '1125080713', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '0.001', '0.00125', ''),
     ('MIC9000 Sample', '2200032904', '2025-10-14', '0.001', '1125081218', 'GY', 'Uncleared', '반송', 'LBM AP Q1 2026  1st 550mt', '3184', '0.001', '0.00125', ''),
 ]
 
@@ -381,6 +386,8 @@ class AllocationTemplateDialog:
         self._tree.tag_configure('stripe', background=C_STRIPE, foreground=C_FG)
         self._tree.tag_configure('sample', background=tc('bg_secondary'), foreground=C_SAMPLE)
         self._tree.tag_configure('sample_stripe', background=tc('bg_secondary'), foreground=C_SAMPLE)
+        self._tree.tag_configure('separator', background=tc('bg_hover'), foreground=tc('accent'),
+                                 font=('맑은 고딕', 10, 'bold'))
 
         vsb = ttk.Scrollbar(tree_frame, orient='vertical', command=self._tree.yview)
         hsb = ttk.Scrollbar(tree_frame, orient='horizontal', command=self._tree.xview)
@@ -499,12 +506,23 @@ class AllocationTemplateDialog:
         product_idx = next((i for i, c in enumerate(columns)
                             if 'PRODUCT' in c.upper()), None)
 
-        # 행 삽입
-        for row_num, row in enumerate(rows):
-            # 샘플 판정
+        # v8.6.3: 본품→샘플 정렬 + 구분자 행 삽입
+        _sorted_rows = sorted(rows, key=lambda r: (
+            1 if _is_sample_row(
+                str(r[product_idx]) if product_idx is not None and product_idx < len(r) else '',
+                str(r[qty_idx]) if qty_idx is not None and qty_idx < len(r) else '0',
+            ) else 0,
+        ))
+        _sep_inserted = False
+        for row_num, row in enumerate(_sorted_rows):
             qty_str = str(row[qty_idx]) if qty_idx is not None and qty_idx < len(row) else '0'
             prod_str = str(row[product_idx]) if product_idx is not None and product_idx < len(row) else ''
             is_sample = _is_sample_row(prod_str, qty_str)
+
+            if is_sample and not _sep_inserted:
+                sep_vals = tuple(['── 샘플 ──'] + [''] * (len(columns) - 1))
+                self._tree.insert('', 'end', values=sep_vals, tags=('separator',))
+                _sep_inserted = True
 
             if is_sample:
                 tag = 'sample' if row_num % 2 == 0 else 'sample_stripe'
