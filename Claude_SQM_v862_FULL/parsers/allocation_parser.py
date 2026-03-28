@@ -2,7 +2,16 @@
 SQM 재고관리 시스템 - Allocation (출고 리스트) Excel 파서
 
 Author: Ruby
-Version: 2.6.1  ← v2.5.4에서 업그레이드
+Version: 2.7.1  ← v2.6.1에서 업그레이드
+
+[v2.7.1 변경사항]
+- E) Easpring 양식 지원: 피벗 테이블이 상단(1~10행)에 있고 14행에 헤더 등장
+  헤더 탐색 범위 10행 → 30행으로 확장, SC RCVD 컬럼 자동 무시
+- F) Jakarta 양식 지원: 'Cleared' 컬럼 → customs 매핑, 피벗 우측 혼재 자동 무시
+- date_in_stock 엑셀 시리얼 숫자 → YYYY-MM-DD 자동 변환 (_parse_date 확장)
+- customs 값 자동 정규화: 오타/대소문자 → 표준값 ('uncleared'/'cleared') 변환
+  예: 'Uncleaared' → 'uncleared', 'CLEARED' → 'cleared'
+- 피벗 잔류 행 필터 강화: 'Grand Total', '행 레이블', '총합계' 등 헤더/데이터 오인 방지
 
 [v2.6.1 변경사항]
 - AllocationRow.export_type 필드 추가: Export 컬럼값('반송', '일반수출' 등) 저장
@@ -15,13 +24,13 @@ Version: 2.6.1  ← v2.5.4에서 업그레이드
 - 피벗 테이블 행 자동 필터링: 헤더 행에 섞인 피벗 집계 데이터 무시
 - '반송', 'Export', 'Remark' 컬럼 자동 무시 (이미 col_map에서 제외됨)
 
-지원 양식:
-A) Song 양식: Sheet1(Product 컬럼 없음) + 데이터 시트(Product 있음) → 데이터 시트 자동 선택
-B) Woo  양식: Sheet1 단일 시트, 5행 헤더, Balance/Export/Remark 추가 컬럼, 피벗 테이블 혼재
-C) 기존 양식: 1행 타이틀, 2행 무시, 3행 헤더, 4행~ 데이터
-D) 화주 원본: 1행 합계(숫자만), 2행 헤더, 3행~ 데이터
-E) Jakarta Trial: 타이틀 1행, 피벗 2행, 헤더 3행 — Date in stock/SALE REF 없음, Cleared 컬럼
-F) 통합 양식: 타이틀 N행 후 헤더 — 헤더 위 행 수 가변 (최대 20행까지 자동 탐색)
+지원 양식 (총 6종):
+A) Song    양식: 다중 시트, Sheet1(요약) + 데이터 시트(Product 있음) → 데이터 시트 자동 선택
+B) Woo     양식: 단일 시트, 1~5행 헤더블록, 6행 컬럼, Balance/Export/Remark 추가, 피벗 우측 혼재
+C) 기존    양식: 1행 타이틀, 2행 무시, 3행 컬럼, 4행~ 데이터
+D) 화주원본 양식: 1행=합계 숫자만, 2행=컬럼, 3행~ 데이터
+E) Easpring양식: 1~10행=피벗 요약, 14행=컬럼, 15행~ 데이터 / 컬럼: SC RCVD 추가
+F) Jakarta 양식: 1행=타이틀, 2~3행=피벗+컬럼 혼재, 4행~ 데이터 / 컬럼: Cleared(=Customs)
 """
 
 from engine_modules.constants import STATUS_SOLD
@@ -77,6 +86,9 @@ class AllocationRow:
 
     # v2.6.1: 수출 유형 ('반송', '일반수출', '' 등) — Woo 양식의 Export 컬럼값 저장
     export_type: str = ""
+
+    # v2.7.1: 수령확인일 (SC RCVD) — Easpring 양식 전용
+    sc_rcvd: date = None
 
     @property
     def tonbag_no(self) -> int:
@@ -162,8 +174,6 @@ class AllocationParser:
             result.parsed_at = datetime.now()
             result.header = self._extract_header(df, excel_path)
             result.rows = self._extract_rows(df, result.header)
-            # v8.6.3: 본품 먼저, 샘플 나중 정렬 (같은 LOT도 본품/샘플 분리 표시)
-            result.rows.sort(key=lambda r: (r.is_sample, r.lot_no))
             result.total_rows = len(result.rows)
             result.total_qty = sum(row.qty_mt for row in result.rows)
 
@@ -200,7 +210,7 @@ class AllocationParser:
 
         for sh in sheet_names:
             try:
-                df_sh = pd.read_excel(excel_path, sheet_name=sh, header=None, nrows=25)
+                df_sh = pd.read_excel(excel_path, sheet_name=sh, header=None, nrows=35)
             except Exception:
                 continue
 
@@ -209,7 +219,7 @@ class AllocationParser:
             has_product = False
             has_lot_data = False
 
-            for i in range(min(20, len(df_sh))):
+            for i in range(min(10, len(df_sh))):
                 row_vals = [str(v).strip().upper() for v in df_sh.iloc[i].values if pd.notna(v)]
                 row_str = ' '.join(row_vals)
 
@@ -333,44 +343,34 @@ class AllocationParser:
         """
         rows = []
 
-        # v8.6.3 [Case F]: 헤더 행 자동 탐색 — 최대 20행까지 스캔
-        # 헤더 위 타이틀/빈 행/피벗 행이 몇 줄이든 LOT+키워드 기반으로 자동 감지
+        # 헤더 행 찾기 - v2.6.0: LOT 컬럼만 있어도 헤더로 인정 (PRODUCT 필수 조건 제거)
         header_row_idx = None
-        best_header_idx = None
-        best_header_score = 0
-
-        for i in range(min(20, len(df))):
+        # v2.7.1: Easpring 양식 14행 헤더 대응 — 탐색 범위 10→30
+        for i in range(min(30, len(df))):
             row_values = [str(v).strip().upper() for v in df.iloc[i].values if pd.notna(v)]
             row_str = ' '.join(row_values)
 
+            # v2.7.1: 피벗 잔류 행 필터 ('Grand Total', '행 레이블' 등은 헤더 아님)
+            _pivot_keywords = ('GRAND TOTAL', '행 레이블', '열 레이블', '총합계', 'SUM OF')
+            if any(kw in row_str.upper() for kw in _pivot_keywords):
+                continue
             has_lot_col = 'LOT' in row_str and 'SUB' not in row_str
             has_product_col = 'PRODUCT' in row_str
-            has_qty_col = 'QTY' in row_str or 'QUANTITY' in row_str or 'BALANCE' in row_str
-            has_sap_col = 'SAP' in row_str
-            has_wh_col = 'WH' in row_str or 'WAREHOUSE' in row_str
 
-            # 점수 산정: LOT 필수 + 보조 키워드 가점
-            if has_lot_col:
-                score = 1
-                if has_product_col:
-                    score += 2
-                if has_qty_col:
-                    score += 1
-                if has_sap_col:
-                    score += 1
-                if has_wh_col:
-                    score += 1
+            # v2.6.0: LOT+PRODUCT 둘 다 있으면 최우선 (점수 2)
+            #         LOT만 있어도 QTY나 SAP 등 다른 컬럼이 함께 있으면 헤더로 인정 (점수 1)
+            if has_lot_col and has_product_col:
+                header_row_idx = i
+                break
+            elif has_lot_col and ('QTY' in row_str or 'SAP' in row_str or STATUS_SOLD in row_str):
+                # Product 없는 Song Sheet1 양식 대응
+                header_row_idx = i
+                # break 하지 않고 계속 탐색 — 더 좋은 행(LOT+PRODUCT)이 있을 수 있음
+                # → 이미 _select_best_sheet에서 최적 시트를 골랐으므로 여기선 break
+                break
 
-                if score > best_header_score:
-                    best_header_score = score
-                    best_header_idx = i
-
-        if best_header_idx is not None:
-            header_row_idx = best_header_idx
-            if best_header_idx > 5:
-                self.warnings.append(f"헤더 행을 {best_header_idx + 1}행에서 감지 (타이틀 {best_header_idx}행)")
-        else:
-            # 화주 원본: 1행 합계(숫자만), 2행 헤더인 경우
+        if header_row_idx is None:
+            # 화주 원본: 1행 합계(숫자만), 2행 헤더인 경우 — 2행을 헤더로 사용
             if len(df) >= 2:
                 row0_str = ' '.join(str(v).strip() for v in df.iloc[0].values if pd.notna(v))
                 if re.match(r'^[\d\s.,]+$', row0_str.replace(' ', '')):
@@ -412,6 +412,10 @@ class AllocationParser:
                 continue
             if re.fullmatch(r'\d+\.?\d*[eE][+-]?\d+', lot_no):
                 lot_no = str(int(float(lot_no)))
+            # v2.7.1: 피벗 합계 행 스킵 (Grand Total, 공백 행)
+            if lot_raw and str(lot_raw).strip().upper() in (
+                    'GRAND TOTAL', '합계', 'TOTAL', '총합계', ''):
+                continue
             # LOT 번호 유효성 검사 (8~11자리 숫자)
             if len(lot_no) < 8 or len(lot_no) > 11 or not lot_no.isdigit():
                 continue
@@ -439,6 +443,11 @@ class AllocationParser:
             if 'date_in_stock' in col_map and col_map['date_in_stock'] < len(row_data):
                 val = row_data[col_map['date_in_stock']]
                 row.date_in_stock = self._parse_date(val)
+
+            # v2.7.1: SC RCVD (수령확인일) — Easpring 양식 전용
+            if 'sc_rcvd' in col_map and col_map['sc_rcvd'] < len(row_data):
+                val = row_data[col_map['sc_rcvd']]
+                row.sc_rcvd = self._parse_date(val)
 
             # QTY (MT)
             if 'qty_mt' in col_map and col_map['qty_mt'] < len(row_data):
@@ -477,7 +486,24 @@ class AllocationParser:
             if 'customs' in col_map and col_map['customs'] < len(row_data):
                 val = row_data[col_map['customs']]
                 if pd.notna(val):
-                    row.customs = str(val).strip()
+                    # v2.7.1: customs 자동 정규화
+                    # 오타/대소문자 → 표준값 ('uncleared'/'cleared') 변환
+                    # 예: 'Uncleaared' → 'uncleared', 'CLEARED' → 'cleared'
+                    _raw = str(val).strip()
+                    _norm = _raw.lower().replace(' ', '').replace('_', '')
+                    # v2.7.1: 오타 포함 유연 매칭 (Uncleaared / UNCLEARED / uncleared)
+                    # 'un' + 'clea' 패턴 = 미통관 계열
+                    if _norm.startswith('un') and 'clea' in _norm:
+                        row.customs = 'uncleared'
+                    elif 'clea' in _norm:
+                        # 'cleared', 'clear', 'cleaared' 등
+                        row.customs = 'cleared'
+                    elif '통관완료' in _raw or ('통관' in _raw and '미' not in _raw):
+                        row.customs = 'cleared'
+                    elif '미통관' in _raw or '통관전' in _raw:
+                        row.customs = 'uncleared'
+                    else:
+                        row.customs = _raw  # 알 수 없는 값은 원본 유지
 
             # SOLD TO
             row.sold_to = header.customer  # 기본값: 헤더에서 추출한 고객명
@@ -533,6 +559,9 @@ class AllocationParser:
 
             rows.append(row)
 
+        # v8.6.3: 본품 먼저, 샘플 나중 순서 정렬
+        # 엑셀 파일에서 본품+샘플이 섞여 있어도 처리 순서 보장
+        rows.sort(key=lambda r: (r.is_sample, r.lot_no))
         return rows
 
     def _map_columns(self, headers: List[str]) -> Dict[str, int]:
@@ -561,7 +590,9 @@ class AllocationParser:
             'lot_no': ['LOT_NO', 'LOT NO', 'LOTNO', 'LOT', 'LOT_NUMBER'],
             'sub_lt': ['SUB_LT', 'SUB LT', 'SUBLT', 'SUB_LOT', 'SUBLOT', 'TONBAG', '톤백', '톤백번호'],
             'warehouse': ['WAREHOUSE', 'WH', '창고', 'LOCATION'],
-            'customs': ['CUSTOMS', '통관', 'CUSTOMS_STATUS', 'CLEARED'],
+            'customs': ['CUSTOMS', '통관', 'CUSTOMS_STATUS',
+                       'CLEARED', 'CUSTOMS STATUS',  # v2.7.1: Jakarta 양식 'Cleared' 컬럼
+                       'UNCLEARED', 'CLEARANCE'],
             'sold_to': ['SOLD_TO', 'SOLD TO', 'CUSTOMER', '고객', '거래처', 'BUYER'],
             'gw': ['GW', 'GROSS_WEIGHT', 'GROSS WEIGHT', '총중량'],
             'sale_ref': ['SALE_REF', 'SALE REF', 'SALEREF', 'SALE_REFERENCE'],
@@ -572,6 +603,11 @@ class AllocationParser:
             'export_type': ['EXPORT', '수출유형', '반송', 'EXPORT_TYPE'],
             # v2.6.0: 아래 컬럼들은 alias_patterns에 포함하지 않아 자동 무시됨:
             # 'Remark', 'Invoice date' (Song 양식)
+            # v2.7.1: SC RCVD → sc_rcvd 필드로 저장 (Easpring 수령확인일)
+            'sc_rcvd': ['SC RCVD', 'SC_RCVD', 'SCRCVD', 'SC DATE', 'RECEIVED DATE',
+                       '수령일', '수령확인일', 'RECEIPT DATE'],
+            # 피벗 잔류 컬럼 자동 무시:
+            # '행 레이블', '열 레이블', '총합계', 'Grand Total'
         }
 
         for i, h in enumerate(headers):
@@ -605,13 +641,23 @@ class AllocationParser:
         return col_map
 
     def _parse_date(self, val) -> Optional[date]:
-        """날짜 파싱 (다양한 형식 지원)"""
+        """v2.7.1: 날짜 파싱 (다양한 형식 + 엑셀 시리얼 숫자 자동 변환)
+
+        엑셀 시리얼 숫자 지원:
+          45952 → 2025-10-22 (Easpring 양식 Date in stock / SC RCVD)
+          유효 범위: 1 ~ 99999 (1900-01-01 ~ 2173-10-15)
+        """
+        import datetime as _dt
+
         if pd.isna(val):
             return None
 
         # pandas Timestamp
-        if hasattr(val, 'date'):
-            return val.date()
+        if hasattr(val, 'date') and callable(val.date):
+            try:
+                return val.date()
+            except Exception:
+                pass
 
         # datetime
         if isinstance(val, datetime):
@@ -621,7 +667,20 @@ class AllocationParser:
         if isinstance(val, date):
             return val
 
-        # 문자열
+        # 엑셀 시리얼 숫자 → 날짜 변환 (v2.7.1: Easpring Date in stock)
+        # 숫자형이고 날짜 범위(1~99999) 이면 시리얼로 간주
+        try:
+            serial = float(val)
+            if 1 <= serial <= 99999:
+                n = int(serial)
+                if n > 59:   # 1900년 윤년 버그 보정 (Excel 고유 버그)
+                    n -= 1
+                return (_dt.date(1899, 12, 31) +
+                        _dt.timedelta(days=n))
+        except (ValueError, TypeError, OverflowError):
+            pass
+
+        # 문자열 파싱
         val_str = str(val).strip()
 
         # 다양한 날짜 형식 시도

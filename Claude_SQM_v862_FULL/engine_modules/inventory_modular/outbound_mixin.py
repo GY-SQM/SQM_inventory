@@ -1244,6 +1244,7 @@ class OutboundMixin(InventoryBaseMixin):
         has_approved_at_col = "approved_at" in alloc_plan_cols
         has_rejected_reason_col = "rejected_reason" in alloc_plan_cols
         has_export_type_col = "export_type" in alloc_plan_cols   # v6.3.3 RUBI
+        has_sc_rcvd_col     = "sc_rcvd"      in alloc_plan_cols   # v2.7.1 SC RCVD
 
         def _build_error_detail(line_no: int, fail_code: str, reason: str, lot_no: str, sold_to: str, qty_mt):
             result['error_details'].append(
@@ -1469,6 +1470,9 @@ class OutboundMixin(InventoryBaseMixin):
                     # 반드시 처리되어야 함. qty_mt 크기로 행을 스킵하지 않는다.
                     # v6.3.3 RUBI: export_type ('반송', '일반수출' 등)
                     export_type_val = str(_alloc_val(alloc, 'export_type') or '').strip()
+                    # v2.7.1: sc_rcvd (수령확인일) — Easpring 양식 전용
+                    _sc = _alloc_val(alloc, 'sc_rcvd')
+                    sc_rcvd_val = str(_sc) if _sc else None
 
                     if not lot_no:
                         msg = "LOT 번호 누락"
@@ -1890,6 +1894,8 @@ class OutboundMixin(InventoryBaseMixin):
                                 payload["rejected_reason"] = ""
                             if has_export_type_col:                      # v6.3.3 RUBI
                                 payload["export_type"] = export_type_val
+                            if has_sc_rcvd_col:                          # v2.7.1 SC RCVD
+                                payload["sc_rcvd"] = sc_rcvd_val
                             _insert_allocation_plan_row(payload)
                             result['pending_approval'] += 1
                         logger.info(
@@ -1932,6 +1938,8 @@ class OutboundMixin(InventoryBaseMixin):
                                 payload["validated_at"] = now
                             if has_export_type_col:                      # v6.3.3 RUBI
                                 payload["export_type"] = export_type_val
+                            if has_sc_rcvd_col:                          # v2.7.1 SC RCVD
+                                payload["sc_rcvd"] = sc_rcvd_val
                             _insert_allocation_plan_row(payload)
                             reserved_in_lot += 1
                         reserved_kg = sum(float(tb.get('weight') or 0) for tb in tonbags[:pick_count])
@@ -1997,6 +2005,8 @@ class OutboundMixin(InventoryBaseMixin):
                                 payload["validated_at"] = now
                             if has_export_type_col:                      # v6.3.3 RUBI
                                 payload["export_type"] = export_type_val
+                            if has_sc_rcvd_col:                          # v2.7.1 SC RCVD
+                                payload["sc_rcvd"] = sc_rcvd_val
                             _insert_allocation_plan_row(payload)
                             reserved_in_lot += 1
                             reserved_kg += float(tb.get('weight') or 0)
