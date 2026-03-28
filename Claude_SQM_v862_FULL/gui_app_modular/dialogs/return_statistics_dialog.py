@@ -7,12 +7,12 @@ SQM v6.12.1 — 반품 사유 통계 리포트 다이얼로그 v2
 from gui_app_modular.utils.ui_constants import create_themed_toplevel  # v8.0.9
 from gui_app_modular.utils.ui_constants import is_dark  # v8.0.9
 from gui_app_modular.utils.ui_constants import tc  # v8.1.3: top-level import (gui_bootstrap 종속 제거)
+from gui_app_modular.utils.excel_file_helper import open_file_default
 import logging
 import tkinter as tk
 from datetime import date, timedelta
 from tkinter import ttk
 from tkinter.constants import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y
-from gui_app_modular.utils.excel_file_helper import open_file_default
 
 logger = logging.getLogger(__name__)
 
@@ -93,31 +93,25 @@ class ReturnStatisticsDialog:
         default_start = (today - timedelta(days=90)).strftime('%Y-%m-%d')
         default_end = today.strftime('%Y-%m-%d')
 
-        if HAS_DATEENTRY and DateEntry:
-            self.date_start = DateEntry(filter_frame, width=10, dateformat='%Y-%m-%d')
-            self.date_start.pack(side=LEFT, padx=2)
-            try:
-                self.date_start.entry.delete(0, END)
-                self.date_start.entry.insert(0, default_start)
-            except Exception as _de:
-                logging.getLogger(__name__).debug(f"[반품통계] 시작일 설정 실패: {_de}")
-        else:
+        # v8.6.3: 공통 날짜 범위 바 통일 적용
+        try:
+            from gui_app_modular.utils.tree_enhancements import make_date_range_bar
+            _db, _sv_s, _sv_e = make_date_range_bar(
+                filter_frame, self._on_refresh,
+                default_from=default_start, default_to=default_end)
+            _db.pack(side=LEFT, padx=2)
+            # date_start/date_end 호환 래퍼
+            class _VarEntry:
+                def __init__(self, sv): self._sv = sv
+                def get(self): return self._sv.get()
+            self.date_start = _VarEntry(_sv_s)
+            self.date_end   = _VarEntry(_sv_e)
+        except Exception as _e:
+            logging.getLogger(__name__).warning(f"[반품통계] make_date_range_bar: {_e}")
             self.date_start = ttk.Entry(filter_frame, width=12)
             self.date_start.pack(side=LEFT, padx=2)
             self.date_start.insert(0, default_start)
-
-        tk.Label(filter_frame, text="~", bg=tc('bg_secondary'), fg=tc('text_primary'),
-                 font=('맑은 고딕', 10)).pack(side=LEFT, padx=3)
-
-        if HAS_DATEENTRY and DateEntry:
-            self.date_end = DateEntry(filter_frame, width=10, dateformat='%Y-%m-%d')
-            self.date_end.pack(side=LEFT, padx=2)
-            try:
-                self.date_end.entry.delete(0, END)
-                self.date_end.entry.insert(0, default_end)
-            except Exception as _de:
-                logging.getLogger(__name__).debug(f"[반품통계] 종료일 설정 실패: {_de}")
-        else:
+            tk.Label(filter_frame, text="~").pack(side=LEFT, padx=3)
             self.date_end = ttk.Entry(filter_frame, width=12)
             self.date_end.pack(side=LEFT, padx=2)
             self.date_end.insert(0, default_end)

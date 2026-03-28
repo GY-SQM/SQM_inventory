@@ -7,8 +7,8 @@ from datetime import datetime
 from tkinter import ttk
 
 from ..utils.constants import BOTH, LEFT, VERTICAL, YES, X
-from ..utils.tree_enhancements import bind_period_vars_debounced
 from ..utils.excel_file_helper import open_file_default
+from ..utils.tree_enhancements import bind_period_vars_debounced
 from ..utils.ui_constants import is_dark, Spacing, ThemeColors, apply_tooltip
 
 logger = logging.getLogger(__name__)
@@ -57,29 +57,18 @@ class SoldTabMixin:
         except Exception:
             ttk.Label(frame, text="✅ 출고완료(OUTBOUND) LOT 리스트").pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
 
-        # 기간 필터: 기본 빈 값 → 전체 조회 (v8.1.8)
-        self._sold_date_from_var = tk.StringVar(value='')
-        self._sold_date_to_var   = tk.StringVar(value='')
+        # v8.6.3: 공통 날짜 범위 바 (make_date_range_bar) 통일 적용
+        try:
+            from ..utils.tree_enhancements import make_date_range_bar
+            _date_bar, self._sold_date_from_var, self._sold_date_to_var = \
+                make_date_range_bar(frame, self._refresh_sold)
+            _date_bar.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
+        except Exception as _e:
+            logger.warning(f'[UI] sold_tab make_date_range_bar: {_e}')
+            self._sold_date_from_var = tk.StringVar(value='')
+            self._sold_date_to_var   = tk.StringVar(value='')
         filter_frame = ttk.Frame(frame)
         filter_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.XS))
-        ttk.Label(filter_frame, text="기간:").pack(side=LEFT, padx=(0, Spacing.XS))
-        _e_from = ttk.Entry(filter_frame, textvariable=self._sold_date_from_var, width=12)
-        _e_from.pack(side=LEFT, padx=Spacing.XS)
-        ttk.Label(filter_frame, text="~").pack(side=LEFT, padx=Spacing.XS)
-        _e_to = ttk.Entry(filter_frame, textvariable=self._sold_date_to_var, width=12)
-        _e_to.pack(side=LEFT, padx=Spacing.XS)
-        # v8.1.8: 플레이스홀더 + 포커스아웃 자동 적용
-        try:
-            from ..utils.tree_enhancements import attach_date_placeholder
-            attach_date_placeholder(_e_from, self._sold_date_from_var)
-            attach_date_placeholder(_e_to,   self._sold_date_to_var)
-        except Exception as e:
-            logger.warning(f'[UI] sold_tab: {e}')
-        _e_from.bind('<Return>', lambda e: self._refresh_sold())
-        _e_to.bind('<Return>',   lambda e: self._refresh_sold())
-        _e_from.bind('<FocusOut>', lambda e: self._refresh_sold())
-        _e_to.bind('<FocusOut>',   lambda e: self._refresh_sold())
-        ttk.Button(filter_frame, text="적용", command=self._refresh_sold).pack(side=LEFT, padx=Spacing.SM)
         ttk.Button(filter_frame, text="🔄 새로고침", command=self._refresh_sold).pack(side=LEFT, padx=Spacing.XS)
         btn_revert_sold = ttk.Button(filter_frame, text="↩️ 출고 취소 (→ 판매화물 결정)", command=lambda: self._safe_call('_on_revert_sold_to_picked'))
         btn_revert_sold.pack(side=LEFT, padx=Spacing.XS)

@@ -154,38 +154,20 @@ class CargoOverviewTabMixin:
         self._cargo_status_combo.bind('<<ComboboxSelected>>', lambda e: self._refresh_cargo_overview())
         apply_tooltip(self._cargo_status_combo, "해당 상태의 화물만 표시. 현재 재고 기준에서는 출고 옵션 없음.")
 
-        # 기간 필터 (날짜 범위로 테이블/합계 연동)
-        ttk.Label(filter_frame, text="  기간:", font=('맑은 고딕', 10, 'bold')).pack(side=LEFT, padx=(Spacing.SM, 4))
-        self._cargo_date_from_var = tk.StringVar()
-        self._cargo_date_to_var = tk.StringVar()
-        _e_from = ttk.Entry(filter_frame, textvariable=self._cargo_date_from_var, width=12)
-        _e_from.pack(side=LEFT, padx=2)
-        apply_tooltip(_e_from, "시작일 (YYYY-MM-DD). 비우면 전체 기간.")
-        from ..utils.tree_enhancements import show_date_calendar, attach_date_placeholder
-        attach_date_placeholder(_e_from, self._cargo_date_from_var)
-        ttk.Button(filter_frame, text="📅", width=2, command=lambda: show_date_calendar(
-            frame.winfo_toplevel(), self._cargo_date_from_var.get(),
-            lambda ymd: (self._cargo_date_from_var.set(ymd), self._refresh_cargo_overview())
-        )).pack(side=LEFT, padx=(0, 2))
-        ttk.Label(filter_frame, text=" ~ ").pack(side=LEFT)
-        _e_to = ttk.Entry(filter_frame, textvariable=self._cargo_date_to_var, width=12)
-        _e_to.pack(side=LEFT, padx=2)
-        apply_tooltip(_e_to, "종료일 (YYYY-MM-DD). 비우면 전체 기간.")
-        attach_date_placeholder(_e_to, self._cargo_date_to_var)
-        ttk.Button(filter_frame, text="📅", width=2, command=lambda: show_date_calendar(
-            frame.winfo_toplevel(), self._cargo_date_to_var.get(),
-            lambda ymd: (self._cargo_date_to_var.set(ymd), self._refresh_cargo_overview())
-        )).pack(side=LEFT, padx=(0, Spacing.SM))
-        _e_from.bind('<Return>', lambda e: self._refresh_cargo_overview())
-        _e_to.bind('<Return>', lambda e: self._refresh_cargo_overview())
-
-        # v8.1.5: 기간 입력 시 자동 새로고침 (350ms 디바운스)
-        from ..utils.tree_enhancements import bind_period_vars_debounced
-        bind_period_vars_debounced(
-            frame, self._cargo_date_from_var, self._cargo_date_to_var,
-            self._refresh_cargo_overview, delay_ms=350,
-            entry_widgets=(_e_from, _e_to),
-        )
+        # v8.6.3: 공통 날짜 범위 바 통일 적용
+        try:
+            from ..utils.tree_enhancements import make_date_range_bar, bind_period_vars_debounced
+            _date_bar, self._cargo_date_from_var, self._cargo_date_to_var = \
+                make_date_range_bar(filter_frame, self._refresh_cargo_overview)
+            _date_bar.pack(side=LEFT, padx=(Spacing.SM, 0))
+            bind_period_vars_debounced(
+                frame, self._cargo_date_from_var, self._cargo_date_to_var,
+                self._refresh_cargo_overview, delay_ms=350,
+            )
+        except Exception as _e:
+            logger.warning(f'[UI] cargo_overview make_date_range_bar: {_e}')
+            self._cargo_date_from_var = tk.StringVar()
+            self._cargo_date_to_var   = tk.StringVar()
 
         ttk.Button(filter_frame, text="🔄 새로고침", command=self._refresh_cargo_overview).pack(side=LEFT, padx=Spacing.SM)
         apply_tooltip(filter_frame.winfo_children()[-1], "목록 다시 불러오기")

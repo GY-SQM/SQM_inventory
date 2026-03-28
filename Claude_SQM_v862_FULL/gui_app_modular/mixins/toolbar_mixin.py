@@ -271,16 +271,13 @@ class ToolbarMixin:
             def make_enter(button):
                 def on_enter(e):
                     if not button._menu_active:
-                        button.config(fg=self._tb_fg_hover, bg=self._tb_hover_bg)
-                        button._underline.place(relx=0.1, rely=1.0, anchor='sw',
-                                                relwidth=0.8, height=2)
+                        button.config(fg=self._tb_fg_hover)
                 return on_enter
 
             def make_leave(button):
                 def on_leave(e):
                     if not button._menu_active:
-                        button.config(fg=self._tb_fg_normal, bg=self._tb_bg)
-                        button._underline.place_forget()
+                        button.config(fg=self._tb_fg_normal)
                 return on_leave
 
             btn.bind('<Enter>', make_enter(btn))
@@ -319,7 +316,7 @@ class ToolbarMixin:
                            font=self._tb_font_scale.body())
             sep.pack(side='left')
 
-            for icon, label, theme in [("🌙", "Dark", "darkly"), ("☀", "Light", "cosmo")]:
+            for icon, label, theme in [("🌙", "Dark", "darkly"), ("☀", "Light", "darkly")]:
                 btn = tk.Label(
                     parent, text=f"{icon} {label}",
                     font=self._tb_font_scale.body(bold=True),
@@ -991,7 +988,9 @@ class ToolbarMixin:
                 self._sec_tabs.pack(in_=self._row1, fill='x', expand=True, padx=Spacing.SM, pady=(Spacing.XS, 0))
                 self._row2_visible = False
         except (RuntimeError, ValueError) as _e:
-            logger.debug(f"toolbar overflow check: {_e}")
+            logger.debug(f"{type(_e).__name__}: {_e}")
+        except (RuntimeError, ValueError) as _e:
+            logger.debug(f"toolbar_mixin: {_e}")
 
     # ═══════════════════════════════════════════════════════
     # 탭 전환
@@ -1097,23 +1096,28 @@ class ToolbarMixin:
                 cb['values'] = vals
                 logger.debug(f"검색 팝업 [{field}]: {len(vals)-1}개 로드")
             except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
+                logger.debug(f"{type(_e).__name__}: {_e}")
+            except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as _e:
                 logger.debug(f"검색 팝업 [{field}] 로드 실패: {_e}")
                 cb['values'] = ['전체']
 
-        # Date (Arrival Date 기준)
+        # v8.6.3: 공통 날짜 범위 바 통일 적용
         tk.Label(main, text='Arrival Date', font=_lab_font, anchor='w'
                  ).grid(row=3, column=0, sticky='w', pady=Spacing.SM)
         df = tk.Frame(main)
         df.grid(row=3, column=1, sticky='ew', padx=(Spacing.SM, 0), pady=Spacing.SM)
-        tk.Entry(df, textvariable=svars['date_from'], width=12, font=_body_font
-                 ).pack(side='left')
-        tk.Label(df, text=' ~ ', font=_body_font).pack(side='left')
-        tk.Entry(df, textvariable=svars['date_to'], width=12, font=_body_font
-                 ).pack(side='left')
-        _is_dark = is_dark()
-        _small_font = self._tb_font_scale.small()
-        tk.Label(df, text='  (YYYY-MM-DD)', font=_small_font, fg=ThemeColors.get('text_muted', _is_dark)
-                 ).pack(side='left', padx=Spacing.XS)
+        try:
+            from gui_app_modular.utils.tree_enhancements import make_date_range_bar
+            _db, _sv_f, _sv_t = make_date_range_bar(
+                df, lambda: None, label_from='', label_to='', show_clear=True)
+            _db.pack(side='left')
+            svars['date_from'] = _sv_f
+            svars['date_to']   = _sv_t
+        except Exception:
+            _is_dark = is_dark()
+            tk.Entry(df, textvariable=svars['date_from'], width=12, font=_body_font).pack(side='left')
+            tk.Label(df, text=' ~ ', font=_body_font).pack(side='left')
+            tk.Entry(df, textvariable=svars['date_to'], width=12, font=_body_font).pack(side='left')
 
         # 상태
         tk.Label(main, text='상태', font=_lab_font, anchor='w'
@@ -1533,7 +1537,7 @@ class ToolbarMixin:
             try:
                 b.config(fg=self._tb_fg_normal)
                 if hasattr(b, '_underline'):
-                    b._underline.place_forget()
+                    b._underline.pack_forget()
             except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
                 logger.debug(f"Suppressed: {_e}")
 
@@ -1571,16 +1575,14 @@ class ToolbarMixin:
                 try:
                     if not b.winfo_exists():
                         continue
+                    # v5.5.3 patch_01: 텍스트 색상만 복구 (배경 변경 없음)
                     mx = b.winfo_pointerx() - b.winfo_rootx()
                     my = b.winfo_pointery() - b.winfo_rooty()
                     is_hover = (0 <= mx <= b.winfo_width() and
                                0 <= my <= b.winfo_height())
-                    b.config(
-                        fg=self._tb_fg_hover if is_hover else self._tb_fg_normal,
-                        bg=self._tb_hover_bg if is_hover else self._tb_bg,
-                    )
+                    b.config(fg=self._tb_fg_hover if is_hover else self._tb_fg_normal)
                     if hasattr(b, '_underline'):
-                        b._underline.place_forget()
+                        b._underline.pack_forget()
                 except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
                     logger.debug(f"Suppressed: {_e}")
             

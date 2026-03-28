@@ -6,6 +6,7 @@ SQM v5.9.5 — Allocation 출고 예약 다이얼로그
 """
 from gui_app_modular.utils.ui_constants import create_themed_toplevel  # v8.0.9
 from gui_app_modular.utils.ui_constants import is_dark  # v8.0.9
+from gui_app_modular.utils.excel_file_helper import open_file_default
 from engine_modules.constants import STATUS_RESERVED
 import logging
 import threading
@@ -14,7 +15,6 @@ from engine_modules.constants import CUSTOMER_PRESETS  # v6.7.3
 import tkinter as tk
 from collections import Counter
 from tkinter import BOTH, END, LEFT, RIGHT, VERTICAL, X, Y, filedialog, ttk
-from gui_app_modular.utils.excel_file_helper import open_file_default
 
 from ..utils.ui_constants import (
     CustomMessageBox,
@@ -88,8 +88,7 @@ class AllocationDialog:
         try:
             if hasattr(self.engine, '_get_allocation_reservation_mode'):
                 default_lot_mode = self.engine._get_allocation_reservation_mode() == "lot"
-        except Exception as e:
-            logger.debug(f"[UI] allocation lot mode check: {e}")
+        except Exception:
             default_lot_mode = False
         self._lot_mode_var = tk.BooleanVar(value=default_lot_mode)
 
@@ -464,15 +463,7 @@ class AllocationDialog:
         self.parsed_rows = result.rows if result else []
         self.tree.delete(*self.tree.get_children())
 
-        # v8.6.3: 본품→샘플 정렬 + 구분자 행 삽입
-        _sample_separator_inserted = False
         for i, row in enumerate(self.parsed_rows):
-            _is_samp = getattr(row, 'is_sample', False)
-            if _is_samp and not _sample_separator_inserted:
-                self.tree.insert('', END, values=(
-                    '── 샘플 ──', '', '', '', '', '', '', '', '',
-                ), tags=('separator',))
-                _sample_separator_inserted = True
             vals = (
                 getattr(row, 'lot_no', ''),
                 getattr(row, 'sap_no', ''),
@@ -482,16 +473,9 @@ class AllocationDialog:
                 getattr(row, 'sale_ref', ''),
                 str(getattr(row, 'outbound_date', '') or ''),
                 getattr(row, 'warehouse', ''),
-                'SAMPLE' if _is_samp else 'PENDING',
+                'PENDING',
             )
             self.tree.insert('', END, values=vals)
-        try:
-            _dk = is_dark()
-            self.tree.tag_configure('separator',
-                                    background=ThemeColors.get('bg_hover', _dk),
-                                    foreground=ThemeColors.get('accent', _dk))
-        except Exception:
-            pass
 
         header = result.header if result else None
         customer = getattr(header, 'customer', '?') if header else '?'
@@ -519,23 +503,9 @@ class AllocationDialog:
             self._alloc_total_footer.update_totals()
 
     def _fill_tree_from_parsed_rows(self):
-        """parsed_rows( dict 리스트 )로 트리 채우기. show_with_data용.
-        v8.6.3: 본품→샘플 정렬 + 구분자 행 삽입."""
+        """parsed_rows( dict 리스트 )로 트리 채우기. show_with_data용."""
         self.tree.delete(*self.tree.get_children())
-        # 본품 먼저, 샘플 나중 정렬
-        _sorted = sorted(self.parsed_rows, key=lambda r: (
-            1 if (r.get('is_sample', False) if hasattr(r, 'get') else getattr(r, 'is_sample', False)) else 0,
-            (r.get('lot_no', '') if hasattr(r, 'get') else getattr(r, 'lot_no', '')),
-        ))
-        _sample_sep = False
-        for i, row in enumerate(_sorted):
-            _is_samp = (row.get('is_sample', False) if hasattr(row, 'get')
-                        else getattr(row, 'is_sample', False))
-            if _is_samp and not _sample_sep:
-                self.tree.insert('', END, values=(
-                    '── 샘플 ──', '', '', '', '', '', '', '', '',
-                ), tags=('separator',))
-                _sample_sep = True
+        for i, row in enumerate(self.parsed_rows):
             if hasattr(row, 'get'):
                 vals = (
                     str(row.get('lot_no', '')),
@@ -546,7 +516,7 @@ class AllocationDialog:
                     str(row.get('sale_ref', '')),
                     str(row.get('outbound_date', '') or ''),
                     str(row.get('warehouse', '')),
-                    'SAMPLE' if _is_samp else 'PENDING',
+                    'PENDING',
                 )
             else:
                 vals = (
@@ -558,16 +528,9 @@ class AllocationDialog:
                     getattr(row, 'sale_ref', ''),
                     str(getattr(row, 'outbound_date', '') or ''),
                     getattr(row, 'warehouse', ''),
-                    'SAMPLE' if _is_samp else 'PENDING',
+                    'PENDING',
                 )
             self.tree.insert('', END, values=vals)
-        try:
-            _dk = is_dark()
-            self.tree.tag_configure('separator',
-                                    background=ThemeColors.get('bg_hover', _dk),
-                                    foreground=ThemeColors.get('accent', _dk))
-        except Exception:
-            pass
         if getattr(self, '_alloc_total_footer', None):
             self._alloc_total_footer.update_totals()
 
@@ -784,8 +747,7 @@ class AllocationDialog:
                 info_rows = self.engine.db.fetchall("PRAGMA table_info(allocation_plan)")
                 cols = {str(r.get('name', '')).strip().lower() for r in (info_rows or [])}
                 has_fp_col = 'source_fingerprint' in cols
-            except Exception as e:
-                logger.debug(f"[UI] source_fingerprint column check: {e}")
+            except Exception:
                 has_fp_col = False
 
             if source_fp and has_fp_col:
@@ -1222,8 +1184,7 @@ class AllocationDialog:
                 "WHERE status='RESERVED' AND tonbag_id IS NULL"
             )
             lot_mode_cnt = int(row.get('cnt', 0) if isinstance(row, dict) else (row[0] if row else 0))
-        except Exception as e:
-            logger.debug(f"[UI] lot mode count query: {e}")
+        except Exception:
             lot_mode_cnt = 0
 
         if lot_mode_cnt > 0:
@@ -1288,8 +1249,8 @@ class AllocationDialog:
                 )
                 if not proceed:
                     return
-        except Exception as e:
-            logger.debug(f"[UI] allocation pre-outbound check: {e}")
+        except Exception:
+            logger.debug("[SUPPRESSED] exception in allocation_dialog.py")  # noqa
 
         ok = CustomMessageBox.askyesno(
             self.dialog, "출고 확정",
@@ -1405,8 +1366,7 @@ class AllocationDialog:
             try:
                 info_rows = self.engine.db.fetchall("PRAGMA table_info(allocation_plan)")
                 plan_cols = {str(r.get('name', '')).strip().lower() for r in (info_rows or [])}
-            except Exception as e:
-                logger.debug(f"[UI] allocation plan cols check: {e}")
+            except Exception:
                 plan_cols = set()
             has_source_col = 'source' in plan_cols
 
@@ -1438,10 +1398,21 @@ class AllocationDialog:
             _cust_cb.grid(row=0, column=1, padx=4, pady=4, sticky="w")
             ttk.Label(filter_frm, text="LOT").grid(row=0, column=2, padx=4, pady=4, sticky="w")
             ttk.Entry(filter_frm, textvariable=lot_var, width=16).grid(row=0, column=3, padx=4, pady=4, sticky="w")
-            ttk.Label(filter_frm, text="시작일").grid(row=0, column=4, padx=4, pady=4, sticky="w")
-            ttk.Entry(filter_frm, textvariable=start_var, width=12).grid(row=0, column=5, padx=4, pady=4, sticky="w")
-            ttk.Label(filter_frm, text="종료일").grid(row=0, column=6, padx=4, pady=4, sticky="w")
-            ttk.Entry(filter_frm, textvariable=end_var, width=12).grid(row=0, column=7, padx=4, pady=4, sticky="w")
+            # v8.6.3: 공통 날짜 범위 바
+            _date_bar_frm = ttk.Frame(filter_frm)
+            _date_bar_frm.grid(row=0, column=4, columnspan=4, padx=4, pady=4, sticky="w")
+            try:
+                from ..utils.tree_enhancements import make_date_range_bar
+                _db, _sv_f, _sv_t = make_date_range_bar(
+                    _date_bar_frm, _fetch_rows, show_clear=False)
+                _db.pack(side=LEFT)
+                start_var.set(_sv_f.get()); end_var.set(_sv_t.get())
+                _sv_f.trace_add('write', lambda *_: start_var.set(_sv_f.get()))
+                _sv_t.trace_add('write', lambda *_: end_var.set(_sv_t.get()))
+            except Exception:
+                ttk.Entry(_date_bar_frm, textvariable=start_var, width=12).pack(side=LEFT, padx=2)
+                ttk.Label(_date_bar_frm, text="~").pack(side=LEFT, padx=2)
+                ttk.Entry(_date_bar_frm, textvariable=end_var, width=12).pack(side=LEFT, padx=2)
 
             cols = ('lot_no', 'customer', 'sale_ref', 'qty_mt', 'outbound_date', 'status', 'res_mode', 'plan_count', 'tb_count', 'created_at')
             hdrs = ('LOT NO', 'CUSTOMER', 'SALE REF', 'QTY(MT)', 'DATE', 'STATUS', 'MODE', 'PLANS', 'TONBAGS', 'CREATED')

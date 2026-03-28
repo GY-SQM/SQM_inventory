@@ -42,11 +42,11 @@ v3.8.4 - advanced_features_mixin에서 분리
 
 from gui_app_modular.utils.ui_constants import create_themed_toplevel  # v8.0.9
 from gui_app_modular.utils.ui_constants import tc
+from gui_app_modular.utils.excel_file_helper import open_file_default
 import logging
 import os
 import sqlite3
 
-from ..utils.excel_file_helper import open_file_default
 from ..utils.ui_constants import CustomMessageBox, apply_modal_window_options
 
 # v6.8.6: STATUS 상수 전역 import (L599 undefined name 수정)
@@ -499,8 +499,8 @@ class AdvancedDialogsMixin:
                         cell.border = thin
                 wb.save(file_path)
                 CustomMessageBox.showinfo(dialog, "완료", f"반품 양식 저장 완료\n\n{file_path}\n\n재고 리스트와 동일 형식 + 반품수량·사유. 필수만 채우면 됩니다.")
-                open_file_default(file_path)
                 self._log(f"📥 반품 양식 다운로드: {file_path}")
+                open_file_default(file_path)
             except (FileNotFoundError, OSError, PermissionError) as e:
                 CustomMessageBox.showerror(dialog, "오류", f"파일 저장 실패: {e}")
 
@@ -2088,8 +2088,17 @@ class AdvancedDialogsMixin:
         ttk.Label(frame, text="출고일 (YYYY-MM-DD):",
                   font=("Arial", 10)).grid(row=0, column=0, sticky=W, pady=6)
         date_var = tk.StringVar(value=date.today().strftime("%Y-%m-%d"))
-        ttk.Entry(frame, textvariable=date_var, width=20).grid(
-            row=0, column=1, sticky=W, pady=6)
+        _de_frame = ttk.Frame(frame)
+        _de_frame.grid(row=0, column=1, sticky=W, pady=6)
+        _de = ttk.Entry(_de_frame, textvariable=date_var, width=14)
+        _de.pack(side='left', padx=(0,2))
+        try:
+            from ..utils.tree_enhancements import show_date_calendar, attach_date_placeholder
+            attach_date_placeholder(_de, date_var)
+            ttk.Button(_de_frame, text="📅", width=3, command=lambda: show_date_calendar(
+                dialog, date_var.get(), lambda ymd: date_var.set(ymd)
+            )).pack(side='left')
+        except Exception: pass
 
         ttk.Label(frame, text="Sales Order No (선택):",
                   font=("Arial", 10)).grid(row=1, column=0, sticky=W, pady=6)
