@@ -20,6 +20,8 @@ A) Song 양식: Sheet1(Product 컬럼 없음) + 데이터 시트(Product 있음)
 B) Woo  양식: Sheet1 단일 시트, 5행 헤더, Balance/Export/Remark 추가 컬럼, 피벗 테이블 혼재
 C) 기존 양식: 1행 타이틀, 2행 무시, 3행 헤더, 4행~ 데이터
 D) 화주 원본: 1행 합계(숫자만), 2행 헤더, 3행~ 데이터
+E) Jakarta Trial: 타이틀 1행, 피벗 2행, 헤더 3행 — Date in stock/SALE REF 없음, Cleared 컬럼
+F) 통합 양식: 타이틀 N행 후 헤더 — 헤더 위 행 수 가변 (최대 20행까지 자동 탐색)
 """
 
 from engine_modules.constants import STATUS_SOLD
@@ -198,7 +200,7 @@ class AllocationParser:
 
         for sh in sheet_names:
             try:
-                df_sh = pd.read_excel(excel_path, sheet_name=sh, header=None, nrows=15)
+                df_sh = pd.read_excel(excel_path, sheet_name=sh, header=None, nrows=25)
             except Exception:
                 continue
 
@@ -207,7 +209,7 @@ class AllocationParser:
             has_product = False
             has_lot_data = False
 
-            for i in range(min(10, len(df_sh))):
+            for i in range(min(20, len(df_sh))):
                 row_vals = [str(v).strip().upper() for v in df_sh.iloc[i].values if pd.notna(v)]
                 row_str = ' '.join(row_vals)
 
@@ -331,29 +333,44 @@ class AllocationParser:
         """
         rows = []
 
-        # 헤더 행 찾기 - v2.6.0: LOT 컬럼만 있어도 헤더로 인정 (PRODUCT 필수 조건 제거)
+        # v8.6.3 [Case F]: 헤더 행 자동 탐색 — 최대 20행까지 스캔
+        # 헤더 위 타이틀/빈 행/피벗 행이 몇 줄이든 LOT+키워드 기반으로 자동 감지
         header_row_idx = None
-        for i in range(min(10, len(df))):
+        best_header_idx = None
+        best_header_score = 0
+
+        for i in range(min(20, len(df))):
             row_values = [str(v).strip().upper() for v in df.iloc[i].values if pd.notna(v)]
             row_str = ' '.join(row_values)
 
             has_lot_col = 'LOT' in row_str and 'SUB' not in row_str
             has_product_col = 'PRODUCT' in row_str
+            has_qty_col = 'QTY' in row_str or 'QUANTITY' in row_str or 'BALANCE' in row_str
+            has_sap_col = 'SAP' in row_str
+            has_wh_col = 'WH' in row_str or 'WAREHOUSE' in row_str
 
-            # v2.6.0: LOT+PRODUCT 둘 다 있으면 최우선 (점수 2)
-            #         LOT만 있어도 QTY나 SAP 등 다른 컬럼이 함께 있으면 헤더로 인정 (점수 1)
-            if has_lot_col and has_product_col:
-                header_row_idx = i
-                break
-            elif has_lot_col and ('QTY' in row_str or 'SAP' in row_str or STATUS_SOLD in row_str):
-                # Product 없는 Song Sheet1 양식 대응
-                header_row_idx = i
-                # break 하지 않고 계속 탐색 — 더 좋은 행(LOT+PRODUCT)이 있을 수 있음
-                # → 이미 _select_best_sheet에서 최적 시트를 골랐으므로 여기선 break
-                break
+            # 점수 산정: LOT 필수 + 보조 키워드 가점
+            if has_lot_col:
+                score = 1
+                if has_product_col:
+                    score += 2
+                if has_qty_col:
+                    score += 1
+                if has_sap_col:
+                    score += 1
+                if has_wh_col:
+                    score += 1
 
-        if header_row_idx is None:
-            # 화주 원본: 1행 합계(숫자만), 2행 헤더인 경우 — 2행을 헤더로 사용
+                if score > best_header_score:
+                    best_header_score = score
+                    best_header_idx = i
+
+        if best_header_idx is not None:
+            header_row_idx = best_header_idx
+            if best_header_idx > 5:
+                self.warnings.append(f"헤더 행을 {best_header_idx + 1}행에서 감지 (타이틀 {best_header_idx}행)")
+        else:
+            # 화주 원본: 1행 합계(숫자만), 2행 헤더인 경우
             if len(df) >= 2:
                 row0_str = ' '.join(str(v).strip() for v in df.iloc[0].values if pd.notna(v))
                 if re.match(r'^[\d\s.,]+$', row0_str.replace(' ', '')):
@@ -544,7 +561,7 @@ class AllocationParser:
             'lot_no': ['LOT_NO', 'LOT NO', 'LOTNO', 'LOT', 'LOT_NUMBER'],
             'sub_lt': ['SUB_LT', 'SUB LT', 'SUBLT', 'SUB_LOT', 'SUBLOT', 'TONBAG', '톤백', '톤백번호'],
             'warehouse': ['WAREHOUSE', 'WH', '창고', 'LOCATION'],
-            'customs': ['CUSTOMS', '통관', 'CUSTOMS_STATUS'],
+            'customs': ['CUSTOMS', '통관', 'CUSTOMS_STATUS', 'CLEARED'],
             'sold_to': ['SOLD_TO', 'SOLD TO', 'CUSTOMER', '고객', '거래처', 'BUYER'],
             'gw': ['GW', 'GROSS_WEIGHT', 'GROSS WEIGHT', '총중량'],
             'sale_ref': ['SALE_REF', 'SALE REF', 'SALEREF', 'SALE_REFERENCE'],
