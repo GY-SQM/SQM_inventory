@@ -52,7 +52,7 @@ class DashboardTabMixin:
         # v8.1.8: 표준 헤더
         try:
             from ..utils.ui_constants import make_tab_header
-            make_tab_header(self.tab_dashboard, "📊 Dashboard", status_color='#3b82f6')
+            make_tab_header(self.tab_dashboard, "", status_color='#3b82f6')  # v8.6.4: 헤더 텍스트 삭제
         except Exception as e:
             logger.warning(f'[UI] dashboard_tab: {e}')
         _d  = is_dark()
@@ -289,25 +289,27 @@ class DashboardTabMixin:
         product_frame = tk.Frame(zone3, bg=BG_CARD)
         product_frame.pack(fill=BOTH, expand=YES)
 
-        columns = ("product", "lots", "tonbag_kg", "tonbag_cnt",
+        # v8.6.4: 순번 + 컴팩트 열 폭 + 가운데 정렬
+        columns = ("no", "product", "lots", "tonbag_kg", "tonbag_cnt",
                    "sample_kg", "sample_cnt", "total_kg", "total_cnt")
         self.tree_dashboard_product = ttk.Treeview(
             product_frame, columns=columns,
             show="headings", height=Spacing.Tab.TREE_MIN_H,
         )
         col_defs = [
-            ("product",    "Product",    120, "w"),
-            ("lots",       "LOT수",       60, "center"),
-            ("tonbag_kg",  "톤백(kg)",   100, "e"),
-            ("tonbag_cnt", "톤백수",      60, "center"),
-            ("sample_kg",  "샘플(kg)",    80, "e"),
-            ("sample_cnt", "샘플수",      60, "center"),
-            ("total_kg",   "총무게(kg)", 110, "e"),
-            ("total_cnt",  "총개수",      60, "center"),
+            ("no",         "순번",       45,  "center"),
+            ("product",    "Product",   160, "w"),
+            ("lots",       "LOT수",      55,  "center"),
+            ("tonbag_kg",  "톤백(kg)",    85,  "e"),
+            ("tonbag_cnt", "톤백수",      55,  "center"),
+            ("sample_kg",  "샘플(kg)",    75,  "e"),
+            ("sample_cnt", "샘플수",      55,  "center"),
+            ("total_kg",   "총무게(kg)",  90,  "e"),
+            ("total_cnt",  "총개수",      55,  "center"),
         ]
         for cid, text, width, anchor in col_defs:
             self.tree_dashboard_product.heading(cid, text=text, anchor='center')
-            self.tree_dashboard_product.column(cid, width=width, anchor=anchor)
+            self.tree_dashboard_product.column(cid, width=width, anchor=anchor, stretch=False)
 
         prod_vsb = tk.Scrollbar(product_frame, orient='vertical',
                                  command=self.tree_dashboard_product.yview)
@@ -830,7 +832,7 @@ class DashboardTabMixin:
             sum_lots = sum_tb_kg = sum_tb_cnt = 0
             sum_sp_kg = sum_sp_cnt = sum_total_kg = sum_total_cnt = 0
 
-            for p in products:
+            for row_no, p in enumerate(products, 1):
                 name = p.get('product', 'Unknown') or 'Unknown'
                 lots = p.get('lot_count', 0)
                 tb_kg = p.get('tonbag_kg', 0)
@@ -841,7 +843,7 @@ class DashboardTabMixin:
                 t_cnt = p.get('total_cnt', 0)
 
                 self.tree_dashboard_product.insert('', END, values=(
-                    name, lots,
+                    row_no, name, lots,
                     f"{tb_kg:,.0f}", tb_cnt,
                     f"{sp_kg:,.0f}", sp_cnt,
                     f"{t_kg:,.0f}", t_cnt
@@ -855,7 +857,7 @@ class DashboardTabMixin:
             # 합계 행
             if products:
                 self.tree_dashboard_product.insert('', END, values=(
-                    '합계', sum_lots,
+                    len(products) + 1, '합계', sum_lots,
                     f"{sum_tb_kg:,.0f}", sum_tb_cnt,
                     f"{sum_sp_kg:,.0f}", sum_sp_cnt,
                     f"{sum_total_kg:,.0f}", sum_total_cnt
