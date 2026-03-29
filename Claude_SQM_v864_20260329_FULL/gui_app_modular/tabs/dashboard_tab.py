@@ -84,14 +84,14 @@ class DashboardTabMixin:
         }
 
         mc = tk.Frame(self.tab_dashboard, bg=BG)
-        mc.pack(fill=BOTH, expand=YES, padx=Spacing.Tab.OUTER_PADX, pady=(8, 12))
+        mc.pack(fill=BOTH, expand=YES, padx=Spacing.Tab.OUTER_PADX, pady=(12, 16))
         mc.columnconfigure(0, weight=1)
 
         # ══════════════════════════════════════════════════════════════
         # 1구역: 재고 상태 카드 5개 (상단 가로 한 줄)
         # ══════════════════════════════════════════════════════════════
         zone1 = tk.Frame(mc, bg=BG)
-        zone1.pack(fill=X, pady=(0, 4))
+        zone1.pack(fill=X, pady=(0, 10))
         zone1.columnconfigure(tuple(range(5)), weight=1)
         for i in range(5):
             zone1.columnconfigure(i, weight=1)
@@ -107,7 +107,7 @@ class DashboardTabMixin:
         for col_i, (key, title, color, subtitle) in enumerate(card_defs):
             card = self._create_dashboard_card(zone1, title, '0.0 MT', color, subtitle=subtitle)
             card.grid(row=0, column=col_i, sticky='nsew',
-                      padx=(0 if col_i == 0 else 4, 0), pady=0)
+                      padx=(0 if col_i == 0 else 8, 0), pady=0)
             self._dashboard_cards[key] = card
 
         # v8.6.4: 테마 리프레시 이후 카드 색상 강제 재적용
@@ -123,7 +123,7 @@ class DashboardTabMixin:
 
         # TOTAL 바
         total_bar = tk.Frame(mc, bg=BG2)
-        total_bar.pack(fill=X, pady=(0, 6))
+        total_bar.pack(fill=X, pady=(4, 12))
         self._dashboard_total_label = tk.Label(
             total_bar,
             text="TOTAL: 계산 중...",
@@ -138,7 +138,7 @@ class DashboardTabMixin:
         # 2구역: 정합성 신호등(좌) + 알림 패널(우)
         # ══════════════════════════════════════════════════════════════
         zone2 = tk.Frame(mc, bg=BG)
-        zone2.pack(fill=X, pady=(0, 6))
+        zone2.pack(fill=X, pady=(0, 12))
 
         # ── 좌: 정합성 신호등 ─────────────────────────────────────────
         integrity_outer = tk.Frame(zone2, bg=BORDER, bd=0)
@@ -265,7 +265,7 @@ class DashboardTabMixin:
         # 3구역: 제품별 현황 테이블 (하단 전체 너비)
         # ══════════════════════════════════════════════════════════════
         zone3 = tk.Frame(mc, bg=BG)
-        zone3.pack(fill=BOTH, expand=YES)
+        zone3.pack(fill=BOTH, expand=YES, pady=(8, 0))
 
         # 섹션 헤더 + 라디오
         z3_hdr = tk.Frame(zone3, bg=BG2)
