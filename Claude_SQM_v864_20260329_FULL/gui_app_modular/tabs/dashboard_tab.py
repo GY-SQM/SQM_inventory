@@ -95,7 +95,7 @@ class DashboardTabMixin:
 
         z1_hdr = tk.Frame(zone1, bg=BG2)
         z1_hdr.pack(fill=X, pady=(0, 4))
-        tk.Label(z1_hdr, text="제품별 재고 현황",
+        tk.Label(z1_hdr, text="재고 및 확인",
                  bg=BG2, fg=FG,
                  font=('맑은 고딕', 13, 'bold'),
                  anchor='w', padx=12, pady=6).pack(side=LEFT)
@@ -113,27 +113,33 @@ class DashboardTabMixin:
         product_frame = tk.Frame(zone1, bg=BG_CARD)
         product_frame.pack(fill=X)
 
+        # v8.6.4: 재고 + 정합성 통합 테이블
         columns = ("product", "available", "reserved", "picked",
-                   "outbound", "return", "total", "sample")
+                   "outbound", "return", "total", "sample",
+                   "int_inbound", "int_current", "int_outbound", "int_diff", "int_status")
         self.tree_dashboard_product = ttk.Treeview(
             product_frame, columns=columns,
             show="headings", height=6,
         )
-        # v8.6.4: 큰 글씨 스타일
         _matrix_style = ttk.Style()
-        _matrix_style.configure('Matrix.Treeview', font=('맑은 고딕', 12), rowheight=36)
-        _matrix_style.configure('Matrix.Treeview.Heading', font=('맑은 고딕', 11, 'bold'))
+        _matrix_style.configure('Matrix.Treeview', font=('맑은 고딕', 11), rowheight=34)
+        _matrix_style.configure('Matrix.Treeview.Heading', font=('맑은 고딕', 10, 'bold'))
         self.tree_dashboard_product.configure(style='Matrix.Treeview')
 
         col_defs = [
-            ("product",   "Product",      170, "center"),
-            ("available", "판매가능",       110, "center"),
-            ("reserved",  "판매배정",       110, "center"),
-            ("picked",    "판매화물",       110, "center"),
-            ("outbound",  "출고완료",       110, "center"),
-            ("return",    "반품대기",       100, "center"),
-            ("total",     "합계",          110, "center"),
-            ("sample",    "샘플",           70,  "center"),
+            ("product",      "Product",  130, "center"),
+            ("available",    "판매가능",   75, "center"),
+            ("reserved",     "판매배정",   75, "center"),
+            ("picked",       "판매화물",   75, "center"),
+            ("outbound",     "출고완료",   75, "center"),
+            ("return",       "반품대기",   70, "center"),
+            ("total",        "합계",       80, "center"),
+            ("sample",       "샘플",       50, "center"),
+            ("int_inbound",  "입고",       70, "center"),
+            ("int_current",  "현재",       70, "center"),
+            ("int_outbound", "출고(확인)", 75, "center"),
+            ("int_diff",     "차이",       60, "center"),
+            ("int_status",   "상태",       40, "center"),
         ]
         for cid, text, width, anchor in col_defs:
             self.tree_dashboard_product.heading(cid, text=text, anchor='center')
@@ -145,7 +151,6 @@ class DashboardTabMixin:
         self.tree_dashboard_product.pack(side=LEFT, fill=X, expand=YES)
         prod_vsb.pack(side=RIGHT, fill=Y)
 
-        # 카드 호환 (기존 _refresh_dashboard_cards 호출 방지)
         self._dashboard_cards = {}
         self._dashboard_total_label = None
         self._dash_product_footer = None
@@ -156,98 +161,17 @@ class DashboardTabMixin:
         zone2 = tk.Frame(mc, bg=BG)
         zone2.pack(fill=X, pady=(0, 12))
 
-        # ── 좌: 정합성 신호등 ─────────────────────────────────────────
-        integrity_outer = tk.Frame(zone2, bg=BORDER, bd=0)
-        integrity_outer.pack(side=LEFT, fill=Y, padx=(0, 4))
-        integrity_inner = tk.Frame(integrity_outer, bg=BG_CARD, padx=12, pady=10)
-        integrity_inner.pack(fill=BOTH, expand=YES, padx=1, pady=1)
+        # v8.6.4: 정합성 패널 삭제 (매트릭스 테이블에 통합)
+        # 정합성 위젯 호환용 더미
+        self._integrity_signal_dot = tk.Label(zone2, text='')
+        self._integrity_signal_label = tk.Label(zone2, text='')
+        self._integrity_signal_sub = tk.Label(zone2, text='')
+        self._int_label_total = tk.Label(zone2, text='')
+        self._int_label_cur = tk.Label(zone2, text='')
+        self._int_label_out = tk.Label(zone2, text='')
+        self._int_label_diff = tk.Label(zone2, text='')
 
-        # 헤더
-        tk.Label(integrity_inner,
-                 text="INTEGRITY CHECK  재고 정합성",
-                 bg=BG_CARD, fg=FG_MUTED,
-                 font=('맑은 고딕', 9, 'bold'),
-                 anchor='w').pack(fill=X, pady=(0, 8))
-
-        # 신호등 행
-        sig_row = tk.Frame(integrity_inner, bg=BG_CARD)
-        sig_row.pack(fill=X, pady=(0, 8))
-
-        # 신호등 도트 (크게)
-        self._integrity_signal_dot = tk.Label(
-            sig_row, text='🟢',
-            font=('맑은 고딕', 22),
-            bg=BG_CARD,
-        )
-        self._integrity_signal_dot.pack(side=LEFT, padx=(0, 10))
-
-        sig_text = tk.Frame(sig_row, bg=BG_CARD)
-        sig_text.pack(side=LEFT, fill=X, expand=YES)
-        self._integrity_signal_label = tk.Label(
-            sig_text, text='정합성 OK',
-            bg=BG_CARD, fg=SUCCESS,
-            font=('맑은 고딕', 14, 'bold'), anchor='w',
-        )
-        self._integrity_signal_label.pack(fill=X)
-        self._integrity_signal_sub = tk.Label(
-            sig_text, text='총입고 = 현재재고 + 출고누계',
-            bg=BG_CARD, fg=FG_MUTED,
-            font=('맑은 고딕', 9), anchor='w',
-        )
-        self._integrity_signal_sub.pack(fill=X)
-
-        # 총합 수치 행
-        int_rows = [
-            ('총입고(누계)', '_int_label_total'),
-            ('현재재고',     '_int_label_cur'),
-            ('출고누계',     '_int_label_out'),
-            ('차이',         '_int_label_diff'),
-        ]
-        for row_title, attr in int_rows:
-            row_f = tk.Frame(integrity_inner, bg=BG_CARD)
-            row_f.pack(fill=X, pady=1)
-            tk.Frame(row_f, bg=BORDER, height=1).pack(fill=X, side=TOP)
-            lbl_f = tk.Frame(row_f, bg=BG_CARD)
-            lbl_f.pack(fill=X, pady=2)
-            tk.Label(lbl_f, text=row_title, bg=BG_CARD, fg=FG_MUTED,
-                     font=('맑은 고딕', 10), width=12, anchor='w').pack(side=LEFT)
-            val_lbl = tk.Label(lbl_f, text='—', bg=BG_CARD, fg=FG,
-                               font=('맑은 고딕', 11, 'bold'), anchor='e')
-            val_lbl.pack(side=RIGHT)
-            setattr(self, attr, val_lbl)
-
-        # v8.6.4: 제품별 정합성 테이블
-        tk.Frame(integrity_inner, bg=BORDER, height=1).pack(fill=X, pady=(6, 4))
-        tk.Label(integrity_inner, text="제품별 정합성",
-                 bg=BG_CARD, fg=FG_MUTED,
-                 font=('맑은 고딕', 9, 'bold'), anchor='w').pack(fill=X)
-        _int_tree_frame = tk.Frame(integrity_inner, bg=BG_CARD)
-        _int_tree_frame.pack(fill=BOTH, expand=YES, pady=(2, 0))
-        _int_cols = ("product", "inbound", "current", "outbound", "diff", "status")
-        self._integrity_product_tree = ttk.Treeview(
-            _int_tree_frame, columns=_int_cols, show="headings", height=4,
-        )
-        for cid, text, w in [
-            ("product", "Product", 100), ("inbound", "입고", 65),
-            ("current", "현재", 65), ("outbound", "출고", 65),
-            ("diff", "차이", 60), ("status", "상태", 50),
-        ]:
-            self._integrity_product_tree.heading(cid, text=text, anchor='center')
-            self._integrity_product_tree.column(cid, width=w, anchor='center', stretch=False)
-        self._integrity_product_tree.pack(fill=BOTH, expand=YES)
-
-        # 드릴다운 버튼
-        tk.Button(
-            integrity_inner,
-            text='🔍 불일치 LOT 상세 보기',
-            bg=BG2, fg=FG2,
-            font=('맑은 고딕', 9),
-            relief='flat', bd=0, cursor='hand2',
-            padx=8, pady=4,
-            command=self._on_integrity_drill_down,
-        ).pack(fill=X, pady=(8, 0))
-
-        # ── 우: 알림 패널 ─────────────────────────────────────────────
+        # ── 알림 패널 (전체 너비) ─────────────────────────────────────
         alert_outer = tk.Frame(zone2, bg=BORDER, bd=0)
         alert_outer.pack(side=LEFT, fill=BOTH, expand=YES)
         alert_inner = tk.Frame(alert_outer, bg=BG_CARD)
@@ -906,16 +830,52 @@ class DashboardTabMixin:
                 if mapped:
                     lot_data[prod][f'{mapped}_lot'] += cnt
 
+            # v8.6.4: 정합성 데이터 조회 (제품별)
+            int_data = {}
+            try:
+                _int_rows = db.fetchall("""
+                    SELECT
+                        COALESCE(i.product, 'Unknown') AS product,
+                        COALESCE(SUM(i.initial_weight),0) AS inbound_kg,
+                        COALESCE(SUM(CASE WHEN ta.cur_kg IS NOT NULL THEN ta.cur_kg ELSE 0 END),0) AS current_kg,
+                        COALESCE(SUM(CASE WHEN ta.out_kg IS NOT NULL THEN ta.out_kg ELSE 0 END),0) AS outbound_kg
+                    FROM inventory i
+                    LEFT JOIN (
+                        SELECT lot_no,
+                            SUM(CASE WHEN status IN ('AVAILABLE','RESERVED','PICKED') THEN weight ELSE 0 END) AS cur_kg,
+                            SUM(CASE WHEN status IN ('OUTBOUND','SHIPPED','SOLD') THEN weight ELSE 0 END) AS out_kg
+                        FROM inventory_tonbag GROUP BY lot_no
+                    ) ta ON i.lot_no = ta.lot_no
+                    GROUP BY COALESCE(i.product, 'Unknown')
+                """)
+                for ir in (_int_rows or []):
+                    pn = ir.get('product', 'Unknown') or 'Unknown'
+                    int_data[pn] = {
+                        'inbound': float(ir.get('inbound_kg', 0) or 0),
+                        'current': float(ir.get('current_kg', 0) or 0),
+                        'outbound': float(ir.get('outbound_kg', 0) or 0),
+                    }
+            except Exception:
+                pass
+
             # 표시
             STATUSES = ['available', 'reserved', 'picked', 'outbound', 'return']
             sums_kg = {s: 0.0 for s in STATUSES}
             sums_tb = {s: 0 for s in STATUSES}
             sums_lot = {s: 0 for s in STATUSES}
             total_sample = 0
+            sums_int = {'inbound': 0.0, 'current': 0.0, 'outbound': 0.0}
 
             for prod_name in sorted(products.keys()):
                 p = products[prod_name]
                 ld = lot_data.get(prod_name, {})
+                # 정합성 값
+                _id = int_data.get(prod_name, {})
+                _inb = _id.get('inbound', 0) / 1000
+                _cur = _id.get('current', 0) / 1000
+                _out = _id.get('outbound', 0) / 1000
+                _dif = _inb - _cur - _out
+                _st = '✅' if abs(_dif) < 0.01 else '❌'
 
                 if mode == 'mt':
                     total = sum(p[f'{s}_kg'] for s in STATUSES)
@@ -923,23 +883,29 @@ class DashboardTabMixin:
                             f"{p['available_kg']/1000:,.1f}", f"{p['reserved_kg']/1000:,.1f}",
                             f"{p['picked_kg']/1000:,.1f}", f"{p['outbound_kg']/1000:,.1f}",
                             f"{p['return_kg']/1000:,.1f}", f"{total/1000:,.1f}",
-                            p['sample_cnt'])
+                            p['sample_cnt'],
+                            f"{_inb:,.1f}", f"{_cur:,.1f}", f"{_out:,.1f}", f"{_dif:+.1f}", _st)
                 elif mode == 'lot':
                     total = sum(ld.get(f'{s}_lot', 0) for s in STATUSES)
                     vals = (prod_name,
                             ld.get('available_lot', 0), ld.get('reserved_lot', 0),
                             ld.get('picked_lot', 0), ld.get('outbound_lot', 0),
                             ld.get('return_lot', 0), total,
-                            p['sample_cnt'])
+                            p['sample_cnt'],
+                            f"{_inb:,.1f}", f"{_cur:,.1f}", f"{_out:,.1f}", f"{_dif:+.1f}", _st)
                 else:  # tonbag
                     total = sum(p[f'{s}_tb'] for s in STATUSES)
                     vals = (prod_name,
                             p['available_tb'], p['reserved_tb'],
                             p['picked_tb'], p['outbound_tb'],
                             p['return_tb'], total,
-                            p['sample_cnt'])
+                            p['sample_cnt'],
+                            f"{_inb:,.1f}", f"{_cur:,.1f}", f"{_out:,.1f}", f"{_dif:+.1f}", _st)
 
                 tree.insert('', END, values=vals)
+                sums_int['inbound'] += _inb
+                sums_int['current'] += _cur
+                sums_int['outbound'] += _out
 
                 for s in STATUSES:
                     sums_kg[s] += p[f'{s}_kg']
@@ -947,7 +913,12 @@ class DashboardTabMixin:
                     sums_lot[s] += lot_data.get(prod_name, {}).get(f'{s}_lot', 0)
                 total_sample += p['sample_cnt']
 
-            # 합계 행
+            # 합계 행 (정합성 합계 포함)
+            _si = sums_int
+            _total_dif = _si['inbound'] - _si['current'] - _si['outbound']
+            _total_st = '✅' if abs(_total_dif) < 0.01 else '❌'
+            _int_tail = (f"{_si['inbound']:,.1f}", f"{_si['current']:,.1f}",
+                         f"{_si['outbound']:,.1f}", f"{_total_dif:+.1f}", _total_st)
             if products:
                 if mode == 'mt':
                     total_all = sum(sums_kg[s] for s in STATUSES)
@@ -956,7 +927,7 @@ class DashboardTabMixin:
                         f"{sums_kg['available']/1000:,.1f}", f"{sums_kg['reserved']/1000:,.1f}",
                         f"{sums_kg['picked']/1000:,.1f}", f"{sums_kg['outbound']/1000:,.1f}",
                         f"{sums_kg['return']/1000:,.1f}", f"{total_all/1000:,.1f}",
-                        total_sample,
+                        total_sample, *_int_tail,
                     ), tags=('total',))
                 elif mode == 'lot':
                     total_all = sum(sums_lot[s] for s in STATUSES)
@@ -965,7 +936,7 @@ class DashboardTabMixin:
                         sums_lot['available'], sums_lot['reserved'],
                         sums_lot['picked'], sums_lot['outbound'],
                         sums_lot['return'], total_all,
-                        total_sample,
+                        total_sample, *_int_tail,
                     ), tags=('total',))
                 else:
                     total_all = sum(sums_tb[s] for s in STATUSES)
@@ -974,9 +945,9 @@ class DashboardTabMixin:
                         sums_tb['available'], sums_tb['reserved'],
                         sums_tb['picked'], sums_tb['outbound'],
                         sums_tb['return'], total_all,
-                        total_sample,
+                        total_sample, *_int_tail,
                     ), tags=('total',))
-                tree.tag_configure('total', font=('맑은 고딕', 12, 'bold'))
+                tree.tag_configure('total', font=('맑은 고딕', 11, 'bold'))
 
         except Exception as e:
             logger.error(f"제품×상태 매트릭스 오류: {e}")
