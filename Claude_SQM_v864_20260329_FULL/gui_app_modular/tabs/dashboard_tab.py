@@ -222,12 +222,13 @@ class DashboardTabMixin:
         alert_hdr.pack(fill=X)
         tk.Label(alert_hdr, text="⚠️  ALERTS  알림 및 경고",
                  bg=BG2, fg=FG_MUTED,
-                 font=('맑은 고딕', 9, 'bold'),
+                 font=('맑은 고딕', 12, 'bold'),
                  anchor='w', padx=10, pady=6).pack(side=LEFT)
         self._alert_count_label = tk.Label(
             alert_hdr, text='', bg=BG2, fg=DANGER,
-            font=('맑은 고딕', 9, 'bold'), padx=8,
+            font=('맑은 고딕', 12, 'bold'), padx=8,
         )
+        self._alert_count_label._tc_skip = True
         self._alert_count_label.pack(side=RIGHT)
 
         # 알림 리스트박스
@@ -236,7 +237,7 @@ class DashboardTabMixin:
         self.alert_listbox = tk.Listbox(
             alert_list_frame,
             bg=BG_CARD, fg=FG,
-            font=('맑은 고딕', 10),
+            font=('맑은 고딕', 13),
             selectmode='single',
             relief='flat', bd=0,
             activestyle='none',
