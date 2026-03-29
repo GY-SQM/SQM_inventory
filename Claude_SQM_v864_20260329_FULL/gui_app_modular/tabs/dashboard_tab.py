@@ -268,16 +268,17 @@ class DashboardTabMixin:
         zone3 = tk.Frame(mc, bg=BG)
         zone3.pack(fill=BOTH, expand=YES, pady=(8, 0))
 
-        # 섹션 헤더 + 라디오
+        # v8.6.4: 제품×상태 매트릭스 테이블 (통합 뷰)
         z3_hdr = tk.Frame(zone3, bg=BG2)
         z3_hdr.pack(fill=X, pady=(0, 4))
-        tk.Label(z3_hdr, text="PRODUCT SUMMARY  제품별 현황",
+        tk.Label(z3_hdr, text="제품별 재고 현황",
                  bg=BG2, fg=FG_MUTED,
-                 font=('맑은 고딕', 9, 'bold'),
+                 font=('맑은 고딕', 11, 'bold'),
                  anchor='w', padx=10, pady=5).pack(side=LEFT)
 
-        self._dash_view_mode = tk.StringVar(value='lot')
-        for val, lbl in (('lot', '📦 LOT 단위'), ('tonbag', '🎒 톤백 상세')):
+        # MT/LOT/톤백 전환
+        self._dash_view_mode = tk.StringVar(value='mt')
+        for val, lbl in (('mt', '📊 MT'), ('lot', '📦 LOT'), ('tonbag', '🎒 톤백')):
             tk.Radiobutton(
                 z3_hdr, text=lbl, variable=self._dash_view_mode,
                 value=val, command=self._refresh_dashboard_products,
@@ -286,28 +287,32 @@ class DashboardTabMixin:
                 font=('맑은 고딕', 10),
             ).pack(side=RIGHT, padx=4)
 
-        # 제품별 트리뷰
         product_frame = tk.Frame(zone3, bg=BG_CARD)
         product_frame.pack(fill=BOTH, expand=YES)
 
-        # v8.6.4: 순번 + 컴팩트 열 폭 + 가운데 정렬
-        columns = ("no", "product", "lots", "tonbag_kg", "tonbag_cnt",
-                   "sample_kg", "sample_cnt", "total_kg", "total_cnt")
+        columns = ("product", "available", "reserved", "picked",
+                   "outbound", "return", "total", "sample")
         self.tree_dashboard_product = ttk.Treeview(
             product_frame, columns=columns,
             show="headings", height=Spacing.Tab.TREE_MIN_H,
         )
         col_defs = [
-            ("no",         "순번",       45,  "center"),
-            ("product",    "Product",   160, "w"),
-            ("lots",       "LOT수",      55,  "center"),
-            ("tonbag_kg",  "톤백(kg)",    85,  "e"),
-            ("tonbag_cnt", "톤백수",      55,  "center"),
-            ("sample_kg",  "샘플(kg)",    75,  "e"),
-            ("sample_cnt", "샘플수",      55,  "center"),
-            ("total_kg",   "총무게(kg)",  90,  "e"),
-            ("total_cnt",  "총개수",      55,  "center"),
+            ("product",   "Product",      160, "w"),
+            ("available", "판매가능",       90,  "e"),
+            ("reserved",  "판매배정",       90,  "e"),
+            ("picked",    "판매화물",       90,  "e"),
+            ("outbound",  "출고완료",       90,  "e"),
+            ("return",    "반품대기",       90,  "e"),
+            ("total",     "합계",          100, "e"),
+            ("sample",    "샘플",           70,  "center"),
         ]
+        _status_colors = {
+            'available': CARD_COLORS['available'],
+            'reserved':  CARD_COLORS['reserved'],
+            'picked':    CARD_COLORS['picked'],
+            'outbound':  CARD_COLORS['sold'],
+            'return':    CARD_COLORS['return'],
+        }
         for cid, text, width, anchor in col_defs:
             self.tree_dashboard_product.heading(cid, text=text, anchor='center')
             self.tree_dashboard_product.column(cid, width=width, anchor=anchor, stretch=False)
@@ -317,23 +322,7 @@ class DashboardTabMixin:
         self.tree_dashboard_product.configure(yscrollcommand=prod_vsb.set)
         self.tree_dashboard_product.pack(side=LEFT, fill=BOTH, expand=YES)
         prod_vsb.pack(side=RIGHT, fill=Y)
-
-        # Footer 합계
-        try:
-            from ..utils.tree_enhancements import TreeviewTotalFooter as _TTF
-            self._dash_product_footer = _TTF(
-                zone3, self.tree_dashboard_product,
-                summable_column_ids=['tonbag_kg', 'sample_kg', 'total_kg'],
-                column_display_names={
-                    'tonbag_kg': '톤백(kg)',
-                    'sample_kg': '샘플(kg)',
-                    'total_kg':  '총무게(kg)',
-                },
-                column_formats={'tonbag_kg': ',.0f', 'sample_kg': ',.0f', 'total_kg': ',.0f'},
-            )
-            self._dash_product_footer.pack(fill=X)
-        except Exception:
-            self._dash_product_footer = None
+        self._dash_product_footer = None
 
         # 자동새로고침 체크박스
         auto_bar = tk.Frame(mc, bg=BG)
@@ -815,58 +804,130 @@ class DashboardTabMixin:
             logger.error(f"알림 새로고침 오류: {e}")
 
     def _refresh_dashboard_products(self) -> None:
-        """v4.0.5 Phase3: 제품별 현황 — 톤백/샘플 구분"""
+        """v8.6.4: 제품×상태 매트릭스 — MT/LOT/톤백 전환 가능."""
         from ..utils.constants import END
 
         try:
             if not hasattr(self, 'tree_dashboard_product'):
                 return
-            self.tree_dashboard_product.delete(*self.tree_dashboard_product.get_children())
+            tree = self.tree_dashboard_product
+            tree.delete(*tree.get_children())
 
-            # v3.8.7: 톤백 데이터 유무에 따라 라디오 메뉴 표시/숨김
-            self._update_dash_tonbag_visibility()
+            mode = getattr(self, '_dash_view_mode', None)
+            mode = mode.get() if mode else 'mt'
 
-            # v4.0.5: 제품별 톤백/샘플 구분 통계
-            products = self._get_product_tonbag_sample_breakdown()
+            # DB에서 제품×상태별 데이터 조회
+            db = getattr(self, 'engine', None)
+            if db:
+                db = getattr(db, 'db', db)
+            if not db:
+                return
 
-            # 합계용
-            sum_lots = sum_tb_kg = sum_tb_cnt = 0
-            sum_sp_kg = sum_sp_cnt = sum_total_kg = sum_total_cnt = 0
+            # 제품별 상태별 집계
+            rows = db.fetchall("""
+                SELECT
+                    COALESCE(i.product, 'Unknown') AS product,
+                    t.status,
+                    COALESCE(t.is_sample, 0) AS is_sample,
+                    COUNT(*) AS cnt,
+                    COALESCE(SUM(t.weight), 0) AS kg
+                FROM inventory_tonbag t
+                LEFT JOIN inventory i ON t.lot_no = i.lot_no
+                GROUP BY COALESCE(i.product, 'Unknown'), t.status, COALESCE(t.is_sample, 0)
+            """)
 
-            for row_no, p in enumerate(products, 1):
-                name = p.get('product', 'Unknown') or 'Unknown'
-                lots = p.get('lot_count', 0)
-                tb_kg = p.get('tonbag_kg', 0)
-                tb_cnt = p.get('tonbag_cnt', 0)
-                sp_kg = p.get('sample_kg', 0)
-                sp_cnt = p.get('sample_cnt', 0)
-                t_kg = p.get('total_kg', 0)
-                t_cnt = p.get('total_cnt', 0)
+            # 매트릭스 구성
+            products = {}
+            status_map = {
+                'AVAILABLE': 'available', 'RESERVED': 'reserved',
+                'PICKED': 'picked', 'OUTBOUND': 'outbound', 'SHIPPED': 'outbound',
+                'SOLD': 'outbound', 'RETURNED': 'return', 'RETURN': 'return',
+            }
+            for r in (rows or []):
+                prod = r.get('product', 'Unknown') or 'Unknown'
+                status = str(r.get('status', '')).upper()
+                is_samp = int(r.get('is_sample', 0) or 0)
+                cnt = int(r.get('cnt', 0) or 0)
+                kg = float(r.get('kg', 0) or 0)
 
-                self.tree_dashboard_product.insert('', END, values=(
-                    row_no, name, lots,
-                    f"{tb_kg:,.0f}", tb_cnt,
-                    f"{sp_kg:,.0f}", sp_cnt,
-                    f"{t_kg:,.0f}", t_cnt
-                ))
+                if prod not in products:
+                    products[prod] = {
+                        'available': 0, 'reserved': 0, 'picked': 0,
+                        'outbound': 0, 'return': 0, 'sample_cnt': 0, 'sample_kg': 0,
+                        'available_cnt': 0, 'reserved_cnt': 0, 'picked_cnt': 0,
+                        'outbound_cnt': 0, 'return_cnt': 0,
+                    }
+                p = products[prod]
+                mapped = status_map.get(status, '')
+                if is_samp:
+                    p['sample_cnt'] += cnt
+                    p['sample_kg'] += kg
+                elif mapped:
+                    p[mapped] += kg
+                    p[f'{mapped}_cnt'] += cnt
 
-                sum_lots += lots
-                sum_tb_kg += tb_kg; sum_tb_cnt += tb_cnt
-                sum_sp_kg += sp_kg; sum_sp_cnt += sp_cnt
-                sum_total_kg += t_kg; sum_total_cnt += t_cnt
+            # 표시
+            sums = {k: 0 for k in ['available', 'reserved', 'picked', 'outbound', 'return',
+                                    'total', 'sample']}
+            for prod_name in sorted(products.keys()):
+                p = products[prod_name]
+                total_kg = sum(p[s] for s in ['available', 'reserved', 'picked', 'outbound', 'return'])
+                total_cnt = sum(p[f'{s}_cnt'] for s in ['available', 'reserved', 'picked', 'outbound', 'return'])
+
+                if mode == 'mt':
+                    vals = (prod_name,
+                            f"{p['available']/1000:,.1f}", f"{p['reserved']/1000:,.1f}",
+                            f"{p['picked']/1000:,.1f}", f"{p['outbound']/1000:,.1f}",
+                            f"{p['return']/1000:,.1f}", f"{total_kg/1000:,.1f}",
+                            p['sample_cnt'])
+                elif mode == 'lot':
+                    vals = (prod_name,
+                            p['available_cnt'], p['reserved_cnt'],
+                            p['picked_cnt'], p['outbound_cnt'],
+                            p['return_cnt'], total_cnt,
+                            p['sample_cnt'])
+                else:  # tonbag
+                    vals = (prod_name,
+                            p['available_cnt'], p['reserved_cnt'],
+                            p['picked_cnt'], p['outbound_cnt'],
+                            p['return_cnt'], total_cnt,
+                            p['sample_cnt'])
+
+                tree.insert('', END, values=vals)
+
+                sums['available'] += p['available']
+                sums['reserved'] += p['reserved']
+                sums['picked'] += p['picked']
+                sums['outbound'] += p['outbound']
+                sums['return'] += p['return']
+                sums['total'] += total_kg
+                sums['sample'] += p['sample_cnt']
 
             # 합계 행
             if products:
-                self.tree_dashboard_product.insert('', END, values=(
-                    len(products) + 1, '합계', sum_lots,
-                    f"{sum_tb_kg:,.0f}", sum_tb_cnt,
-                    f"{sum_sp_kg:,.0f}", sum_sp_cnt,
-                    f"{sum_total_kg:,.0f}", sum_total_cnt
-                ), tags=('total',))
-                self.tree_dashboard_product.tag_configure('total', font=('', 13, 'bold'))
+                if mode == 'mt':
+                    tree.insert('', END, values=(
+                        '합계',
+                        f"{sums['available']/1000:,.1f}", f"{sums['reserved']/1000:,.1f}",
+                        f"{sums['picked']/1000:,.1f}", f"{sums['outbound']/1000:,.1f}",
+                        f"{sums['return']/1000:,.1f}", f"{sums['total']/1000:,.1f}",
+                        int(sums['sample']),
+                    ), tags=('total',))
+                else:
+                    tree.insert('', END, values=(
+                        '합계',
+                        sum(products[p]['available_cnt'] for p in products),
+                        sum(products[p]['reserved_cnt'] for p in products),
+                        sum(products[p]['picked_cnt'] for p in products),
+                        sum(products[p]['outbound_cnt'] for p in products),
+                        sum(products[p]['return_cnt'] for p in products),
+                        sum(sum(products[p][f'{s}_cnt'] for s in ['available','reserved','picked','outbound','return']) for p in products),
+                        int(sums['sample']),
+                    ), tags=('total',))
+                tree.tag_configure('total', font=('맑은 고딕', 11, 'bold'))
 
-        except (ValueError, TypeError, AttributeError) as e:
-            logger.error(f"제품 현황 오류: {e}")
+        except Exception as e:
+            logger.error(f"제품×상태 매트릭스 오류: {e}")
 
 
     def _refresh_dashboard_chart(self) -> None:
