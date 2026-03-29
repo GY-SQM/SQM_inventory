@@ -745,7 +745,9 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 height=18, selectmode='extended',
                 style='Preview.Treeview'
             )
-            self.tree._disable_global_editable = True
+            # v8.6.4: 파싱 결과 수동 편집 활성화 (더블클릭 + Ctrl+C/V)
+            self.tree._enable_global_editable = True
+            self.tree._on_tree_data_changed = self._sync_tree_edit_to_preview_data
             self.tree.tag_configure('odd', background=ThemeColors.get('tree_stripe', _tree_dark), foreground=_tree_fg)
             self.tree.tag_configure('even', background=ThemeColors.get('bg_card', _tree_dark), foreground=_tree_fg)
             self.tree.tag_configure('edited', background=ThemeColors.get('warning', _tree_dark), foreground=_tree_fg)
@@ -3381,6 +3383,32 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         ordered = [deepcopy(rows[i]) for i in indices if 0 <= i < len(rows)]
         self._log_safe(f"📌 DB 업로드 순서: 화면 정렬/필터 순서 적용 ({len(ordered)}건)")
         return ordered
+
+    def _sync_tree_edit_to_preview_data(self) -> None:
+        """v8.6.4: GlobalEditableTree 편집 후 preview_data 동기화.
+
+        트리뷰에서 수정된 값을 preview_data에 반영하여
+        DB 업로드 시 수정된 값이 사용되도록 함.
+        """
+        if not hasattr(self, 'tree') or not hasattr(self, 'preview_data'):
+            return
+        try:
+            columns = [c for c, *_ in getattr(self, 'PREVIEW_COLUMNS', [])]
+            if not columns:
+                columns = list(self.tree['columns'])
+            for item_id in self.tree.get_children():
+                values = self.tree.item(item_id, 'values')
+                # preview_data 인덱스 찾기
+                idx = list(self.tree.get_children()).index(item_id)
+                if idx < len(self.preview_data):
+                    row = self.preview_data[idx]
+                    if isinstance(row, dict):
+                        for ci, col_id in enumerate(columns):
+                            if ci < len(values):
+                                row[col_id] = values[ci]
+            logger.debug(f"[v8.6.4] preview_data 동기화 완료: {len(self.preview_data)}행")
+        except Exception as e:
+            logger.debug(f"[v8.6.4] preview_data 동기화 스킵: {e}")
 
     def _setup_preview_edit_bindings(self) -> None:
         """업로드1 미리보기: 엑셀형 셀 편집/복사/붙여넣기 바인딩."""

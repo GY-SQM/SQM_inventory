@@ -95,8 +95,8 @@ class ManualInboundPreviewDialog:
         self.tree = ttk.Treeview(
             tree_frame, columns=self.DISPLAY_COLS, show='headings', height=18
         )
-        # 자체 인라인 편집 로직 사용(전역 editable 훅 중복 방지)
-        self.tree._disable_global_editable = True
+        # v8.6.4: 파싱 결과 수동 편집 활성화 (더블클릭 + Ctrl+C/V)
+        self.tree._enable_global_editable = True
         for cid, hdr, w in zip(self.DISPLAY_COLS, self.HEADERS, self.WIDTHS):
             self.tree.heading(cid, text=hdr, anchor='center')
             anchor = 'e' if cid in ('net_weight', 'mxbg_pallet') else 'center'

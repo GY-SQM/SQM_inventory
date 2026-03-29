@@ -112,6 +112,7 @@ class PickingListPreviewDialog:
         if is_dict_format:
             columns = ("lot_no", "qty_kg", "unit", "is_sample", "storage")
             tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=12)
+            tree._enable_global_editable = True  # v8.6.4: 편집 활성화
             tree.heading("lot_no", text="LOT NO", anchor='center')
             tree.heading("qty_kg", text="Qty(Kg)", anchor='center')
             tree.heading("unit", text="단위", anchor='center')
@@ -133,6 +134,7 @@ class PickingListPreviewDialog:
         else:
             columns = ("material", "description", "total_qty", "unit", "batches", "batch_detail")
             tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=12)
+            tree._enable_global_editable = True  # v8.6.4: 편집 활성화
             tree.heading("material", text="자재코드", anchor='center')
             tree.heading("description", text="설명", anchor='center')
             tree.heading("total_qty", text="총량", anchor='center')
