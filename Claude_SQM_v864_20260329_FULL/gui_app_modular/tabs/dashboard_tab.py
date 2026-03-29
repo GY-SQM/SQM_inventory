@@ -126,13 +126,13 @@ class DashboardTabMixin:
         self.tree_dashboard_product.configure(style='Matrix.Treeview')
 
         col_defs = [
-            ("product",   "Product",      170, "w"),
-            ("available", "판매가능",       110, "e"),
-            ("reserved",  "판매배정",       110, "e"),
-            ("picked",    "판매화물",       110, "e"),
-            ("outbound",  "출고완료",       110, "e"),
-            ("return",    "반품대기",       100, "e"),
-            ("total",     "합계",          110, "e"),
+            ("product",   "Product",      170, "center"),
+            ("available", "판매가능",       110, "center"),
+            ("reserved",  "판매배정",       110, "center"),
+            ("picked",    "판매화물",       110, "center"),
+            ("outbound",  "출고완료",       110, "center"),
+            ("return",    "반품대기",       100, "center"),
+            ("total",     "합계",          110, "center"),
             ("sample",    "샘플",           70,  "center"),
         ]
         for cid, text, width, anchor in col_defs:
@@ -196,7 +196,7 @@ class DashboardTabMixin:
         )
         self._integrity_signal_sub.pack(fill=X)
 
-        # 수치 행들
+        # 총합 수치 행
         int_rows = [
             ('총입고(누계)', '_int_label_total'),
             ('현재재고',     '_int_label_cur'),
@@ -215,6 +215,26 @@ class DashboardTabMixin:
                                font=('맑은 고딕', 11, 'bold'), anchor='e')
             val_lbl.pack(side=RIGHT)
             setattr(self, attr, val_lbl)
+
+        # v8.6.4: 제품별 정합성 테이블
+        tk.Frame(integrity_inner, bg=BORDER, height=1).pack(fill=X, pady=(6, 4))
+        tk.Label(integrity_inner, text="제품별 정합성",
+                 bg=BG_CARD, fg=FG_MUTED,
+                 font=('맑은 고딕', 9, 'bold'), anchor='w').pack(fill=X)
+        _int_tree_frame = tk.Frame(integrity_inner, bg=BG_CARD)
+        _int_tree_frame.pack(fill=BOTH, expand=YES, pady=(2, 0))
+        _int_cols = ("product", "inbound", "current", "outbound", "diff", "status")
+        self._integrity_product_tree = ttk.Treeview(
+            _int_tree_frame, columns=_int_cols, show="headings", height=4,
+        )
+        for cid, text, w in [
+            ("product", "Product", 100), ("inbound", "입고", 65),
+            ("current", "현재", 65), ("outbound", "출고", 65),
+            ("diff", "차이", 60), ("status", "상태", 50),
+        ]:
+            self._integrity_product_tree.heading(cid, text=text, anchor='center')
+            self._integrity_product_tree.column(cid, width=w, anchor='center', stretch=False)
+        self._integrity_product_tree.pack(fill=BOTH, expand=YES)
 
         # 드릴다운 버튼
         tk.Button(
@@ -424,6 +444,43 @@ class DashboardTabMixin:
                 self._int_label_diff.config(
                     text=f"{diff_mt:+.3f} MT  ({'✅ OK' if _ok else '❌ 불일치'})",
                     fg=diff_color)
+
+            # v8.6.4: 제품별 정합성 테이블 갱신
+            if hasattr(self, '_integrity_product_tree'):
+                try:
+                    _ipt = self._integrity_product_tree
+                    _ipt.delete(*_ipt.get_children())
+                    db = getattr(self, 'engine', None)
+                    if db:
+                        db = getattr(db, 'db', db)
+                    if db:
+                        _prod_rows = db.fetchall("""
+                            SELECT
+                                COALESCE(i.product, 'Unknown') AS product,
+                                COALESCE(SUM(CASE WHEN i.status='AVAILABLE' THEN i.initial_weight ELSE 0 END),0) AS inbound_kg,
+                                COALESCE(SUM(CASE WHEN t_agg.cur_kg IS NOT NULL THEN t_agg.cur_kg ELSE 0 END),0) AS current_kg,
+                                COALESCE(SUM(CASE WHEN t_agg.out_kg IS NOT NULL THEN t_agg.out_kg ELSE 0 END),0) AS outbound_kg
+                            FROM inventory i
+                            LEFT JOIN (
+                                SELECT lot_no,
+                                    SUM(CASE WHEN status IN ('AVAILABLE','RESERVED','PICKED') THEN weight ELSE 0 END) AS cur_kg,
+                                    SUM(CASE WHEN status IN ('OUTBOUND','SHIPPED','SOLD') THEN weight ELSE 0 END) AS out_kg
+                                FROM inventory_tonbag GROUP BY lot_no
+                            ) t_agg ON i.lot_no = t_agg.lot_no
+                            GROUP BY COALESCE(i.product, 'Unknown')
+                        """)
+                        for pr in (_prod_rows or []):
+                            pname = pr.get('product', 'Unknown')
+                            inb = float(pr.get('inbound_kg', 0) or 0) / 1000
+                            cur = float(pr.get('current_kg', 0) or 0) / 1000
+                            out = float(pr.get('outbound_kg', 0) or 0) / 1000
+                            diff_p = inb - cur - out
+                            st = '✅' if abs(diff_p) < 0.01 else '❌'
+                            _ipt.insert('', 'end', values=(
+                                pname, f"{inb:,.1f}", f"{cur:,.1f}",
+                                f"{out:,.1f}", f"{diff_p:+.3f}", st))
+                except Exception as _ipe:
+                    logger.debug(f"제품별 정합성 스킵: {_ipe}")
 
         except Exception as e:
             logger.debug(f"정합성 갱신 오류: {e}")
