@@ -135,19 +135,20 @@ class DashboardTabMixin:
             ("return",    "반품대기",   70, "center"),
             ("total",     "합계",       80, "center"),
             ("sample",    "샘플",       50, "center"),
-            ("bal_open",  "기초재고",   75, "center"),
-            ("bal_in",    "입고",       70, "center"),
-            ("bal_out",   "출고",       70, "center"),
-            ("bal_close", "기말재고",   75, "center"),
+            ("bal_open",  "🟡기초재고",  80, "center"),
+            ("bal_in",    "🟡입고",     70, "center"),
+            ("bal_out",   "🟡출고",     70, "center"),
+            ("bal_close", "🟡기말재고", 80, "center"),
             ("bal_check", "검증",       45, "center"),
         ]
         for cid, text, width, anchor in col_defs:
             self.tree_dashboard_product.heading(cid, text=text, anchor='center')
             self.tree_dashboard_product.column(cid, width=width, anchor=anchor, stretch=True)
 
-        # v8.6.4: 기초/입고/출고/기말 헤더 + 데이터 → 진한 노랑
-        _gold_cols = {'bal_open', 'bal_in', 'bal_out', 'bal_close', 'bal_check'}
-        self.tree_dashboard_product.tag_configure('gold_data', foreground='#b8860b')
+        # v8.6.4: 기초/입고/출고/기말 → 진한 노랑 (다크: #ffc107, 라이트: #b8860b)
+        _gold_fg = '#ffc107' if _d else '#b8860b'
+        self.tree_dashboard_product.tag_configure('gold_data', foreground=_gold_fg)
+        self._gold_fg = _gold_fg  # 나중에 재적용용
 
         prod_vsb = tk.Scrollbar(product_frame, orient='vertical',
                                  command=self.tree_dashboard_product.yview)
@@ -915,7 +916,7 @@ class DashboardTabMixin:
                             p['return_tb'], total,
                             p['sample_cnt'], *_bal_tail)
 
-                tree.insert('', END, values=vals, tags=('gold_data',))
+                tree.insert('', END, values=vals)
                 sums_bal['open'] += _bopen
                 sums_bal['in'] += _bin
                 sums_bal['out'] += _bout
@@ -961,7 +962,8 @@ class DashboardTabMixin:
                         total_sample, *_bal_tail,
                     ), tags=('total',))
                 tree.tag_configure('total', font=('맑은 고딕', 11, 'bold'))
-                tree.tag_configure('gold_data', foreground='#b8860b')
+                _gfg = getattr(self, '_gold_fg', '#ffc107')
+                tree.tag_configure('gold_data', foreground=_gfg)
 
         except Exception as e:
             logger.error(f"제품×상태 매트릭스 오류: {e}")
