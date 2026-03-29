@@ -88,51 +88,67 @@ class DashboardTabMixin:
         mc.columnconfigure(0, weight=1)
 
         # ══════════════════════════════════════════════════════════════
-        # 1구역: 재고 상태 카드 5개 (상단 가로 한 줄)
+        # 1구역: 제품×상태 통합 매트릭스 (카드+제품 테이블 통합)
         # ══════════════════════════════════════════════════════════════
         zone1 = tk.Frame(mc, bg=BG)
-        zone1.pack(fill=X, pady=(0, 10))
-        zone1.columnconfigure(tuple(range(5)), weight=1)
-        for i in range(5):
-            zone1.columnconfigure(i, weight=1)
+        zone1.pack(fill=X, pady=(0, 12))
 
-        card_defs = [
-            ('status_available', '판매가능',      CARD_COLORS['available'], '판매비중 정'),
-            ('status_reserved',  '판매배정',      CARD_COLORS['reserved'],  '예약 확률'),
-            ('status_picked',    '판매화물 결정', CARD_COLORS['picked'],    '피킹 확률'),
-            ('status_sold',      '출고완료',      CARD_COLORS['sold'],      '이번 달'),
-            ('status_return',    '반품대기',      CARD_COLORS['return'],    '반품 처리 중'),
-        ]
-        self._dashboard_cards = {}
-        for col_i, (key, title, color, subtitle) in enumerate(card_defs):
-            card = self._create_dashboard_card(zone1, title, '0.0 MT', color, subtitle=subtitle)
-            card.grid(row=0, column=col_i, sticky='nsew',
-                      padx=(0 if col_i == 0 else 8, 0), pady=0)
-            self._dashboard_cards[key] = card
+        z1_hdr = tk.Frame(zone1, bg=BG2)
+        z1_hdr.pack(fill=X, pady=(0, 4))
+        tk.Label(z1_hdr, text="제품별 재고 현황",
+                 bg=BG2, fg=FG,
+                 font=('맑은 고딕', 13, 'bold'),
+                 anchor='w', padx=12, pady=6).pack(side=LEFT)
 
-        # v8.6.4: 테마 리프레시 이후 카드 색상 강제 재적용
-        def _force_card_colors():
-            for _c in self._dashboard_cards.values():
-                _clr = getattr(_c, 'color', '#ffffff')
-                if hasattr(_c, 'value_label'):
-                    _c.value_label.config(fg=_clr)
-                if hasattr(_c, 'title_label'):
-                    _c.title_label.config(fg=_clr)
-        self.tab_dashboard.after(1500, _force_card_colors)
-        self.tab_dashboard.after(3000, _force_card_colors)
+        self._dash_view_mode = tk.StringVar(value='mt')
+        for val, lbl in (('mt', '📊 MT'), ('lot', '📦 LOT'), ('tonbag', '🎒 톤백')):
+            tk.Radiobutton(
+                z1_hdr, text=lbl, variable=self._dash_view_mode,
+                value=val, command=self._refresh_dashboard_products,
+                bg=BG2, fg=FG, selectcolor=BG_CARD,
+                activebackground=BG2, activeforeground=FG,
+                font=('맑은 고딕', 11),
+            ).pack(side=RIGHT, padx=6)
 
-        # TOTAL 바
-        total_bar = tk.Frame(mc, bg=BG2)
-        total_bar.pack(fill=X, pady=(4, 12))
-        self._dashboard_total_label = tk.Label(
-            total_bar,
-            text="TOTAL: 계산 중...",
-            bg=BG2, fg=ACCENT,
-            font=('맑은 고딕', 11, 'bold'),
-            anchor='w', padx=10, pady=4,
+        product_frame = tk.Frame(zone1, bg=BG_CARD)
+        product_frame.pack(fill=X)
+
+        columns = ("product", "available", "reserved", "picked",
+                   "outbound", "return", "total", "sample")
+        self.tree_dashboard_product = ttk.Treeview(
+            product_frame, columns=columns,
+            show="headings", height=6,
         )
-        self._dashboard_total_label._tc_skip = True
-        self._dashboard_total_label.pack(fill=X)
+        # v8.6.4: 큰 글씨 스타일
+        _matrix_style = ttk.Style()
+        _matrix_style.configure('Matrix.Treeview', font=('맑은 고딕', 12), rowheight=36)
+        _matrix_style.configure('Matrix.Treeview.Heading', font=('맑은 고딕', 11, 'bold'))
+        self.tree_dashboard_product.configure(style='Matrix.Treeview')
+
+        col_defs = [
+            ("product",   "Product",      170, "w"),
+            ("available", "판매가능",       110, "e"),
+            ("reserved",  "판매배정",       110, "e"),
+            ("picked",    "판매화물",       110, "e"),
+            ("outbound",  "출고완료",       110, "e"),
+            ("return",    "반품대기",       100, "e"),
+            ("total",     "합계",          110, "e"),
+            ("sample",    "샘플",           70,  "center"),
+        ]
+        for cid, text, width, anchor in col_defs:
+            self.tree_dashboard_product.heading(cid, text=text, anchor='center')
+            self.tree_dashboard_product.column(cid, width=width, anchor=anchor, stretch=True)
+
+        prod_vsb = tk.Scrollbar(product_frame, orient='vertical',
+                                 command=self.tree_dashboard_product.yview)
+        self.tree_dashboard_product.configure(yscrollcommand=prod_vsb.set)
+        self.tree_dashboard_product.pack(side=LEFT, fill=X, expand=YES)
+        prod_vsb.pack(side=RIGHT, fill=Y)
+
+        # 카드 호환 (기존 _refresh_dashboard_cards 호출 방지)
+        self._dashboard_cards = {}
+        self._dashboard_total_label = None
+        self._dash_product_footer = None
 
         # ══════════════════════════════════════════════════════════════
         # 2구역: 정합성 신호등(좌) + 알림 패널(우)
@@ -262,67 +278,10 @@ class DashboardTabMixin:
         )
         self._kpi_summary_label.pack(fill=X)
 
-        # ══════════════════════════════════════════════════════════════
-        # 3구역: 제품별 현황 테이블 (하단 전체 너비)
-        # ══════════════════════════════════════════════════════════════
-        zone3 = tk.Frame(mc, bg=BG)
-        zone3.pack(fill=BOTH, expand=YES, pady=(8, 0))
-
-        # v8.6.4: 제품×상태 매트릭스 테이블 (통합 뷰)
-        z3_hdr = tk.Frame(zone3, bg=BG2)
-        z3_hdr.pack(fill=X, pady=(0, 4))
-        tk.Label(z3_hdr, text="제품별 재고 현황",
-                 bg=BG2, fg=FG_MUTED,
-                 font=('맑은 고딕', 11, 'bold'),
-                 anchor='w', padx=10, pady=5).pack(side=LEFT)
-
-        # MT/LOT/톤백 전환
-        self._dash_view_mode = tk.StringVar(value='mt')
-        for val, lbl in (('mt', '📊 MT'), ('lot', '📦 LOT'), ('tonbag', '🎒 톤백')):
-            tk.Radiobutton(
-                z3_hdr, text=lbl, variable=self._dash_view_mode,
-                value=val, command=self._refresh_dashboard_products,
-                bg=BG2, fg=FG, selectcolor=BG_CARD,
-                activebackground=BG2, activeforeground=FG,
-                font=('맑은 고딕', 10),
-            ).pack(side=RIGHT, padx=4)
-
-        product_frame = tk.Frame(zone3, bg=BG_CARD)
-        product_frame.pack(fill=BOTH, expand=YES)
-
-        columns = ("product", "available", "reserved", "picked",
-                   "outbound", "return", "total", "sample")
-        self.tree_dashboard_product = ttk.Treeview(
-            product_frame, columns=columns,
-            show="headings", height=Spacing.Tab.TREE_MIN_H,
-        )
-        col_defs = [
-            ("product",   "Product",      160, "w"),
-            ("available", "판매가능",       90,  "e"),
-            ("reserved",  "판매배정",       90,  "e"),
-            ("picked",    "판매화물",       90,  "e"),
-            ("outbound",  "출고완료",       90,  "e"),
-            ("return",    "반품대기",       90,  "e"),
-            ("total",     "합계",          100, "e"),
-            ("sample",    "샘플",           70,  "center"),
-        ]
-        _status_colors = {
-            'available': CARD_COLORS['available'],
-            'reserved':  CARD_COLORS['reserved'],
-            'picked':    CARD_COLORS['picked'],
-            'outbound':  CARD_COLORS['sold'],
-            'return':    CARD_COLORS['return'],
-        }
-        for cid, text, width, anchor in col_defs:
-            self.tree_dashboard_product.heading(cid, text=text, anchor='center')
-            self.tree_dashboard_product.column(cid, width=width, anchor=anchor, stretch=False)
-
-        prod_vsb = tk.Scrollbar(product_frame, orient='vertical',
-                                 command=self.tree_dashboard_product.yview)
-        self.tree_dashboard_product.configure(yscrollcommand=prod_vsb.set)
-        self.tree_dashboard_product.pack(side=LEFT, fill=BOTH, expand=YES)
-        prod_vsb.pack(side=RIGHT, fill=Y)
-        self._dash_product_footer = None
+        # v8.6.4: zone3 제거 (zone1 매트릭스로 통합)
+        # 하단 빈 공간 — 향후 기능 추가용
+        zone3_placeholder = tk.Frame(mc, bg=BG)
+        zone3_placeholder.pack(fill=BOTH, expand=YES)
 
         # 자동새로고침 체크박스
         auto_bar = tk.Frame(mc, bg=BG)
