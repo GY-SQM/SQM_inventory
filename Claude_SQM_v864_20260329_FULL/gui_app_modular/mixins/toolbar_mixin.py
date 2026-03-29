@@ -141,18 +141,7 @@ class ToolbarMixin:
         self._build_refresh_button(self._right_actions)
         self._build_quick_theme_buttons(self._right_actions)  # v7.3.0: 🌙☀ 빠른 전환
 
-        # v4.0.0: 오른쪽 버전 배지 (Phase3: FontScale body/heading)
-        try:
-            from version import __version__, APP_NAME
-            ver_frame = tk.Frame(self._right_actions, bg=self._tb_bg)
-            ver_frame.pack(side='left', padx=(Spacing.SM, 0))
-            _vf = self._tb_font_scale
-            tk.Label(ver_frame, text=f"📦 {APP_NAME}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_progress', is_dark()),
-                     font=_vf.body(bold=True)).pack(side='left')
-            tk.Label(ver_frame, text=f"  v{__version__}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_icon_warn', True),
-                     font=_vf.heading()).pack(side='left')
-        except (ImportError, ModuleNotFoundError) as _e:
-            logger.debug(f'Suppressed: {_e}')
+        # v8.6.4: 버전 배지 → 타이틀바로 이동 (우측 공간 확보)
         # v7.9.9 [SIDEBAR]: Row2 탭버튼 제거 — 사이드바로 이전
         self._row2 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=0)
         self._row2.pack(fill='x')
@@ -346,7 +335,7 @@ class ToolbarMixin:
                           padx=Spacing.MD, pady=Spacing.SM, cursor='hand2')
             btn._tc_skip = True
             btn._menu_color = menu_color
-            btn.pack(side='left', padx=Spacing.SM)
+            btn.pack(side='left', padx=Spacing.MD)
 
             underline = tk.Frame(btn, height=2, bg=self._tb_underline_color)
             btn._underline = underline

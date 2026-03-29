@@ -93,12 +93,12 @@ class SQMInventoryApp:
         else:
             self.root = root
         
-        # v4.0.0 Q10: 창 제목에 버전 + 회사명
+        # v8.6.4: 타이틀바에 버전 표시 (윗줄 이동)
         try:
             from version import __version__, APP_NAME
-            self.root.title(f"(주)지와이로지스 — {APP_NAME} v{__version__}")
+            self.root.title(f"📦 {APP_NAME}  v{__version__}")
         except ImportError:
-            self.root.title("(주)지와이로지스 — SQM 재고관리 v4.0.0")
+            self.root.title("📦 SQM 재고관리 시스템  v8.6.4")
         
         # Store references
         self.tk = tk
@@ -365,13 +365,13 @@ class SQMInventoryApp:
         self.main_frame = ttk.Frame(self.root)
         self.main_frame.pack(fill=BOTH, expand=YES, padx=0, pady=5)
 
-        # v7.9.9 [SIDEBAR]: 왼쪽 사이드바 + 오른쪽 콘텐츠 분할 레이아웃
-        self._sidebar_frame = tk.Frame(self.main_frame, width=60, bg=tc('bg_secondary'))
-        self._sidebar_frame.pack(side='left', fill='y')
-        self._sidebar_frame.pack_propagate(False)  # 너비 고정
+        # v8.6.4: 사이드바 너비 확대 + 콘텐츠 여백
+        self._sidebar_frame = tk.Frame(self.main_frame, width=72, bg=tc('bg_secondary'))
+        self._sidebar_frame.pack(side='left', fill='y', padx=(4, 0))
+        self._sidebar_frame.pack_propagate(False)
 
         self._content_frame = ttk.Frame(self.main_frame)
-        self._content_frame.pack(side='left', fill=BOTH, expand=YES, padx=(4, 5))
+        self._content_frame.pack(side='left', fill=BOTH, expand=YES, padx=(8, 8))
 
         # Setup main notebook (tabs) — 콘텐츠 영역에 배치
         self.notebook = ttk.Notebook(self._content_frame)
