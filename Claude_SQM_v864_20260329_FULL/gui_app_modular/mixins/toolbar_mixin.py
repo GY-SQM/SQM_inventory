@@ -343,10 +343,10 @@ class ToolbarMixin:
                           font=_btn_font,
                           bg=self._tb_bg, fg=_btn_fg,
                           anchor='center', justify='center',
-                          padx=Spacing.SM, pady=Spacing.SM, cursor='hand2')
+                          padx=Spacing.MD, pady=Spacing.SM, cursor='hand2')
             btn._tc_skip = True
             btn._menu_color = menu_color
-            btn.pack(side='left', padx=Spacing.XS)
+            btn.pack(side='left', padx=Spacing.SM)
 
             underline = tk.Frame(btn, height=2, bg=self._tb_underline_color)
             btn._underline = underline
@@ -871,7 +871,7 @@ class ToolbarMixin:
 
             # 외부 wrapper
             wrapper = _tk.Frame(sidebar, bg=SIDEBAR_BG, cursor='hand2')
-            wrapper.pack(fill='x', pady=6)
+            wrapper.pack(fill='x', pady=8)
 
             # 왼쪽 활성 인디케이터 바
             bar = _tk.Frame(wrapper, width=3, bg=SIDEBAR_BG)
@@ -880,7 +880,7 @@ class ToolbarMixin:
 
             # 내부 컨테이너 (아이콘+텍스트 수직 배치)
             inner = _tk.Frame(wrapper, bg=SIDEBAR_BG, cursor='hand2')
-            inner.pack(side='left', fill='x', expand=True, padx=2, pady=4)
+            inner.pack(side='left', fill='x', expand=True, padx=4, pady=6)
 
             # 아이콘
             _tab_color = TAB_COLORS.get(key, ICON_FG)

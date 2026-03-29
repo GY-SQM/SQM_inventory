@@ -61,7 +61,7 @@ class TableStyler:
     # 행 높이 (v8.7.0 Phase1: normal 36px로 가독성 개선)
     ROW_HEIGHT = {
         'compact': 24,
-        'normal': 36,
+        'normal': 40,  # v8.6.4: 36→40
         'comfortable': 40,
     }
 

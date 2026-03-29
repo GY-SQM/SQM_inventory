@@ -816,7 +816,7 @@ class ReadableStyle:
     """
 
     # Treeview 행 높이 (v8.7.0 Phase1: 36px로 가독성 개선)
-    ROW_HEIGHT = 36
+    ROW_HEIGHT = 40  # v8.6.4: 36→40 (행 간격 여유)
 
     # 기본 폰트 — v3.8.7: 30% 확대
     FONT_FAMILY = '맑은 고딕'

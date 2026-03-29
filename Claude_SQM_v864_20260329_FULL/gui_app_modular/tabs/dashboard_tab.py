@@ -382,7 +382,7 @@ class DashboardTabMixin:
         color_bar.pack(side='top', fill='x')
         color_bar.pack_propagate(False)
 
-        content = tk.Frame(outer, bg=_card_bg, padx=12, pady=8)
+        content = tk.Frame(outer, bg=_card_bg, padx=16, pady=12)
         content._tc_skip = True
         content.pack(side='top', fill='both', expand=True)
 
