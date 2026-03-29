@@ -84,7 +84,7 @@ class DashboardTabMixin:
         }
 
         mc = tk.Frame(self.tab_dashboard, bg=BG)
-        mc.pack(fill=BOTH, expand=YES, padx=Spacing.Tab.OUTER_PADX, pady=(0, Spacing.XS))
+        mc.pack(fill=BOTH, expand=YES, padx=Spacing.Tab.OUTER_PADX, pady=(8, 12))
         mc.columnconfigure(0, weight=1)
 
         # ══════════════════════════════════════════════════════════════

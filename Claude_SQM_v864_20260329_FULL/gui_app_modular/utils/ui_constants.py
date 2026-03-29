@@ -241,30 +241,30 @@ class Spacing:
 
     # 용도별 권장값
     class Padding:
-        DIALOG = 16         # 다이얼로그 내부
-        FRAME = 8           # 일반 프레임
-        LABELFRAME = 16     # LabelFrame 내부
-        BUTTON_GROUP = 8    # 버튼 사이
-        SECTION = 24        # 섹션 사이
+        DIALOG = 20         # v8.6.4: 16→20 다이얼로그 내부
+        FRAME = 12          # v8.6.4: 8→12 일반 프레임
+        LABELFRAME = 20     # v8.6.4: 16→20 LabelFrame 내부
+        BUTTON_GROUP = 10   # v8.6.4: 8→10 버튼 사이
+        SECTION = 28        # v8.6.4: 24→28 섹션 사이
 
     # ── v8.1.8: 탭 레이아웃 표준 상수 ──────────────────────────────
     # 모든 탭에 동일하게 적용하여 시각적 일관성 확보
     class Tab:
-        """탭 내부 레이아웃 표준값 (Grid 기반)."""
+        """탭 내부 레이아웃 표준값 (Grid 기반). v8.6.4: 여백 확대."""
         # 탭 전체 가로 패딩
-        OUTER_PADX   = 6        # 탭 프레임 좌우 여백
+        OUTER_PADX   = 16       # v8.6.4: 6→16 (여유 있는 좌우 여백)
         # 헤더 (make_tab_header)
-        HEADER_H     = 38       # 헤더 높이 (고정)
-        HEADER_PADY  = (0, 4)   # 헤더 아래 여백
+        HEADER_H     = 42       # v8.6.4: 38→42 (약간 높게)
+        HEADER_PADY  = (4, 8)   # v8.6.4: (0,4)→(4,8) 헤더 상하 여백
         # 버튼바
-        BTN_BAR_PADX = (6, 6)   # 버튼바 좌우
-        BTN_BAR_PADY = (0, 4)   # 버튼바 위아래
-        BTN_GAP      = 4        # 버튼 사이 간격
+        BTN_BAR_PADX = (16, 16) # v8.6.4: (6,6)→(16,16)
+        BTN_BAR_PADY = (4, 8)   # v8.6.4: (0,4)→(4,8)
+        BTN_GAP      = 6        # v8.6.4: 4→6 버튼 사이 간격
         # 필터/검색바 (버튼바 아래)
-        FILTER_PADY  = (0, 4)
+        FILTER_PADY  = (4, 8)   # v8.6.4: (0,4)→(4,8)
         # 트리뷰 컨테이너
-        TREE_PADX    = (6, 6)
-        TREE_PADY    = (0, 6)
+        TREE_PADX    = (16, 16) # v8.6.4: (6,6)→(16,16)
+        TREE_PADY    = (4, 12)  # v8.6.4: (0,6)→(4,12)
         # 트리뷰 최소 행 수 — expand=True로 나머지 공간 채움
         TREE_MIN_H   = 15
 
