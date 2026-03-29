@@ -116,7 +116,7 @@ class DashboardTabMixin:
         # v8.6.4: 재고 + 정합성 통합 테이블
         columns = ("product", "available", "reserved", "picked",
                    "outbound", "return", "total", "sample",
-                   "int_inbound", "int_current", "int_outbound", "int_diff", "int_status")
+                   "bal_open", "bal_in", "bal_out", "bal_close", "bal_check")
         self.tree_dashboard_product = ttk.Treeview(
             product_frame, columns=columns,
             show="headings", height=6,
@@ -127,23 +127,27 @@ class DashboardTabMixin:
         self.tree_dashboard_product.configure(style='Matrix.Treeview')
 
         col_defs = [
-            ("product",      "Product",  130, "center"),
-            ("available",    "판매가능",   75, "center"),
-            ("reserved",     "판매배정",   75, "center"),
-            ("picked",       "판매화물",   75, "center"),
-            ("outbound",     "출고완료",   75, "center"),
-            ("return",       "반품대기",   70, "center"),
-            ("total",        "합계",       80, "center"),
-            ("sample",       "샘플",       50, "center"),
-            ("int_inbound",  "입고",       70, "center"),
-            ("int_current",  "현재",       70, "center"),
-            ("int_outbound", "출고(확인)", 75, "center"),
-            ("int_diff",     "차이",       60, "center"),
-            ("int_status",   "상태",       40, "center"),
+            ("product",   "Product",  130, "center"),
+            ("available", "판매가능",   75, "center"),
+            ("reserved",  "판매배정",   75, "center"),
+            ("picked",    "판매화물",   75, "center"),
+            ("outbound",  "출고완료",   75, "center"),
+            ("return",    "반품대기",   70, "center"),
+            ("total",     "합계",       80, "center"),
+            ("sample",    "샘플",       50, "center"),
+            ("bal_open",  "기초재고",   75, "center"),
+            ("bal_in",    "입고",       70, "center"),
+            ("bal_out",   "출고",       70, "center"),
+            ("bal_close", "기말재고",   75, "center"),
+            ("bal_check", "검증",       45, "center"),
         ]
         for cid, text, width, anchor in col_defs:
             self.tree_dashboard_product.heading(cid, text=text, anchor='center')
             self.tree_dashboard_product.column(cid, width=width, anchor=anchor, stretch=True)
+
+        # v8.6.4: 기초/입고/출고/기말 헤더 + 데이터 → 진한 노랑
+        _gold_cols = {'bal_open', 'bal_in', 'bal_out', 'bal_close', 'bal_check'}
+        self.tree_dashboard_product.tag_configure('gold_data', foreground='#b8860b')
 
         prod_vsb = tk.Scrollbar(product_frame, orient='vertical',
                                  command=self.tree_dashboard_product.yview)
@@ -830,31 +834,37 @@ class DashboardTabMixin:
                 if mapped:
                     lot_data[prod][f'{mapped}_lot'] += cnt
 
-            # v8.6.4: 정합성 데이터 조회 (제품별)
-            int_data = {}
+            # v8.6.4: 기초재고/입고/출고/기말재고 조회 (제품별)
+            # 기초재고 = initial_weight 합계
+            # 입고 = 현재 재고 중 추가 입고 (stock_movement INBOUND)
+            # 출고 = OUTBOUND/SHIPPED/SOLD 톤백 무게
+            # 기말재고 = 기초재고 + 입고 - 출고 (또는 현재 톤백 합계)
+            bal_data = {}
             try:
-                _int_rows = db.fetchall("""
+                _bal_rows = db.fetchall("""
                     SELECT
                         COALESCE(i.product, 'Unknown') AS product,
-                        COALESCE(SUM(i.initial_weight),0) AS inbound_kg,
-                        COALESCE(SUM(CASE WHEN ta.cur_kg IS NOT NULL THEN ta.cur_kg ELSE 0 END),0) AS current_kg,
-                        COALESCE(SUM(CASE WHEN ta.out_kg IS NOT NULL THEN ta.out_kg ELSE 0 END),0) AS outbound_kg
+                        COALESCE(SUM(i.initial_weight), 0) AS open_kg,
+                        COALESCE(SUM(ta.in_kg), 0) AS in_kg,
+                        COALESCE(SUM(ta.out_kg), 0) AS out_kg,
+                        COALESCE(SUM(ta.close_kg), 0) AS close_kg
                     FROM inventory i
                     LEFT JOIN (
                         SELECT lot_no,
-                            SUM(CASE WHEN status IN ('AVAILABLE','RESERVED','PICKED') THEN weight ELSE 0 END) AS cur_kg,
-                            SUM(CASE WHEN status IN ('OUTBOUND','SHIPPED','SOLD') THEN weight ELSE 0 END) AS out_kg
+                            SUM(CASE WHEN status IN ('AVAILABLE','RESERVED','PICKED') THEN weight ELSE 0 END) AS close_kg,
+                            SUM(CASE WHEN status IN ('OUTBOUND','SHIPPED','SOLD') THEN weight ELSE 0 END) AS out_kg,
+                            0 AS in_kg
                         FROM inventory_tonbag GROUP BY lot_no
                     ) ta ON i.lot_no = ta.lot_no
                     GROUP BY COALESCE(i.product, 'Unknown')
                 """)
-                for ir in (_int_rows or []):
-                    pn = ir.get('product', 'Unknown') or 'Unknown'
-                    int_data[pn] = {
-                        'inbound': float(ir.get('inbound_kg', 0) or 0),
-                        'current': float(ir.get('current_kg', 0) or 0),
-                        'outbound': float(ir.get('outbound_kg', 0) or 0),
-                    }
+                for br in (_bal_rows or []):
+                    pn = br.get('product', 'Unknown') or 'Unknown'
+                    _open = float(br.get('open_kg', 0) or 0)
+                    _in = float(br.get('in_kg', 0) or 0)
+                    _out = float(br.get('out_kg', 0) or 0)
+                    _close = float(br.get('close_kg', 0) or 0)
+                    bal_data[pn] = {'open': _open, 'in': _in, 'out': _out, 'close': _close}
             except Exception:
                 pass
 
@@ -864,48 +874,52 @@ class DashboardTabMixin:
             sums_tb = {s: 0 for s in STATUSES}
             sums_lot = {s: 0 for s in STATUSES}
             total_sample = 0
-            sums_int = {'inbound': 0.0, 'current': 0.0, 'outbound': 0.0}
+            sums_bal = {'open': 0.0, 'in': 0.0, 'out': 0.0, 'close': 0.0}
 
             for prod_name in sorted(products.keys()):
                 p = products[prod_name]
                 ld = lot_data.get(prod_name, {})
-                # 정합성 값
-                _id = int_data.get(prod_name, {})
-                _inb = _id.get('inbound', 0) / 1000
-                _cur = _id.get('current', 0) / 1000
-                _out = _id.get('outbound', 0) / 1000
-                _dif = _inb - _cur - _out
-                _st = '✅' if abs(_dif) < 0.01 else '❌'
+                # 기초/입고/출고/기말 값
+                _bd = bal_data.get(prod_name, {})
+                _bopen = _bd.get('open', 0) / 1000
+                _bin = _bd.get('in', 0) / 1000
+                _bout = _bd.get('out', 0) / 1000
+                _bclose = _bd.get('close', 0) / 1000
+                # 합계 vs 기말재고 검증
+                total_kg_all = sum(p[f'{s}_kg'] for s in STATUSES)
+                _total_mt = total_kg_all / 1000
+                _check = 'OK' if abs(_total_mt - _bclose) < 0.1 else '⚠️'
+
+                # 기초/입고/출고/기말 꼬리
+                _bal_tail = (f"{_bopen:,.1f}", f"{_bin:,.1f}", f"{_bout:,.1f}",
+                             f"{_bclose:,.1f}", _check)
 
                 if mode == 'mt':
-                    total = sum(p[f'{s}_kg'] for s in STATUSES)
                     vals = (prod_name,
                             f"{p['available_kg']/1000:,.1f}", f"{p['reserved_kg']/1000:,.1f}",
                             f"{p['picked_kg']/1000:,.1f}", f"{p['outbound_kg']/1000:,.1f}",
-                            f"{p['return_kg']/1000:,.1f}", f"{total/1000:,.1f}",
-                            p['sample_cnt'],
-                            f"{_inb:,.1f}", f"{_cur:,.1f}", f"{_out:,.1f}", f"{_dif:+.1f}", _st)
+                            f"{p['return_kg']/1000:,.1f}", f"{_total_mt:,.1f}",
+                            p['sample_cnt'], *_bal_tail)
                 elif mode == 'lot':
                     total = sum(ld.get(f'{s}_lot', 0) for s in STATUSES)
                     vals = (prod_name,
                             ld.get('available_lot', 0), ld.get('reserved_lot', 0),
                             ld.get('picked_lot', 0), ld.get('outbound_lot', 0),
                             ld.get('return_lot', 0), total,
-                            p['sample_cnt'],
-                            f"{_inb:,.1f}", f"{_cur:,.1f}", f"{_out:,.1f}", f"{_dif:+.1f}", _st)
-                else:  # tonbag
+                            p['sample_cnt'], *_bal_tail)
+                else:
                     total = sum(p[f'{s}_tb'] for s in STATUSES)
                     vals = (prod_name,
                             p['available_tb'], p['reserved_tb'],
                             p['picked_tb'], p['outbound_tb'],
                             p['return_tb'], total,
-                            p['sample_cnt'],
-                            f"{_inb:,.1f}", f"{_cur:,.1f}", f"{_out:,.1f}", f"{_dif:+.1f}", _st)
+                            p['sample_cnt'], *_bal_tail)
 
-                tree.insert('', END, values=vals)
-                sums_int['inbound'] += _inb
-                sums_int['current'] += _cur
-                sums_int['outbound'] += _out
+                tree.insert('', END, values=vals, tags=('gold_data',))
+                sums_bal['open'] += _bopen
+                sums_bal['in'] += _bin
+                sums_bal['out'] += _bout
+                sums_bal['close'] += _bclose
 
                 for s in STATUSES:
                     sums_kg[s] += p[f'{s}_kg']
@@ -913,21 +927,20 @@ class DashboardTabMixin:
                     sums_lot[s] += lot_data.get(prod_name, {}).get(f'{s}_lot', 0)
                 total_sample += p['sample_cnt']
 
-            # 합계 행 (정합성 합계 포함)
-            _si = sums_int
-            _total_dif = _si['inbound'] - _si['current'] - _si['outbound']
-            _total_st = '✅' if abs(_total_dif) < 0.01 else '❌'
-            _int_tail = (f"{_si['inbound']:,.1f}", f"{_si['current']:,.1f}",
-                         f"{_si['outbound']:,.1f}", f"{_total_dif:+.1f}", _total_st)
+            # 합계 행 (기초/입고/출고/기말 + 검증)
+            _sb = sums_bal
+            _total_kg_sum = sum(sums_kg[s] for s in STATUSES) / 1000
+            _total_check = 'OK' if abs(_total_kg_sum - _sb['close']) < 0.1 else '⚠️'
+            _bal_tail = (f"{_sb['open']:,.1f}", f"{_sb['in']:,.1f}",
+                         f"{_sb['out']:,.1f}", f"{_sb['close']:,.1f}", _total_check)
             if products:
                 if mode == 'mt':
-                    total_all = sum(sums_kg[s] for s in STATUSES)
                     tree.insert('', END, values=(
                         '합계',
                         f"{sums_kg['available']/1000:,.1f}", f"{sums_kg['reserved']/1000:,.1f}",
                         f"{sums_kg['picked']/1000:,.1f}", f"{sums_kg['outbound']/1000:,.1f}",
-                        f"{sums_kg['return']/1000:,.1f}", f"{total_all/1000:,.1f}",
-                        total_sample, *_int_tail,
+                        f"{sums_kg['return']/1000:,.1f}", f"{_total_kg_sum:,.1f}",
+                        total_sample, *_bal_tail,
                     ), tags=('total',))
                 elif mode == 'lot':
                     total_all = sum(sums_lot[s] for s in STATUSES)
@@ -936,7 +949,7 @@ class DashboardTabMixin:
                         sums_lot['available'], sums_lot['reserved'],
                         sums_lot['picked'], sums_lot['outbound'],
                         sums_lot['return'], total_all,
-                        total_sample, *_int_tail,
+                        total_sample, *_bal_tail,
                     ), tags=('total',))
                 else:
                     total_all = sum(sums_tb[s] for s in STATUSES)
@@ -945,9 +958,10 @@ class DashboardTabMixin:
                         sums_tb['available'], sums_tb['reserved'],
                         sums_tb['picked'], sums_tb['outbound'],
                         sums_tb['return'], total_all,
-                        total_sample, *_int_tail,
+                        total_sample, *_bal_tail,
                     ), tags=('total',))
                 tree.tag_configure('total', font=('맑은 고딕', 11, 'bold'))
+                tree.tag_configure('gold_data', foreground='#b8860b')
 
         except Exception as e:
             logger.error(f"제품×상태 매트릭스 오류: {e}")
