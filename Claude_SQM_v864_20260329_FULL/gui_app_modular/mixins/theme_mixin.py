@@ -164,6 +164,15 @@ class ThemeMixin:
                 self._safe_refresh()
             except (ValueError, TypeError, AttributeError) as _e:
                 logger.debug(f"탭 리프레시 무시: {_e}")
+
+            # v8.6.4: 테마 전환 시 대시보드 카드 색상 즉시 동기화
+            try:
+                if hasattr(self, '_refresh_dashboard'):
+                    self.root.after(200, self._refresh_dashboard)
+                elif hasattr(self, '_refresh_dashboard_cards'):
+                    self.root.after(200, self._refresh_dashboard_cards)
+            except (ValueError, TypeError, AttributeError) as _e:
+                logger.debug(f"대시보드 색상 동기화 무시: {_e}")
             
             # v6.1.1: 50ms 후 2차 적용 (간헐적 타이밍 이슈 보험)
             try:
@@ -182,21 +191,43 @@ class ThemeMixin:
                     self._refresh_toolbar_colors()
             except (ValueError, TypeError, AttributeError) as _e:
                 logger.debug(f"toolbar color sync 무시: {_e}")
-
-            # v8.6.4: 대시보드 카드 색상 강제 재적용 (테마 전환 시 덮어쓰기 복원)
-            def _delayed_card_reapply():
+            
+            # v8.6.4: 모든 테마 리프레시 완료 후 컬러풀 UI 최종 복원
+            def _final_colorful_restore():
                 try:
+                    # 메뉴바 컬러 복원
+                    for btn in getattr(self, '_all_menu_btns', []):
+                        _mc = getattr(btn, '_menu_color', None)
+                        if _mc:
+                            btn.config(fg=_mc)
+                    # 사이드바 아이콘 컬러 복원
+                    _TAB_CLR = {
+                        'inventory':'#4ade80','allocation':'#facc15',
+                        'picked':'#a78bfa','sold':'#38bdf8',
+                        'return_tab':'#f87171','move':'#22d3ee',
+                        'dashboard':'#00e676','log':'#94a3b8','scan':'#fb923c',
+                    }
+                    for k, w in getattr(self, '_sidebar_wrappers', {}).items():
+                        if not getattr(w, '_active', False) and hasattr(w, '_icon'):
+                            w._icon.config(fg=_TAB_CLR.get(k, '#94a3b8'))
+                    # 카드 색상 복원
                     if hasattr(self, '_reapply_dashboard_card_colors'):
                         self._reapply_dashboard_card_colors()
-                except Exception as _ce:
-                    logger.debug(f"카드 색상 재적용 무시: {_ce}")
-            self.root.after(300, _delayed_card_reapply)
-            self.root.after(1200, _delayed_card_reapply)
-            self.root.after(2500, _delayed_card_reapply)  # 3차 보험
-            
+                    elif hasattr(self, '_dashboard_cards'):
+                        for _c in self._dashboard_cards.values():
+                            _clr = getattr(_c, 'color', '#fff')
+                            if hasattr(_c, 'value_label'):
+                                _c.value_label.config(fg=_clr)
+                            if hasattr(_c, 'title_label'):
+                                _c.title_label.config(fg=_clr)
+                except Exception as _fe:
+                    logger.debug(f"[v8.6.4] 컬러 복원 무시: {_fe}")
+            self.root.after(500, _final_colorful_restore)
+            self.root.after(1500, _final_colorful_restore)
+
         except Exception as e:
             logger.debug(f"Theme change non-critical: {e}")
-    
+
     def _update_theme_colors(self) -> None:
         """v6.1.1: 테마 변경 시 전체 위젯 자동 스캔 + 일괄 갱신 (실패 시 fallback)"""
         try:

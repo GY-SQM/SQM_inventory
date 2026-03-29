@@ -68,18 +68,19 @@ class DashboardTabMixin:
         BORDER   = ThemeColors.get('border',        _d) if 'border' in (
             ThemeColors.DARK if _d else ThemeColors.LIGHT) else (
             '#1a3a5c' if _d else '#e2e8f0')
-        ACCENT   = '#00E5A0' if _d else '#0369a1'   # Footer 강조색
+        ACCENT   = '#00d4ff' if _d else '#0056d6'   # v8.6.4 강조색
         SUCCESS  = '#00e676' if _d else '#059669'
         WARNING  = '#FF8C00' if _d else '#d97706'
         DANGER   = '#ff1744' if _d else '#dc2626'
 
         # 상태 카드 색상
+        # v8.6.4: Pro 팔레트 동기화 — Muted Pastel (다크) / Muted Deep (라이트)
         CARD_COLORS = {
-            'available': ('#00e676' if _d else '#059669'),
-            'reserved':  ('#FF8C00' if _d else '#d97706'),
-            'picked':    ('#a78bfa' if _d else '#7c3aed'),
-            'sold':      ('#00b0ff' if _d else '#0369a1'),
-            'return':    ('#ff6b9d' if _d else '#be185d'),
+            'available': ('#52c87e' if _d else '#147848'),   # 소프트 에메랄드 / 딥 에메랄드
+            'reserved':  ('#e8943a' if _d else '#a86020'),   # 소프트 테라코타 / 딥 앰버
+            'picked':    ('#a07ee0' if _d else '#6040b0'),   # 소프트 라벤더 / 딥 바이올렛
+            'sold':      ('#4ab0e8' if _d else '#1060a8'),   # 소프트 스카이 / 딥 사파이어
+            'return':    ('#e06888' if _d else '#a03060'),   # 소프트 로즈 / 딥 루비
         }
 
         mc = tk.Frame(self.tab_dashboard, bg=BG)
@@ -109,7 +110,7 @@ class DashboardTabMixin:
                       padx=(0 if col_i == 0 else 4, 0), pady=0)
             self._dashboard_cards[key] = card
 
-        # v8.6.4: 테마 리프레시(800ms) 이후 카드 색상 강제 재적용
+        # v8.6.4: 테마 리프레시 이후 카드 색상 강제 재적용
         def _force_card_colors():
             for _c in self._dashboard_cards.values():
                 _clr = getattr(_c, 'color', '#ffffff')
@@ -130,7 +131,7 @@ class DashboardTabMixin:
             font=('맑은 고딕', 11, 'bold'),
             anchor='w', padx=10, pady=4,
         )
-        self._dashboard_total_label._tc_skip = True  # v8.6.4: 컬러 보호
+        self._dashboard_total_label._tc_skip = True
         self._dashboard_total_label.pack(fill=X)
 
         # ══════════════════════════════════════════════════════════════
@@ -171,7 +172,6 @@ class DashboardTabMixin:
             bg=BG_CARD, fg=SUCCESS,
             font=('맑은 고딕', 14, 'bold'), anchor='w',
         )
-        self._integrity_signal_label._tc_skip = True  # v8.6.4: 컬러 보호
         self._integrity_signal_label.pack(fill=X)
         self._integrity_signal_sub = tk.Label(
             sig_text, text='총입고 = 현재재고 + 출고누계',
@@ -228,7 +228,6 @@ class DashboardTabMixin:
             alert_hdr, text='', bg=BG2, fg=DANGER,
             font=('맑은 고딕', 9, 'bold'), padx=8,
         )
-        self._alert_count_label._tc_skip = True  # v8.6.4: 컬러 보호
         self._alert_count_label.pack(side=RIGHT)
 
         # 알림 리스트박스
@@ -361,81 +360,58 @@ class DashboardTabMixin:
 
     def _create_dashboard_card(self, parent, title: str, value: str, color: str,
                                fonts=None, subtitle: str = '') -> 'ttk.Frame':
-        """v8.6.4: 대시보드 카드 — v8.3.4 ProDark 스타일 재현.
-
-        ┌──────────────────────────────┐
-        │██████████████████████████████│ ← 컬러 상단 바
-        │ 판매가능            판매비중 정│ ← 제목 + 우상단 서브타이틀
-        │ 1,248.0 MT                   │ ← 대형 컬러 MT 값
-        │ 12 LOT / 312 톤백            │ ← 하위 정보
-        └──────────────────────────────┘
-        """
+        """v8.6.4: 대시보드 카드 — TOP 컬러 바 + MT 컬러 값 + 서브타이틀"""
         from ..utils.constants import tk
 
         try:
             _dk = is_dark()
             _cp = ThemeColors.get_palette(_dk)
         except (ImportError, ModuleNotFoundError):
-            _cp = {'bg_card': ThemeColors.get('bg_card'), 'text_secondary': '#666666'}
+            _cp = {'bg_card': ThemeColors.get('bg_card', is_dark()), 'text_secondary': '#666666'}
 
-        _card_bg = _cp.get('bg_card', ThemeColors.get('bg_card'))
+        _card_bg = _cp.get('bg_card', ThemeColors.get('bg_card', is_dark()))
         _card_fg = _cp.get('text_secondary', '#666666')
         _border_color = _cp.get('border', '#e0e0e0')
 
-        # ═══ 외부 프레임 ═══
         outer = tk.Frame(parent, bg=_card_bg, bd=0,
                          highlightbackground=_border_color, highlightthickness=1)
         outer._tc_skip = True
 
-        # 상단 컬러 바 (가로 4px)
         color_bar = tk.Frame(outer, bg=color, height=4)
         color_bar._tc_skip = True
         color_bar.pack(side='top', fill='x')
         color_bar.pack_propagate(False)
 
-        # 콘텐츠 영역
         content = tk.Frame(outer, bg=_card_bg, padx=12, pady=8)
         content._tc_skip = True
         content.pack(side='top', fill='both', expand=True)
 
-        # 제목 행 (좌: 타이틀, 우: 서브타이틀)
         title_row = tk.Frame(content, bg=_card_bg)
         title_row._tc_skip = True
         title_row.pack(fill='x')
 
-        title_label = tk.Label(
-            title_row, text=title,
-            font=('맑은 고딕', 11, 'bold'),
-            bg=_card_bg, fg=color,
-        )
+        title_label = tk.Label(title_row, text=title,
+                               font=('맑은 고딕', 11, 'bold'),
+                               bg=_card_bg, fg=color)
         title_label._tc_skip = True
         title_label.pack(side='left')
 
-        # 우상단 서브타이틀 (판매비중 정, 예약 확률 등)
         if subtitle:
-            subtitle_label = tk.Label(
-                title_row, text=subtitle,
-                font=('맑은 고딕', 8),
-                bg=_card_bg, fg=_card_fg,
-            )
-            subtitle_label._tc_skip = True
-            subtitle_label.pack(side='right')
+            sub_title_lbl = tk.Label(title_row, text=subtitle,
+                                     font=('맑은 고딕', 8),
+                                     bg=_card_bg, fg=_card_fg)
+            sub_title_lbl._tc_skip = True
+            sub_title_lbl.pack(side='right')
 
-        # 값 (대형 MT 값 — 상태별 컬러)
-        value_label = tk.Label(
-            content, text=value,
-            font=('맑은 고딕', 22, 'bold'),
-            bg=_card_bg, fg=color,
-        )
+        value_label = tk.Label(content, text=value,
+                               font=('맑은 고딕', 22, 'bold'),
+                               bg=_card_bg, fg=color)
         value_label._tc_skip = True
         value_label.pack(anchor='w', pady=(4, 0))
 
-        # 하위 텍스트 (LOT수 / 톤백수)
-        sub_label = tk.Label(
-            content, text='',
-            font=('맑은 고딕', 9),
-            bg=_card_bg, fg=_card_fg,
-        )
+        sub_label = tk.Label(content, text='',
+                             font=('맑은 고딕', 9),
+                             bg=_card_bg, fg=_card_fg)
         sub_label._tc_skip = True
         sub_label.pack(anchor='w', pady=(2, 0))
 
@@ -497,7 +473,6 @@ class DashboardTabMixin:
                 self._int_label_diff.config(
                     text=f"{diff_mt:+.3f} MT  ({'✅ OK' if _ok else '❌ 불일치'})",
                     fg=diff_color)
-                self._int_label_diff._tc_skip = True  # v8.6.4: 컬러 보호
 
         except Exception as e:
             logger.debug(f"정합성 갱신 오류: {e}")
@@ -610,46 +585,6 @@ class DashboardTabMixin:
             logger.error(f"드릴다운 오류: {e}")
 
 
-    def _reapply_dashboard_card_colors(self) -> None:
-        """v8.6.4: 테마 전환 후 카드 색상 강제 재적용.
-
-        _change_theme() → apply_tc_theme_to_all() 이 카드 fg를 덮어쓰므로
-        테마 전환 완료 후 호출하여 상태별 컬러를 복원.
-        """
-        if not hasattr(self, '_dashboard_cards') or not self._dashboard_cards:
-            return
-        _d = is_dark()
-        # 현재 테마에 맞는 카드 컬러 재계산
-        _new_colors = {
-            'status_available': '#00e676' if _d else '#059669',
-            'status_reserved':  '#FF8C00' if _d else '#d97706',
-            'status_picked':    '#a78bfa' if _d else '#7c3aed',
-            'status_sold':      '#00b0ff' if _d else '#0369a1',
-            'status_return':    '#ff6b9d' if _d else '#be185d',
-        }
-        _card_bg = ThemeColors.get('bg_card', _d)
-        for _k, _c in self._dashboard_cards.items():
-            _clr = _new_colors.get(_k, '#ffffff')
-            _c.color = _clr  # 저장된 색상도 업데이트
-            if hasattr(_c, 'value_label'):
-                _c.value_label.config(fg=_clr, bg=_card_bg)
-            if hasattr(_c, 'title_label'):
-                _c.title_label.config(fg=_clr, bg=_card_bg)
-            if hasattr(_c, 'sub_label'):
-                _c.sub_label.config(bg=_card_bg)
-        # TOTAL 라벨
-        if hasattr(self, '_dashboard_total_label'):
-            _accent = '#00E5A0' if _d else '#0369a1'
-            _bg2 = ThemeColors.get('bg_secondary', _d)
-            self._dashboard_total_label.config(fg=_accent, bg=_bg2)
-        # 정합성 라벨
-        if hasattr(self, '_integrity_signal_label'):
-            try:
-                self._refresh_dashboard_integrity()
-            except Exception:
-                pass
-        logger.debug(f"[v8.6.4] 카드 색상 재적용 완료 (dark={_d})")
-
     def _refresh_dashboard(self) -> None:
         """대시보드 데이터 새로고침 (v4.0.4: 메인 스레드 직접 실행)"""
         try:
@@ -678,7 +613,7 @@ class DashboardTabMixin:
             logger.error(f"대시보드 새로고침 오류: {e}")
 
     def _refresh_dashboard_cards(self) -> None:
-        """v8.6.4: 카드 — MT 기반 대형 값 + LOT/톤백 서브텍스트 (v8.3.4 스타일)."""
+        """v8.1.5: 5단계 카드 — 톤백/샘플 구분 sub_label 포함."""
         try:
             if not hasattr(self, '_dashboard_cards') or not self._dashboard_cards:
                 return
@@ -688,27 +623,78 @@ class DashboardTabMixin:
             total_kg  = stats.get('total_kg', 0) or 0
             total_mt  = total_kg / 1000.0
 
-            # v8.6.4: LOT수 계산 헬퍼
-            def _lot_cnt(key_prefix):
-                return int(stats.get(f'{key_prefix}_lot_cnt', 0) or 0)
+            def _sub(kg: float, tb: int, samp: int) -> str:
+                """카드 하단: MT + 톤백/샘플 구분."""
+                return f"{kg/1000:,.1f} MT" + "\n" + f"톤백 {tb:,}개  /  샘플 {samp:,}개"
 
-            def _set_card(key, kg, lot=0, tb=0):
+            def _set_card(key, cnt, kg, tb=0, samp=0):
                 card = self._dashboard_cards.get(key)
                 if not card:
                     return
+                # v8.6.4: MT 기반 대형 값
                 mt = kg / 1000.0
-                # v8.6.4: 주 값 = MT (참조 이미지 스타일)
                 card.value_label.config(text=f"{mt:,.1f} MT")
                 if hasattr(card, 'sub_label'):
-                    card.sub_label.config(text=f"{lot} LOT / {tb} 톤백")
+                    card.sub_label.config(text=f"{tb} LOT / {samp} 톤백")
+
+            # v8.6.4: 테마 전환 시 카드 색상 동기화
+            def _sync_card_colors():
+                try:
+                    from ..utils.ui_constants import ThemeColors, tc
+                    from theme_aware import ThemeAware
+                    _dk = ThemeAware.is_dark()
+                    _card_bg  = ThemeColors.get('bg_card',      _dk)
+                    _card_fg  = ThemeColors.get('text_secondary', _dk)
+                    _border   = ThemeColors.get('border',         _dk)
+                    _new_colors = {
+                        'status_available': '#00e676' if _dk else '#059669',
+                        'status_reserved':  '#FF8C00' if _dk else '#d97706',
+                        'status_picked':    '#a78bfa' if _dk else '#7c3aed',
+                        'status_sold':      '#00b0ff' if _dk else '#0369a1',
+                        'status_return':    '#ff6b9d' if _dk else '#be185d',
+                    }
+                    for key, color in _new_colors.items():
+                        card = self._dashboard_cards.get(key)
+                        if not card: continue
+                        # 카드 배경 갱신
+                        for w in card.winfo_children():
+                            try:
+                                w.config(bg=_card_bg)
+                                for ww in w.winfo_children():
+                                    try: ww.config(bg=_card_bg)
+                                    except Exception: pass
+                            except Exception: pass
+                        # 좌측 색바 갱신 (첫 번째 자식의 첫 번째 자식)
+                        try:
+                            inner = card.winfo_children()[0]
+                            color_bar = inner.winfo_children()[0]
+                            color_bar.config(bg=color)
+                        except (IndexError, Exception): pass
+                        # 값/제목 레이블 색상 갱신
+                        if hasattr(card, 'value_label'):
+                            card.value_label.config(fg=color, bg=_card_bg)
+                        if hasattr(card, 'title_label'):
+                            card.title_label.config(fg=color, bg=_card_bg)
+                        if hasattr(card, 'sub_label'):
+                            card.sub_label.config(fg=_card_fg, bg=_card_bg)
+                        # 외부 테두리 색상 갱신
+                        card.config(bg=_border)
+                        card.color = color
+                except Exception as _ce:
+                    logger.debug(f"[DashCard] 색상 동기화 스킵: {_ce}")
+
+            _sync_card_colors()
 
             # 판매가능
-            _set_card('status_available',
-                      stats.get('available_kg', 0),
-                      _lot_cnt('available') or stats.get('available_lot_cnt', 0) or 0,
-                      stats.get('avail_tb_cnt', 0))
+            _set_card(
+                'status_available',
+                stats.get('available_cnt', 0),
+                stats.get('available_kg', 0),
+                stats.get('avail_tb_cnt', 0),
+                stats.get('avail_samp_cnt', 0),
+            )
 
-            # 판매배정
+            # 판매배정 (LOT 단위 — 톤백 ID 미확정 포함)
             _rcard = self._dashboard_cards.get('status_reserved')
             if _rcard:
                 _lot = int(stats.get('reserved_lot_cnt', stats.get('reserved_cnt', 0)) or 0)
@@ -719,31 +705,39 @@ class DashboardTabMixin:
                     _rcard.sub_label.config(text=f"{_lot} LOT / {_tb} 톤백")
 
             # 판매화물 결정
-            _set_card('status_picked',
-                      stats.get('picked_kg', 0),
-                      _lot_cnt('picked'),
-                      stats.get('picked_tb_cnt', 0))
+            _set_card(
+                'status_picked',
+                stats.get('picked_cnt', 0),
+                stats.get('picked_kg', 0),
+                stats.get('picked_tb_cnt', 0),
+                stats.get('picked_samp_cnt', 0),
+            )
 
             # 출고완료
-            _set_card('status_sold',
-                      stats.get('outbound_kg', stats.get('sold_kg', 0)),
-                      _lot_cnt('outbound') or _lot_cnt('sold'),
-                      stats.get('out_tb_cnt', 0))
+            _set_card(
+                'status_sold',
+                stats.get('outbound_cnt', stats.get('sold_cnt', 0)),
+                stats.get('outbound_kg', stats.get('sold_kg', 0)),
+                stats.get('out_tb_cnt', 0),
+                stats.get('out_samp_cnt', 0),
+            )
 
             # 반품대기
-            _set_card('status_return',
-                      stats.get('return_kg', 0),
-                      _lot_cnt('return'),
-                      stats.get('ret_tb_cnt', 0))
+            _set_card(
+                'status_return',
+                stats.get('return_cnt', 0),
+                stats.get('return_kg', 0),
+                stats.get('ret_tb_cnt', 0),
+                stats.get('ret_samp_cnt', 0),
+            )
 
-            # TOTAL 바 (v8.3.4 스타일)
-            _total_lots = int(stats.get('total_lot_cnt', 0) or 0)
-            _total_tb   = int(stats.get('avail_tb_cnt', 0) or 0) + int(stats.get('reserved_tonbag_cnt', 0) or 0)
-            _total_samp = int(stats.get('avail_samp_cnt', 0) or 0)
+            # TOTAL 바
             if hasattr(self, '_dashboard_total_label'):
+                _total_tb = int(stats.get('avail_tb_cnt', 0) or 0) + int(stats.get('reserved_tonbag_cnt', 0) or 0)
+                _total_samp = int(stats.get('avail_samp_cnt', 0) or 0)
                 self._dashboard_total_label.config(
                     text=(
-                        f"전체 재고 {total_mt:,.1f}MT · LOT {_total_lots or total_cnt}개"
+                        f"전체 재고 {total_mt:,.1f}MT · LOT {total_cnt}개"
                         f" · 톤백 {_total_tb}개 · 샘플 {_total_samp}개"
                     )
                 )

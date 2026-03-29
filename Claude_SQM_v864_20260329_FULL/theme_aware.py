@@ -78,7 +78,14 @@ class ThemeAware:
 
     @classmethod
     def is_dark(cls) -> bool:
-        """현재 테마가 다크 모드인지 확인"""
+        """현재 테마가 다크 모드인지 확인 (v8.6.4: _GLOBAL_IS_DARK 우선 참조)"""
+        # 1순위: ui_constants 전역 상태 (set_global_theme에서 관리)
+        try:
+            from gui_app_modular.utils.ui_constants import _GLOBAL_IS_DARK
+            return _GLOBAL_IS_DARK
+        except ImportError:
+            pass
+        # 2순위: 실제 ttk 배경색으로 판단
         try:
             style = ttk.Style()
             bg = style.lookup('TFrame', 'background') or style.lookup('.', 'background')

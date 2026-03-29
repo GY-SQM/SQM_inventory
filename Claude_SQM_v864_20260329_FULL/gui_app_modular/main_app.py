@@ -1017,6 +1017,12 @@ class SQMInventoryApp:
             # 사이드바 활성 표시 갱신
             if hasattr(self, '_highlight_active_tab'):
                 self._highlight_active_tab()
+            # v8.6.4: 메뉴바 컬러 복원 (apply_tc_theme_to_all 이후)
+            for btn in getattr(self, '_all_menu_btns', []):
+                _mc = getattr(btn, '_menu_color', None)
+                if _mc:
+                    try: btn.config(fg=_mc)
+                    except Exception: pass
             logger.info("[v8.4.1] 초기 테마/탭 렌더링 강제 완료")
         except Exception as e:
             logger.debug(f"[BUG-A] _force_initial_theme_refresh 스킵: {e}")

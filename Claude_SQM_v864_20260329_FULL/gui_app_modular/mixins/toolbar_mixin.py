@@ -147,7 +147,7 @@ class ToolbarMixin:
             ver_frame = tk.Frame(self._right_actions, bg=self._tb_bg)
             ver_frame.pack(side='left', padx=(Spacing.SM, 0))
             _vf = self._tb_font_scale
-            tk.Label(ver_frame, text=f"📦 {APP_NAME}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_progress'),
+            tk.Label(ver_frame, text=f"📦 {APP_NAME}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_progress', is_dark()),
                      font=_vf.body(bold=True)).pack(side='left')
             tk.Label(ver_frame, text=f"  v{__version__}", bg=self._tb_bg, fg=ThemeColors.get('statusbar_icon_warn', True),
                      font=_vf.heading()).pack(side='left')
@@ -157,6 +157,12 @@ class ToolbarMixin:
         self._row2 = tk.Frame(self._toolbar_container, bg=self._tb_bg, pady=0)
         self._row2.pack(fill='x')
         self._row2_visible = False  # Row2 사용 안 함
+
+        # v8.6.4: 컬러 액션 버튼 바 (v8.3.4 스타일 복원)
+        try:
+            self._build_action_button_bar()
+        except Exception as _ab:
+            logger.debug(f"액션 버튼 바 스킵: {_ab}")
 
         # v3.8.9: 메뉴 버튼 — 왼쪽 정렬, 최대 너비 제한
         self._menu_frame = tk.Frame(self._row1, bg=self._tb_bg)
@@ -178,6 +184,81 @@ class ToolbarMixin:
         # 4개 메인 + 총괄 재고 리스트 + 통계 + 로그
         self._tab_index_map = {'inventory': 0, 'allocation': 1, 'picked': 2, 'sold': 3, 'cargo_overview': 4, 'dashboard': 5, 'log': 6}
         self._active_tab_key = 'inventory'
+
+
+    def _build_action_button_bar(self) -> None:
+        """v8.6.4: v8.3.4 스타일 컬러 버튼 바 — 다크/라이트 자동 대응.
+
+        이미지 2번(v8.3.4) 기준:
+          PDF입고(초록) / 즉시출고(파랑) / 반품(회색) /
+          재고조회(파랑) / 정합성(청록) / 백업(회색) / 설정(회색)
+        """
+        from gui_app_modular.utils.ui_constants import tc
+        _dk = is_dark()
+
+        # 버튼 바 프레임
+        self._action_bar = tk.Frame(
+            self._toolbar_container,
+            bg=tc('bg_secondary'),
+            pady=3, padx=6,
+        )
+        self._action_bar.pack(fill='x')
+
+        # 버튼 정의: (label, method, bg_key, hover_key)
+        BTN_DEFS = [
+            ("📄 PDF 입고",   "_on_pdf_inbound",          '#22c55e', '#16a34a'),
+            ("🚀 즉시 출고",  "_on_s1_onestop_outbound",  '#3b82f6', '#2563eb'),
+            ("🔄 반품",       "_show_return_dialog",       '#64748b', '#475569'),
+            ("📊 재고 조회",  "_bulk_import_inventory",    '#0ea5e9', '#0284c7'),
+            (None, None, None, None),  # 구분선
+            ("🔍 정합성",     "_run_integrity_check",      '#06b6d4', '#0891b2'),
+            ("💾 백업",       "_on_backup_db",             '#64748b', '#475569'),
+            ("⚙️ 설정",       "_show_settings_dialog",     '#64748b', '#475569'),
+        ]
+
+        for item in BTN_DEFS:
+            label, method, bg_color, hover_color = item
+            if label is None:
+                # 구분선
+                sep = tk.Frame(self._action_bar, bg=tc('border'), width=1)
+                sep.pack(side='left', fill='y', padx=6, pady=2)
+                continue
+
+            btn = tk.Label(
+                self._action_bar,
+                text=label,
+                bg=bg_color,
+                fg=tc('text_on_dark'),  # v8.6.4
+                font=('맑은 고딕', 10, 'bold'),
+                padx=12, pady=4,
+                cursor='hand2',
+                relief='flat',
+            )
+            btn.pack(side='left', padx=(0, 3), pady=1)
+
+            # 클릭 바인딩
+            btn.bind('<Button-1>',
+                     lambda e, m=method: self._safe_call(m))
+            # 호버 효과
+            btn.bind('<Enter>',
+                     lambda e, b=btn, hc=hover_color: b.config(bg=hc))
+            btn.bind('<Leave>',
+                     lambda e, b=btn, bc=bg_color: b.config(bg=bc))
+
+        # 참조 저장 (테마 갱신용)
+        self._action_bar_buttons = [
+            c for c in self._action_bar.winfo_children()
+            if isinstance(c, tk.Label)
+        ]
+
+    def _refresh_action_bar_colors(self) -> None:
+        """v8.6.4: 테마 전환 시 액션 버튼 바 배경 갱신."""
+        try:
+            from gui_app_modular.utils.ui_constants import tc
+            if hasattr(self, '_action_bar') and self._action_bar.winfo_exists():
+                self._action_bar.config(bg=tc('bg_secondary'))
+        except Exception as _e:
+            logger.debug(f"action_bar 색상 갱신 스킵: {_e}")
 
     # ═══════════════════════════════════════════════════════
     # 메뉴 생성 헬퍼 (v3.8.4: 항목 간격 확대)
@@ -226,29 +307,29 @@ class ToolbarMixin:
     def _build_all_menus(self) -> None:
         """7개 드롭다운 메뉴 (밑줄 스타일) + 툴팁"""
         from ..utils.menu_tab_tooltips import clip_tooltip as _menu_bar_tip_clip
-        # v8.6.4: 메뉴별 컬러 아이콘 (ProDark 스타일)
+        # v8.6.4: 메뉴별 컬러
         menus = [
             ('📁 파일 ▼',      self._build_file_menu,
              '파일 메뉴: 데이터베이스 열기/저장/백업, 설정 파일, 최근 파일, 종료 등 파일 관련 기능',
-             None),  # 기본 색상
+             None),
             ('📥 입고 ▼',      self._build_inbound_menu,
              '입고 메뉴: 원스톱 입고(PDF/엑셀), 로케이션 업로드, 입고 이력 조회 등 입고 처리 기능',
-             '#4ade80'),  # 초록
+             '#4ade80'),
             ('📤 출고 ▼',      self._build_outbound_menu,
              '출고 메뉴: 선택 출고, 출고 템플릿, 출고 이력, 반품(재입고) 등 출고·반품 관련 기능',
-             '#facc15'),  # 노랑
+             '#facc15'),
             ('📊 재고 ▼',      self._build_report_menu,
              '재고 메뉴: 재고 현황·통계, 대시보드, LOT/톤백 조회, 엑셀 내보내기 등 재고 조회·보고 기능',
-             '#38bdf8'),  # 하늘
+             '#38bdf8'),
             ('📝 보고서 ▼',    self._build_customer_report_menu,
              '보고서 메뉴: 고객별·기간별 보고서, PDF/엑셀 출력 등 보고서 생성·출력 기능',
-             '#a78bfa'),  # 보라
+             '#a78bfa'),
             ('🔧 설정/도구 ▼', self._build_settings_menu,
              '설정/도구 메뉴: API 키·테마 설정, 데이터 검증, 마이그레이션, 개발자 도구 등',
-             '#94a3b8'),  # 슬레이트
+             '#94a3b8'),
             ('❓ 도움말 ▼',    self._build_help_menu,
              '도움말 메뉴: 단축키, 사용 안내, 정보·버전, 로그 보기 등',
-             None),  # 기본 색상
+             None),
         ]
 
         for item in menus:
@@ -263,11 +344,10 @@ class ToolbarMixin:
                           bg=self._tb_bg, fg=_btn_fg,
                           anchor='center', justify='center',
                           padx=Spacing.SM, pady=Spacing.SM, cursor='hand2')
-            btn._tc_skip = True   # v8.6.4: 테마 리프레시에서 컬러 보호
-            btn._menu_color = menu_color  # 원래 컬러 저장
+            btn._tc_skip = True
+            btn._menu_color = menu_color
             btn.pack(side='left', padx=Spacing.XS)
 
-            # 밑줄 인디케이터 (숨긴 상태로 생성)
             underline = tk.Frame(btn, height=2, bg=self._tb_underline_color)
             btn._underline = underline
             btn._menu_active = False
@@ -328,7 +408,7 @@ class ToolbarMixin:
                            font=self._tb_font_scale.body())
             sep.pack(side='left')
 
-            for icon, label, theme in [("🌙", "Dark", "darkly"), ("☀", "Light", "darkly")]:
+            for icon, label, theme in [("🌙", "Dark", "darkly"), ("☀", "Light", "litera")]:  # v8.6.4 수정
                 btn = tk.Label(
                     parent, text=f"{icon} {label}",
                     font=self._tb_font_scale.body(bold=True),
@@ -343,7 +423,7 @@ class ToolbarMixin:
             logger.debug(f"quick theme buttons: {_e}")
 
     def _refresh_toolbar_colors(self) -> None:
-        """v7.3.0: 테마 전환 시 툴바 전체 배경·전경색 동기화"""
+        """v8.6.4: 테마 전환 시 툴바 전체 배경·전경색 동기화"""
         try:
             self._load_toolbar_colors()
             for widget in [self._toolbar_container, self._row1, self._row2,
@@ -352,12 +432,12 @@ class ToolbarMixin:
                     widget.config(bg=self._tb_bg)
             for child in self._row1.winfo_children():
                 try:
-                    # v8.6.4: 메뉴 컬러 버튼은 원래 색상 유지
                     _orig_color = getattr(child, '_menu_color', None)
-                    child.config(bg=self._tb_bg,
-                                 fg=_orig_color or self._tb_fg_normal)
+                    child.config(bg=self._tb_bg, fg=_orig_color or self._tb_fg_normal)
                 except (tk.TclError, AttributeError):
                     logger.debug("[SUPPRESSED] exception in toolbar_mixin.py")  # noqa
+            # v8.6.4: 액션 버튼 바 배경 갱신
+            self._refresh_action_bar_colors()
         except (ValueError, TypeError, KeyError, AttributeError, tk.TclError) as _e:
             logger.debug(f"toolbar color refresh: {_e}")
 
@@ -705,8 +785,8 @@ class ToolbarMixin:
                     try:
                         from version import __version__
                         display_label = f"{label} (v{__version__})"
-                    except ImportError as _e:
-                        logger.debug(f"[toolbar] 버전 정보 로드 실패: {_e}")
+                    except ImportError:
+                        pass
                 m.add_command(
                     label=f"  {display_label}",
                     command=lambda mn=method_name: self._safe_call(mn)
@@ -741,21 +821,16 @@ class ToolbarMixin:
         TEXT_FG     = tc('text_muted')
         TEXT_ACTIVE = tc('text_primary')
 
-        # v8.6.4: 사이드바 탭별 컬러 매핑
+        # v8.6.4: 사이드바 탭별 컬러
         TAB_COLORS = {
-            'inventory':  '#4ade80',  # 초록
-            'allocation': '#facc15',  # 노랑
-            'picked':     '#a78bfa',  # 보라
-            'sold':       '#38bdf8',  # 하늘
-            'return_tab': '#f87171',  # 빨강
-            'move':       '#22d3ee',  # 시안
-            'dashboard':  '#00e676',  # 밝은 초록
-            'log':        '#94a3b8',  # 슬레이트
-            'scan':       '#fb923c',  # 주황
+            'inventory':  '#4ade80', 'allocation': '#facc15',
+            'picked':     '#a78bfa', 'sold':       '#38bdf8',
+            'return_tab': '#f87171', 'move':       '#22d3ee',
+            'dashboard':  '#00e676', 'log':        '#94a3b8',
+            'scan':       '#fb923c',
         }
 
         tab_defs = [
-            # key,          icon,  label,       tooltip
             ('inventory',   '📦', 'Inventory',
              'Full LOT list. Filter · search · double-click for detail.'),
             ('allocation',  '📋', 'Allocation',
@@ -807,16 +882,15 @@ class ToolbarMixin:
             inner = _tk.Frame(wrapper, bg=SIDEBAR_BG, cursor='hand2')
             inner.pack(side='left', fill='x', expand=True, padx=2, pady=4)
 
-            # v8.6.4: 탭별 아이콘 컬러
+            # 아이콘
             _tab_color = TAB_COLORS.get(key, ICON_FG)
             icon_lbl = _tk.Label(inner, text=icon,
                                  font=('Segoe UI Emoji', 18),
                                  bg=SIDEBAR_BG, fg=_tab_color,
                                  cursor='hand2')
-            icon_lbl._tc_skip = True  # 테마 리프레시 보호
+            icon_lbl._tc_skip = True
             icon_lbl.pack()
 
-            # 텍스트 라벨
             text_lbl = _tk.Label(inner, text=label,
                                  font=('맑은 고딕', 9),
                                  bg=SIDEBAR_BG, fg=TEXT_FG,
@@ -831,7 +905,6 @@ class ToolbarMixin:
             wrapper._active = False
 
             def make_handlers(w, i_lbl, t_lbl, tab_key):
-                # v8.6.4: hover 시 원래 탭 컬러 유지
                 _icon_color = TAB_COLORS.get(tab_key, ICON_FG)
                 def on_enter(e):
                     if not w._active:
@@ -914,7 +987,7 @@ class ToolbarMixin:
         _tk.Frame(sidebar, bg=SIDEBAR_BG, height=6).pack(fill='x')
 
     def _highlight_active_tab(self) -> None:
-        """v8.6.4 [SIDEBAR]: 활성 탭 인디케이터 바 + 배경 + 컬러 아이콘 유지."""
+        """v8.6.4 [SIDEBAR]: 활성 탭 = 밝은 흰색, 비활성 = 탭 고유 컬러."""
         SIDEBAR_BG   = tc('bg_secondary')
         ACTIVE_BG    = tc('bg_secondary')
         ACTIVE_BAR   = tc('border_focus')
@@ -923,7 +996,6 @@ class ToolbarMixin:
         TEXT_FG      = tc('text_muted')
         TEXT_ACTIVE  = tc('text_primary')
 
-        # v8.6.4: 탭별 아이콘 컬러 매핑
         TAB_COLORS = {
             'inventory':  '#4ade80', 'allocation': '#facc15',
             'picked':     '#a78bfa', 'sold':       '#38bdf8',
@@ -938,7 +1010,6 @@ class ToolbarMixin:
             is_active = (key == self._active_tab_key)
             bg      = ACTIVE_BG  if is_active else SIDEBAR_BG
             bar_c   = ACTIVE_BAR if is_active else INACTIVE_BAR
-            # v8.6.4: 활성=밝은 흰색, 비활성=탭 고유 컬러
             _tab_clr = TAB_COLORS.get(key, TEXT_FG)
             icon_fg = ACTIVE_FG if is_active else _tab_clr
             text_fg = TEXT_ACTIVE if is_active else TEXT_FG
@@ -1208,7 +1279,7 @@ class ToolbarMixin:
         bf.grid(row=5, column=0, columnspan=2, pady=(Spacing.LG, 0))
         _popup_dark = is_dark()
         _btn_fg = ThemeColors.get('badge_text', _popup_dark)
-        tk.Button(bf, text='🔍 검색', font=_btn_font, bg=ThemeColors.get('statusbar_progress'), fg=_btn_fg,
+        tk.Button(bf, text='🔍 검색', font=_btn_font, bg=ThemeColors.get('statusbar_progress', is_dark()), fg=_btn_fg,
                  bd=0, width=_btn_w, pady=Spacing.SM, cursor='hand2',
                  command=do_search).pack(side='left', padx=Spacing.SM)
         tk.Button(bf, text='🔄 초기화', font=_btn_font, bg=ThemeColors.get('btn_neutral', _popup_dark), fg=_btn_fg,

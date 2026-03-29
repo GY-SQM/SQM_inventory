@@ -192,7 +192,6 @@ def _refresh_native_widget(widget, colors: dict) -> None:
     # 컬러 고정 영역(툴바/탭 등)은 테마 리프레시에서 제외
     if getattr(widget, '_keep_colorful_theme', False):
         return
-    # v8.6.4: _tc_skip=True → 대시보드 카드 등 의도적 컬러 보호
     if getattr(widget, '_tc_skip', False):
         return
     is_dark = colors['is_dark']
@@ -290,14 +289,15 @@ def refresh_all_widgets_for_theme(app) -> dict:
     try:
         try:
             from fixes.global_tree_style import apply_global_tree_style
-            apply_global_tree_style()
+            from gui_app_modular.utils.ui_constants import _GLOBAL_IS_DARK
+            _root = getattr(app, 'root', app)
+            apply_global_tree_style(_root, _GLOBAL_IS_DARK)  # v8.6.4: 인자 추가
         except (ImportError, Exception) as e:
             logger.debug(f"global_tree_style 재적용 skip: {e}")
         colors = get_theme_colors_from_style()
         stats['is_dark'] = colors['is_dark']
         style = ttk.Style()
         for w in _walk_widgets(app.root):
-            # v8.6.4: _tc_skip=True 위젯(대시보드 카드 등) 보호
             if getattr(w, '_tc_skip', False):
                 continue
             if isinstance(w, ttk.Treeview):
@@ -372,30 +372,23 @@ def apply_tc_theme_to_all(app_self) -> int:
     import tkinter as tk
 
     count = 0
-    skip_count = 0
     root = getattr(app_self, 'root', app_self)
 
     for w in _walk_widgets(root):
         try:
             wclass = w.winfo_class()
             # v8.4.1 [BUG-F]: ttk 위젯은 config(bg=...) 불가 → 스킵
+            # ttk 위젯 클래스: TFrame, TLabel, TButton, TLabelframe, TEntry,
+            # TCombobox, TCheckbutton, TRadiobutton, TScrollbar, Treeview 등
             if wclass.startswith('T') or wclass in ('Treeview', 'TCombobox'):
                 continue
-            # v8.6.4 [BUG-FIX]: _tc_skip=True → 해당 위젯 전체 스킵 (대시보드 카드 등)
             if getattr(w, '_tc_skip', False):
-                skip_count += 1
                 continue
-            _skip_fg = getattr(w, '_tc_skip_fg', False)
-            _skip_bg = getattr(w, '_tc_skip_bg', False)
             if wclass in ('Label', 'Message'):
-                if not _skip_fg:
-                    w.config(fg=tc('text_primary'))
-                if not _skip_bg:
-                    w.config(bg=tc('bg_primary'))
+                w.config(fg=tc('text_primary'), bg=tc('bg_primary'))
                 count += 1
             elif wclass in ('Frame', 'Canvas'):
-                if not _skip_bg:
-                    w.config(bg=tc('bg_primary'))
+                w.config(bg=tc('bg_primary'))
                 count += 1
             elif wclass == 'LabelFrame':
                 w.config(fg=tc('text_primary'), bg=tc('bg_primary'))
@@ -438,5 +431,5 @@ def apply_tc_theme_to_all(app_self) -> int:
         except Exception:
             logger.debug("[THEME-FAIL] file=theme_refresh.py reason=theme_apply_error")  # noqa
 
-    logger.warning(f"[apply_tc_theme_to_all] {count}개 위젯 색상 갱신, {skip_count}개 _tc_skip 보호")
+    logger.debug(f"[apply_tc_theme_to_all] {count}개 위젯 색상 갱신")
     return count

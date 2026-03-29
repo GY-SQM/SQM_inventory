@@ -15,7 +15,13 @@
       "Bash(python -c \":*)",
       "Bash(python3 -c \":*)",
       "Bash(grep -rn \"\\\\.config\\(fg=\\\\|\\\\.configure\\(foreground=\" 'F:/프로그램/Sqm 재고관리/Claude_SQM_v864_20260329_FULL/' --include=*.py)",
-      "Bash(python3 -c \"import py_compile; py_compile.compile\\(''gui_app_modular/mixins/toolbar_mixin.py'', doraise=True\\); print\\(''OK''\\)\")"
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\(''gui_app_modular/mixins/toolbar_mixin.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(cd:*)",
+      "Bash(cp ProPalette_PATCH/theme_aware.py Claude_SQM_v864_20260329_FULL/theme_aware.py)",
+      "Bash(cp ProPalette_PATCH/gui_app_modular/utils/ui_constants.py Claude_SQM_v864_20260329_FULL/gui_app_modular/utils/ui_constants.py)",
+      "Bash(cp ProPalette_PATCH/gui_app_modular/utils/theme_refresh.py Claude_SQM_v864_20260329_FULL/gui_app_modular/utils/theme_refresh.py)",
+      "Bash(cp ProPalette_PATCH/gui_app_modular/tabs/dashboard_tab.py Claude_SQM_v864_20260329_FULL/gui_app_modular/tabs/dashboard_tab.py)",
+      "Bash(cp ProPalette_PATCH/gui_app_modular/mixins/theme_mixin.py Claude_SQM_v864_20260329_FULL/gui_app_modular/mixins/theme_mixin.py)"
     ]
   }
 }

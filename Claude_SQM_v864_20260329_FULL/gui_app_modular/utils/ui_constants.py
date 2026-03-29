@@ -403,180 +403,197 @@ class ThemeColors:
     """
 
     LIGHT = {
-        # 시맨틱 색상 (v3.6.2: 부드러운 톤)
-        'success': '#2e7d4f',    # 깊은 녹색 (기존 #28a745)
-        'warning': '#d4a017',    # 골드 (기존 #ffc107)
-        'danger':  '#c0392b',    # 차분한 레드 (기존 #dc3545)
-        'info':    '#2980b9',    # 딥 블루 (기존 #17a2b8)
-        'primary': '#34495e',    # 네이비 그레이 (기존 #007bff)
+    # ── v8.6.4 Pro Light — 딥 네이비 × 아이스 화이트 ──────────────────
+    # 설계: Bloomberg / SAP Fiori Light — 차분하고 고급진 Business 팔레트
+    # 원칙: 툴바/사이드바는 딥 네이비 유지, 콘텐츠는 쿨 아이스 화이트
 
-        # 상태 색상 (Treeview 행 배경 - 부드러운 파스텔)
-        'available': '#e8f5e9',   # 연한 민트 (기존 #C6EFCE)
-        'picked':   '#fce4ec',   # 연한 핑크 (기존 #FFC7CE)
-        'reserved': '#fff8e1',   # 연한 크림 (기존 #FFEB9C)
-        'shipped':  '#e3f2fd',   # 연한 스카이 (기존 #DDEBF7)
+    # ── Semantic ──────────────────────────────────────────────────────
+    'success': '#147848',    # 딥 에메랄드
+    'warning': '#a86020',    # 딥 앰버
+    'danger':  '#b83030',    # 딥 레드
+    'info':    '#1060a8',    # 딥 사파이어
+    'primary': '#162040',    # 딥 네이비
 
-        # 텍스트
-        'text_primary':   '#2c3e50',   # 진한 네이비 (순수 검정 X)
-        'text_secondary': '#4a5568',   # v8.1.8: #7f8c8d → #4a5568 (대비율 2.4→5.0:1, WCAG AA 통과)
-        'text_muted':     '#b0bec5',   # 비활성 텍스트
+    # ── Status 행 배경 ────────────────────────────────────────────────
+    'available': '#e4f4ec',  # 소프트 민트
+    'picked':    '#ede8f8',  # 소프트 라벤더
+    'reserved':  '#faf0e0',  # 소프트 크림
+    'shipped':   '#e0eef8',  # 소프트 스카이
 
-        # 배경 (v3.6.2: 순백색 대신 약간 따뜻한 톤)
-        'bg_primary':   '#fafbfc',   # 살짝 따뜻한 화이트
-        'bg_secondary': '#f0f3f5',   # 연한 그레이
-        'bg_hover':     '#e8ecef',   # 호버 배경
-        'bg_toolbar':   '#f0f3f5',   # 툴바 배경
-        'bg_card':      '#ffffff',   # 카드/패널 배경
+    # ── Text ──────────────────────────────────────────────────────────
+    'text_on_dark':   '#ffffff',
+    'text_primary':   '#162040',
+    'text_secondary': '#3d5878',
+    'text_muted':     '#7898b8',
+    'accent':         '#1460c8',
+    'accent_light':   '#4080e0',
 
-        # 테두리
-        'border':       '#dce1e5',   # 연한 테두리
-        'border_focus': '#5dade2',   # 포커스 테두리
+    # ── Background ────────────────────────────────────────────────────
+    'bg_primary':   '#f0f5fc',   # 쿨 아이스 화이트
+    'bg_secondary': '#e4edf8',   # 페일 블루
+    'bg_hover':     '#d0dff0',
+    'bg_toolbar':   '#162040',   # 딥 네이비
+    'bg_card':      '#ffffff',
 
-        # 액션 버튼 (v3.6.2: 채도 낮춘 부드러운 팔레트)
-        'btn_inbound':       '#2e7d4f',   # 입고: 딥 그린
-        'btn_inbound_hover': '#3a9e64',
-        'btn_outbound':       '#c77c2a',   # 출고: 앰버
-        'btn_outbound_hover': '#d49545',
-        'btn_report':         '#2c6fbb',   # 보고서: 스틸 블루
-        'btn_report_hover':   '#4a8fd4',
-        'btn_neutral':        '#6c7a89',   # 중립: 슬레이트
-        'btn_neutral_hover':  '#8395a7',
-
-        # Treeview
-        'tree_select_bg':  '#d6eaf8',   # 선택 행 배경
-        'tree_select_fg':  '#1a5276',   # 선택 행 텍스트
-        'tree_stripe':     '#f7f9fa',   # 줄무늬 배경 (짝수행)
-
-        # 차트
-        'chart_bg':   '#ffffff',
-        'chart_grid': '#ecf0f1',
-
-        # v3.6.3: 검색바
-        'search_bg':          '#fafbfc',
-        'search_fg':          '#2c3e50',
-        'search_border':      '#dce1e5',
-        'search_placeholder': '#b0bec5',
-        'search_cursor':      '#2c3e50',
-
-        # v3.6.3: 상태바
-        'statusbar_bg':       '#2c3e50',
-        'statusbar_fg':       '#ffffff',
-        'statusbar_icon_ok':  '#2ecc71',
-        'statusbar_icon_warn':'#f39c12',
-        'statusbar_icon_err': '#e74c3c',
-        'statusbar_progress': '#3498db',
-        'statusbar_progress_done': '#2ecc71',
-        'statusbar_track':    '#34495e',
-
-        # v3.6.3: 배지
-        'badge_db':           '#27ae60',
-        'badge_version':      '#3498db',
-        'badge_text':         '#ffffff',
-
-        # v3.6.3: 기타 UI
-        'arrow_separator':    '#bdc3c7',
-        'shortcut_text':      '#cccccc',
-        'shortcut_text_dim':  '#dddddd',
-        'canvas_highlight':   '#000000',
-    }
-
-    DARK = {
-    # ── v8.3.3 PRO DARK 테마 (2026-03-24) ─────────────────────────
-    # 설계 기준: Flexport (물류), Linear (SaaS), Vercel (개발 플랫폼)
-    # 핵심 원칙:
-    #   1) 배경: 순수 검정 대신 따뜻한 Slate-900 (#0f172a)
-    #   2) 강조: Cyan-400 (#22d3ee) — 물류 앱 신뢰감
-    #   3) 텍스트: Slate-100 (#f1f5f9) 본문, Slate-400 (#94a3b8) 보조
-    #   4) 상태: 색맹 대응 — 초록/노랑/빨강 + 아이콘 보조
-    #   5) 카드/테이블: Surface #1e293b (Slate-800)
-    # ─────────────────────────────────────────────────────────────────
-
-    # ── Semantic ─────────────────────────────────────────────────────
-    'success': '#4ade80',    # Green-400  — 입고 완료, AVAILABLE
-    'warning': '#facc15',    # Yellow-400 — 주의, RESERVED
-    'danger':  '#f87171',    # Red-400    — 오류, 만료
-    'info':    '#38bdf8',    # Sky-400    — 정보
-    'primary': '#22d3ee',    # Cyan-400   — 메인 강조 (Flexport 스타일)
-
-    # ── Status 행 배경 (Treeview row tag) ────────────────────────────
-    # 색맹 대응: 채도 낮추고 명도 차이로 구분
-    'available': '#0f2a1a',  # Slate + 그린 (판매가능)
-    'reserved':  '#1a1a0a',  # Slate + 앰버 (판매배정)
-    'picked':    '#1a0a2a',  # Slate + 퍼플 (피킹)
-    'shipped':   '#0a1a2a',  # Slate + 블루 (출고)
-
-    # ── Text ─────────────────────────────────────────────────────────
-    'text_primary':   '#f1f5f9',   # Slate-100 — 주 텍스트
-    'text_secondary': '#94a3b8',   # Slate-400 — 보조 텍스트
-    'text_muted':     '#475569',   # Slate-600 — 비활성/플레이스홀더
-    'accent':         '#22d3ee',   # Cyan-400  — 강조 (링크, 아이콘)
-    'accent_light':   '#67e8f9',   # Cyan-300  — 연한 강조
-
-    # ── Background (3단계 깊이) ───────────────────────────────────────
-    'bg_primary':   '#0f172a',   # Slate-900 — 앱 배경 (Treeview)
-    'bg_secondary': '#1e293b',   # Slate-800 — 패널/사이드바
-    'bg_hover':     '#334155',   # Slate-700 — 호버
-    'bg_toolbar':   '#0f172a',   # Slate-900 — 툴바 (앱과 동일)
-    'bg_card':      '#1e293b',   # Slate-800 — 카드/다이얼로그
-
-    # ── Border ───────────────────────────────────────────────────────
-    'border':       '#334155',   # Slate-700 — 기본 테두리
-    'border_focus': '#22d3ee',   # Cyan-400  — 포커스 테두리
+    # ── Border ────────────────────────────────────────────────────────
+    'border':       '#bdd0ea',
+    'border_focus': '#1460c8',
 
     # ── Buttons ───────────────────────────────────────────────────────
-    # 물류 앱 컨벤션: 입고=Green, 출고=Amber, 보고서=Blue
-    'btn_inbound':        '#166534',   # Green-800 배경
-    'btn_inbound_hover':  '#15803d',   # Green-700
-    'btn_outbound':       '#92400e',   # Amber-800 배경
-    'btn_outbound_hover': '#b45309',   # Amber-700
-    'btn_report':         '#1e3a5f',   # Blue-900 배경
-    'btn_report_hover':   '#1d4ed8',   # Blue-700
-    'btn_neutral':        '#334155',   # Slate-700
-    'btn_neutral_hover':  '#475569',   # Slate-600
+    'btn_inbound':        '#147848',
+    'btn_inbound_hover':  '#189858',
+    'btn_outbound':       '#a86020',
+    'btn_outbound_hover': '#c87828',
+    'btn_report':         '#1840a0',
+    'btn_report_hover':   '#2050c0',
+    'btn_neutral':        '#405878',
+    'btn_neutral_hover':  '#506888',
 
-    # ── Treeview ─────────────────────────────────────────────────────
-    'tree_select_bg':  '#164e63',   # Cyan-900 — 선택 행 (Flexport 파랑)
-    'tree_select_fg':  '#ecfeff',   # Cyan-50  — 선택 행 글자
-    'tree_stripe':     '#1e293b',   # Slate-800 — 줄무늬 (홀짝 구분)
+    # ── Treeview ──────────────────────────────────────────────────────
+    'tree_select_bg':  '#c0d4f0',
+    'tree_select_fg':  '#0a1830',
+    'tree_stripe':     '#f5f9ff',
 
     # ── Charts ────────────────────────────────────────────────────────
-    'chart_bg':   '#0f172a',
-    'chart_grid': '#334155',
+    'chart_bg':   '#ffffff',
+    'chart_grid': '#e4edf8',
 
     # ── Search bar ────────────────────────────────────────────────────
-    'search_bg':          '#1e293b',
-    'search_fg':          '#f1f5f9',
-    'search_border':      '#334155',
-    'search_placeholder': '#475569',
-    'search_cursor':      '#22d3ee',
+    'search_bg':          '#ffffff',
+    'search_fg':          '#162040',
+    'search_border':      '#bdd0ea',
+    'search_placeholder': '#7898b8',
+    'search_cursor':      '#1460c8',
 
     # ── Status bar ────────────────────────────────────────────────────
-    'statusbar_bg':            '#0f172a',
-    'statusbar_fg':            '#94a3b8',
-    'statusbar_icon_ok':       '#4ade80',   # Green
-    'statusbar_icon_warn':     '#facc15',   # Yellow
-    'statusbar_icon_err':      '#f87171',   # Red
-    'statusbar_progress':      '#22d3ee',   # Cyan
-    'statusbar_progress_done': '#4ade80',
-    'statusbar_track':         '#334155',
+    'statusbar_bg':            '#162040',
+    'statusbar_fg':            '#8aaac8',
+    'statusbar_icon_ok':       '#147848',
+    'statusbar_icon_warn':     '#a86020',
+    'statusbar_icon_err':      '#b83030',
+    'statusbar_progress':      '#1460c8',
+    'statusbar_progress_done': '#147848',
+    'statusbar_track':         '#1e2e58',
 
     # ── Badges ────────────────────────────────────────────────────────
-    'badge_db':      '#0e7490',   # Cyan-700
-    'badge_version': '#1d4ed8',   # Blue-700
+    'badge_db':      '#1060a8',
+    'badge_version': '#1840a0',
     'badge_text':    '#ffffff',
 
-    # ── Misc ─────────────────────────────────────────────────────────
-    'arrow_separator':  '#475569',
-    'shortcut_text':    '#94a3b8',
-    'shortcut_text_dim':'#64748b',
-    'canvas_highlight': '#22d3ee',
+    # ── Misc ──────────────────────────────────────────────────────────
+    'arrow_separator':    '#bdd0ea',
+    'shortcut_text':      '#7898b8',
+    'shortcut_text_dim':  '#a0b8d0',
+    'canvas_highlight':   '#1460c8',
 }
+
+    DARK = {
+    # ── v8.6.4 Pro Dark — 딥 미드나잇 × 스틸 블루 ────────────────────
+    # 설계: Bloomberg Terminal 수준 — 눈 편안한 딥 네이비 기반
+    # 원칙:
+    #   1) 배경: 딥 미드나잇 블루 (#0b1322) — 따뜻한 네이비 느낌
+    #   2) 강조: 스카이 블루 (#38bdf8) — 눈부심 없는 소프트 시안
+    #   3) 레이어: 4단계 (07101e → 0b1322 → 101c34 → 13203c)
+    #   4) 카드 색: Muted Pastel — 채도 낮춰 고급스럽게
+
+    # ── Semantic ──────────────────────────────────────────────────────
+    'success': '#52c87e',    # 소프트 에메랄드
+    'warning': '#e8943a',    # 소프트 테라코타
+    'danger':  '#e06868',    # 소프트 레드
+    'info':    '#4ab0e8',    # 소프트 스카이
+    'primary': '#38bdf8',    # 스카이 블루
+
+    # ── Status 행 배경 ────────────────────────────────────────────────
+    'available': '#0d2018',  # 딥 그린 틴트
+    'picked':    '#18102e',  # 딥 퍼플 틴트
+    'reserved':  '#1e1608',  # 딥 앰버 틴트
+    'shipped':   '#0a1826',  # 딥 블루 틴트
+
+    # ── Text ──────────────────────────────────────────────────────────
+    'text_on_dark':   '#ffffff',
+    'text_primary':   '#dce8fa',   # 눈부심 없는 블루-화이트
+    'text_secondary': '#6e92be',   # 스틸 블루
+    'text_muted':     '#364e6e',   # 딥 스틸
+    'accent':         '#38bdf8',   # 스카이 블루
+    'accent_light':   '#7dd4fa',
+
+    # ── Background (4단계 깊이) ───────────────────────────────────────
+    'bg_primary':   '#0b1322',   # 앱 본문
+    'bg_secondary': '#101c34',   # 패널
+    'bg_hover':     '#182840',   # 호버
+    'bg_toolbar':   '#07101e',   # 툴바
+    'bg_card':      '#13203c',   # 카드
+
+    # ── Border ────────────────────────────────────────────────────────
+    'border':       '#1c3358',
+    'border_focus': '#38bdf8',
+
+    # ── Buttons ───────────────────────────────────────────────────────
+    'btn_inbound':        '#1a6e40',
+    'btn_inbound_hover':  '#228850',
+    'btn_outbound':       '#8a5a10',
+    'btn_outbound_hover': '#aa7018',
+    'btn_report':         '#183898',
+    'btn_report_hover':   '#2048b8',
+    'btn_neutral':        '#2c4060',
+    'btn_neutral_hover':  '#384e78',
+
+    # ── Treeview ──────────────────────────────────────────────────────
+    'tree_select_bg':  '#102e58',
+    'tree_select_fg':  '#dce8fa',
+    'tree_stripe':     '#101c34',
+
+    # ── Charts ────────────────────────────────────────────────────────
+    'chart_bg':   '#0b1322',
+    'chart_grid': '#1c3358',
+
+    # ── Search bar ────────────────────────────────────────────────────
+    'search_bg':          '#13203c',
+    'search_fg':          '#dce8fa',
+    'search_border':      '#1c3358',
+    'search_placeholder': '#364e6e',
+    'search_cursor':      '#38bdf8',
+
+    # ── Status bar ────────────────────────────────────────────────────
+    'statusbar_bg':            '#07101e',
+    'statusbar_fg':            '#6e92be',
+    'statusbar_icon_ok':       '#52c87e',
+    'statusbar_icon_warn':     '#e8943a',
+    'statusbar_icon_err':      '#e06868',
+    'statusbar_progress':      '#38bdf8',
+    'statusbar_progress_done': '#52c87e',
+    'statusbar_track':         '#1c3358',
+
+    # ── Badges ────────────────────────────────────────────────────────
+    'badge_db':      '#0e5878',
+    'badge_version': '#183898',
+    'badge_text':    '#ffffff',
+
+    # ── Misc ──────────────────────────────────────────────────────────
+    'arrow_separator':   '#1c3358',
+    'shortcut_text':     '#6e92be',
+    'shortcut_text_dim': '#364e6e',
+    'canvas_highlight':  '#38bdf8',
+}
+
+
+
+
+
+
 
 
     @classmethod
     def is_dark_theme(cls, theme_name: str) -> bool:
         """다크 테마 여부 확인"""
-        return theme_name.lower() in ('darkly', 'cyborg', 'superhero', 'solar', 'vapor')
+        # v8.6.4: 다크 테마 목록 확장 (PRO DARK 계열 포함)
+        _DARK_SET = {
+            'darkly', 'cyborg', 'superhero', 'solar', 'vapor',
+            'dark', 'pro_dark', 'sqm_dark', 'slate',
+            'monokai', 'night', 'dim',
+        }
+        return theme_name.lower() in _DARK_SET or \
+               'dark' in theme_name.lower()
 
     @classmethod
     def get(cls, key: str, is_dark: bool = False) -> str:
@@ -646,7 +663,7 @@ _GLOBAL_THEME:   str  = 'darkly'
 def set_global_theme(theme_name: str) -> None:
     """앱 테마 변경 시 호출 — 전역 상태 갱신."""
     global _GLOBAL_IS_DARK, _GLOBAL_THEME
-    _GLOBAL_THEME   = str(theme_name or 'darkly')
+    _GLOBAL_THEME   = str(theme_name or 'darkly')  # v8.6.4: 기본 darkly
     _GLOBAL_IS_DARK = ThemeColors.is_dark_theme(_GLOBAL_THEME)
 
 
@@ -684,14 +701,14 @@ def tc(key: str, dark: bool = None) -> str:
     if color is None:
         # 공통 키 폴백
         _fallback = {
-            'text_primary':   '#e2e8f0' if _dark else '#1a1a1a',
-            'text_secondary': '#cccccc' if _dark else '#555555',
-            'text_muted':     '#888888' if _dark else '#888888',
-            'text_on_dark':   '#f0f0f0',
-            'text_on_light':  '#1a1a1a',
-            'bg_primary':     '#0d1b2a' if _dark else '#fafbfc',
-            'bg_secondary':   '#112233' if _dark else '#f0f3f5',
-            'bg_card':        '#1a2a3a' if _dark else '#ffffff',
+            'text_primary':   '#dce8fa' if _dark else '#162040',
+            'text_secondary': '#6e92be' if _dark else '#3d5878',
+            'text_muted':     '#364e6e' if _dark else '#7898b8',
+            'text_on_dark':   '#ffffff',
+            'text_on_light':  '#1a2744',
+            'bg_primary':     '#0b1322' if _dark else '#f0f5fc',
+            'bg_secondary':   '#101c34' if _dark else '#e4edf8',
+            'bg_card':        '#13203c' if _dark else '#ffffff',
             'bg_entry':       '#1a2a3a' if _dark else '#ffffff',
             'border':         '#1a3a5c' if _dark else '#dce1e5',
             'select_bg':      '#1a3a5c' if _dark else '#d6eaf8',
