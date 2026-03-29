@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(xargs grep:*)",
+      "Bash(python -c \"import tkinter; import ttkbootstrap; import sqlite3; print\\(''OK: tkinter, ttkbootstrap, sqlite3''\\)\")",
+      "Bash(python run.py)",
+      "Bash(find gui_app_modular -type f -name \"*.py\" -exec grep -Pzo \"except[^\\\\n]*:\\\\s*\\\\n\\\\s*pass\" {} +)",
+      "Bash(awk 'NR==1 || NR==2 {print}')",
+      "Bash(find 'F:/프로그램/Sqm 재고관리/Claude_SQM_v864_20260329_FULL/gui_app_modular/' -type f -name *.py)",
+      "Read(//tmp/**)",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\(''engine_modules/inventory_modular/outbound_mixin.py'', doraise=True\\); print\\(''OK''\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''gui_app_modular/mixins/advanced_dialogs_mixin.py'', doraise=True\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''gui_app_modular/dialogs/onestop_inbound.py'', doraise=True\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(python3 -c \":*)",
+      "Bash(grep -rn \"\\\\.config\\(fg=\\\\|\\\\.configure\\(foreground=\" 'F:/프로그램/Sqm 재고관리/Claude_SQM_v864_20260329_FULL/' --include=*.py)",
+      "Bash(python3 -c \"import py_compile; py_compile.compile\\(''gui_app_modular/mixins/toolbar_mixin.py'', doraise=True\\); print\\(''OK''\\)\")"
+    ]
+  }
+}
