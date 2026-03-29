@@ -795,7 +795,7 @@ class DashboardTabMixin:
                 GROUP BY COALESCE(i.product, 'Unknown'), t.status, COALESCE(t.is_sample, 0)
             """)
 
-            # 매트릭스 구성
+            # 매트릭스 구성 — 톤백 단위 집계
             products = {}
             status_map = {
                 'AVAILABLE': 'available', 'RESERVED': 'reserved',
@@ -811,10 +811,11 @@ class DashboardTabMixin:
 
                 if prod not in products:
                     products[prod] = {
-                        'available': 0, 'reserved': 0, 'picked': 0,
-                        'outbound': 0, 'return': 0, 'sample_cnt': 0, 'sample_kg': 0,
-                        'available_cnt': 0, 'reserved_cnt': 0, 'picked_cnt': 0,
-                        'outbound_cnt': 0, 'return_cnt': 0,
+                        'available_kg': 0, 'reserved_kg': 0, 'picked_kg': 0,
+                        'outbound_kg': 0, 'return_kg': 0,
+                        'available_tb': 0, 'reserved_tb': 0, 'picked_tb': 0,
+                        'outbound_tb': 0, 'return_tb': 0,
+                        'sample_cnt': 0, 'sample_kg': 0,
                     }
                 p = products[prod]
                 mapped = status_map.get(status, '')
@@ -822,68 +823,103 @@ class DashboardTabMixin:
                     p['sample_cnt'] += cnt
                     p['sample_kg'] += kg
                 elif mapped:
-                    p[mapped] += kg
-                    p[f'{mapped}_cnt'] += cnt
+                    p[f'{mapped}_kg'] += kg
+                    p[f'{mapped}_tb'] += cnt
+
+            # LOT 단위 집계 (별도 쿼리)
+            lot_rows = db.fetchall("""
+                SELECT
+                    COALESCE(i.product, 'Unknown') AS product,
+                    i.status,
+                    COUNT(DISTINCT i.lot_no) AS lot_cnt
+                FROM inventory i
+                GROUP BY COALESCE(i.product, 'Unknown'), i.status
+            """)
+            lot_data = {}
+            for r in (lot_rows or []):
+                prod = r.get('product', 'Unknown') or 'Unknown'
+                status = str(r.get('status', '')).upper()
+                cnt = int(r.get('lot_cnt', 0) or 0)
+                if prod not in lot_data:
+                    lot_data[prod] = {
+                        'available_lot': 0, 'reserved_lot': 0, 'picked_lot': 0,
+                        'outbound_lot': 0, 'return_lot': 0,
+                    }
+                mapped = status_map.get(status, '')
+                if mapped:
+                    lot_data[prod][f'{mapped}_lot'] += cnt
 
             # 표시
-            sums = {k: 0 for k in ['available', 'reserved', 'picked', 'outbound', 'return',
-                                    'total', 'sample']}
+            STATUSES = ['available', 'reserved', 'picked', 'outbound', 'return']
+            sums_kg = {s: 0.0 for s in STATUSES}
+            sums_tb = {s: 0 for s in STATUSES}
+            sums_lot = {s: 0 for s in STATUSES}
+            total_sample = 0
+
             for prod_name in sorted(products.keys()):
                 p = products[prod_name]
-                total_kg = sum(p[s] for s in ['available', 'reserved', 'picked', 'outbound', 'return'])
-                total_cnt = sum(p[f'{s}_cnt'] for s in ['available', 'reserved', 'picked', 'outbound', 'return'])
+                ld = lot_data.get(prod_name, {})
 
                 if mode == 'mt':
+                    total = sum(p[f'{s}_kg'] for s in STATUSES)
                     vals = (prod_name,
-                            f"{p['available']/1000:,.1f}", f"{p['reserved']/1000:,.1f}",
-                            f"{p['picked']/1000:,.1f}", f"{p['outbound']/1000:,.1f}",
-                            f"{p['return']/1000:,.1f}", f"{total_kg/1000:,.1f}",
+                            f"{p['available_kg']/1000:,.1f}", f"{p['reserved_kg']/1000:,.1f}",
+                            f"{p['picked_kg']/1000:,.1f}", f"{p['outbound_kg']/1000:,.1f}",
+                            f"{p['return_kg']/1000:,.1f}", f"{total/1000:,.1f}",
                             p['sample_cnt'])
                 elif mode == 'lot':
+                    total = sum(ld.get(f'{s}_lot', 0) for s in STATUSES)
                     vals = (prod_name,
-                            p['available_cnt'], p['reserved_cnt'],
-                            p['picked_cnt'], p['outbound_cnt'],
-                            p['return_cnt'], total_cnt,
+                            ld.get('available_lot', 0), ld.get('reserved_lot', 0),
+                            ld.get('picked_lot', 0), ld.get('outbound_lot', 0),
+                            ld.get('return_lot', 0), total,
                             p['sample_cnt'])
                 else:  # tonbag
+                    total = sum(p[f'{s}_tb'] for s in STATUSES)
                     vals = (prod_name,
-                            p['available_cnt'], p['reserved_cnt'],
-                            p['picked_cnt'], p['outbound_cnt'],
-                            p['return_cnt'], total_cnt,
+                            p['available_tb'], p['reserved_tb'],
+                            p['picked_tb'], p['outbound_tb'],
+                            p['return_tb'], total,
                             p['sample_cnt'])
 
                 tree.insert('', END, values=vals)
 
-                sums['available'] += p['available']
-                sums['reserved'] += p['reserved']
-                sums['picked'] += p['picked']
-                sums['outbound'] += p['outbound']
-                sums['return'] += p['return']
-                sums['total'] += total_kg
-                sums['sample'] += p['sample_cnt']
+                for s in STATUSES:
+                    sums_kg[s] += p[f'{s}_kg']
+                    sums_tb[s] += p[f'{s}_tb']
+                    sums_lot[s] += lot_data.get(prod_name, {}).get(f'{s}_lot', 0)
+                total_sample += p['sample_cnt']
 
             # 합계 행
             if products:
                 if mode == 'mt':
+                    total_all = sum(sums_kg[s] for s in STATUSES)
                     tree.insert('', END, values=(
                         '합계',
-                        f"{sums['available']/1000:,.1f}", f"{sums['reserved']/1000:,.1f}",
-                        f"{sums['picked']/1000:,.1f}", f"{sums['outbound']/1000:,.1f}",
-                        f"{sums['return']/1000:,.1f}", f"{sums['total']/1000:,.1f}",
-                        int(sums['sample']),
+                        f"{sums_kg['available']/1000:,.1f}", f"{sums_kg['reserved']/1000:,.1f}",
+                        f"{sums_kg['picked']/1000:,.1f}", f"{sums_kg['outbound']/1000:,.1f}",
+                        f"{sums_kg['return']/1000:,.1f}", f"{total_all/1000:,.1f}",
+                        total_sample,
+                    ), tags=('total',))
+                elif mode == 'lot':
+                    total_all = sum(sums_lot[s] for s in STATUSES)
+                    tree.insert('', END, values=(
+                        '합계',
+                        sums_lot['available'], sums_lot['reserved'],
+                        sums_lot['picked'], sums_lot['outbound'],
+                        sums_lot['return'], total_all,
+                        total_sample,
                     ), tags=('total',))
                 else:
+                    total_all = sum(sums_tb[s] for s in STATUSES)
                     tree.insert('', END, values=(
                         '합계',
-                        sum(products[p]['available_cnt'] for p in products),
-                        sum(products[p]['reserved_cnt'] for p in products),
-                        sum(products[p]['picked_cnt'] for p in products),
-                        sum(products[p]['outbound_cnt'] for p in products),
-                        sum(products[p]['return_cnt'] for p in products),
-                        sum(sum(products[p][f'{s}_cnt'] for s in ['available','reserved','picked','outbound','return']) for p in products),
-                        int(sums['sample']),
+                        sums_tb['available'], sums_tb['reserved'],
+                        sums_tb['picked'], sums_tb['outbound'],
+                        sums_tb['return'], total_all,
+                        total_sample,
                     ), tags=('total',))
-                tree.tag_configure('total', font=('맑은 고딕', 11, 'bold'))
+                tree.tag_configure('total', font=('맑은 고딕', 12, 'bold'))
 
         except Exception as e:
             logger.error(f"제품×상태 매트릭스 오류: {e}")
