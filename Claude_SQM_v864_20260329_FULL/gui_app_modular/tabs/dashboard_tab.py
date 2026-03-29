@@ -113,48 +113,64 @@ class DashboardTabMixin:
         product_frame = tk.Frame(zone1, bg=BG_CARD)
         product_frame.pack(fill=X)
 
-        # v8.6.4: 재고 + 정합성 통합 테이블
-        columns = ("product", "available", "reserved", "picked",
-                   "outbound", "return", "total", "sample",
-                   "bal_open", "bal_in", "bal_out", "bal_close", "bal_check")
-        self.tree_dashboard_product = ttk.Treeview(
-            product_frame, columns=columns,
-            show="headings", height=6,
-        )
+        # v8.6.4: 좌우 분할 Treeview — 좌: 재고, 우: 정합성(노랑)
         _matrix_style = ttk.Style()
         _matrix_style.configure('Matrix.Treeview', font=('맑은 고딕', 11), rowheight=34)
         _matrix_style.configure('Matrix.Treeview.Heading', font=('맑은 고딕', 10, 'bold'))
-        self.tree_dashboard_product.configure(style='Matrix.Treeview')
-
-        col_defs = [
-            ("product",   "Product",  130, "center"),
-            ("available", "판매가능",   75, "center"),
-            ("reserved",  "판매배정",   75, "center"),
-            ("picked",    "판매화물",   75, "center"),
-            ("outbound",  "출고완료",   75, "center"),
-            ("return",    "반품대기",   70, "center"),
-            ("total",     "합계",       80, "center"),
-            ("sample",    "샘플",       50, "center"),
-            ("bal_open",  "🟡기초재고",  80, "center"),
-            ("bal_in",    "🟡입고",     70, "center"),
-            ("bal_out",   "🟡출고",     70, "center"),
-            ("bal_close", "🟡기말재고", 80, "center"),
-            ("bal_check", "검증",       45, "center"),
-        ]
-        for cid, text, width, anchor in col_defs:
-            self.tree_dashboard_product.heading(cid, text=text, anchor='center')
-            self.tree_dashboard_product.column(cid, width=width, anchor=anchor, stretch=True)
-
-        # v8.6.4: 기초/입고/출고/기말 → 진한 노랑 (다크: #ffc107, 라이트: #b8860b)
         _gold_fg = '#ffc107' if _d else '#b8860b'
-        self.tree_dashboard_product.tag_configure('gold_data', foreground=_gold_fg)
-        self._gold_fg = _gold_fg  # 나중에 재적용용
+        _gold_hd_fg = '#ffd54f' if _d else '#a07000'
+        self._gold_fg = _gold_fg
+        _matrix_style.configure('Gold.Treeview', font=('맑은 고딕', 11), rowheight=34,
+                                foreground=_gold_fg)
+        _matrix_style.configure('Gold.Treeview.Heading', font=('맑은 고딕', 10, 'bold'),
+                                foreground=_gold_hd_fg)
 
-        prod_vsb = tk.Scrollbar(product_frame, orient='vertical',
-                                 command=self.tree_dashboard_product.yview)
-        self.tree_dashboard_product.configure(yscrollcommand=prod_vsb.set)
-        self.tree_dashboard_product.pack(side=LEFT, fill=X, expand=YES)
-        prod_vsb.pack(side=RIGHT, fill=Y)
+        # ── 좌측: 재고 현황 ──
+        left_frame = tk.Frame(product_frame, bg=BG_CARD)
+        left_frame.pack(side=LEFT, fill=BOTH, expand=YES)
+
+        left_cols = ("product", "available", "reserved", "picked",
+                     "outbound", "return", "total", "sample")
+        self.tree_dashboard_product = ttk.Treeview(
+            left_frame, columns=left_cols, show="headings", height=6,
+            style='Matrix.Treeview',
+        )
+        for cid, text, w in [
+            ("product", "Product", 130), ("available", "판매가능", 80),
+            ("reserved", "판매배정", 80), ("picked", "판매화물", 80),
+            ("outbound", "출고완료", 80), ("return", "반품대기", 70),
+            ("total", "합계", 85), ("sample", "샘플", 50),
+        ]:
+            self.tree_dashboard_product.heading(cid, text=text, anchor='center')
+            self.tree_dashboard_product.column(cid, width=w, anchor='center', stretch=True)
+        self.tree_dashboard_product.pack(fill=BOTH, expand=YES)
+
+        # ── 우측: 정합성 (진한 노랑) ──
+        right_frame = tk.Frame(product_frame, bg=BG_CARD)
+        right_frame.pack(side=LEFT, fill=Y)
+
+        right_cols = ("bal_open", "bal_in", "bal_out", "bal_close", "bal_check")
+        self._tree_balance = ttk.Treeview(
+            right_frame, columns=right_cols, show="headings", height=6,
+            style='Gold.Treeview',
+        )
+        for cid, text, w in [
+            ("bal_open", "기초재고", 80), ("bal_in", "입고", 65),
+            ("bal_out", "출고", 65), ("bal_close", "기말재고", 80),
+            ("bal_check", "검증", 45),
+        ]:
+            self._tree_balance.heading(cid, text=text, anchor='center')
+            self._tree_balance.column(cid, width=w, anchor='center', stretch=False)
+        self._tree_balance.pack(fill=Y, expand=YES)
+
+        # 스크롤 연동
+        def _sync_scroll(*args):
+            self.tree_dashboard_product.yview(*args)
+            self._tree_balance.yview(*args)
+        _shared_vsb = tk.Scrollbar(product_frame, orient='vertical', command=_sync_scroll)
+        self.tree_dashboard_product.configure(yscrollcommand=_shared_vsb.set)
+        self._tree_balance.configure(yscrollcommand=_shared_vsb.set)
+        _shared_vsb.pack(side=RIGHT, fill=Y)
 
         self._dashboard_cards = {}
         self._dashboard_total_label = None
@@ -757,6 +773,10 @@ class DashboardTabMixin:
                 return
             tree = self.tree_dashboard_product
             tree.delete(*tree.get_children())
+            # 우측 정합성 트리도 초기화
+            btree = getattr(self, '_tree_balance', None)
+            if btree:
+                btree.delete(*btree.get_children())
 
             mode = getattr(self, '_dash_view_mode', None)
             mode = mode.get() if mode else 'mt'
@@ -896,27 +916,29 @@ class DashboardTabMixin:
                              f"{_bclose:,.1f}", _check)
 
                 if mode == 'mt':
-                    vals = (prod_name,
+                    left_vals = (prod_name,
                             f"{p['available_kg']/1000:,.1f}", f"{p['reserved_kg']/1000:,.1f}",
                             f"{p['picked_kg']/1000:,.1f}", f"{p['outbound_kg']/1000:,.1f}",
                             f"{p['return_kg']/1000:,.1f}", f"{_total_mt:,.1f}",
-                            p['sample_cnt'], *_bal_tail)
+                            p['sample_cnt'])
                 elif mode == 'lot':
                     total = sum(ld.get(f'{s}_lot', 0) for s in STATUSES)
-                    vals = (prod_name,
+                    left_vals = (prod_name,
                             ld.get('available_lot', 0), ld.get('reserved_lot', 0),
                             ld.get('picked_lot', 0), ld.get('outbound_lot', 0),
                             ld.get('return_lot', 0), total,
-                            p['sample_cnt'], *_bal_tail)
+                            p['sample_cnt'])
                 else:
                     total = sum(p[f'{s}_tb'] for s in STATUSES)
-                    vals = (prod_name,
+                    left_vals = (prod_name,
                             p['available_tb'], p['reserved_tb'],
                             p['picked_tb'], p['outbound_tb'],
                             p['return_tb'], total,
-                            p['sample_cnt'], *_bal_tail)
+                            p['sample_cnt'])
 
-                tree.insert('', END, values=vals)
+                tree.insert('', END, values=left_vals)
+                if btree:
+                    btree.insert('', END, values=_bal_tail)
                 sums_bal['open'] += _bopen
                 sums_bal['in'] += _bin
                 sums_bal['out'] += _bout
@@ -928,12 +950,12 @@ class DashboardTabMixin:
                     sums_lot[s] += lot_data.get(prod_name, {}).get(f'{s}_lot', 0)
                 total_sample += p['sample_cnt']
 
-            # 합계 행 (기초/입고/출고/기말 + 검증)
+            # 합계 행 — 좌/우 분리
             _sb = sums_bal
             _total_kg_sum = sum(sums_kg[s] for s in STATUSES) / 1000
             _total_check = 'OK' if abs(_total_kg_sum - _sb['close']) < 0.1 else '⚠️'
-            _bal_tail = (f"{_sb['open']:,.1f}", f"{_sb['in']:,.1f}",
-                         f"{_sb['out']:,.1f}", f"{_sb['close']:,.1f}", _total_check)
+            _bal_total = (f"{_sb['open']:,.1f}", f"{_sb['in']:,.1f}",
+                          f"{_sb['out']:,.1f}", f"{_sb['close']:,.1f}", _total_check)
             if products:
                 if mode == 'mt':
                     tree.insert('', END, values=(
@@ -941,7 +963,7 @@ class DashboardTabMixin:
                         f"{sums_kg['available']/1000:,.1f}", f"{sums_kg['reserved']/1000:,.1f}",
                         f"{sums_kg['picked']/1000:,.1f}", f"{sums_kg['outbound']/1000:,.1f}",
                         f"{sums_kg['return']/1000:,.1f}", f"{_total_kg_sum:,.1f}",
-                        total_sample, *_bal_tail,
+                        total_sample,
                     ), tags=('total',))
                 elif mode == 'lot':
                     total_all = sum(sums_lot[s] for s in STATUSES)
@@ -950,7 +972,7 @@ class DashboardTabMixin:
                         sums_lot['available'], sums_lot['reserved'],
                         sums_lot['picked'], sums_lot['outbound'],
                         sums_lot['return'], total_all,
-                        total_sample, *_bal_tail,
+                        total_sample,
                     ), tags=('total',))
                 else:
                     total_all = sum(sums_tb[s] for s in STATUSES)
@@ -959,11 +981,13 @@ class DashboardTabMixin:
                         sums_tb['available'], sums_tb['reserved'],
                         sums_tb['picked'], sums_tb['outbound'],
                         sums_tb['return'], total_all,
-                        total_sample, *_bal_tail,
+                        total_sample,
                     ), tags=('total',))
                 tree.tag_configure('total', font=('맑은 고딕', 11, 'bold'))
-                _gfg = getattr(self, '_gold_fg', '#ffc107')
-                tree.tag_configure('gold_data', foreground=_gfg)
+                # 우측 정합성 합계
+                if btree:
+                    btree.insert('', END, values=_bal_total, tags=('total',))
+                    btree.tag_configure('total', font=('맑은 고딕', 11, 'bold'))
 
         except Exception as e:
             logger.error(f"제품×상태 매트릭스 오류: {e}")
