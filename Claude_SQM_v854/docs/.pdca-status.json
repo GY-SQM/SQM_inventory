@@ -1,0 +1,131 @@
+{
+  "version": "2.0",
+  "lastUpdated": "2026-03-25T08:42:39.131Z",
+  "activeFeatures": [
+    "parsers",
+    "gui_app_modular",
+    "tests",
+    "engine_modules"
+  ],
+  "primaryFeature": "parsers",
+  "features": {
+    "parsers": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-25T08:39:52.660Z",
+        "lastUpdated": "2026-03-25T08:40:05.562Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\parsers\\__init__.py"
+    },
+    "gui_app_modular": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-25T08:40:15.109Z",
+        "lastUpdated": "2026-03-25T08:40:15.109Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\gui_app_modular\\utils\\gui_bootstrap.py"
+    },
+    "tests": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-25T08:40:37.136Z",
+        "lastUpdated": "2026-03-25T08:41:16.035Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\tests\\test_v700_file_db_and_scale.py"
+    },
+    "engine_modules": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-25T08:42:19.542Z",
+        "lastUpdated": "2026-03-25T08:42:39.130Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\engine_modules\\db_migration_mixin.py"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-03-25T07:54:42.379Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-03-25T08:42:39.131Z"
+  },
+  "history": [
+    {
+      "timestamp": "2026-03-25T08:39:52.660Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-25T08:39:59.102Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-25T08:40:05.562Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-25T08:40:15.109Z",
+      "feature": "gui_app_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-25T08:40:37.136Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-25T08:41:16.035Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-25T08:42:19.542Z",
+      "feature": "engine_modules",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-25T08:42:35.123Z",
+      "feature": "engine_modules",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-25T08:42:39.130Z",
+      "feature": "engine_modules",
+      "phase": "do",
+      "action": "updated"
+    }
+  ]
+}

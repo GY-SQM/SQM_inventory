@@ -1,0 +1,33 @@
+# -*- coding: utf-8 -*-
+"""SQM 재고관리 시스템 버전 정보"""
+
+__version__ = "8.5.7"
+VERSION = "8.5.7"
+VERSION_TUPLE = (8, 5, 7)
+RELEASE_DATE = "2026-03-26"
+APP_NAME = "SQM 재고관리 시스템"
+APP_NAME_EN = "SQM Inventory Management System"
+BUILD_DATE = "2026-03-26"
+BUILD_NOTE = (
+    "v8.5.7 (2026-03-26)\n"
+    "출고 보고서(Detail of Outbound) 자동 생성 기능\n"
+    "  [NEW] export_mixin._export_outbound_report()\n"
+    "    Excel: 본품+샘플 분리, 합계행, 날짜/고객 필터\n"
+    "    PDF: reportlab 한글지원, landscape A4\n"
+    "  [FIX] outbound_mixin.py sold_table INSERT 보강\n"
+    "    기존: lot_no, tonbag_id, sold_qty_kg 등 3개만\n"
+    "    추가: sap_no, bl_no, customer, sku, sales_order_no,\n"
+    "          picking_no, delivery_date, ct_plt, sold_qty_mt,\n"
+    "          gross_weight_kg, is_sample (11개 필드)\n"
+    "  [DB] db_migration_mixin._migrate_v857\n"
+    "    sold_table 컬럼 추가: gross_weight_kg, sold_qty_mt, is_sample\n"
+    "    과거 OUTBOUND 톤백 → sold_table 역보정 자동 마이그레이션\n"
+    "    기존 빈 필드(sap_no, bl_no 등) inventory JOIN 보정\n"
+    "  [MENU] export_handlers 옵션 10번 추가\n"
+    "\n"
+    "v8.5.6 (2026-03-25)\n"
+    "P2: shim/deprecated 제거 + 버그3건 + 교차검증 정리\n"
+    "\n"
+    "v8.5.5 (2026-03-25)\n"
+    "P1: 사문 파일 삭제 (~13,800줄 제거)\n"
+)

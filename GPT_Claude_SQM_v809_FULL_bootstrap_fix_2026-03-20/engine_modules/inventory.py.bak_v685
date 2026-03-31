@@ -1,0 +1,98 @@
+"""
+SQM 재고관리 시스템 - 재고 엔진 (Facade)
+==========================================
+
+v3.0 - 레거시 버전 사용 (호환성 보장)
+
+★★★ 실제 구현: legacy/inventory_legacy.py ★★★
+
+모듈화 버전(inventory_modular/)은 SQLAlchemy를 사용하여
+현재 테스트와 호환되지 않습니다. 
+안정성을 위해 레거시 버전을 사용합니다.
+
+기존 코드:
+    from engine_modules.inventory import SQMInventoryEngine
+    engine = SQMInventoryEngine(db_path)
+    
+위 코드가 그대로 동작합니다.
+"""
+
+import logging
+import os
+import sys
+
+logger = logging.getLogger(__name__)
+
+# legacy 폴더를 path에 추가
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_LEGACY = os.path.join(_ROOT, 'legacy')
+if _LEGACY not in sys.path:
+    sys.path.insert(0, _LEGACY)
+
+# ★★★ v3.0: 모듈화 버전 사용 (레거시 폴더 없음) ★★★
+try:
+    from engine_modules.inventory_modular import SQMInventoryEngine
+    logger.debug("[v3.0] inventory.py: 모듈화 버전 사용")
+except ImportError as e:
+    logger.error(f"[v3.0] 모듈화 버전 import 실패: {e}")
+    SQMInventoryEngine = None
+
+# 모듈화 버전도 export (선택적 사용)
+try:
+    from engine_modules.inventory_modular import (  # noqa: F401
+        CRUDMixin,  # noqa: F401
+        ExportMixin,  # noqa: F401
+        ImportMixin,  # noqa: F401
+        InboundMixin,  # noqa: F401
+        OutboundMixin,  # noqa: F401
+        PackingDataAdapter,  # noqa: F401
+        PreflightMixin,  # noqa: F401
+        QueryMixin,  # noqa: F401
+        ReturnMixin,  # noqa: F401
+        ShipmentMixin,  # noqa: F401
+        SQMInventoryEngineV3,  # noqa: F401
+        TonbagMixin,  # noqa: F401
+        dict_to_packing_data,  # noqa: F401
+        format_lot_no,  # noqa: F401
+        format_weight,  # noqa: F401
+        normalize_column_name,  # noqa: F401
+        safe_parse_date,  # noqa: F401
+        safe_parse_float,  # noqa: F401
+        safe_parse_int,  # noqa: F401
+    )
+except ImportError as e:
+    logger.warning(f"[v3.0] 모듈화 버전 import 실패: {e}")
+    SQMInventoryEngineV3 = None
+
+# pandas 플래그 (호환성)
+try:
+    import pandas as pd
+    HAS_PANDAS = True
+except ImportError:
+    HAS_PANDAS = False
+    pd = None
+
+# validators 플래그 (호환성)
+try:
+    HAS_VALIDATORS = True
+except ImportError:
+    HAS_VALIDATORS = False
+
+__all__ = [
+    # Main engine (레거시)
+    'SQMInventoryEngine',
+
+    # Modular version (선택적)
+    'SQMInventoryEngineV3',
+
+    # Flags
+    'HAS_PANDAS',
+    'HAS_VALIDATORS',
+]
+
+try:
+    from version import __version__
+except ImportError:
+    __version__ = "0.0.0"  # S2-3: version.py 누락 시 fallback
+    import logging as _vlog
+    _vlog.getLogger(__name__).warning("[버전] version.py 로드 실패 → fallback 0.0.0")

@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-26T03:35:32.738Z",
+  "lastUpdated": "2026-03-26T08:18:30.588Z",
   "activeFeatures": [
     "engine_modules",
     "parsers",
@@ -10,7 +10,9 @@
     "mixins",
     "handlers",
     "inventory_modular",
-    "api"
+    "api",
+    "dialogs",
+    "Claude_SQM_v859"
   ],
   "primaryFeature": "engine_modules",
   "features": {
@@ -75,9 +77,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-26T00:34:52.628Z",
-        "lastUpdated": "2026-03-26T00:35:05.214Z"
+        "lastUpdated": "2026-03-26T08:14:48.503Z"
       },
-      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\gui_app_modular\\preparse_review_dialog.py"
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v859\\gui_app_modular\\main_app.py"
     },
     "mixins": {
       "phase": "do",
@@ -114,9 +116,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-26T01:45:26.228Z",
-        "lastUpdated": "2026-03-26T02:59:38.359Z"
+        "lastUpdated": "2026-03-26T08:18:09.840Z"
       },
-      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\engine_modules\\inventory_modular\\base.py"
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v859\\engine_modules\\inventory_modular\\outbound_mixin.py"
     },
     "api": {
       "phase": "do",
@@ -130,6 +132,32 @@
         "lastUpdated": "2026-03-26T03:35:32.738Z"
       },
       "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v855\\api\\main.py"
+    },
+    "dialogs": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T07:09:26.046Z",
+        "lastUpdated": "2026-03-26T08:10:49.914Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v859\\gui_app_modular\\dialogs\\allocation_dialog.py"
+    },
+    "Claude_SQM_v859": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-26T07:09:45.926Z",
+        "lastUpdated": "2026-03-26T08:18:30.588Z"
+      },
+      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v859\\version.py"
     }
   },
   "pipeline": {
@@ -140,7 +168,7 @@
   "session": {
     "startedAt": "2026-03-25T07:54:42.379Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-03-26T03:35:32.738Z"
+    "lastActivity": "2026-03-26T08:18:30.588Z"
   },
   "history": [
     {
@@ -362,6 +390,84 @@
     {
       "timestamp": "2026-03-26T03:35:32.738Z",
       "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T07:09:26.046Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T07:09:45.926Z",
+      "feature": "Claude_SQM_v859",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T07:17:54.570Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T07:19:15.748Z",
+      "feature": "Claude_SQM_v859",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T08:04:24.043Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T08:04:31.686Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T08:05:54.028Z",
+      "feature": "Claude_SQM_v859",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T08:10:49.914Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T08:14:15.947Z",
+      "feature": "gui_app_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T08:14:25.159Z",
+      "feature": "gui_app_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T08:14:48.503Z",
+      "feature": "gui_app_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T08:18:09.840Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-26T08:18:30.588Z",
+      "feature": "Claude_SQM_v859",
       "phase": "do",
       "action": "updated"
     }

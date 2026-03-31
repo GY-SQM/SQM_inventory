@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQM — NiceGUI 화면 미리보기</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI','맑은 고딕',sans-serif;background:#0f1117;color:#e2e8f0;height:100vh;display:flex;overflow:hidden;}
+
+/* 사이드바 */
+.sidebar{width:64px;background:#1a1d27;border-right:1px solid #2d3148;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:4px;flex-shrink:0;}
+.logo{width:36px;height:36px;background:#4f46e5;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:16px;}
+.nav-item{width:48px;height:48px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;transition:background .15s;font-size:18px;}
+.nav-item span{font-size:9px;color:#6b7280;}
+.nav-item:hover{background:#2d3148;}
+.nav-item.active{background:#312e81;}
+.nav-item.active span{color:#a5b4fc;}
+.spacer{flex:1;}
+.nav-bottom{font-size:18px;width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.nav-bottom:hover{background:#2d3148;}
+
+/* 메인 */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+
+/* 헤더 */
+.header{height:52px;background:#1a1d27;border-bottom:1px solid #2d3148;display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0;}
+.header-title{font-size:15px;font-weight:600;color:#e2e8f0;}
+.header-sub{font-size:12px;color:#6b7280;}
+.spacer-h{flex:1;}
+.search-box{background:#0f1117;border:1px solid #2d3148;border-radius:8px;padding:6px 12px;font-size:12px;color:#9ca3af;width:200px;display:flex;align-items:center;gap:6px;}
+
+/* 상단 KPI 카드 */
+.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;padding:16px 20px;flex-shrink:0;}
+.kpi-card{background:#1a1d27;border:1px solid #2d3148;border-radius:12px;padding:14px 16px;}
+.kpi-label{font-size:11px;color:#6b7280;margin-bottom:6px;}
+.kpi-value{font-size:22px;font-weight:700;}
+.kpi-sub{font-size:11px;color:#6b7280;margin-top:3px;}
+.kpi-green{color:#34d399;} .kpi-blue{color:#60a5fa;} .kpi-amber{color:#fbbf24;} .kpi-gray{color:#9ca3af;} .kpi-coral{color:#f87171;}
+
+/* 필터 바 */
+.filter-bar{display:flex;align-items:center;gap:8px;padding:0 20px 12px;flex-shrink:0;}
+.filter-chip{background:#1e2235;border:1px solid #2d3148;border-radius:20px;padding:4px 12px;font-size:12px;color:#9ca3af;cursor:pointer;}
+.filter-chip.active{background:#312e81;border-color:#4f46e5;color:#a5b4fc;}
+.filter-select{background:#1a1d27;border:1px solid #2d3148;border-radius:8px;padding:5px 10px;font-size:12px;color:#9ca3af;}
+.btn-primary{background:#4f46e5;border:none;border-radius:8px;padding:6px 14px;font-size:12px;color:#fff;cursor:pointer;margin-left:auto;}
+.btn-outline{background:transparent;border:1px solid #2d3148;border-radius:8px;padding:6px 14px;font-size:12px;color:#9ca3af;cursor:pointer;}
+
+/* 테이블 컨테이너 */
+.table-wrap{flex:1;overflow:auto;padding:0 20px;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead tr{background:#1a1d27;position:sticky;top:0;z-index:10;}
+thead th{padding:10px 12px;text-align:left;font-weight:600;color:#9ca3af;border-bottom:1px solid #2d3148;white-space:nowrap;}
+thead th.sort{cursor:pointer;}
+thead th.sort:hover{color:#e2e8f0;}
+.sort-arrow{font-size:10px;margin-left:3px;color:#4f46e5;}
+tbody tr{border-bottom:1px solid #1e2235;transition:background .1s;cursor:pointer;}
+tbody tr:hover{background:#1e2235;}
+tbody tr.selected{background:#1e2947;}
+tbody td{padding:9px 12px;color:#d1d5db;}
+tbody td.mono{font-family:'Courier New',monospace;font-size:11px;color:#94a3b8;}
+
+/* 상태 배지 */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+.badge-green{background:#064e3b;color:#34d399;}
+.badge-blue{background:#1e3a5f;color:#60a5fa;}
+.badge-amber{background:#451a03;color:#fbbf24;}
+.badge-gray{background:#1f2937;color:#9ca3af;}
+.badge-coral{background:#450a0a;color:#f87171;}
+.badge-dot{width:5px;height:5px;border-radius:50%;}
+.dot-green{background:#34d399;}
+.dot-blue{background:#60a5fa;}
+.dot-amber{background:#fbbf24;}
+.dot-gray{background:#9ca3af;}
+
+/* 하단 패널 */
+.detail-panel{background:#1a1d27;border-top:1px solid #2d3148;padding:12px 20px;flex-shrink:0;}
+.detail-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+.detail-title{font-size:13px;font-weight:600;color:#e2e8f0;}
+.detail-close{margin-left:auto;background:none;border:none;color:#6b7280;cursor:pointer;font-size:16px;}
+.detail-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;}
+.detail-tonbag{background:#0f1117;border:1px solid #2d3148;border-radius:6px;padding:6px 8px;font-size:11px;}
+.dt-no{color:#6b7280;font-size:10px;margin-bottom:2px;}
+.dt-wt{color:#e2e8f0;font-weight:600;}
+
+/* 하단 상태바 */
+.statusbar{height:28px;background:#12151f;border-top:1px solid #1e2235;display:flex;align-items:center;padding:0 20px;gap:20px;font-size:11px;color:#4b5563;flex-shrink:0;}
+.sb-item{display:flex;align-items:center;gap:5px;}
+.sb-dot{width:6px;height:6px;border-radius:50%;}
+</style>
+</head>
+<body>
+
+<!-- 사이드바 -->
+<div class="sidebar">
+  <div class="logo">⚡</div>
+  <div class="nav-item active">📦<span>재고</span></div>
+  <div class="nav-item">📋<span>배정</span></div>
+  <div class="nav-item">🚛<span>피킹</span></div>
+  <div class="nav-item">✅<span>출고</span></div>
+  <div class="nav-item">📊<span>통계</span></div>
+  <div class="nav-item">📝<span>로그</span></div>
+  <div class="spacer"></div>
+  <div class="nav-bottom">📷</div>
+  <div class="nav-bottom">⚙️</div>
+</div>
+
+<!-- 메인 -->
+<div class="main">
+
+  <!-- 헤더 -->
+  <div class="header">
+    <div>
+      <div class="header-title">재고 현황</div>
+      <div class="header-sub">광양 창고 · 리튬카보네이트</div>
+    </div>
+    <div class="spacer-h"></div>
+    <div class="search-box">🔍 <span>LOT / BL / SAP 검색...</span></div>
+    <button style="background:#4f46e5;border:none;border-radius:8px;padding:7px 14px;font-size:12px;color:#fff;cursor:pointer;margin-left:8px;">📥 입고</button>
+  </div>
+
+  <!-- KPI 카드 -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-label">📦 판매가능</div>
+      <div class="kpi-value kpi-green">247.0 MT</div>
+      <div class="kpi-sub">49개 LOT · 494 톤백</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">📋 판매배정</div>
+      <div class="kpi-value kpi-blue">80.0 MT</div>
+      <div class="kpi-sub">16개 LOT · 160 톤백</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">🚛 피킹완료</div>
+      <div class="kpi-value kpi-amber">40.0 MT</div>
+      <div class="kpi-sub">8개 LOT · 80 톤백</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">✅ 이번달 출고</div>
+      <div class="kpi-value kpi-gray">160.0 MT</div>
+      <div class="kpi-sub">32개 LOT</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">📦 전체 재고</div>
+      <div class="kpi-value" style="color:#e2e8f0;">367.0 MT</div>
+      <div class="kpi-sub">입고 - 출고 합계</div>
+    </div>
+  </div>
+
+  <!-- 필터 바 -->
+  <div class="filter-bar">
+    <div class="filter-chip active">전체</div>
+    <div class="filter-chip">AVAILABLE</div>
+    <div class="filter-chip">RESERVED</div>
+    <div class="filter-chip">PICKED</div>
+    <select class="filter-select"><option>모든 선사</option><option>MAERSK</option><option>MSC</option></select>
+    <select class="filter-select"><option>모든 제품</option><option>LC-Battery Grade</option></select>
+    <button class="btn-outline">📊 Excel</button>
+    <button class="btn-primary">🔄 새로고침</button>
+  </div>
+
+  <!-- 테이블 -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:32px;"><input type="checkbox" style="accent-color:#4f46e5;"></th>
+          <th>No.</th>
+          <th class="sort">LOT NO <span class="sort-arrow">▼</span></th>
+          <th class="sort">SAP NO</th>
+          <th class="sort">BL NO</th>
+          <th>PRODUCT</th>
+          <th>STATUS</th>
+          <th class="sort">Balance(Kg) <span class="sort-arrow">↕</span></th>
+          <th>NET(Kg)</th>
+          <th>CONTAINER</th>
+          <th>MXBG</th>
+          <th>ARRIVAL</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="selected" onclick="toggleDetail(this)">
+          <td><input type="checkbox" checked style="accent-color:#4f46e5;"></td>
+          <td style="color:#6b7280;">1</td>
+          <td class="mono">1126011432</td>
+          <td class="mono">2200034275</td>
+          <td class="mono">MAEU263764814</td>
+          <td style="color:#e2e8f0;">LC-Battery Grade</td>
+          <td><span class="badge badge-green"><span class="badge-dot dot-green"></span>AVAILABLE</span></td>
+          <td style="color:#34d399;font-weight:600;">5,001</td>
+          <td>5,001</td>
+          <td style="color:#94a3b8;">MRSU7185999</td>
+          <td>10</td>
+          <td style="color:#6b7280;">2026-03-13</td>
+        </tr>
+        <tr onclick="toggleDetail(this)">
+          <td><input type="checkbox" style="accent-color:#4f46e5;"></td>
+          <td style="color:#6b7280;">2</td>
+          <td class="mono">1126011442</td>
+          <td class="mono">2200034275</td>
+          <td class="mono">MAEU263764814</td>
+          <td style="color:#e2e8f0;">LC-Battery Grade</td>
+          <td><span class="badge badge-green"><span class="badge-dot dot-green"></span>AVAILABLE</span></td>
+          <td style="color:#34d399;font-weight:600;">5,001</td>
+          <td>5,001</td>
+          <td style="color:#94a3b8;">MRSU7185999</td>
+          <td>10</td>
+          <td style="color:#6b7280;">2026-03-13</td>
+        </tr>
+        <tr onclick="toggleDetail(this)">
+          <td><input type="checkbox" style="accent-color:#4f46e5;"></td>
+          <td style="color:#6b7280;">3</td>
+          <td class="mono">1126011443</td>
+          <td class="mono">2200034275</td>
+          <td class="mono">MAEU263764814</td>
+          <td style="color:#e2e8f0;">LC-Battery Grade</td>
+          <td><span class="badge badge-blue"><span class="badge-dot dot-blue"></span>RESERVED</span></td>
+          <td style="color:#60a5fa;font-weight:600;">5,001</td>
+          <td>5,001</td>
+          <td style="color:#94a3b8;">MRSU7185999</td>
+          <td>10</td>
+          <td style="color:#6b7280;">2026-03-13</td>
+        </tr>
+        <tr onclick="toggleDetail(this)">
+          <td><input type="checkbox" style="accent-color:#4f46e5;"></td>
+          <td style="color:#6b7280;">4</td>
+          <td class="mono">1126011445</td>
+          <td class="mono">2200034275</td>
+          <td class="mono">MAEU263764814</td>
+          <td style="color:#e2e8f0;">LC-Battery Grade</td>
+          <td><span class="badge badge-amber"><span class="badge-dot dot-amber"></span>PICKED</span></td>
+          <td style="color:#fbbf24;font-weight:600;">5,001</td>
+          <td>5,001</td>
+          <td style="color:#94a3b8;">MRSU7185999</td>
+          <td>10</td>
+          <td style="color:#6b7280;">2026-03-13</td>
+        </tr>
+        <tr onclick="toggleDetail(this)">
+          <td><input type="checkbox" style="accent-color:#4f46e5;"></td>
+          <td style="color:#6b7280;">5</td>
+          <td class="mono">1126011534</td>
+          <td class="mono">2200034275</td>
+          <td class="mono">MAEU263764814</td>
+          <td style="color:#e2e8f0;">LC-Battery Grade</td>
+          <td><span class="badge badge-green"><span class="badge-dot dot-green"></span>AVAILABLE</span></td>
+          <td style="color:#34d399;font-weight:600;">5,001</td>
+          <td>5,001</td>
+          <td style="color:#94a3b8;">MRSU6898402</td>
+          <td>10</td>
+          <td style="color:#6b7280;">2026-03-13</td>
+        </tr>
+        <tr onclick="toggleDetail(this)">
+          <td><input type="checkbox" style="accent-color:#4f46e5;"></td>
+          <td style="color:#6b7280;">6</td>
+          <td class="mono">1125110452</td>
+          <td class="mono">2200034275</td>
+          <td class="mono">MAEU263764814</td>
+          <td style="color:#e2e8f0;">LC-Battery Grade</td>
+          <td><span class="badge badge-green"><span class="badge-dot dot-green"></span>AVAILABLE</span></td>
+          <td style="color:#34d399;font-weight:600;">5,001</td>
+          <td>5,001</td>
+          <td style="color:#94a3b8;">MRSU6898402</td>
+          <td>10</td>
+          <td style="color:#6b7280;">2026-03-13</td>
+        </tr>
+        <tr onclick="toggleDetail(this)">
+          <td><input type="checkbox" style="accent-color:#4f46e5;"></td>
+          <td style="color:#6b7280;">7</td>
+          <td class="mono">1126010548</td>
+          <td class="mono">2200034275</td>
+          <td class="mono">MEDUFP963970</td>
+          <td style="color:#e2e8f0;">LC-Battery Grade</td>
+          <td><span class="badge badge-blue"><span class="badge-dot dot-blue"></span>RESERVED</span></td>
+          <td style="color:#60a5fa;font-weight:600;">5,001</td>
+          <td>5,001</td>
+          <td style="color:#94a3b8;">MRSU6898402</td>
+          <td>10</td>
+          <td style="color:#6b7280;">2026-03-13</td>
+        </tr>
+        <tr onclick="toggleDetail(this)">
+          <td><input type="checkbox" style="accent-color:#4f46e5;"></td>
+          <td style="color:#6b7280;">8</td>
+          <td class="mono">1126011531</td>
+          <td class="mono">2200034275</td>
+          <td class="mono">MEDUFP963970</td>
+          <td style="color:#e2e8f0;">LC-Battery Grade</td>
+          <td><span class="badge badge-gray"><span class="badge-dot dot-gray"></span>OUTBOUND</span></td>
+          <td style="color:#9ca3af;font-weight:600;">0</td>
+          <td>5,001</td>
+          <td style="color:#94a3b8;">MRSU6898402</td>
+          <td>10</td>
+          <td style="color:#6b7280;">2026-03-13</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 하단 상세 패널 -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="detail-header">
+      <span style="font-size:14px;">🎒</span>
+      <div class="detail-title">톤백 상세 — LOT 1126011432</div>
+      <div style="font-size:11px;color:#6b7280;margin-left:8px;">10개 톤백 · 5,001 kg</div>
+      <button class="detail-close" onclick="hideDetail()">✕</button>
+    </div>
+    <div class="detail-grid">
+      <div class="detail-tonbag">
+        <div class="dt-no">001</div>
+        <div class="dt-wt">500.1 kg</div>
+        <div style="font-size:10px;color:#34d399;">● AVAILABLE</div>
+      </div>
+      <div class="detail-tonbag">
+        <div class="dt-no">002</div>
+        <div class="dt-wt">500.1 kg</div>
+        <div style="font-size:10px;color:#34d399;">● AVAILABLE</div>
+      </div>
+      <div class="detail-tonbag">
+        <div class="dt-no">003</div>
+        <div class="dt-wt">500.1 kg</div>
+        <div style="font-size:10px;color:#34d399;">● AVAILABLE</div>
+      </div>
+      <div class="detail-tonbag">
+        <div class="dt-no">004</div>
+        <div class="dt-wt">500.1 kg</div>
+        <div style="font-size:10px;color:#34d399;">● AVAILABLE</div>
+      </div>
+      <div class="detail-tonbag">
+        <div class="dt-no">005</div>
+        <div class="dt-wt">500.1 kg</div>
+        <div style="font-size:10px;color:#34d399;">● AVAILABLE</div>
+      </div>
+      <div class="detail-tonbag">
+        <div class="dt-no">006</div>
+        <div class="dt-wt">500.1 kg</div>
+        <div style="font-size:10px;color:#34d399;">● AVAILABLE</div>
+      </div>
+      <div class="detail-tonbag">
+        <div class="dt-no">007</div>
+        <div class="dt-wt">500.1 kg</div>
+        <div style="font-size:10px;color:#34d399;">● AVAILABLE</div>
+      </div>
+      <div class="detail-tonbag">
+        <div class="dt-no">008</div>
+        <div class="dt-wt">500.1 kg</div>
+        <div style="font-size:10px;color:#34d399;">● AVAILABLE</div>
+      </div>
+      <div class="detail-tonbag">
+        <div class="dt-no">009</div>
+        <div class="dt-wt">500.1 kg</div>
+        <div style="font-size:10px;color:#34d399;">● AVAILABLE</div>
+      </div>
+      <div class="detail-tonbag" style="border-color:#4f46e5;opacity:.5;">
+        <div class="dt-no">S00</div>
+        <div class="dt-wt">1.0 kg</div>
+        <div style="font-size:10px;color:#6b7280;">● SAMPLE</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 상태바 -->
+  <div class="statusbar">
+    <div class="sb-item"><span class="sb-dot" style="background:#34d399;"></span>DB 연결됨</div>
+    <div class="sb-item">총 8건 표시 중</div>
+    <div class="sb-item">마지막 새로고침: 17:45:32</div>
+    <div style="margin-left:auto;">SQM v8.1.3 · 광양창고</div>
+  </div>
+
+</div>
+
+<script>
+function toggleDetail(row){
+  document.querySelectorAll('tbody tr').forEach(r=>r.classList.remove('selected'));
+  row.classList.add('selected');
+  document.getElementById('detailPanel').style.display='block';
+}
+function hideDetail(){
+  document.getElementById('detailPanel').style.display='none';
+}
+</script>
+</body>
+</html>

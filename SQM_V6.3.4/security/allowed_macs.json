@@ -1,4 +1,0 @@
-{
-  "allowed_macs": [],
-  "_comment": "MAC 주소 확인: cmd → ipconfig /all → 물리적 주소. 비어있으면 잠금 비활성화(모든 PC 허용). 형식: XX:XX:XX:XX:XX:XX 또는 XX-XX-XX-XX-XX-XX"
-}

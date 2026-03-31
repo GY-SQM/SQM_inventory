@@ -1,1 +1,0 @@
-[{"event_type": "action", "event_name": "app_start", "timestamp": "2026-02-04T11:12:10.639611", "duration_ms": null, "metadata": {}}, {"event_type": "action", "event_name": "app_shutdown", "timestamp": "2026-02-04T11:12:13.896127", "duration_ms": null, "metadata": {"session_duration": 3}}]

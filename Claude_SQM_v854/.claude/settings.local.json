@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//g/프로그램/Sqm 재고관리/Claude_SQM_v855/**)",
+      "Bash(rm \"G:/프로그램/Sqm 재고관리/Claude_SQM_v855/gui_app_modular/dialogs/custom_messagebox.py\")",
+      "Bash(rm \"G:/프로그램/Sqm 재고관리/Claude_SQM_v855/gui_app_modular/apply_darkmode_fix.py\")",
+      "Bash(rm -rf \"G:/프로그램/Sqm 재고관리/Claude_SQM_v855/features/pdf_parser\")"
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python3:*)",
+      "Bash(python -X utf8 full_pipeline_test.py)",
+      "Bash(python -X utf8 -c \":*)",
+      "Bash(ls:*)",
+      "Bash(find \"F:/프로그램/Sqm 재고관리/Claude_SQM_v863_20260327_PATCH \\(1\\)/\" -name \"*.py\" -type f)",
+      "Bash(find \"F:/프로그램/Sqm 재고관리/Claude_SQM_v863_20260327_PATCH \\(1\\)/\" -type f -name \"*.py\")"
+    ]
+  }
+}

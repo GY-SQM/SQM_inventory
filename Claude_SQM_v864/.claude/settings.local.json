@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(xargs grep:*)",
+      "Bash(python -c \"import tkinter; import ttkbootstrap; import sqlite3; print\\(''OK: tkinter, ttkbootstrap, sqlite3''\\)\")",
+      "Bash(python run.py)"
+    ]
+  }
+}

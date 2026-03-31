@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"G:/프로그램/Sqm 재고관리/Claude_SQM_v864_20260329_FULL\" -name \"*.py\" -exec grep -l \"CREATE TABLE\" {})",
+      "Bash(xargs wc:*)"
+    ]
+  }
+}
