@@ -125,18 +125,7 @@ class SQMInventoryApp:
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             logger.debug(f"ReadableStyle init: {e}")
         
-        # v4.19.1: 전역 Treeview 스타일 적용
-        try:
-            import sys
-            from pathlib import Path
-            sys.path.insert(0, str(Path(__file__).parent.parent))
-            from fixes.global_tree_style import apply_global_tree_style
-            apply_global_tree_style()
-            logger.info("✅ 전역 Treeview 스타일 적용 완료")
-        except ImportError as e:
-            logger.debug(f"전역 스타일 로딩 실패 (무시): {e}")
-        except (ValueError, TypeError, KeyError, AttributeError, OSError) as e:
-            logger.warning(f"전역 스타일 적용 실패: {e}")
+        # v4.19.1: 전역 Treeview 스타일 — line 217의 after(800) 호출로 통합됨
         
         # Initialize engine
         self._update_splash('엔진 초기화...')
@@ -752,28 +741,30 @@ class SQMInventoryApp:
             findings = scan_duplicate_keys(self.engine.db)
             signature = "\n".join(findings)
             if findings:
+                if signature == self._dup_guard_last_signature:
+                    # 동일 결과 반복 — 로그/상태바 재출력 생략 (60초 타이머 스팸 방지)
+                    return
                 self._set_status(f"⚠️ 중복 감지 {len(findings)}건")
-                if signature != self._dup_guard_last_signature:
-                    self._log("⚠️ 전역 중복 검사 결과:")
-                    for line in findings[:10]:
-                        self._log(f"   - {line}")
-                    if len(findings) > 10:
-                        self._log(f"   ... 외 {len(findings) - 10}건")
+                self._log("⚠️ 전역 중복 검사 결과:")
+                for line in findings[:10]:
+                    self._log(f"   - {line}")
+                if len(findings) > 10:
+                    self._log(f"   ... 외 {len(findings) - 10}건")
+                # v6.3.5: 기본은 팝업 생략(논블로킹), SQM_DUP_POPUP=1 일 때만 모달 표시
+                _dup_popup = (os.environ.get("SQM_DUP_POPUP", "").strip() == "1")
+                if _dup_popup:
                     popup_lines = findings[:5]
                     popup_msg = "중복 데이터가 감지되었습니다.\n\n"
                     popup_msg += "\n".join([f"• {x}" for x in popup_lines])
                     if len(findings) > 5:
                         popup_msg += f"\n\n... 외 {len(findings) - 5}건"
-                    # v6.3.5: 기본은 팝업 생략(논블로킹), SQM_DUP_POPUP=1 일 때만 모달 표시
-                    _dup_popup = (os.environ.get("SQM_DUP_POPUP", "").strip() == "1")
-                    if _dup_popup:
-                        CustomMessageBox.showwarning(
-                            self.root,
-                            "중복 데이터 경고",
-                            popup_msg
-                        )
-                    else:
-                        self._log("⚠️ 중복 데이터 경고: 팝업은 생략했습니다. (SQM_DUP_POPUP=1 이면 팝업 표시)")
+                    CustomMessageBox.showwarning(
+                        self.root,
+                        "중복 데이터 경고",
+                        popup_msg
+                    )
+                else:
+                    self._log("⚠️ 중복 데이터 경고: 팝업은 생략했습니다. (SQM_DUP_POPUP=1 이면 팝업 표시)")
                 self._dup_guard_last_signature = signature
             else:
                 self._dup_guard_last_signature = ""

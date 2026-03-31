@@ -29,8 +29,7 @@ class DatabaseSchemaMixin:
         self._init_parsing_log_table() # v8.2.4: 파싱 통계
         self._migrate_v243()
         self._migrate_v660_move()
-        # v6.0: allocation_plan / picking_table / sold_table 은 반드시 생성 (v243 중간 실패 시에도)
-        self._ensure_allocation_and_picking_sold_tables()
+        # v8.6.4: _run_all_migrations()이 v593+v600 포함하므로 별도 ensure 호출 제거
         # 최신 마이그레이션 체인 실행 (idempotent). 신규 컬럼/인덱스 보강 반영.
         try:
             self._run_all_migrations()

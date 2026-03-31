@@ -23,6 +23,12 @@ _KEY_RULES: Dict[str, List[Tuple[str, ...]]] = {
         ("source_fingerprint", "line_no"),
         ("import_batch_id", "line_no"),
     ],
+    # stock_movement는 이력 테이블 — 동일 lot_no에 여러 이벤트(입고/출고/반품)가
+    # 정상적으로 존재하므로 중복 검사 대상에서 제외한다.
+    "stock_movement": [],
+    # sold_table, picking_table도 동일 lot_no 다중 행이 정상
+    "sold_table": [],
+    "picking_table": [],
 }
 
 _GENERIC_KEYS: List[Tuple[str, ...]] = [

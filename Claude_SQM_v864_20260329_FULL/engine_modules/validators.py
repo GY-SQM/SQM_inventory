@@ -304,10 +304,11 @@ class InventoryValidator:
 
         # 4. v3.8.4: inventory↔tonbag 크로스 검증 (중량)
         # 비교: inventory.current_weight vs 톤백 weight 합계.
-        # AVAILABLE, SAMPLE, RESERVED, PICKED 포함 (출고 확정 SOLD 전까지는 재고로 봄).
+        # AVAILABLE, RESERVED, PICKED 포함 (출고 확정 SOLD 전까지는 재고로 봄).
+        # v8.6.4-fix: SAMPLE 제외 — 샘플 톤백(1kg)은 inventory.current_weight에 미포함.
         try:
             cross_check = self.db.fetchall("""
-                SELECT 
+                SELECT
                     i.lot_no,
                     i.current_weight AS inv_weight,
                     COALESCE(t.tonbag_total_weight, 0) AS tonbag_weight
@@ -315,7 +316,8 @@ class InventoryValidator:
                 LEFT JOIN (
                     SELECT lot_no, SUM(weight) AS tonbag_total_weight
                     FROM inventory_tonbag
-                    WHERE status IN ('AVAILABLE','SAMPLE','RESERVED','PICKED')
+                    WHERE status IN ('AVAILABLE','RESERVED','PICKED')
+                      AND COALESCE(is_sample, 0) = 0
                     GROUP BY lot_no
                 ) t ON i.lot_no = t.lot_no
                 WHERE i.current_weight > 0
@@ -339,10 +341,27 @@ class InventoryValidator:
                             f"크로스 불일치(오차 과대): {lot} (inventory={inv_w:.0f}kg, tonbag합계={ton_w:.0f}kg). "
                             "톤백 weight/행 또는 상태 확인 필요."
                         )
+                    elif diff <= 1.0 and inv_w == ton_w + 1:
+                        # v8.6.4: 샘플 1kg 포함 오류 자동 보정
+                        try:
+                            self.db.execute(
+                                "UPDATE inventory SET current_weight = ? WHERE lot_no = ?",
+                                (ton_w, lot)
+                            )
+                            warnings.append(
+                                f"크로스 불일치 자동보정: {lot} ({inv_w:.0f}kg→{ton_w:.0f}kg, 샘플 1kg 제외)."
+                            )
+                            logger.info(f"[정합성] {lot} current_weight 자동보정: {inv_w}→{ton_w}")
+                        except Exception as fix_e:
+                            logger.warning(f"[정합성] {lot} 자동보정 실패: {fix_e}")
+                            warnings.append(
+                                f"크로스 불일치: {lot} (inventory={inv_w:.0f}kg, tonbag합계={ton_w:.0f}kg). "
+                                "원인: 샘플 1kg 포함 오류 — 자동보정 실패."
+                            )
                     else:
                         warnings.append(
                             f"크로스 불일치: {lot} (inventory={inv_w:.0f}kg, tonbag합계={ton_w:.0f}kg). "
-                            "원인: inventory 현재중량과 톤백(AVAILABLE+SAMPLE+RESERVED+PICKED) 합계 불일치."
+                            "원인: inventory 현재중량과 톤백(AVAILABLE+RESERVED+PICKED, 샘플 제외) 합계 불일치."
                         )
                 if len(cross_check) > 5:
                     more = len(cross_check) - 5

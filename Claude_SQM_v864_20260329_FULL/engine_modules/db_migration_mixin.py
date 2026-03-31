@@ -23,8 +23,14 @@ logger = logging.getLogger(__name__)
 class DatabaseMigrationMixin:
     """마이그레이션 전용 Mixin — SQMDatabase에 MRO로 합성"""
 
+    _migrations_applied: bool = False
+
     def _run_all_migrations(self) -> None:
         """모든 마이그레이션 순차 실행 (v243 제외 — database.py에서 직접 호출)"""
+        if self._migrations_applied:
+            logger.debug("[마이그레이션] 이미 실행됨 — 스킵")
+            return
+        self._migrations_applied = True
         self._migrate_v289_picking_list()
         self._migrate_v388_column_unify()
         self._migrate_v391_sample_tonbag()
