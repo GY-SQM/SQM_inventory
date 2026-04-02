@@ -267,8 +267,10 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     def _build_inbound_button_frame_impl(self, main) -> None:
         pass
 
-    def _create_dialog(self) -> None:
-        """원스톱 입고 팝업 생성"""
+    # ── _create_dialog 헬퍼 ─────────────────────────────────
+
+    def _cd_setup_window(self) -> ttk.Frame:
+        """다이얼로그 윈도우 생성 + 크기/모달 설정. main Frame 반환."""
         self.dialog = create_themed_toplevel(self.parent)
         try:
             from version import __version__ as _sqm_ver
@@ -279,7 +281,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
         if getattr(self, 'compact_mode', False):
-            # compact: 미리보기는 메인 창에만 — 단, 진행/버튼 행은 표시되도록 최소 높이 확보 + 상하 크기 조절 허용
             self.dialog.geometry("1180x560")
             self.dialog.minsize(900, 420)
             self.dialog.resizable(True, True)
@@ -289,7 +290,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             try:
                 sw = self.parent.winfo_screenwidth()
                 sh = self.parent.winfo_screenheight()
-                # v8.1.6: 서류 4줄 세로 배치에 맞춰 기본 창 확대
                 w = min(1320, int(sw * 0.82))
                 h = min(900, int(sh * 0.88))
                 x = (sw - w) // 2
@@ -301,13 +301,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 center_dialog(self.dialog, self.parent)
             setup_dialog_geometry_persistence(self.dialog, "onestop_inbound_dialog", self.parent)
         self.dialog.protocol("WM_DELETE_WINDOW", self._on_cancel)
-        
         main = ttk.Frame(self.dialog, padding=6)
         main.pack(fill=BOTH, expand=YES)
+        return main
 
-        # ═══════════════════════════════════════════════════════════
-        # v8.3.3 [UX] 상단 진행 단계 표시 — Flexport 스타일
-        # ═══════════════════════════════════════════════════════════
+    def _cd_build_step_indicator(self, main: ttk.Frame):
+        """상단 진행 단계 표시 (Flexport 스타일 ①②③④)."""
         _is_dark = is_dark()
         _bg      = ThemeColors.get('bg_secondary', _is_dark)
         _accent  = ThemeColors.get('accent',       _is_dark)
@@ -329,7 +328,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             col = col_i * 2
             cell = tk.Frame(step_fr, bg=_bg)
             cell.grid(row=0, column=col, padx=8)
-            # 단계 번호 원형 배지
             tk.Label(
                 cell, text=num,
                 bg=_accent if col_i == 0 else _bg,
@@ -337,7 +335,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 font=('맑은 고딕', 11, 'bold'),
                 width=3, relief='flat',
             ).pack(side=LEFT, padx=(0, 4))
-            # 단계 텍스트
             txt_fr = tk.Frame(cell, bg=_bg)
             txt_fr.pack(side=LEFT)
             tk.Label(
@@ -351,7 +348,6 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 bg=_bg, fg=_muted,
                 font=('맑은 고딕', 8),
             ).pack(anchor='w')
-            # 구분 화살표
             if col_i < len(STEPS) - 1:
                 tk.Label(
                     step_fr, text='›',
@@ -371,12 +367,32 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._step_text    = _text
         self._current_step = 0
 
-        # ─── 구분선 ───────────────────────────────────────────────
         tk.Frame(main, bg=_border, height=1).pack(fill=X, pady=(0, 6))
 
-        # ═══════════════════════════════════════════════════════════
-        # 1. 상단: 4종 서류 세로 4줄 + 그 아래 파싱 버튼 줄 (v8.1.6)
-        # ═══════════════════════════════════════════════════════════
+    # ── _create_dialog 메인 ──────────────────────────────────
+
+    def _create_dialog(self) -> None:
+        """원스톱 입고 팝업 생성"""
+        # 1) 윈도우 설정
+        main = self._cd_setup_window()
+
+        # 2) 상단 진행 단계 표시
+        self._cd_build_step_indicator(main)
+
+        # 3) 서류 선택 카드 + 파싱 버튼
+        self._cd_build_doc_file_section(main)
+
+        # 4) 선사/템플릿 선택 + 프로그레스 바
+        self._cd_build_carrier_and_progress(main)
+
+        # 5) 미리보기 테이블
+        self._cd_build_preview_table(main)
+
+        # 6) 하단 액션 버튼
+        self._build_inbound_action_buttons(main, is_dark())
+
+    def _cd_build_doc_file_section(self, main: ttk.Frame):
+        """4종 서류 파일 선택 카드 + 파싱/재파싱 버튼 구성."""
         file_frame = ttk.Frame(main)
         file_frame.pack(fill=BOTH, expand=False, pady=(0, 4))
 
@@ -593,7 +609,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             except Exception as e:
                 logger.warning(f"[UI] deferred start scheduling failed: {e}")
 
-        # ── v8.0.0 [TEMPLATE-TABLE]: 파싱 템플릿 선택 — 테이블 방식 ──────────
+    def _cd_build_carrier_and_progress(self, main: ttk.Frame):
+        """선사/템플릿 선택 + 프로그레스 바 구성."""
         _tpl_row = ttk.Frame(main)
         _tpl_row.pack(fill=X, pady=(0, 2))
         _os_dark_tpl = is_dark()
@@ -717,9 +734,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._progress_inline_pct_elapsed = ttk.Label(_row2, text="", font=('맑은 고딕', 10), foreground=ThemeColors.get('text_secondary', _pop_dark))
         self._progress_inline_pct_elapsed.pack(side=tk.RIGHT)
         
-        # ═══════════════════════════════════════════════════════════
-        # 2. 미리보기 테이블 — compact_mode에서는 생성 생략, 결과는 메인 창에만 표시
-        # ═══════════════════════════════════════════════════════════
+    def _cd_build_preview_table(self, main: ttk.Frame):
+        """미리보기 Treeview + 필터바 구성. compact_mode에서는 생략."""
         _tree_dark = is_dark()
         self._var_show_container_suffix = tk.BooleanVar(value=False)
         if not getattr(self, 'compact_mode', False):
@@ -790,9 +806,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             self.filter_bar = None
             self._tree_frame = None
             self._tree_frame_visible = False
-        
-        self._build_inbound_action_buttons(main, _tree_dark)
-    
+
     # ═══════════════════════════════════════════════════════════
     # 4. 하단 한 줄 — 액션 버튼 (v8.1.3: _create_dialog에서 분리)
     # ═══════════════════════════════════════════════════════════
