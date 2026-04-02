@@ -28,7 +28,15 @@
       "Bash(grep -n \"위치 미지정\\\\|지정 위치 없음\\\\|location.*NULL\" 'G:/프로그램/Sqm 재고관리/Claude_SQM_v864_20260329_FULL' -r --include=*.py)",
       "Read(//g/프로그램/Sqm 재고관리/**)",
       "Bash(PYTHONIOENCODING=utf-8 python -X utf8 -c \":*)",
-      "Skill(bkit:pdca)"
+      "Skill(bkit:pdca)",
+      "Bash(grep -rn \"except.*:\\\\s*$\\\\|except.*pass\" engine_modules/ gui_app_modular/ --include=\"*.py\")",
+      "Bash(python -m py_compile engine_modules/inventory_modular/outbound_mixin.py)",
+      "Bash(python -m py_compile gui_app_modular/tabs/allocation_tab.py)",
+      "Bash(python -m py_compile gui_app_modular/tabs/picked_tab.py)",
+      "Bash(python -m py_compile gui_app_modular/tabs/sold_tab.py)",
+      "Bash(grep -c \"\\\\.after\\(\" gui_app_modular/*.py gui_app_modular/**/*.py)",
+      "Bash(find . -name \"*.py\" -exec grep -c \"def \" {} +)",
+      "Bash(xargs wc:*)"
     ]
   }
 }

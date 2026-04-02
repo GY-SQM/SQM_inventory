@@ -1,9 +1,39 @@
 {
   "version": "3.0",
-  "lastUpdated": "2026-03-30T07:12:38.988Z",
-  "activeFeatures": [],
-  "primaryFeature": null,
-  "features": {},
+  "lastUpdated": "2026-04-02T07:58:17.817Z",
+  "activeFeatures": [
+    "tabs",
+    "gui_app_modular"
+  ],
+  "primaryFeature": "tabs",
+  "features": {
+    "tabs": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-02T07:58:13.713Z",
+        "lastUpdated": "2026-04-02T07:58:14.842Z"
+      },
+      "lastFile": "D:\\프로그램\\Sqm 재고관리\\Claude_SQM_v866\\gui_app_modular\\tabs\\dashboard_tab.py"
+    },
+    "gui_app_modular": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-02T07:58:16.757Z",
+        "lastUpdated": "2026-04-02T07:58:17.816Z"
+      },
+      "lastFile": "D:\\프로그램\\Sqm 재고관리\\Claude_SQM_v866\\gui_app_modular\\utils\\tree_enhancements.py"
+    }
+  },
   "pipeline": {
     "currentPhase": 1,
     "level": "Dynamic",
@@ -12,9 +42,34 @@
   "session": {
     "startedAt": "2026-03-30T07:11:29.217Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-03-30T07:12:38.988Z"
+    "lastActivity": "2026-04-02T07:58:17.817Z"
   },
-  "history": [],
+  "history": [
+    {
+      "timestamp": "2026-04-02T07:58:13.713Z",
+      "feature": "tabs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T07:58:14.843Z",
+      "feature": "tabs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T07:58:16.757Z",
+      "feature": "gui_app_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T07:58:17.817Z",
+      "feature": "gui_app_modular",
+      "phase": "do",
+      "action": "updated"
+    }
+  ],
   "stateMachine": {
     "defaultWorkflow": "default",
     "activeWorkflows": {},

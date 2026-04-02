@@ -203,11 +203,11 @@ def show_date_calendar(parent, initial_value: Optional[str], on_choose: Callable
     def _on_year_select(e=None):
         nonlocal year
         try: year = int(_year_var.get()); _render()
-        except Exception: pass
+        except (ValueError, TypeError): pass  # 비정상 입력 무시
     def _on_month_select(e=None):
         nonlocal month
         try: month = int(_month_var.get()); _render()
-        except Exception: pass
+        except (ValueError, TypeError): pass  # 비정상 입력 무시
     _y_cb.bind('<<ComboboxSelected>>', _on_year_select)
     _m_cb.bind('<<ComboboxSelected>>', _on_month_select)
 

@@ -1,5 +1,5 @@
 # SQM Claude Code 마스터 프롬프트
-# 작성: Ruby (2026-03-27 updated v8.6.3)
+# 작성: Ruby (2026-04-02 동기화: Claude_SQM_v864_20260329_FULL / version.py v8.6.5)
 # 용도: 버그수정 + UI개선 + 메뉴단일화 + 창크기저장 + 디버깅 자동화
 
 ---
@@ -8,17 +8,19 @@
 
 ```bash
 # 기본 — 중단 없이 완전 자동 실행
-cd "F:\프로그램\Sqm 재고관리\Claude_SQM_v862_FULL"
+cd "F:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL"
 claude --dangerously-skip-permissions
 
-# 프롬프트 파일로 바로 실행 (붙여넣기 불필요)
+# 프롬프트 파일로 바로 실행 (마스터 MD는 보통 저장소 루트에 둠)
 claude --dangerously-skip-permissions \
-  --system-prompt-file Claude_Code_SQM_MASTER.md
+  --system-prompt-file "F:\프로그램\Sqm 재고관리\Claude_Code_SQM_MASTER.md"
 
 # 예산 제한 걸고 싶을 때 (비용 초과 방지)
 claude --dangerously-skip-permissions \
   --max-budget-usd 10.00 \
-  --system-prompt-file Claude_Code_SQM_MASTER.md
+  --system-prompt-file "F:\프로그램\Sqm 재고관리\Claude_Code_SQM_MASTER.md"
+
+# (대안) v864 폴더 안에 마스터 사본을 두었다면 해당 경로로 지정
 ```
 
 ## ⚠️ --dangerously-skip-permissions 주의사항
@@ -44,9 +46,9 @@ git add -A && git commit -m "backup before claude auto-run $(date +%Y%m%d_%H%M)"
 ```
 You are a senior Python architect and UI/UX engineer.
 
-Project: SQM v8.6.3 — LOT-based tonbag logistics system
+Project: SQM v8.6.5 — LOT-based tonbag logistics system
          Lithium carbonate warehouse management (Gwangyang, Korea)
-Tech:    Python 3.12 / tkinter / ttkbootstrap / SQLite / pytest
+Tech:    Python 3.10+ / tkinter / ttkbootstrap / SQLite / pytest
          Gemini Vision API / openpyxl / reportlab / PyMuPDF
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -89,23 +91,23 @@ RULE-5.  Port conflicts → auto-increment (8080→8081→8082→8090).
 RULE-6.  Async DB calls → always use run_in_executor pattern.
 RULE-7.  Test failures during migration → log + continue.
          Engine tests must stay passing. UI tests may fail.
-RULE-8.  Never modify: data/sqm_inventory.db (직접 삭제 금지)
+RULE-8.  Never modify: data/db/sqm_inventory.db (직접 삭제 금지)
 RULE-9.  Never delete: data/db/ 폴더 전체
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[SYSTEM OVERVIEW — v8.6.3 아키텍처]
+[SYSTEM OVERVIEW — v8.6.5 아키텍처]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Core workflow:
   Inbound → Inventory → Allocation → Picking → Outbound → Return → Move
 
-Project root: F:\프로그램\Sqm 재고관리\Claude_SQM_v862_FULL
+Project root: F:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL
 
 ── 프로젝트 통계 ─────────────────────────────────────
-  총 Python 파일: 233개
-  총 코드 라인:   ~103,000줄
+  총 Python 파일: 240개 (rglob *.py 기준, 2026-04-02)
+  총 코드 라인:   ~106,000줄 (동일 기준)
   데이터베이스:    SQLite (data/db/sqm_inventory.db)
-  버전:           v8.6.3 (2026-03-27)
+  버전:           v8.6.5 (2026-03-31) — Single Source: version.py
 
 ── 3계층 아키텍처 ────────────────────────────────────
   1) Backend Engine  (engine_modules/)   ~13,000줄
@@ -114,13 +116,13 @@ Project root: F:\프로그램\Sqm 재고관리\Claude_SQM_v862_FULL
 
 ── 디렉토리 구조 ─────────────────────────────────────
 
-  Claude_SQM_v862_FULL/
+  Claude_SQM_v864_20260329_FULL/
   ├── run.py                    ★ 유일한 엔트리 포인트
   ├── run_bootstrap.py          부트스트랩 (진단/백업/GUI/CLI)
   ├── config.py (531줄)         DB_PATH, API키, 설정 상수
   ├── config_logging.py (140줄) 로깅 설정
   ├── config_sql.py (39줄)      SQL 방언 추상화 (SQLite↔PostgreSQL)
-  ├── version.py                버전 정보 (__version__ = "8.6.2")
+  ├── version.py                버전 정보 (__version__ = "8.6.5")
   ├── theme_aware.py            테마 관리
   ├── requirements.txt          의존성 목록
   │
@@ -577,7 +579,7 @@ Project root: F:\프로그램\Sqm 재고관리\Claude_SQM_v862_FULL
   참조 파일: 박아름-Detail of Outbound (26.03.24) - MSO-260318.xlsx
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[보고서 생성 로직 — v8.6.2 핵심 규칙]
+[보고서 생성 로직 — v8.6.5 기준 (v8.6.2부터 동일 흐름)]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   ── Detail of Outbound: 출고될 때마다, 일별로 작성 ──────
@@ -661,8 +663,22 @@ Project root: F:\프로그램\Sqm 재고관리\Claude_SQM_v862_FULL
           박아름-Detail of Outbound (26.03.24) - MSO-260318.xlsx
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[v8.5.9~v8.6.3 주요 변경 이력]
+[v8.5.9~v8.6.5 주요 변경 이력]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+v8.6.5 (2026-03-31):
+  [STAB-1~4] process_outbound DB잠금 크래시 방지, transaction rollback 범위 확대,
+             confirm_outbound 이중 SOLD 차단, fix_lot_status_integrity N+1 제거
+  [PERF-1~3] Treeview 일괄 삭제 6곳, Lazy Tab Refresh(dirty flag), 대시보드 백그라운드 새로고침
+  [UX-1] busy cursor (긴 작업 대기 표시)
+  [AUDIT-8] gui 일부 except Exception:pass → 로깅 교체
+  [CLEAN-1] inbound_mixin re 중복 import 제거
+
+v8.6.4 (2026-03-28):
+  Full audit: 빈 except 27건+_log 중복 수정, dead code 7개(207줄) 제거
+  서브메서드 12개 추가(inb/ret/co/g1/do/scan 분해)
+  인덱스 3개(tb_status_is_sample / sold_delivery / mv_lot_type) 추가
+  파서 v2.7.1: E/F양식 + 시리얼 변환 + customs 정규화 + SC_RCVD
 
 v8.6.3 (2026-03-27):
   [초기화면] main_app.py: 시작 탭 tab_inventory → tab_dashboard
@@ -797,7 +813,7 @@ Fix critical issues (P1) before moving to Phase 1.
 
 Run iterative cycles until ALL bugs fixed and UI improved.
 
-── BUG FIXES (v8.6.3 기준 확인 필요) ─────────────────
+── BUG FIXES (v8.6.5 기준 확인 필요) ─────────────────
 
 BUG-FIX-1 [P1] 출고확정 스캔 시 sold_table 자동 INSERT 확인:
   File: gui_app_modular/tabs/scan_tab.py
@@ -832,7 +848,7 @@ UI-2 [P1] Theme unification:
 UI-3 [P2] Status badge pills in all tables:
   AVAILABLE→green RESERVED→blue PICKED→amber OUTBOUND→gray RETURN→coral
 
-── v8.6.3 완료된 UI 작업 ────────────────────────────
+── v8.6.3 이후·유지 UI 작업 (v8.6.5 트리 기준) ─────────
 
 UI-DONE-1 [완료] 초기화면 대시보드:
   main_app.py L441: notebook.select(self.tab_dashboard) + after(800, _refresh_dashboard)
@@ -1018,15 +1034,25 @@ Report after every phase and every step.
 
 ```bash
 # 1. SQM 프로젝트 폴더로 이동
-cd "F:\프로그램\Sqm 재고관리\Claude_SQM_v862_FULL"
+cd "F:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL"
 
-# 2. Claude Code 실행
+# 2. Claude Code 실행 (프롬프트는 저장소 루트의 본 파일 권장)
 claude --dangerously-skip-permissions \
-  --system-prompt-file Claude_Code_SQM_MASTER.md
+  --system-prompt-file "F:\프로그램\Sqm 재고관리\Claude_Code_SQM_MASTER.md"
 
 #    → 자리 비우기 (3~6시간)
 #    → 돌아오면 결과 확인
 ```
+
+## v8.6.5·v8.6.4 요약 (v8.6.3 대비 · v864 마스터 동기화)
+
+| 항목 | v8.6.3 | v8.6.5 |
+|---|---|---|
+| 코드베이스 경로 | (문서상 구버전 폴더명) | **Claude_SQM_v864_20260329_FULL** |
+| 버전 단일 소스 | 8.6.3 | **version.py → 8.6.5** (RELEASE 2026-03-31) |
+| 안정성 | — | STAB-1~4: DB 잠금·rollback·이중 SOLD·fix_lot N+1 |
+| 성능 | — | PERF: Treeview 일괄 삭제, Lazy 탭, 대시보드 백그라운드 |
+| 품질·파서 | — | v8.6.4: audit/인덱스/파서 v2.7.1 등 (version.py BUILD_NOTE 참고) |
 
 ## v8.6.3 업데이트 사항 (v8.6.2 대비)
 
@@ -1062,9 +1088,13 @@ claude --dangerously-skip-permissions \
 | 자재코드 체계 | 참고 수준 | 정규 섹션으로 정리 |
 | 출고 보고서 | 미포함 | Detail of Outbound + Sales Order DN |
 
+※ **v8.6.5 / Claude_SQM_v864_20260329_FULL** 기준(2026-04-02): Python 파일 약 **240개**, 코드 라인 약 **10.6만 줄**(`*.py` rglob 합산). 위 표의 233개·~103k줄은 v8.6.2 시점 스냅샷.
+
 ## 실행 후 확인
 
 ```bash
+cd "F:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL"
+
 # Phase 0 감사 결과
 python -m pytest tests/ -q
 
