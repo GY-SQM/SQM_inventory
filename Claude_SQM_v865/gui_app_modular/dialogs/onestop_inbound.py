@@ -48,6 +48,7 @@ except ImportError:
 import os
 import time
 import json
+import sqlite3
 import tkinter as tk
 from tkinter import ttk, filedialog, BOTH, YES, X, Y, LEFT, RIGHT, BOTTOM, END, VERTICAL, HORIZONTAL
 import logging
@@ -2318,8 +2319,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     # UI 동기화
                     if self.dialog and self.dialog.winfo_exists():
                         self.dialog.after(0, lambda t=_auto_tpl: self._apply_template_to_carrier_badge(t))
-            except Exception as _ate:
-                logger.debug(f"선사 자동 템플릿 매칭 실패(무시): {_ate}")
+            except (ValueError, KeyError, TypeError, AttributeError) as _ate:
+                logger.warning(f"선사 자동 템플릿 매칭 실패(무시): {_ate}")
 
         try:
             from features.ai.bl_carrier_registry import CARRIER_TEMPLATES
@@ -2351,8 +2352,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     f"(PL힌트={'ON' if ctx['hint_packing'] else 'OFF'}, "
                     f"INV힌트={'ON' if ctx['hint_invoice'] else 'OFF'})"
                 )
-        except Exception as _he:
-            logger.debug(f"선사 힌트 교체 실패(무시): {_he}")
+        except (ImportError, ValueError, KeyError, AttributeError) as _he:
+            logger.warning(f"선사 힌트 교체 실패(무시): {_he}")
 
     def _pt_handle_missing_dates(self, do_result):  # v8.6.4 [SRP]
         """D/O 없거나 arrival_date 누락 시 사용자 입력 팝업"""
@@ -2617,23 +2618,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         f"ℹ️ {len(self.preview_data)}개 LOT 선택 저장 "
                         f"({len(_checked)}/{len(_checked) + (len(self.preview_data) - len(_checked))} 선택)"
                     )
-            except Exception as _ce:
+            except (RuntimeError, ValueError, KeyError, ImportError) as _ce:
                 # region agent log
-                _dbg_log(
-                    "H4",
-                    "onestop_inbound.py:parse_confirm_except",
-                    "parse confirm dialog skipped by exception",
-                    {
-                        "error": str(_ce),
-                        "preview_len": len(self.preview_data or []),
-                        "preview_sample_net_weight": (
-                            self.preview_data[0].get("net_weight", None)
-                            if self.preview_data else None
-                        ),
-                    },
-                )
+                _dbg_log(f"[PARSE-CONFIRM] 다이얼로그 생략: {_ce}")
                 # endregion
-                logger.debug(f"[PARSE-CONFIRM] 다이얼로그 생략: {_ce}")
+                logger.warning(f"[PARSE-CONFIRM] 다이얼로그 생략: {_ce}")
         else:
             # region agent log
             _dbg_log(
@@ -2710,8 +2699,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         self.preview_data.append(row)
                     if self.preview_data:
                         self._log_safe(f"📎 D/O 기반 DB 자동매칭: {len(self.preview_data)}건 (B/L 기준)")
-                except Exception as e:
-                    logger.debug(f"D/O 단독 DB 자동매칭 실패: {e}")
+                except (sqlite3.Error, ValueError, KeyError, TypeError) as e:
+                    logger.warning(f"D/O 단독 DB 자동매칭 실패: {e}")
             return
         
         _lots = list(getattr(pl, 'lots', []) or [])
@@ -3438,8 +3427,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             if ci < len(values):
                                 row[col_id] = values[ci]
             logger.debug(f"[v8.6.4] preview_data 동기화 완료: {len(self.preview_data)}행")
-        except Exception as e:
-            logger.debug(f"[v8.6.4] preview_data 동기화 스킵: {e}")
+        except (ValueError, KeyError, TypeError, IndexError) as e:
+            logger.warning(f"[v8.6.4] preview_data 동기화 스킵: {e}")
 
     def _setup_preview_edit_bindings(self) -> None:
         """업로드1 미리보기: 엑셀형 셀 편집/복사/붙여넣기 바인딩."""
@@ -3959,8 +3948,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         # v8.3.3 [UX]: DB 저장 완료 → 단계4 활성화
         try:
             self._activate_step(3)
-        except Exception as e:
-            logger.warning(f'[UI] onestop_inbound: {e}')
+        except (sqlite3.Error, ValueError, TypeError, RuntimeError) as e:
+            logger.warning(f'[UI] onestop_inbound _show_success_and_close: {e}')
         def _close():
             if self.dialog and self.dialog.winfo_exists():
                 _app = self.app if self.app else None
@@ -4129,8 +4118,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         f"이 서류는 {cname} 선사의 Invoice/FA입니다."
                     )
                 self._inbound_template_data = _tpl
-        except Exception as e:
-            logger.debug(f"선사 힌트 강제 교체 실패: {e}")
+        except (ImportError, ValueError, KeyError, AttributeError) as e:
+            logger.warning(f"선사 힌트 강제 교체 실패: {e}")
         self._log_safe(f"🚢 선사 재파싱 시작: {cid} → PL/INV 힌트 적용")
         # v8.0.6: 선사 재파싱은 확인창 없이 바로 파싱 진행
         self._do_start_parsing_after_template()
