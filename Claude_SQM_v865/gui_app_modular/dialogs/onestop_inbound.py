@@ -530,14 +530,16 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 self.file_labels[doc_type].configure(text=os.path.basename(path))
                 self.check_labels[doc_type].configure(text="✓", fg=_success_c)
 
+        self._cd_build_parse_action_buttons(file_frame)
+
+    def _cd_build_parse_action_buttons(self, file_frame: ttk.Frame):
+        """파싱 액션 버튼 행 (멀티선택/파싱/재파싱/선사재파싱) + 자동파싱."""
         actions = ttk.Frame(file_frame)
         actions.pack(fill=X, pady=(4, 0))
 
-        # v8.5.9: 📁 멀티 선택 버튼 — Ctrl+클릭으로 BL/PL/FA/DO 한번에 선택
         self.btn_folder = ttk.Button(
             actions, text="📁 멀티 선택",
-            command=self._select_folder,
-            width=13,
+            command=self._select_folder, width=13,
         )
         self.btn_folder.pack(side=LEFT, padx=(0, 6))
         self._attach_doc_tooltip(
@@ -590,11 +592,8 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         )
         self.parse_hint.pack(side=LEFT, fill=X, expand=True, padx=(4, 0))
         self._update_parse_hint()
-        
-        # v6.5.0: 빠른 폴더 스캔 자동 파싱 — 3단계 안전 타이밍
-        #   1) update_idletasks() — 모든 pending UI 이벤트 즉시 처리
-        #   2) after_idle()       — 이벤트 루프가 완전히 idle 상태 확인
-        #   3) after(500)         — Windows 렌더링 여유 시간 500ms 확보
+
+        # 자동 파싱 (빠른 스캔 모드)
         if getattr(self, '_auto_start_parse', False):
             def _deferred_start():
                 try:
@@ -2850,6 +2849,62 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
     # ★★★ v5.8.7: 날짜 입력 팝업 (DatePicker 달력 UI)
     # ═══════════════════════════════════════════════════════════
     
+    # ── _ask_missing_dates 헬퍼 ─────────────────────────────
+
+    @staticmethod
+    def _amd_validate_date(s: str) -> bool:
+        """YYYY-MM-DD 형식 날짜 문자열 검증."""
+        import re as _re
+        if not s:
+            return True
+        s = s.strip()
+        if _re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', s):
+            try:
+                parts = s.split('-')
+                _date_type(int(parts[0]), int(parts[1]), int(parts[2]))
+                return True
+            except ValueError:
+                return False
+        return False
+
+    @staticmethod
+    def _amd_calc_dates(arrival_str: str, con_return_str: str, ft_raw: str):
+        """arrival/con_return/free_time 상호 계산.
+        Returns: (con_return_str, free_time_str, error_msg)
+        """
+        try:
+            arr_d = _date_type(*[int(x) for x in arrival_str.split('-')])
+        except (ValueError, IndexError, TypeError):
+            return '', '', "⚠️ 입항일 파싱 오류 (YYYY-MM-DD)"
+
+        try:
+            if ft_raw:
+                if not ft_raw.isdigit() or int(ft_raw) < 0:
+                    return '', '', "⚠️ Free time: 0 이상 일수(숫자) 입력"
+                free_time_str = ft_raw
+                con_return_d = arr_d + timedelta(days=int(ft_raw))
+                con_return_str = con_return_d.strftime('%Y-%m-%d')
+            elif con_return_str:
+                cr_d = _date_type(*[int(x) for x in con_return_str.split('-')])
+                free_time_str = str(max(0, (cr_d - arr_d).days))
+            else:
+                free_time_str = '14'
+                con_return_str = (arr_d + timedelta(days=14)).strftime('%Y-%m-%d')
+        except (ValueError, IndexError, TypeError):
+            return '', '', "⚠️ 반납일/Free time 계산 오류 — 형식 확인"
+
+        # con_return >= arrival_date 검증
+        try:
+            cr_d = _date_type(*[int(x) for x in con_return_str.split('-')])
+            if cr_d < arr_d:
+                return '', '', "⚠️ 컨테이너 반납일은 입항일과 같거나 이후여야 합니다."
+        except (ValueError, IndexError, TypeError):
+            pass
+
+        return con_return_str, free_time_str, ''
+
+    # ── _ask_missing_dates 메인 ──────────────────────────────
+
     def _ask_missing_dates(self, prefilled_ship: str = '', do_result=None) -> dict:
         """
         사용자에게 입항일·반납기한·Free time을 물어보는 DatePicker 팝업.
@@ -3045,20 +3100,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                     con_return_ref.widget.bind('<FocusOut>', _sync_from_con_return)
                 ft_entry.bind('<FocusOut>', _sync_from_ft)
                 
-                # ── 날짜 검증 함수 ──
-                def _validate_date(s):
-                    import re as _re
-                    if not s:
-                        return True
-                    s = s.strip()
-                    if _re.match(r'^\d{4}-\d{1,2}-\d{1,2}$', s):
-                        try:
-                            parts = s.split('-')
-                            _date_type(int(parts[0]), int(parts[1]), int(parts[2]))
-                            return True
-                        except ValueError:
-                            return False
-                    return False
+                _validate_date = OneStopInboundDialog._amd_validate_date
                 
                 # ── 확인 버튼 ── (반납일 또는 Free time 중 하나만 알면 나머지 자동 계산)
                 def _on_ok():
@@ -3093,38 +3135,13 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                             return
                     con_return_str = (con_return_ref.get() or '').strip()
                     ft_raw = (ft_var.get() or '').strip()
-                    free_time_str = ''
-                    try:
-                        # free_time을 입력했으면 이를 우선 기준으로 con_return을 계산
-                        # (DateEntry 표시값 지연 반영/잠금 상태에서도 일관된 결과 보장)
-                        if ft_raw:
-                            if not ft_raw.isdigit() or int(ft_raw) < 0:
-                                err_var.set("⚠️ Free time: 0 이상 일수(숫자) 입력")
-                                return
-                            free_time_str = ft_raw
-                            con_return_d = arr_d + timedelta(days=int(ft_raw))
-                            con_return_str = con_return_d.strftime('%Y-%m-%d')
-                        elif con_return_str:
-                            if not _validate_date(con_return_str):
-                                err_var.set("⚠️ 반납기한(con_return): YYYY-MM-DD 형식")
-                                return
-                            cr_d = _date_type(*[int(x) for x in con_return_str.split('-')])
-                            free_time_str = str(max(0, (cr_d - arr_d).days))
-                        else:
-                            free_time_str = '14'
-                            con_return_str = (arr_d + timedelta(days=14)).strftime('%Y-%m-%d')
-                    except (ValueError, IndexError, TypeError) as e:
-                        err_var.set("⚠️ 반납일/Free time 계산 오류 — 형식 확인")
-                        logger.debug(f"[_ask_missing_dates] 반납일·Free time: {e}")
+                    if con_return_str and not _validate_date(con_return_str):
+                        err_var.set("⚠️ 반납기한(con_return): YYYY-MM-DD 형식")
                         return
-                    # con_return >= arrival_date (당일 반납 포함 허용)
-                    try:
-                        cr_d = _date_type(*[int(x) for x in con_return_str.split('-')])
-                        if cr_d < arr_d:
-                            err_var.set("⚠️ 컨테이너 반납일은 입항일과 같거나 이후여야 합니다.")
-                            return
-                    except (ValueError, IndexError, TypeError):
-                        logger.debug("[SUPPRESSED] exception in onestop_inbound.py")  # noqa
+                    con_return_str, free_time_str, _calc_err = OneStopInboundDialog._amd_calc_dates(arr, con_return_str, ft_raw)
+                    if _calc_err:
+                        err_var.set(_calc_err)
+                        return
                     # 사용자 확인 단계: Free time·반납일 표시 후 맞음/다시 입력 선택
                     from ..utils.custom_messagebox import CustomMessageBox
                     confirmed = CustomMessageBox._create_dialog(
