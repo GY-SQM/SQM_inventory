@@ -315,7 +315,7 @@ class BarcodeScanEngine:
         try:
             self.db.execute(
                 "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) "
-                "VALUES (?,'SOLD',?,?,?)",
+                "VALUES (?,'OUTBOUND',?,?,?)",
                 (lot_no, weight_kg, f"phase4_scan_confirm uid={uid}", now),
             )
         except Exception:
@@ -930,7 +930,7 @@ class BarcodeScanEngine:
                 _sold_check = self.db.fetchone(
                     "SELECT id, tonbag_uid, lot_no, status, weight, location FROM inventory_tonbag "
                     "WHERE (tonbag_uid = ? OR CAST(sub_lt AS TEXT) = ?) "
-                    "AND status = 'SOLD'",
+                    "AND status IN ('OUTBOUND','SOLD')",
                     (code, code),
                 )
                 if _sold_check:
@@ -1133,7 +1133,7 @@ class BarcodeScanEngine:
 
                 self.db.execute(
                     "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) "
-                    "VALUES (?,'SOLD',?,?,?)",
+                    "VALUES (?,'OUTBOUND',?,?,?)",
                     (
                         lot_no, tb_weight,
                         f"barcode_lot_mode uid={code}, plan_id={plan_id}, export_type={export_type}",
@@ -1225,16 +1225,16 @@ class BarcodeScanEngine:
                     )
                     try:
                         self.db.execute(
-                            "INSERT INTO sold_table (lot_no, tonbag_id, sub_lt, tonbag_uid, sold_qty_kg, sold_date, status, created_by) VALUES (?,?,?,?,?,?,'SOLD','barcode_scan')",
+                            "INSERT INTO sold_table (lot_no, tonbag_id, sub_lt, tonbag_uid, sold_qty_kg, sold_date, status, created_by) VALUES (?,?,?,?,?,?,'OUTBOUND','barcode_scan')",
                             (row['lot_no'], row['id'], row['sub_lt'], row.get('tonbag_uid') or '', row.get('weight') or 0, now))
                     except Exception as e:
                         logger.debug(f"sold_table insert skipped in barcode scan: {e}")
                     try:
-                        self.db.execute("UPDATE picking_table SET status='SOLD', sold_date=? WHERE tonbag_id=? AND status='ACTIVE'", (now, row['id']))
+                        self.db.execute("UPDATE picking_table SET status='OUTBOUND', sold_date=? WHERE tonbag_id=? AND status='ACTIVE'", (now, row['id']))
                     except Exception as e:
                         logger.debug(f"picking_table status update skipped in barcode scan: {e}")
                     self.db.execute(
-                        "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) VALUES (?,'SOLD',?,?,?)",
+                        "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) VALUES (?,'OUTBOUND',?,?,?)",
                         (row['lot_no'], row.get('weight') or 0, f"barcode_scan uid={code}", now))
                     sold_count += 1
                 else:
@@ -1301,7 +1301,7 @@ class BarcodeScanEngine:
                         self.db.execute(
                             "INSERT INTO sold_table "
                             "(lot_no, tonbag_id, sub_lt, tonbag_uid, sold_qty_kg, sold_date, status, created_by) "
-                            "VALUES (?,?,?,?,?,?,'SOLD','barcode_scan_swap')",
+                            "VALUES (?,?,?,?,?,?,'OUTBOUND','barcode_scan_swap')",
                             (
                                 lot_no, scanned_row['id'], scanned_row.get('sub_lt', 0),
                                 scanned_row.get('tonbag_uid') or code, scanned_row.get('weight') or 0, now
@@ -1311,7 +1311,7 @@ class BarcodeScanEngine:
                         logger.debug(f"sold_table insert skipped in barcode swap: {e}")
                     self.db.execute(
                         "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) "
-                        "VALUES (?,'SOLD',?,?,?)",
+                        "VALUES (?,'OUTBOUND',?,?,?)",
                         (
                             lot_no,
                             scanned_row.get('weight') or 0,

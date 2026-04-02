@@ -65,7 +65,7 @@ class LotDetailDialogMixin:
                         'outbound_date': '', 'is_sample': 0, 'remarks': ''} for r in (rows or [])]
         elif source == 'sold':
             rows = self.engine.db.fetchall(
-                "SELECT sub_lt, sold_qty_kg, customer, sold_date FROM sold_table WHERE lot_no = ? AND status = 'SOLD' ORDER BY sub_lt",
+                "SELECT sub_lt, sold_qty_kg, customer, sold_date FROM sold_table WHERE lot_no = ? AND status IN ('OUTBOUND','SOLD') ORDER BY sub_lt",
                 (lot_no,))
             tonbags = [{'sub_lt': r.get('sub_lt'), 'weight': float(r.get('sold_qty_kg') or 0), 'status': STATUS_SOLD,
                         'location': '', 'picked_date': '', 'picked_to': str(r.get('customer') or ''),
@@ -242,7 +242,9 @@ class LotDetailDialogMixin:
         tb_tree.tag_configure('available', background=ThemeColors.get('available', is_dark), foreground=fg)
         tb_tree.tag_configure('picked', background=ThemeColors.get('picked', is_dark), foreground=fg)
         tb_tree.tag_configure('shipped', background=ThemeColors.get('shipped', is_dark), foreground=fg)
-        tb_tree.tag_configure('depleted', background=ThemeColors.get('bg_secondary', is_dark), foreground=ThemeColors.get('text_muted', is_dark))
+        tb_tree.tag_configure('depleted',
+            background='#e8e8e8' if not is_dark else '#1a1a2e',
+            foreground='#666666' if not is_dark else '#9a9ab0')
         tb_tree.tag_configure('sample', background=ThemeColors.get('available', is_dark), foreground=fg)
 
         # 톤백 요약 바

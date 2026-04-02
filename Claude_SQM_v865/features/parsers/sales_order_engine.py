@@ -416,7 +416,7 @@ class SalesOrderEngine:
                         status, sold_date, created_at, created_by
                     ) VALUES (
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        'SOLD', ?, ?, 'system'
+                        'OUTBOUND', ?, ?, 'system'
                     )
                     """,
                     [row + (now, now) for row in sold_rows],
@@ -440,7 +440,7 @@ class SalesOrderEngine:
                     """
                     INSERT INTO stock_movement
                         (lot_no, movement_type, qty_kg, remarks, movement_date, created_at)
-                    VALUES (?, 'SOLD', ?, ?, ?, ?)
+                    VALUES (?, 'OUTBOUND', ?, ?, ?, ?)
                     """,
                     [(lot, qty, remarks, now, now) for lot, qty, remarks in movement_rows],
                 )
@@ -476,7 +476,7 @@ class SalesOrderEngine:
                         status, sold_date, created_at, created_by
                     ) VALUES (
                         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                        'SOLD', ?, ?, 'system'
+                        'OUTBOUND', ?, ?, 'system'
                     )
                     """,
                     row + (now, now),
@@ -500,7 +500,7 @@ class SalesOrderEngine:
                     """
                     INSERT INTO stock_movement
                         (lot_no, movement_type, qty_kg, remarks, movement_date, created_at)
-                    VALUES (?, 'SOLD', ?, ?, ?, ?)
+                    VALUES (?, 'OUTBOUND', ?, ?, ?, ?)
                     """,
                     (lot, qty, remarks, now, now),
                 )
@@ -915,7 +915,7 @@ class SalesOrderEngine:
                 """
                 INSERT INTO stock_movement
                     (lot_no, movement_type, qty_kg, remarks, movement_date, created_at)
-                VALUES (?, 'SOLD', ?, ?, datetime('now'), datetime('now'))
+                VALUES (?, 'OUTBOUND', ?, ?, datetime('now'), datetime('now'))
                 """,
                 (lot_no, qty_kg, f"SO#{so_no}"),
             )
