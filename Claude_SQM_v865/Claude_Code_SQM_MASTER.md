@@ -1536,18 +1536,135 @@ Report after every phase AND every step within each phase.
 
 ---
 
-## 기동님 실행 방법 (3단계)
+## 기동님 실행 방법
 
 ```bash
-# 1. SQM 프로젝트 폴더로 이동
-cd "G:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL"
+# 1. SQM v865 폴더로 이동
+cd "F:\프로그램\Sqm 재고관리\Claude_SQM_v865"
 
-# 2. Claude Code 실행
+# 2. Claude Code 실행 (자동 모드)
 claude --dangerously-skip-permissions \
   --system-prompt-file Claude_Code_SQM_MASTER.md
 
 #    → 자리 비우기 (3~6시간)
 #    → 돌아오면 결과 확인
+```
+
+---
+
+## 야간 자동 실행 — P2 리팩토링 (v865)
+
+```
+YOU ARE CONTINUING the v865 refactoring session.
+All P0 and P1 tasks are DONE. Now execute P2 tasks below.
+
+Working directory: F:\프로그램\Sqm 재고관리\Claude_SQM_v865
+Git root (for commit/push): F:\프로그램\Sqm 재고관리
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[ABSOLUTE RULES — NEVER VIOLATE]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- NO DB schema change
+- NO business policy change
+- NO public method signature change
+- NO cross-file interface change
+- NO new SOLD write-path (all writes must use OUTBOUND)
+- SOLD read-path: keep WHERE status IN ('OUTBOUND','SOLD') for backward compat
+- Always run: python -m py_compile <file> after EVERY edit
+- If py_compile fails → fix immediately before moving on
+- If a change feels risky → skip it and log as DEFERRED
+- Backup each file before modifying: cp file.py file.py.bak_auto
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[TASK 1] outbound_handlers.py 분해 (2,868줄)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: gui_app_modular/handlers/outbound_handlers.py
+
+1. Read the entire file and identify all methods > 80 lines
+2. For each large method, extract helper methods with _oh_ prefix
+3. Keep public signatures unchanged
+4. Separate business logic from UI callback wiring where possible
+5. py_compile verify after each method split
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[TASK 2] advanced_dialogs_mixin.py 분해 (2,283줄)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: gui_app_modular/mixins/advanced_dialogs_mixin.py
+
+1. Read the entire file and identify all methods > 80 lines
+2. Extract helpers with _adm_ prefix
+3. Separate report generation logic from dialog UI
+4. py_compile verify
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[TASK 3] except Exception 나머지 정리 (onestop_inbound.py)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: gui_app_modular/dialogs/onestop_inbound.py
+
+Already done: 7 data-path exceptions standardized.
+Remaining: ~53 UI-related except Exception.
+
+Rules:
+- File I/O: except Exception → except (OSError, IOError, PermissionError)
+- JSON: except Exception → except (json.JSONDecodeError, KeyError, ValueError)
+- tkinter widget ops (winfo_exists, config, pack, grid): KEEP except Exception
+  (tkinter raises TclError, RuntimeError, etc unpredictably)
+- Template load/save: except Exception → except (OSError, json.JSONDecodeError, KeyError)
+- Add logger.warning where only logger.debug exists on recoverable errors
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[TASK 4] 중복 SQL 쿼리 통합
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Search for repeated SQL patterns across *.py:
+   grep -rn "SELECT.*FROM inventory_tonbag.*WHERE.*status" --include="*.py"
+   grep -rn "SELECT.*FROM allocation_plan.*WHERE.*status" --include="*.py"
+2. Find queries repeated >= 3 times across different files
+3. Create named methods in engine_modules/inventory_modular/query_mixin.py
+4. Replace duplicates with method calls
+5. py_compile verify all changed files
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[TASK 5] after() 호출 정리
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Search: grep -rn "\.after(" --include="*.py" | grep -v test
+2. Identify unnecessary/duplicate refresh calls
+3. Consolidate where possible (multiple after() → single deferred refresh)
+4. Do NOT remove after() calls in critical UI update paths
+5. py_compile verify
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[EXECUTION ORDER]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Execute TASK 1 → TASK 2 → TASK 3 → TASK 4 → TASK 5 in order.
+Do not stop between tasks. Do not ask. Auto-decide everything.
+If a task has ambiguity that could alter DB semantics → skip and log as DEFERRED.
+
+After EACH task, output:
+  TASK N COMPLETE:
+  - files modified: [list]
+  - methods extracted: [count]
+  - py_compile: PASS/FAIL
+  - deferred items: [list or none]
+
+After ALL tasks, output:
+  ══════════════════════════════════════
+  P2 SESSION COMPLETE — SQM v865
+  Task 1 (outbound_handlers): [summary]
+  Task 2 (advanced_dialogs): [summary]
+  Task 3 (except cleanup): [summary]
+  Task 4 (SQL consolidation): [summary]
+  Task 5 (after cleanup): [summary]
+  Total files modified: N
+  Total helpers extracted: N
+  Deferred: [list]
+  ══════════════════════════════════════
 ```
 
 ## v8.6.5 리팩토링 이력 (2026-04-02~03, Claude Code 세션)
