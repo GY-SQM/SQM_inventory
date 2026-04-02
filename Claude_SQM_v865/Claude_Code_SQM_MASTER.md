@@ -1,6 +1,6 @@
 # SQM Claude Code 마스터 프롬프트
-# 작성: Ruby (2026-03-31 updated v8.6.4)
-# 용도: 버그수정 + UI개선 + 메뉴단일화 + 창크기저장 + 디버깅 자동화
+# 작성: Ruby (2026-03-31 updated v8.6.5)
+# 용도: 버그수정 + UI개선 + 안정성/효율성/편리성 + 디버깅 자동화
 
 ---
 
@@ -158,7 +158,7 @@ Project root: G:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL
   │       ├── crud_mixin.py (532줄)     CRUD 오퍼레이션
   │       ├── query_mixin.py (722줄)    쿼리 빌드/실행
   │       ├── inbound_mixin.py (703줄)  입고 처리
-  │       ├── outbound_mixin.py (3,825줄) ★ 최대 파일 — 출고/배정
+  │       ├── outbound_mixin.py (4,040줄) ★ 최대 파일 — 출고/배정 (v865 헬퍼 19개 분해)
   │       ├── return_mixin.py (1,079줄) 반품 처리
   │       ├── tonbag_mixin.py (652줄)   톤백 관리
   │       ├── export_mixin.py (1,411줄) Excel/PDF 내보내기
@@ -369,13 +369,13 @@ Project root: G:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   gui_app_modular/utils/ui_constants.py      (1,549줄) 전체 UI 상수
-  gui_app_modular/main_app.py                (1,375줄) 메인 윈도우 + 18개 Mixin
+  gui_app_modular/main_app.py                (1,382줄) 메인 윈도우 + 41개 Mixin
   gui_app_modular/tabs/inventory_tab.py      (1,569줄) 재고 탭
-  gui_app_modular/dialogs/onestop_inbound.py (4,175줄) 원스톱 입고
+  gui_app_modular/dialogs/onestop_inbound.py (4,175줄) 원스톱 입고 (v865: _create_dialog 530→20줄 분해)
   gui_app_modular/mixins/toolbar_mixin.py    (1,903줄) 메인 툴바 (메뉴 버튼 7개)
   gui_app_modular/mixins/custom_menubar.py   커스텀 메뉴바
   gui_app_modular/menu_registry.py           (165줄) 메뉴 단일 소스
-  engine_modules/inventory_modular/outbound_mixin.py (3,825줄) 출고/배정 엔진
+  engine_modules/inventory_modular/outbound_mixin.py (4,040줄) 출고/배정 엔진 (v865: 핵심 3함수 헬퍼 19개 분해)
   engine_modules/inventory_modular/query_mixin.py (722줄) 쿼리 빌더
   engine_modules/constants.py                (265줄) STATUS/MOVEMENT 상수
   parsers/document_parser_modular/bl_mixin.py     BL 파싱
@@ -416,7 +416,7 @@ Project root: G:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL
   STATUS_AVAILABLE   = 'AVAILABLE'
   STATUS_RESERVED    = 'RESERVED'
   STATUS_PICKED      = 'PICKED'
-  STATUS_SOLD        = 'SOLD'        (deprecated, read-only)
+  STATUS_SOLD        = 'SOLD'        (deprecated, read-only — v865: 전체 write-path OUTBOUND로 전환 완료)
   STATUS_DEPLETED    = 'DEPLETED'
   STATUS_RETURNED    = 'RETURNED'
 
@@ -447,6 +447,8 @@ Project root: G:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL
 
 3. STATUS FLOW: AVAILABLE→RESERVED→PICKED→OUTBOUND
    STATUS_SOLD = deprecated read-only. All writes → STATUS_OUTBOUND
+   ★ v865: SOLD write-path 0건 달성 (barcode_scan_engine, sales_order_engine, outbound_mixin 전부 OUTBOUND)
+   ★ read-path는 하위호환 유지 (WHERE status IN ('OUTBOUND','SOLD'))
 
 4. STOCK: CURRENT = AVAILABLE + RESERVED + PICKED + RETURN
 
@@ -1062,6 +1064,138 @@ DESIGN GOAL: Professional, premium logistics management software.
   ✅ pytest passes all engine tests
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[PHASE 2: STABILITY + EFFICIENCY + USABILITY — v8.6.5]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Phase 2는 안정성/효율성/편리성 3축 개선. Phase 1 완료 후 자동 시작.
+각 항목별로 수정 → 테스트 → 로그 확인 → 다음 항목.
+
+── PHASE 2-A: 즉시 수정 (1~5줄 변경, P0~P2) ──────────
+
+STAB-1 [P0] process_outbound DB 잠금 크래시 방지:
+  File: engine_modules/inventory_modular/outbound_mixin.py
+  Line: ~671 (except 절)
+  현재: except (ValueError, TypeError, AttributeError) as e:
+  수정: except (ValueError, TypeError, AttributeError,
+               sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
+  이유: DB 잠금/디스크 오류 시 unhandled exception으로 크래시
+
+STAB-2 [P2] transaction() rollback 범위 확대:
+  File: engine_modules/database.py
+  Line: ~266-279 (transaction context manager __exit__)
+  현재: except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError, OSError):
+  수정: except Exception:  (rollback 후 re-raise)
+  이유: TypeError/KeyError 등 발생 시 rollback 안 되어 부분 커밋
+
+STAB-3 [P2] confirm_outbound double-SOLD 체크 실패 시 중단:
+  File: engine_modules/inventory_modular/outbound_mixin.py
+  Line: ~2605-2624
+  현재: except → logger.debug → 계속 진행
+  수정: except → logger.error → result['errors'].append → return result
+  이유: safety guard 실패를 무시하면 중복 출고 가능
+
+PERF-1 [P2] Treeview 일괄 삭제 (전 탭 공통):
+  대상: gui_app_modular/tabs/*.py 의 모든 Treeview 새로고침 함수
+  현재: for item in tree.get_children(): tree.delete(item)
+  수정: tree.delete(*tree.get_children())
+  이유: 아이템별 삭제 → 단일 호출, 500행 기준 3배 빨라짐
+
+CLEAN-1 [P3] inbound_mixin.py re 중복 import 제거:
+  File: engine_modules/inventory_modular/inbound_mixin.py
+  Line: ~88
+  현재: import re as _re (함수 내부, 모듈 레벨에도 import re 있음)
+  수정: 내부 import 삭제, 모듈 레벨 re 사용
+
+── PHASE 2-B: 핵심 구조 개선 (P1, 15~50줄) ────────────
+
+PERF-2 [P1] Lazy Tab Refresh (dirty flag 시스템):
+  대상: gui_app_modular/mixins/refresh_mixin.py + main_app.py
+  현재: _safe_refresh() → 8개 탭 전체 새로고침 (1~3초 UI 멈춤)
+  수정:
+    1) main_app.__init__에 self._dirty_tabs = set() 추가
+    2) _mark_tabs_dirty(*tab_names) 메서드 추가
+    3) _safe_refresh() → 현재 탭 + dirty 탭만 새로고침
+    4) <<NotebookTabChanged>> 핸들러에서 dirty면 새로고침
+    5) 각 handler에서 _safe_refresh() 대신 _mark_tabs_dirty('inventory', 'dashboard') 등 호출
+  효과: DB 쿼리 70% 감소, UI 멈춤 제거
+
+PERF-3 [P1] 대시보드 백그라운드 새로고침:
+  File: gui_app_modular/tabs/dashboard_tab.py
+  현재: _refresh_dashboard() → 7개 DB 쿼리 순차 실행 (메인 스레드)
+  수정:
+    1) threading.Thread(target=_fetch_dashboard_data) 로 DB 조회
+    2) _fetch_dashboard_data() 안에서 1~2개 통합 쿼리로 전체 통계 수집
+    3) self.root.after(0, lambda: _apply_dashboard_data(data)) 로 UI 업데이트
+  효과: 대시보드 진입 시 UI 멈춤 완전 제거
+
+STAB-4 [P1] fix_lot_status_integrity N+1 제거 + 트랜잭션:
+  File: engine_modules/inventory_modular/outbound_mixin.py
+  Lines: ~277-295
+  현재: for loop 안에서 개별 fetchone (N+1) + 트랜잭션 없음
+  수정:
+    1) 초기 GROUP BY에 SOLD/OUTBOUND 카운트 포함:
+       SELECT lot_no,
+         SUM(CASE WHEN status IN ('AVAILABLE','RESERVED') THEN 1 ELSE 0 END) as avail_cnt,
+         SUM(CASE WHEN status IN ('SOLD','OUTBOUND') THEN 1 ELSE 0 END) as sold_cnt
+       FROM inventory_tonbag GROUP BY lot_no
+    2) with self.db.transaction("IMMEDIATE"): 로 감싸기
+  효과: N+1 쿼리 제거, 부분 수정 방지
+
+PERF-4 [P1] 시작 시 deferred tasks 통합:
+  File: gui_app_modular/main_app.py
+  Lines: ~199-220, 457-458, 543-549, 700-713
+  현재: 12개 root.after() 콜백이 4초 내 중복 데이터 로드
+  수정:
+    Phase A (0~500ms): UI 렌더링만
+    Phase B (800ms): 단일 DB 스냅샷 로드 (inventory + tonbag + allocation)
+    Phase C (1500ms): 스냅샷 기반 대시보드/통계/정합성 체크
+    Phase D (2500ms): 중복 감지 + 백업 체크
+  효과: DB 조회 횟수 절반, 시작 시간 0.5~1초 단축
+
+── PHASE 2-C: UX 개선 (P2~P3) ─────────────────────────
+
+UX-1 [P2] busy cursor (긴 작업 시 대기 표시):
+  대상: gui_app_modular/mixins/refresh_mixin.py
+  수정: _safe_refresh() 앞뒤에:
+    self.root.config(cursor='wait')
+    self.root.update_idletasks()
+    ... (작업) ...
+    self.root.config(cursor='')
+  추가: _set_status("데이터 로딩 중...") / _set_status("완료")
+
+UX-2 [P2] silent exception 정리 (17개 파일):
+  대상: grep -rn "except.*Exception.*pass" gui_app_modular/ engine_modules/
+  수정: except Exception: pass → except Exception as e: logger.debug(f"[context]: {e}")
+  ★ 특히 dashboard_tab.py (3곳), outbound_mixin.py (1곳) 우선
+
+UX-3 [P2] _refresh_inventory 이중 쿼리 제거:
+  File: gui_app_modular/tabs/inventory_tab.py
+  Lines: ~1085-1112, ~1391
+  현재: get_all_inventory() + 별도 GROUP BY 쿼리 2회
+  수정: JOIN으로 1회 통합 쿼리
+  추가: _refresh_inventory_async 결과를 직접 전달 (재조회 방지)
+
+UX-4 [P2] 반품 처리 벌크 UPDATE:
+  File: engine_modules/inventory_modular/return_mixin.py
+  Lines: ~140-153
+  현재: 톤백당 3회 UPDATE (벌크 반품 20개 = 60회)
+  수정: lot_no IN (...) + OR 조건으로 1~2회 UPDATE
+
+UX-5 [P3] Ctrl+Z 최근 작업 복구 단축키:
+  File: gui_app_modular/mixins/keybindings_mixin.py
+  수정: Ctrl+Z → "마지막 자동 백업 복원" 확인 다이얼로그 연결
+  연관: gui_app_modular/dialogs/auto_backup.py
+
+── PHASE 2 COMPLETE WHEN ───────────────────────────────
+
+  ✅ STAB-1~4 안정성 수정 완료 (크래시/부분커밋 방지)
+  ✅ PERF-1~4 효율성 수정 완료 (lazy refresh + 백그라운드 대시보드)
+  ✅ UX-1~5 편리성 수정 완료 (busy cursor + silent exception 정리)
+  ✅ pytest passes all engine tests
+  ✅ 프로그램 시작 → 경고 0건 확인
+  ✅ 탭 전환 시 UI 멈춤 없음 확인
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 [CYCLE REPORT FORMAT — AFTER EVERY STEP]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1172,9 +1306,16 @@ Auto-decide everything. Never stop. Report after every step.
        Find any method > 100 lines:
          grep -rn "def " --include="*.py" → measure line spans
        Target files (known large):
-         outbound_mixin.py (3,798줄) → split reserve_from_allocation() further
-         onestop_inbound.py (4,032줄) → split _on_parse_complete()
-         gemini_parser.py (1,821줄) → split _build_prompt()
+         outbound_mixin.py (4,040줄) → v865 완료: 핵심 3함수 헬퍼 19개 분해
+           confirm_outbound: 263→82줄 (_co_* 7개)
+           execute_reserved: 202→88줄 (_er_* 6개)
+           reserve_from_allocation: 665→466줄 (_ra_* 7개 추가, 기존 10개 유지)
+         onestop_inbound.py (4,175줄) → v865 완료: _create_dialog 530→20줄
+           _cd_setup_window(36줄), _cd_build_step_indicator(66줄)
+           _cd_build_doc_file_section(141줄), _cd_build_parse_action_buttons(76줄)
+           _cd_build_carrier_and_progress(125줄), _cd_build_preview_table(77줄)
+           _amd_validate_date(16줄), _amd_calc_dates(37줄)
+         gemini_parser.py (1,821줄) → split _build_prompt() (미착수)
        Rule: Each method ≤ 80 lines. Extract sub-methods with clear names.
 
   3-B. Magic number elimination:
@@ -1408,6 +1549,41 @@ claude --dangerously-skip-permissions \
 #    → 자리 비우기 (3~6시간)
 #    → 돌아오면 결과 확인
 ```
+
+## v8.6.5 리팩토링 이력 (2026-04-02~03, Claude Code 세션)
+
+| 커밋 | 파일 | 내용 |
+|------|------|------|
+| def7b5e | outbound_mixin.py | 핵심 3함수 헬퍼 19개 분해 (confirm_outbound 263→82줄, execute_reserved 202→88줄, reserve_from_allocation 665→466줄) |
+| eb03ae1 | barcode_scan_engine.py, sales_order_engine.py, lot_detail_dialog.py | SOLD write-path 전면 제거 → OUTBOUND 통일 (14→0건) |
+| ca71921 | onestop_inbound.py | _create_dialog 530줄 → 20줄 오케스트레이터 + 6개 _cd_* 헬퍼 |
+| 74d86ad | onestop_inbound.py | 파싱버튼 76줄 분리 + 날짜 검증/계산 53줄 static 메서드 추출 |
+| 9a4c03d | onestop_inbound.py | 데이터 경로 except Exception 7건 → 특정 타입 표준화 |
+
+### 변경 원칙
+- DB schema 변경 없음
+- business policy 변경 없음
+- public method signature 변경 없음
+- SOLD는 read-path에서 하위호환 유지 (WHERE status IN ('OUTBOUND','SOLD'))
+
+### 41개 Mixin 분류 (SQMInventoryAppFull)
+| 그룹 | 수 | 포함 |
+|------|---|------|
+| UI 프레임 | 5 | Menu, Toolbar, StatusBar, Window, Theme |
+| 기능/단축키 | 4 | KeyBindings, ContextMenu, DragDrop, FeaturesV2 |
+| 데이터/검증 | 3 | Database, Validation, Refresh |
+| 탭 | 14 | Dashboard(2), Inventory, Allocation(2), Outbound, Picked, Sold, Scan, Tonbag, Log, Summary, Cargo, Return, Move |
+| 핸들러 | 12 | Import, Outbound(3), Backup, PDF(2), Export, Inbound(2), StatusImport, Product, SimpleExcel |
+| 대화상자 | 5 | LotAllocationAudit, LotDetail, Settings, Info, OutboundPreview |
+| 고급 | 1 | AdvancedFeatures |
+
+### 남은 P2 작업
+- UI refresh / after() 104회 정리
+- 서비스 계층 분리 (outbound/allocation/picking)
+- 41개 mixin 축소
+- gemini_parser.py _build_prompt() 분해
+
+---
 
 ## v8.6.4 업데이트 사항 (v8.6.3 대비)
 
