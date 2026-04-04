@@ -1,0 +1,6 @@
+# 로컬 Claude 설정 (권한/환경별)
+.claude/settings.local.json
+
+# 편집기 백업 산출물
+*.bak_auto
+*.bak_20*

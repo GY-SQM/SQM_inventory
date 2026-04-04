@@ -1,0 +1,433 @@
+{
+  "version": "3.0",
+  "lastUpdated": "2026-04-03T16:03:09.961Z",
+  "activeFeatures": [
+    "scripts",
+    "schemas",
+    "react_api",
+    "routes",
+    "stage_gates",
+    "api",
+    "web",
+    "middleware",
+    "Claude_SQM_v867"
+  ],
+  "primaryFeature": "scripts",
+  "features": {
+    "scripts": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-03T14:57:52.162Z",
+        "lastUpdated": "2026-04-03T16:01:35.117Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\scripts\\telegram_bridge.py"
+    },
+    "schemas": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-03T15:21:34.528Z",
+        "lastUpdated": "2026-04-03T15:21:34.528Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\react_api\\schemas\\write_models.py"
+    },
+    "react_api": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-03T15:21:55.561Z",
+        "lastUpdated": "2026-04-03T15:42:21.615Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\react_api\\main.py"
+    },
+    "routes": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-03T15:22:21.644Z",
+        "lastUpdated": "2026-04-03T15:42:13.094Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\react_api\\routes\\ai_dashboard.py"
+    },
+    "stage_gates": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-03T15:26:06.328Z",
+        "lastUpdated": "2026-04-03T15:26:06.328Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\tests\\stage_gates\\test_api_write_endpoints.py"
+    },
+    "api": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-03T15:32:17.424Z",
+        "lastUpdated": "2026-04-03T15:42:26.674Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\web\\src\\api\\aiApi.js"
+    },
+    "web": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-03T15:32:41.252Z",
+        "lastUpdated": "2026-04-03T15:42:57.738Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\web\\src\\pages\\DashboardPage.jsx"
+    },
+    "middleware": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-03T15:38:34.755Z",
+        "lastUpdated": "2026-04-03T15:38:45.991Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\react_api\\middleware\\__init__.py"
+    },
+    "Claude_SQM_v867": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-03T15:45:05.455Z",
+        "lastUpdated": "2026-04-03T16:03:09.959Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\run_master.bat"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-04-03T14:52:29.075Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-04-03T16:03:09.961Z"
+  },
+  "history": [
+    {
+      "timestamp": "2026-04-03T14:57:52.163Z",
+      "feature": "scripts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:21:34.529Z",
+      "feature": "schemas",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:21:55.562Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:22:15.292Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:22:21.645Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:22:28.828Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:22:35.425Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:22:58.763Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:23:06.397Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:23:11.205Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:23:21.794Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:26:06.329Z",
+      "feature": "stage_gates",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:29:14.278Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:29:19.793Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:29:24.359Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:29:47.043Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:29:52.275Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:30:00.212Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:32:17.425Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:32:41.254Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:32:51.951Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:33:16.062Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:33:51.777Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:34:13.849Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:34:35.450Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:34:48.156Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:35:01.798Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:35:11.135Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:38:34.756Z",
+      "feature": "middleware",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:38:45.992Z",
+      "feature": "middleware",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:38:59.398Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:39:03.414Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:40:04.561Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:40:09.115Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:40:13.245Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:42:13.095Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:42:17.770Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:42:21.616Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:42:26.675Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:42:57.740Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:44:48.105Z",
+      "feature": "scripts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:45:05.456Z",
+      "feature": "Claude_SQM_v867",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T15:45:19.459Z",
+      "feature": "Claude_SQM_v867",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T16:01:35.119Z",
+      "feature": "scripts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-03T16:03:09.960Z",
+      "feature": "Claude_SQM_v867",
+      "phase": "do",
+      "action": "updated"
+    }
+  ],
+  "stateMachine": {
+    "defaultWorkflow": "default",
+    "activeWorkflows": {},
+    "totalTransitions": 0
+  },
+  "automation": {
+    "globalLevel": 2,
+    "trustScore": 40,
+    "pendingApprovals": 0,
+    "lastGateResult": null
+  },
+  "team": {
+    "enabled": true,
+    "stateFile": ".bkit/runtime/agent-state.json",
+    "eventsFile": ".bkit/runtime/agent-events.jsonl"
+  }
+}
