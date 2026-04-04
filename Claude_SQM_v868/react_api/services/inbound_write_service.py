@@ -3,16 +3,17 @@
 import logging
 from typing import Dict
 
-from engine_modules.database import SQMDatabase
+from engine_modules.inventory_modular.engine import SQMInventoryEngineV3
 from react_api.schemas.write_models import InboundCreateRequest
 
 logger = logging.getLogger(__name__)
 
 
-def create_inbound(db: SQMDatabase, req: InboundCreateRequest) -> Dict:
+def create_inbound(engine: SQMInventoryEngineV3, req: InboundCreateRequest) -> Dict:
     """
     POST /api/inbound/create 핸들러.
-    기존 engine_modules의 process_inbound()를 감싸서 호출한다.
+    SQMInventoryEngineV3.process_inbound()를 호출한다.
+    engine이 자체 트랜잭션을 관리하므로 여기서는 감싸지 않는다.
     """
     # packing_data 구성 (process_inbound이 기대하는 형식)
     packing_data = {
@@ -47,7 +48,7 @@ def create_inbound(db: SQMDatabase, req: InboundCreateRequest) -> Dict:
     bl_data = {'bl_no': req.bl_no} if req.bl_no else None
 
     try:
-        result = db.process_inbound(
+        result = engine.process_inbound(
             packing_data=packing_data,
             invoice_data=invoice_data if invoice_data else None,
             bl_data=bl_data,

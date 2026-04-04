@@ -1,6 +1,6 @@
 {
   "version": "3.0",
-  "lastUpdated": "2026-04-04T08:33:35.430Z",
+  "lastUpdated": "2026-04-04T08:35:21.761Z",
   "activeFeatures": [
     "scripts",
     "schemas",
@@ -36,9 +36,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-04-03T15:21:34.528Z",
-        "lastUpdated": "2026-04-03T15:21:34.528Z"
+        "lastUpdated": "2026-04-04T08:35:04.461Z"
       },
-      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\react_api\\schemas\\write_models.py"
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v868\\react_api\\schemas\\write_models.py"
     },
     "react_api": {
       "phase": "do",
@@ -49,9 +49,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-04-03T15:21:55.561Z",
-        "lastUpdated": "2026-04-04T08:33:35.427Z"
+        "lastUpdated": "2026-04-04T08:34:43.992Z"
       },
-      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v868\\react_api\\utils\\db.py"
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v868\\react_api\\services\\outbound_write_service.py"
     },
     "routes": {
       "phase": "do",
@@ -62,9 +62,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-04-03T15:22:21.644Z",
-        "lastUpdated": "2026-04-03T15:42:13.094Z"
+        "lastUpdated": "2026-04-04T08:35:21.760Z"
       },
-      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v867\\react_api\\routes\\ai_dashboard.py"
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v868\\react_api\\routes\\location.py"
     },
     "stage_gates": {
       "phase": "do",
@@ -140,7 +140,7 @@
   "session": {
     "startedAt": "2026-04-03T14:52:29.075Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-04-04T08:33:35.430Z"
+    "lastActivity": "2026-04-04T08:35:21.761Z"
   },
   "history": [
     {
@@ -416,6 +416,42 @@
     {
       "timestamp": "2026-04-04T08:33:35.430Z",
       "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-04T08:34:14.335Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-04T08:34:43.993Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-04T08:34:52.584Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-04T08:35:04.463Z",
+      "feature": "schemas",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-04T08:35:13.436Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-04T08:35:21.761Z",
+      "feature": "routes",
       "phase": "do",
       "action": "updated"
     }

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""출고 쓰기 서비스 — engine_modules 출고/취소 래퍼."""
+"""출고 쓰기 서비스 — engine_modules 출고/취소/위치변경 래퍼."""
 import logging
 from typing import Dict
 
-from engine_modules.database import SQMDatabase
+from engine_modules.inventory_modular.engine import SQMInventoryEngineV3
 from react_api.schemas.write_models import (
     OutboundExecuteRequest,
     OutboundCancelRequest,
@@ -13,10 +13,11 @@ from react_api.schemas.write_models import (
 logger = logging.getLogger(__name__)
 
 
-def execute_outbound(db: SQMDatabase, req: OutboundExecuteRequest) -> Dict:
+def execute_outbound(engine: SQMInventoryEngineV3, req: OutboundExecuteRequest) -> Dict:
     """
     POST /api/outbound/execute
-    process_outbound()를 호출하여 톤백 출고 처리.
+    engine.process_outbound()를 호출하여 톤백 출고 처리.
+    engine이 자체 트랜잭션(IMMEDIATE)을 관리한다.
     """
     allocations = []
     for item in req.items:
@@ -30,7 +31,7 @@ def execute_outbound(db: SQMDatabase, req: OutboundExecuteRequest) -> Dict:
         })
 
     try:
-        result = db.process_outbound(
+        result = engine.process_outbound(
             allocation_data=allocations,
             source=req.source,
             stop_at_picked=req.stop_at_picked,
@@ -56,13 +57,14 @@ def execute_outbound(db: SQMDatabase, req: OutboundExecuteRequest) -> Dict:
         }
 
 
-def cancel_outbound(db: SQMDatabase, req: OutboundCancelRequest) -> Dict:
+def cancel_outbound(engine: SQMInventoryEngineV3, req: OutboundCancelRequest) -> Dict:
     """
     PUT /api/outbound/cancel
-    cancel_outbound_tonbag()를 호출하여 톤백 출고 취소.
+    engine.cancel_outbound_tonbag()를 호출하여 톤백 출고 취소.
+    engine이 자체 트랜잭션(IMMEDIATE)을 관리한다.
     """
     try:
-        result = db.cancel_outbound_tonbag(
+        result = engine.cancel_outbound_tonbag(
             lot_no=req.lot_no,
             sub_lt=req.sub_lt,
         )
@@ -82,44 +84,32 @@ def cancel_outbound(db: SQMDatabase, req: OutboundCancelRequest) -> Dict:
         }
 
 
-def update_location(db: SQMDatabase, req: LocationUpdateRequest) -> Dict:
+def update_location(engine: SQMInventoryEngineV3, req: LocationUpdateRequest) -> Dict:
     """
     PUT /api/location/update
-    톤백 위치 변경.
+    engine.update_tonbag_location()를 호출하여 톤백 위치 변경.
+    engine이 자체 트랜잭션 + 7개 hard-stop 검증을 수행한다.
     """
     try:
-        with db.transaction("IMMEDIATE"):
-            tonbag = db.fetchone(
-                "SELECT id, location FROM inventory_tonbag WHERE lot_no = ? AND sub_lt = ?",
-                (req.lot_no, req.sub_lt),
-            )
-            if not tonbag:
-                return {
-                    'success': False,
-                    'message': f"톤백 없음: {req.lot_no}-{req.sub_lt}",
-                    'data': {}
-                }
-
-            old_location = tonbag.get('location', '') if isinstance(tonbag, dict) else (tonbag[1] if len(tonbag) > 1 else '')
-            db.execute(
-                "UPDATE inventory_tonbag SET location = ? WHERE lot_no = ? AND sub_lt = ?",
-                (req.new_location, req.lot_no, req.sub_lt),
-            )
-            # 감사 로그
-            db.execute(
-                """INSERT INTO audit_log (event_type, event_data, created_at)
-                   VALUES (?, ?, datetime('now'))""",
-                ('LOCATION_UPDATE', f'{req.lot_no}-{req.sub_lt}: {old_location} → {req.new_location}'),
-            )
-
+        result = engine.update_tonbag_location(
+            lot_no=req.lot_no,
+            sub_lt=req.sub_lt,
+            location=req.new_location,
+            source='WEB',
+            reason_code=req.reason_code or 'RELOCATE',
+            operator=req.operator or 'web_user',
+            note=req.note or '',
+        )
         return {
-            'success': True,
-            'message': f"위치 변경 완료: {req.lot_no}-{req.sub_lt} → {req.new_location}",
+            'success': result.get('success', False),
+            'message': result.get('error', '') if not result.get('success') else
+                       f"위치 변경 완료: {req.lot_no}-{req.sub_lt} "
+                       f"{result.get('from_location', '')} → {result.get('to_location', '')}",
             'data': {
                 'lot_no': req.lot_no,
                 'sub_lt': req.sub_lt,
-                'old_location': old_location,
-                'new_location': req.new_location,
+                'from_location': result.get('from_location', ''),
+                'to_location': result.get('to_location', ''),
             }
         }
     except Exception as e:

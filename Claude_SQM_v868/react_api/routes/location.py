@@ -4,13 +4,13 @@ from fastapi import APIRouter
 
 from react_api.schemas.write_models import LocationUpdateRequest, WriteResponse
 from react_api.services.outbound_write_service import update_location
-from react_api.utils.db import get_db
+from react_api.utils.db import get_engine
 
 router = APIRouter(prefix="/api/location", tags=["location"])
 
 
 @router.put("/update", response_model=WriteResponse)
 def location_update(req: LocationUpdateRequest) -> WriteResponse:
-    with get_db() as db:
-        result = update_location(db, req)
+    with get_engine() as engine:
+        result = update_location(engine, req)
     return WriteResponse(**result)

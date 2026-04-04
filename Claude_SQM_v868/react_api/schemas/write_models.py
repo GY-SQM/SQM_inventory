@@ -63,6 +63,9 @@ class LocationUpdateRequest(BaseModel):
     lot_no: str
     sub_lt: int
     new_location: str = Field(..., min_length=1)
+    reason_code: Optional[str] = "RELOCATE"
+    operator: Optional[str] = "web_user"
+    note: Optional[str] = ""
 
 
 # ─── POST /api/files/upload ───
