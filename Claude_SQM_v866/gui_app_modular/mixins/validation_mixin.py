@@ -151,14 +151,7 @@ class ValidationMixin:
 
     def _check_lot_exists(self, lot_no: str) -> bool:
         """Check if LOT exists in database"""
-        try:
-            result = self.engine.db.fetchone(
-                "SELECT 1 FROM inventory WHERE lot_no = ?",
-                (lot_no,)
-            )
-            return result is not None
-        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError):
-            return False
+        return self.engine.inventory_lot_exists(lot_no)
     
     def _check_tonbag_available(self, lot_no: str, sub_lt: int) -> bool:
         """Check if tonbag is available for outbound"""

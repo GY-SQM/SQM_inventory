@@ -118,3 +118,20 @@ desktop.ini
 # sample inbound data/
 # sample outbound allocation table/
 Claude_SQM_v770_PATCH1/nul
+
+# --- 워크스페이스 정리 (2026-04-04) ---
+# Claude Code 로컬 권한·환경 (공유 제외)
+**/.claude/settings.local.json
+
+# 편집 세션 백업 산출물
+*.bak_auto
+*.bak_20*
+
+# MS Office 임시 잠금 파일
+~$*
+
+# 동일 저장소 내 수동 복사본(중복·대용량, 커밋 제외)
+Claude_SQM_v854 - 복사본 (2)/
+Claude_SQM_v865 - 복사본/
+Claude_SQM_v867 - 복사본/
+Claude_SQM_v867 - 복사본 (2)/

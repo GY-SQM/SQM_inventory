@@ -459,7 +459,8 @@ class SQMInventoryApp:
                 logger.debug(f"[대시보드새로고침] {_e}")
 
         self.root.after(0,   _set_dashboard_tab)       # 즉시: 탭 선택
-        self.root.after(800, _refresh_dashboard_safe)  # 0.8초 후: 데이터 로드
+        # B09: _refresh_dashboard_safe 제거 — _set_dashboard_tab이
+        # <<NotebookTabChanged>> 이벤트를 발생시켜 _refresh_dashboard를 이미 호출함
         
         # v3.8.4: notebook 탭 변경 시 툴바 탭 버튼 연동
         def _on_notebook_tab_changed(event):
@@ -651,11 +652,10 @@ class SQMInventoryApp:
             logger.debug(f"[STARTUP] 상태 확인 스킵: {e}")
 
     def _startup_stats_refresh(self) -> None:
-        """v3.9.4: 앱 시작 시 통계 자동 갱신 (하단바 + 상태바)"""
+        """v3.9.4: 앱 시작 시 통계 자동 갱신 (하단바 + 상태바)
+        B09: _refresh_inventory 호출 제거 — _load_initial_data에서 이미 수행됨.
+        """
         try:
-            # 재고리스트 새로고침 → 하단 통계 자동 채움
-            if hasattr(self, '_refresh_inventory'):
-                self._refresh_inventory()
             # 상태바 요약
             if hasattr(self, '_update_statusbar_summary'):
                 self._update_statusbar_summary()

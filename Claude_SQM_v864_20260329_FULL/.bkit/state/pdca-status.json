@@ -1,6 +1,6 @@
 {
   "version": "3.0",
-  "lastUpdated": "2026-04-02T12:14:32.529Z",
+  "lastUpdated": "2026-04-02T15:55:07.426Z",
   "activeFeatures": [
     "dialogs",
     "tabs",
@@ -8,7 +8,11 @@
     "gui_app_modular",
     "inventory_modular",
     "mixins",
-    "Claude_SQM_v864_20260329_FULL"
+    "Claude_SQM_v864_20260329_FULL",
+    "core",
+    "parsers",
+    "Claude_SQM_v865",
+    "telegram_bot"
   ],
   "primaryFeature": "dialogs",
   "features": {
@@ -21,9 +25,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-31T07:44:30.457Z",
-        "lastUpdated": "2026-03-31T23:40:30.763Z"
+        "lastUpdated": "2026-04-02T15:16:26.137Z"
       },
-      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v864_20260329_FULL\\gui_app_modular\\dialogs\\onestop_outbound.py",
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v865\\gui_app_modular\\dialogs\\onestop_inbound.py",
       "stateMachine": {
         "currentState": "do",
         "previousState": null,
@@ -141,9 +145,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-31T11:07:32.914Z",
-        "lastUpdated": "2026-03-31T11:54:43.348Z"
+        "lastUpdated": "2026-04-02T14:03:52.716Z"
       },
-      "lastFile": "G:\\프로그램\\Sqm 재고관리\\Claude_SQM_v864_20260329_FULL\\engine_modules\\inventory_modular\\outbound_mixin.py",
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v864_20260329_FULL\\engine_modules\\inventory_modular\\outbound_mixin.py",
       "stateMachine": {
         "currentState": "do",
         "previousState": null,
@@ -221,6 +225,58 @@
       },
       "phaseTimestamps": {},
       "automationLevel": 2
+    },
+    "core": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-02T14:48:39.101Z",
+        "lastUpdated": "2026-04-02T14:51:34.519Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v865\\core\\barcode_scan_engine.py"
+    },
+    "parsers": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-02T14:49:34.988Z",
+        "lastUpdated": "2026-04-02T14:50:37.107Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v865\\features\\parsers\\sales_order_engine.py"
+    },
+    "Claude_SQM_v865": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-02T15:30:00.604Z",
+        "lastUpdated": "2026-04-02T15:55:07.425Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v865\\run_p2_overnight.ps1"
+    },
+    "telegram_bot": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-02T15:45:26.045Z",
+        "lastUpdated": "2026-04-02T15:45:32.240Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v865\\telegram_bot\\run_telegram_bot.bat"
     }
   },
   "pipeline": {
@@ -231,7 +287,7 @@
   "session": {
     "startedAt": "2026-03-31T07:40:36.741Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-04-02T12:14:32.529Z"
+    "lastActivity": "2026-04-02T15:55:07.426Z"
   },
   "history": [
     {
@@ -675,6 +731,306 @@
     {
       "timestamp": "2026-03-31T23:40:45.678Z",
       "feature": "mixins",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T13:57:10.878Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T13:58:57.458Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T13:59:58.995Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:00:33.794Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:01:01.259Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:01:16.744Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:01:43.321Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:01:48.911Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:01:54.961Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:02:01.530Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:03:52.718Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:48:39.102Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:48:49.854Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:48:56.162Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:48:57.805Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:48:59.927Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:49:04.895Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:49:20.688Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:49:34.989Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:50:32.310Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:50:37.108Z",
+      "feature": "parsers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:51:14.112Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T14:51:34.520Z",
+      "feature": "core",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:00:02.583Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:00:59.829Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:01:15.032Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:01:31.069Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:01:49.076Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:04:06.986Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:04:59.102Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:05:05.471Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:05:22.683Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:15:38.142Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:15:43.011Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:15:48.347Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:15:52.818Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:16:03.043Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:16:08.902Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:16:20.276Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:16:26.139Z",
+      "feature": "dialogs",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:30:00.606Z",
+      "feature": "Claude_SQM_v865",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:30:10.755Z",
+      "feature": "Claude_SQM_v865",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:42:15.510Z",
+      "feature": "Claude_SQM_v865",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:45:26.046Z",
+      "feature": "telegram_bot",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:45:32.241Z",
+      "feature": "telegram_bot",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:48:32.910Z",
+      "feature": "Claude_SQM_v865",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:50:35.487Z",
+      "feature": "Claude_SQM_v865",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:50:40.572Z",
+      "feature": "Claude_SQM_v865",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:52:49.908Z",
+      "feature": "Claude_SQM_v865",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-02T15:55:07.426Z",
+      "feature": "Claude_SQM_v865",
       "phase": "do",
       "action": "updated"
     }

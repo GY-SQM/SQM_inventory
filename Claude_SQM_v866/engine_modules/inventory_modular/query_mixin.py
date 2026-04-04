@@ -241,8 +241,7 @@ class QueryMixin:
     def get_lot_detail(self, lot_no: str) -> Dict:
         """LOT 상세 조회"""
         try:
-            row = self.db.fetchone(
-                "SELECT * FROM inventory WHERE lot_no = ?", (lot_no,))
+            row = self.get_inventory_row(lot_no)
             if not row:
                 return {'error': f'LOT not found: {lot_no}'}
             lot_data = _row_to_dict(row)
@@ -719,4 +718,102 @@ class QueryMixin:
             }
         except Exception as e:
             logger.debug(f"get_tonbag_map 오류: {e}")
-            return {}
+
+    # ══════════════════════════════════════════════════════════
+    # 공통 단건 조회 헬퍼 (중복 SQL 제거 — Task 4)
+    # ══════════════════════════════════════════════════════════
+
+    def get_inventory_row(self, lot_no: str):
+        """inventory 테이블에서 LOT 단건 조회 (raw row 반환).
+
+        Returns the sqlite3 Row (dict-like) for *lot_no*, or None if not found.
+        Use this instead of inlining ``SELECT * FROM inventory WHERE lot_no = ?``.
+        """
+        return self.db.fetchone(
+            "SELECT * FROM inventory WHERE lot_no = ?", (lot_no,)
+        )
+
+    def inventory_lot_exists(self, lot_no: str) -> bool:
+        """inventory 테이블에 해당 lot_no가 존재하는지 확인.
+
+        Returns True if the lot exists, False otherwise.
+        Use this instead of inlining ``SELECT 1 FROM inventory WHERE lot_no = ?``.
+        """
+        try:
+            row = self.db.fetchone(
+                "SELECT 1 FROM inventory WHERE lot_no = ?", (lot_no,)
+            )
+            return row is not None
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError):
+            return False
+
+    # ═══════════════════════════════════════════════════════════
+    # B08: allocation_plan 공통 쿼리 헬퍼 (중복 SQL 제거)
+    # ═══════════════════════════════════════════════════════════
+
+    def count_alloc_plans(self, status: str = None, lot_no: str = None,
+                          tonbag_id_null: bool = None) -> int:
+        """allocation_plan 행 수 카운트 — WHERE 조건 선택적 적용.
+
+        Parameters
+        ----------
+        status : 예) 'RESERVED', 'EXECUTED'
+        lot_no : 특정 LOT만 카운트
+        tonbag_id_null : True → tonbag_id IS NULL, False → tonbag_id IS NOT NULL
+
+        10+곳에서 반복되던 allocation_plan COUNT 쿼리 단일화.
+        """
+        conditions: list[str] = []
+        params: list = []
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+        if lot_no:
+            conditions.append("lot_no = ?")
+            params.append(lot_no)
+        if tonbag_id_null is True:
+            conditions.append("tonbag_id IS NULL")
+        elif tonbag_id_null is False:
+            conditions.append("tonbag_id IS NOT NULL")
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        try:
+            row = self.db.fetchone(
+                f"SELECT COUNT(*) AS cnt FROM allocation_plan {where}",
+                tuple(params)
+            )
+            return int((row.get('cnt') if isinstance(row, dict) else row[0]) or 0) if row else 0
+        except Exception as e:
+            logger.debug(f"count_alloc_plans 오류: {e}")
+            return 0
+
+    def get_alloc_reserved_lots(self) -> list:
+        """allocation_plan에서 RESERVED 상태인 DISTINCT lot_no 목록 반환.
+
+        6+곳에서 반복되던 SELECT DISTINCT lot_no FROM allocation_plan WHERE status='RESERVED' 단일화.
+        Returns list of lot_no strings.
+        """
+        try:
+            rows = self.db.fetchall(
+                "SELECT DISTINCT lot_no FROM allocation_plan WHERE status = 'RESERVED'"
+            ) or []
+            return [
+                r.get('lot_no') if isinstance(r, dict) else r[0]
+                for r in rows
+            ]
+        except Exception as e:
+            logger.debug(f"get_alloc_reserved_lots 오류: {e}")
+            return []
+
+    def get_tonbag_by_uid(self, uid: str):
+        """tonbag_uid로 inventory_tonbag 단건 조회 (raw row 반환).
+
+        바코드 스캔 등 3+곳에서 반복되던 SELECT * FROM inventory_tonbag WHERE tonbag_uid=? 단일화.
+        Returns sqlite3 Row (dict-like) or None.
+        """
+        try:
+            return self.db.fetchone(
+                "SELECT * FROM inventory_tonbag WHERE tonbag_uid = ?", (uid,)
+            )
+        except Exception as e:
+            logger.debug(f"get_tonbag_by_uid 오류: {e}")
+            return None

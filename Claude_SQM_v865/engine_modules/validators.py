@@ -322,6 +322,7 @@ class InventoryValidator:
                 ) t ON i.lot_no = t.lot_no
                 WHERE i.current_weight > 0
                   AND ABS(i.current_weight - COALESCE(t.tonbag_total_weight, 0)) > 0.01
+                LIMIT 50
             """)
             if cross_check:
                 for row in cross_check[:5]:
@@ -341,7 +342,7 @@ class InventoryValidator:
                             f"크로스 불일치(오차 과대): {lot} (inventory={inv_w:.0f}kg, tonbag합계={ton_w:.0f}kg). "
                             "톤백 weight/행 또는 상태 확인 필요."
                         )
-                    elif diff <= 1.0 and inv_w == ton_w + 1:
+                    elif diff <= 1.0 and inv_w == ton_w + 1 and ton_w > 0:
                         # v8.6.4: 샘플 1kg 포함 오류 자동 보정
                         try:
                             self.db.execute(

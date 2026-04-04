@@ -413,13 +413,7 @@ class InboundMixin(InventoryBaseMixin):
     
     def _check_lot_exists(self, lot_no: str) -> bool:
         """LOT 존재 여부 확인"""
-        try:
-            row = self.db.fetchone(
-                "SELECT 1 FROM inventory WHERE lot_no = ?", (lot_no,)
-            )
-            return row is not None
-        except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError):
-            return False
+        return self.inventory_lot_exists(lot_no)
     
     def _prepare_lot_data(self, packing, bl_data=None, 
                           do_data=None) -> Dict:

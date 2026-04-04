@@ -1,0 +1,182 @@
+{
+  "results": [
+    {
+      "name": "git_repo",
+      "status": "PASS",
+      "detail": "repo root: F:\\프로그램\\Sqm 재고관리"
+    },
+    {
+      "name": "target_exists",
+      "status": "PASS",
+      "detail": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v864_20260329_FULL\\engine_modules\\inventory_modular\\outbound_mixin.py"
+    },
+    {
+      "name": "target_git_path",
+      "status": "PASS",
+      "detail": "Claude_SQM_v864_20260329_FULL/engine_modules/inventory_modular/outbound_mixin.py"
+    },
+    {
+      "name": "backup_exists",
+      "status": "PASS",
+      "detail": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v864_20260329_FULL\\engine_modules\\inventory_modular\\outbound_mixin.py.bak_20260402"
+    },
+    {
+      "name": "baseline_commit",
+      "status": "PASS",
+      "detail": "c408df1"
+    },
+    {
+      "name": "syntax_compile",
+      "status": "PASS",
+      "detail": "syntax ok"
+    },
+    {
+      "name": "func_exists:confirm_outbound",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "signature:confirm_outbound",
+      "status": "PASS",
+      "detail": "unchanged"
+    },
+    {
+      "name": "size:confirm_outbound",
+      "status": "PASS",
+      "detail": "82 lines (warn>120)"
+    },
+    {
+      "name": "func_exists:execute_reserved",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "signature:execute_reserved",
+      "status": "PASS",
+      "detail": "unchanged"
+    },
+    {
+      "name": "size:execute_reserved",
+      "status": "PASS",
+      "detail": "83 lines (warn>120)"
+    },
+    {
+      "name": "func_exists:reserve_from_allocation",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "signature:reserve_from_allocation",
+      "status": "PASS",
+      "detail": "unchanged"
+    },
+    {
+      "name": "size:reserve_from_allocation",
+      "status": "PASS",
+      "detail": "466 lines (warn>520)"
+    },
+    {
+      "name": "helper:_co_guard_against_double_outbound",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "helper:_co_run_post_checks",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "helper:_er_load_reserved_plans",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "helper:_er_warn_stale_plans",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "helper:_er_insert_picking_row",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "helper:_ra_parse_allocation_line",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "helper:_ra_validate_line_inputs",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "helper:_ra_resolve_pick_count",
+      "status": "PASS",
+      "detail": "present"
+    },
+    {
+      "name": "optional_helper_signal",
+      "status": "PASS",
+      "detail": "found 12 optional helpers"
+    },
+    {
+      "name": "outbound_wording_signal",
+      "status": "PASS",
+      "detail": "OUTBOUND mentions=20"
+    },
+    {
+      "name": "double_outbound_tag",
+      "status": "PASS",
+      "detail": "DOUBLE_OUTBOUND_BLOCKED found"
+    },
+    {
+      "name": "new_sold_write_patterns",
+      "status": "PASS",
+      "detail": "no obvious new SOLD write patterns"
+    },
+    {
+      "name": "changed_files",
+      "status": "WARN",
+      "detail": "5 files changed: Claude_SQM_v864_20260329_FULL/.bkit/audit/2026-04-02.jsonl, Claude_SQM_v864_20260329_FULL/.bkit/state/pdca-status.json, Claude_SQM_v864_20260329_FULL/.claude/settings.local.json, Claude_SQM_v864_20260329_FULL/GPT_Claude_Code_Final_Execution_Prompt_v1.md, Claude_SQM_v864_20260329_FULL/engine_modules/inventory_modular/outbound_mixin.py"
+    }
+  ],
+  "summary": {
+    "class_name": "OutboundMixin",
+    "compare_source": "backup:outbound_mixin.py.bak_20260402",
+    "optional_helpers_found": [
+      "_co_load_picked_tonbags",
+      "_co_validate_customer_sale_ref",
+      "_co_build_sold_row_payload",
+      "_co_insert_sold_row",
+      "_co_insert_outbound_movement",
+      "_er_validate_tonbag",
+      "_er_apply_pick_transition",
+      "_er_record_pick_movement",
+      "_ra_check_alloc_conflict",
+      "_ra_check_lot_dup",
+      "_ra_record_reservation_result",
+      "_ra_log_random_selection"
+    ],
+    "text_metrics": {
+      "bare_except": 0,
+      "except_pass": 0,
+      "status_sold_mentions": 20,
+      "status_outbound_mentions": 20,
+      "double_outbound_blocked_tag": 1,
+      "double_sold_blocked_tag": 0
+    },
+    "changed_files_vs_baseline": [
+      "Claude_SQM_v864_20260329_FULL/.bkit/audit/2026-04-02.jsonl",
+      "Claude_SQM_v864_20260329_FULL/.bkit/state/pdca-status.json",
+      "Claude_SQM_v864_20260329_FULL/.claude/settings.local.json",
+      "Claude_SQM_v864_20260329_FULL/GPT_Claude_Code_Final_Execution_Prompt_v1.md",
+      "Claude_SQM_v864_20260329_FULL/engine_modules/inventory_modular/outbound_mixin.py"
+    ],
+    "result_counts": {
+      "PASS": 27,
+      "WARN": 1,
+      "FAIL": 0
+    }
+  }
+}

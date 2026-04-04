@@ -1052,7 +1052,8 @@ class S1OneStopOutboundDialog:
                 apply_treeview_theme(tree, parent=self.dialog)
             except Exception as e:
                 logger.warning(f"[UI] apply treeview theme failed: {e}")
-            tree.tag_configure('unsel', background=tc('bg_secondary'), foreground=tc('text_muted'))
+            # v8.6.5: 대비 강화 (text_muted on bg_secondary → 읽기 어려움)
+            tree.tag_configure('unsel', background=tc('bg_secondary'), foreground=tc('text_secondary'))
 
             # 데이터 삽입
             for tb in tonbags:

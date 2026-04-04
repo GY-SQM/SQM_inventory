@@ -83,16 +83,16 @@ class RefreshMixin:
             try:
                 root.config(cursor='wait')
                 root.update_idletasks()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[refresh] cursor wait 설정 실패 (위젯 파괴됨?): {e}")
         try:
             self._refresh_main_tabs_inner()
         finally:
             if root and root.winfo_exists():
                 try:
                     root.config(cursor='')
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"[refresh] cursor 복원 실패: {e}")
 
     def _refresh_main_tabs_inner(self) -> None:
         """실제 탭 새로고침 로직"""

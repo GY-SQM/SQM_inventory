@@ -1379,30 +1379,8 @@ class OutboundHandlersMixin:
                     if not rows:
                         CustomMessageBox.showwarning(self.root, "경고", "붙여넣기 데이터가 없습니다.")
                         return
-                    _hdr_kw = {'lot_no', 'lot no', 'lotno', 'sap_no', 'product', 'qty'}
-                    if rows and str(rows[0].get('lot_no', '')).strip().lower().replace(' ', '_') in _hdr_kw:
-                        rows = rows[1:]
-
-                    parsed = []
-                    parse_errors = []
-                    for idx, r in enumerate(rows, 1):
-                        lot_no = str(r.get('lot_no', '')).strip()
-                        if not lot_no:
-                            continue
-                        raw_qty = str(r.get('qty_mt', '0')).replace(',', '').replace(' ', '').strip()
-                        try:
-                            qty = float(raw_qty) if raw_qty else 0.0
-                        except (ValueError, TypeError):
-                            parse_errors.append(f"행 {idx}: QTY 파싱 실패 '{r.get('qty_mt', '')}'")
-                            qty = 0.0
-                        if qty <= 0:
-                            parse_errors.append(f"행 {idx}: {lot_no} - QTY <= 0 (건너뜀)")
-                            continue
-                        row = dict(r)
-                        row['lot_no'] = lot_no
-                        row['qty_mt'] = qty
-                        parsed.append(row)
-
+                    # v8.6.5: 공통 파싱/병합/검증 헬퍼 사용
+                    parsed, parse_errors = self._oh_parse_alloc_paste_rows(rows)
                     if parse_errors:
                         logger.warning(f"빠른 출고 파싱 경고: {parse_errors}")
                     if not parsed:
@@ -1412,34 +1390,8 @@ class OutboundHandlersMixin:
                         CustomMessageBox.showwarning(self.root, "경고", msg)
                         return
 
-                    from collections import OrderedDict
-                    lot_merged = OrderedDict()
-                    for row in parsed:
-                        ln = row['lot_no']
-                        if ln in lot_merged:
-                            lot_merged[ln]['qty_mt'] += row['qty_mt']
-                        else:
-                            lot_merged[ln] = dict(row)
-                    merged = list(lot_merged.values())
-
-                    lot_nos = [r['lot_no'] for r in merged]
-                    validation_errors = []
-                    try:
-                        placeholders = ",".join("?" * len(lot_nos))
-                        avail_rows = self.engine.db.fetchall(
-                            f"SELECT lot_no, COUNT(*) as avail_cnt "
-                            f"FROM inventory_tonbag "
-                            f"WHERE lot_no IN ({placeholders}) AND status='AVAILABLE' "
-                            f"AND COALESCE(is_sample,0)=0 "
-                            f"GROUP BY lot_no",
-                            tuple(lot_nos),
-                        )
-                        avail_map = {r['lot_no']: r['avail_cnt'] for r in avail_rows}
-                        for row in merged:
-                            if row['lot_no'] not in avail_map:
-                                validation_errors.append(f"❌ {row['lot_no']}: LOT 미등록 또는 가용 톤백 없음")
-                    except Exception as e:
-                        logger.warning(f"빠른 출고 사전 검증 실패 (계속 진행): {e}")
+                    merged = self._oh_merge_alloc_lots(parsed)
+                    validation_errors = self._oh_validate_alloc_lot_nos(merged)
 
                     if validation_errors:
                         warn_msg = "다음 LOT에 문제가 있습니다:\n\n" + "\n".join(validation_errors[:10])
@@ -1500,30 +1452,8 @@ class OutboundHandlersMixin:
                 if not rows:
                     CustomMessageBox.showwarning(self.root, "경고", "붙여넣기 데이터가 없습니다.")
                     return
-                _hdr_kw = {'lot_no', 'lot no', 'lotno', 'sap_no', 'product', 'qty'}
-                if rows and str(rows[0].get('lot_no', '')).strip().lower().replace(' ', '_') in _hdr_kw:
-                    rows = rows[1:]
-
-                parsed = []
-                parse_errors = []
-                for idx, r in enumerate(rows, 1):
-                    lot_no = str(r.get('lot_no', '')).strip()
-                    if not lot_no:
-                        continue
-                    raw_qty = str(r.get('qty_mt', '0')).replace(',', '').replace(' ', '').strip()
-                    try:
-                        qty = float(raw_qty) if raw_qty else 0.0
-                    except (ValueError, TypeError):
-                        parse_errors.append(f"행 {idx}: QTY 파싱 실패 '{r.get('qty_mt', '')}'")
-                        qty = 0.0
-                    if qty <= 0:
-                        parse_errors.append(f"행 {idx}: {lot_no} - QTY <= 0 (건너뜀)")
-                        continue
-                    row = dict(r)
-                    row['lot_no'] = lot_no
-                    row['qty_mt'] = qty
-                    parsed.append(row)
-
+                # v8.6.5: 공통 파싱/병합/검증 헬퍼 사용
+                parsed, parse_errors = self._oh_parse_alloc_paste_rows(rows)
                 if parse_errors:
                     logger.warning(f"빠른 출고 파싱 경고: {parse_errors}")
                 if not parsed:
@@ -1533,34 +1463,8 @@ class OutboundHandlersMixin:
                     CustomMessageBox.showwarning(self.root, "경고", msg)
                     return
 
-                from collections import OrderedDict
-                lot_merged = OrderedDict()
-                for row in parsed:
-                    ln = row['lot_no']
-                    if ln in lot_merged:
-                        lot_merged[ln]['qty_mt'] += row['qty_mt']
-                    else:
-                        lot_merged[ln] = dict(row)
-                merged = list(lot_merged.values())
-
-                lot_nos = [r['lot_no'] for r in merged]
-                validation_errors = []
-                try:
-                    placeholders = ",".join("?" * len(lot_nos))
-                    avail_rows = self.engine.db.fetchall(
-                        f"SELECT lot_no, COUNT(*) as avail_cnt "
-                        f"FROM inventory_tonbag "
-                        f"WHERE lot_no IN ({placeholders}) AND status='AVAILABLE' "
-                        f"AND COALESCE(is_sample,0)=0 "
-                        f"GROUP BY lot_no",
-                        tuple(lot_nos),
-                    )
-                    avail_map = {r['lot_no']: r['avail_cnt'] for r in avail_rows}
-                    for row in merged:
-                        if row['lot_no'] not in avail_map:
-                            validation_errors.append(f"❌ {row['lot_no']}: LOT 미등록 또는 가용 톤백 없음")
-                except Exception as e:
-                    logger.warning(f"빠른 출고 사전 검증 실패 (계속 진행): {e}")
+                merged = self._oh_merge_alloc_lots(parsed)
+                validation_errors = self._oh_validate_alloc_lot_nos(merged)
 
                 if validation_errors:
                     warn_msg = "다음 LOT에 문제가 있습니다:\n\n" + "\n".join(validation_errors[:10])
@@ -1713,44 +1617,28 @@ class OutboundHandlersMixin:
             f"/ {_tpl.get('customer','')} / {_tpl.get('bag_weight_kg',500)}kg"
         )
 
-        # ── 이하 기존 흐름 (Gate-1) ────────────────────────────
-        # v6.1.0: Gate-1 경로 (피킹 파서 → 교차검증 → RESERVED→PICKED)
+        # ── Gate-1 경로 시도 → 실패 시 레거시 경로 ──
+        if self._oh_picking_gate1_flow(path, _tpl):
+            return
+        self._oh_picking_legacy_flow(path)
+
+    # ── B05 헬퍼: Gate-1 피킹 플로우 ────────────────────────────────
+    def _oh_picking_gate1_flow(self, path: str, _tpl: dict) -> bool:
+        """Gate-1 교차검증 피킹 플로우. 성공 시 True, ImportError 시 False."""
         try:
             from parsers.document_parser_modular.picking_mixin import PickingListParserMixin
             parser = PickingListParserMixin()
             picking_result = parser.parse_picking_list(path)
 
-            # ── v7.4.0: 파싱 후 meta에 템플릿 고정값 주입 ──
+            self._oh_picking_inject_tpl_meta(picking_result, _tpl)
             meta = picking_result.meta
-            _inject = [
-                ('contact_person',  'contact_person'),
-                ('contact_email',   'contact_email'),
-                ('port_loading',    'port_loading'),
-                ('port_discharge',  'port_discharge'),
-                ('delivery_terms',  'delivery_terms'),
-            ]
-            for tpl_key, meta_attr in _inject:
-                tpl_val = _tpl.get(tpl_key, '')
-                if tpl_val and not getattr(meta, meta_attr, ''):
-                    setattr(meta, meta_attr, tpl_val)
-            # customer / bag_weight는 outbound_mixin에서 직접 사용
-            # v8.6.1 [BAG-WEIGHT-PRIORITY]: PDF 감지값 > 템플릿값 > fallback(500)
-            _meta_bag = getattr(getattr(picking_result, 'meta', None), 'bag_weight_kg', 0) or 0
-            _tpl_bag  = int(_tpl.get('bag_weight_kg', 500) or 500)
-            _resolved_bag = _meta_bag if _meta_bag >= 100 else _tpl_bag
-            if not hasattr(picking_result, '_tpl_customer'):
-                picking_result._tpl_customer    = _tpl.get('customer', '')
-                picking_result._tpl_cust_code   = _tpl.get('customer_code', '')
-                picking_result._tpl_bag_weight  = _resolved_bag
-                picking_result._tpl_storage     = _tpl.get('storage_location',
-                                                             '1001 GY logistics')
             if not picking_result.success:
                 errs = '\n'.join(picking_result.errors[:5])
                 CustomMessageBox.showerror(
                     self.root, '피킹리스트 파싱 실패',
                     f'PDF 파싱 중 오류:\n\n{errs}'
                 )
-                return
+                return True
             warnings = list(getattr(picking_result, 'warnings', []))
             if warnings:
                 top_warnings = '\n'.join(f'- {w}' for w in warnings[:5])
@@ -1760,7 +1648,7 @@ class OutboundHandlersMixin:
                     f'{top_warnings}\n\n'
                     f'경고를 확인하고 계속 진행하시겠습니까?'
                 ):
-                    return
+                    return True
             summary = picking_result.summary
             meta = picking_result.meta
             if not CustomMessageBox.askyesno(
@@ -1772,135 +1660,120 @@ class OutboundHandlersMixin:
                 f'총 중량    : {summary.get("total_mt", 0):.1f} MT\n\n'
                 f'Gate-1 교차검증을 진행하시겠습니까?'
             ):
-                return
+                return True
             if not hasattr(self.engine, 'gate1_verify_picking'):
                 CustomMessageBox.showerror(
                     self.root, '기능 없음',
                     'gate1_verify_picking() 미구현'
                 )
-                return
+                return True
             gate1 = self.engine.gate1_verify_picking(
                 picking_result, getattr(meta, 'picking_no', '')
             )
 
-            # v6.12.1: Gate-1 결과 JSON 저장 (감사 추적용)
             self._save_gate1_result_json(gate1, getattr(meta, 'picking_no', ''))
 
             if not gate1['passed']:
-                # Gate-1 실패 → 팝업 다이얼로그(읽기 전용, '진행' 버튼 없음)
-                try:
-                    from ..dialogs.gate1_result_dialog import Gate1ResultDialog
-                    current_theme = getattr(self, '_current_theme', 'darkly')
-                    Gate1ResultDialog(
-                        self.root, gate1,
-                        picking_no=getattr(meta, 'picking_no', ''),
-                        on_proceed=None,
-                        current_theme=current_theme,
-                    )
-                except ImportError:
-                    CustomMessageBox.showerror(
-                        self.root, 'Gate-1 교차검증 실패',
-                        gate1['error_report'][:800]
-                    )
-                self._save_gate1_report(gate1, getattr(meta, 'picking_no', ''))
-                return
+                self._oh_picking_show_gate1_fail(gate1, meta)
+                return True
 
-            # Gate-1 통과 → 팝업 다이얼로그('진행' 버튼 포함)
-            _proceed_flag = [False]
+            if not self._oh_picking_confirm_gate1_proceed(gate1, meta):
+                return True
 
-            def _do_execute():
+            self._oh_picking_execute_gate1(picking_result, meta, gate1)
+            return True
+        except ImportError:
+            logger.debug("[SUPPRESSED] exception in outbound_handlers.py")  # noqa
+            return False
+
+    def _oh_picking_show_gate1_fail(self, gate1: dict, meta) -> None:
+        """Gate-1 실패 시 결과 다이얼로그 표시."""
+        try:
+            from ..dialogs.gate1_result_dialog import Gate1ResultDialog
+            current_theme = getattr(self, '_current_theme', 'darkly')
+            Gate1ResultDialog(
+                self.root, gate1,
+                picking_no=getattr(meta, 'picking_no', ''),
+                on_proceed=None,
+                current_theme=current_theme,
+            )
+        except ImportError:
+            CustomMessageBox.showerror(
+                self.root, 'Gate-1 교차검증 실패',
+                gate1['error_report'][:800]
+            )
+        self._save_gate1_report(gate1, getattr(meta, 'picking_no', ''))
+
+    def _oh_picking_confirm_gate1_proceed(self, gate1: dict, meta) -> bool:
+        """Gate-1 통과 후 사용자 확인. 진행 시 True."""
+        _proceed_flag = [False]
+
+        def _do_execute():
+            _proceed_flag[0] = True
+
+        try:
+            from ..dialogs.gate1_result_dialog import Gate1ResultDialog
+            current_theme = getattr(self, '_current_theme', 'darkly')
+            Gate1ResultDialog(
+                self.root, gate1,
+                picking_no=getattr(meta, 'picking_no', ''),
+                on_proceed=_do_execute,
+                current_theme=current_theme,
+            )
+        except ImportError:
+            matched = len(gate1['matched_lots'])
+            if CustomMessageBox.askyesno(
+                self.root, '판매화물 결정 실행',
+                f'Gate-1 통과\n\n매칭된 LOT: {matched}개\n\n'
+                f'{matched}개 LOT을 [판매화물 결정] 상태로 전환합니다.\n계속하시겠습니까?'
+            ):
                 _proceed_flag[0] = True
 
-            try:
-                from ..dialogs.gate1_result_dialog import Gate1ResultDialog
-                current_theme = getattr(self, '_current_theme', 'darkly')
-                Gate1ResultDialog(
-                    self.root, gate1,
-                    picking_no=getattr(meta, 'picking_no', ''),
-                    on_proceed=_do_execute,
-                    current_theme=current_theme,
-                )
-            except ImportError:
-                # fallback: 기존 텍스트 확인
-                matched = len(gate1['matched_lots'])
-                if CustomMessageBox.askyesno(
-                    self.root, '판매화물 결정 실행',
-                    f'Gate-1 통과\n\n매칭된 LOT: {matched}개\n\n'
-                    f'{matched}개 LOT을 [판매화물 결정] 상태로 전환합니다.\n계속하시겠습니까?'
-                ):
-                    _proceed_flag[0] = True
+        return _proceed_flag[0]
 
-            if not _proceed_flag[0]:
+    def _oh_picking_execute_gate1(self, picking_result, meta, gate1: dict) -> None:
+        """Gate-1 통과 후 실제 실행."""
+        allow_qty_mismatch = False
+        approval_reason = ''
+        if gate1.get('requires_approval'):
+            allow_qty_mismatch, approval_reason, _approved = self._oh_picking_admin_approval()
+            if not _approved:
                 return
 
-            allow_qty_mismatch = False
-            approval_reason = ''
-            if gate1.get('requires_approval'):
-                configured_code = str(os.environ.get('SQM_ADMIN_CODE', '')).strip()
-                if not configured_code:
-                    CustomMessageBox.showerror(
-                        self.root,
-                        '관리자 코드 미설정',
-                        '수량 불일치 승인 진행을 위해 SQM_ADMIN_CODE 환경변수를 설정하세요.'
-                    )
-                    return
-                entered = CustomMessageBox.askstring(
-                    self.root,
-                    '관리자 승인',
-                    'Gate-1 수량 불일치 승인 코드 입력:',
-                    show='*',
-                )
-                if entered is None:
-                    return
-                if str(entered).strip() != configured_code:
-                    CustomMessageBox.showerror(self.root, '승인 실패', '관리자 코드가 올바르지 않습니다.')
-                    return
-                reason = CustomMessageBox.askstring(
-                    self.root,
-                    '승인 사유',
-                    '승인 사유를 입력하세요 (필수):',
-                )
-                if reason is None or not str(reason).strip():
-                    CustomMessageBox.showwarning(self.root, '승인 중단', '승인 사유는 필수입니다.')
-                    return
-                approval_reason = str(reason).strip()
-                allow_qty_mismatch = True
-
-            if hasattr(self, 'do_action_tx'):
-                exec_result = self.do_action_tx(
-                    "EXECUTE_FROM_PICKING",
-                    lambda: self.engine.gate1_apply_picking_result(
-                        picking_result,
-                        picking_no=getattr(meta, 'picking_no', ''),
-                        sales_order=getattr(meta, 'sales_order', ''),
-                        allow_qty_mismatch=allow_qty_mismatch,
-                        approval_reason=approval_reason,
-                    ),
-                    parent=self.root,
-                    refresh_mode="deferred",
-                )
-            else:
-                exec_result = self.engine.gate1_apply_picking_result(
+        if hasattr(self, 'do_action_tx'):
+            exec_result = self.do_action_tx(
+                "EXECUTE_FROM_PICKING",
+                lambda: self.engine.gate1_apply_picking_result(
                     picking_result,
                     picking_no=getattr(meta, 'picking_no', ''),
                     sales_order=getattr(meta, 'sales_order', ''),
                     allow_qty_mismatch=allow_qty_mismatch,
                     approval_reason=approval_reason,
-                )
-            if exec_result.get('success'):
-                CustomMessageBox.showinfo(
-                    self.root, '판매화물 결정 완료',
-                    f'처리: {exec_result.get("executed", 0)}개 LOT\n현장 출고 완료 후 [출고 확정]을 실행하세요.'
-                )
-                if not hasattr(self, 'do_action_tx'):
-                    self._refresh_after_outbound_action("EXECUTE_FROM_PICKING")
-            else:
-                errs = '\n'.join(exec_result.get('errors', [])[:3])
-                CustomMessageBox.showerror(self.root, '실행 실패', errs)
-            return
-        except ImportError:
-            logger.debug("[SUPPRESSED] exception in outbound_handlers.py")  # noqa
+                ),
+                parent=self.root,
+                refresh_mode="deferred",
+            )
+        else:
+            exec_result = self.engine.gate1_apply_picking_result(
+                picking_result,
+                picking_no=getattr(meta, 'picking_no', ''),
+                sales_order=getattr(meta, 'sales_order', ''),
+                allow_qty_mismatch=allow_qty_mismatch,
+                approval_reason=approval_reason,
+            )
+        if exec_result.get('success'):
+            CustomMessageBox.showinfo(
+                self.root, '판매화물 결정 완료',
+                f'처리: {exec_result.get("executed", 0)}개 LOT\n현장 출고 완료 후 [출고 확정]을 실행하세요.'
+            )
+            if not hasattr(self, 'do_action_tx'):
+                self._refresh_after_outbound_action("EXECUTE_FROM_PICKING")
+        else:
+            errs = '\n'.join(exec_result.get('errors', [])[:3])
+            CustomMessageBox.showerror(self.root, '실행 실패', errs)
 
+    def _oh_picking_legacy_flow(self, path: str) -> None:
+        """레거시 피킹 파서 경로 (Gate-1 미지원 시 폴백)."""
         parse_picking_list_pdf = None
         try:
             from features.parsers.picking_list_parser import parse_picking_list_pdf as _parse
@@ -1926,7 +1799,6 @@ class OutboundHandlersMixin:
 
         try:
             doc = parse_picking_list_pdf(path)
-            # v8.0.6 [PICKING-REVIEW]: 첫 행 검수 + 열 매핑 품질 점수 추가
             if _HAS_PICKING_REVIEW:
                 _log_fn = getattr(self, '_append_log', None) or getattr(self, '_log_safe', None)
                 doc = enrich_picking_doc_with_review(doc, path, log_fn=_log_fn)
@@ -2227,31 +2099,14 @@ class OutboundHandlersMixin:
             #   - 환경변수로 강제 가능: SQM_OUTBOUND_MODE=random_scan_confirm
             outbound_mode = (os.environ.get('SQM_OUTBOUND_MODE', 'random_scan_confirm') or '').strip().lower()
 
-            selected_sale_ref = None
-            sale_refs = scanner.get_picked_sale_refs()
-            if len(sale_refs) == 1:
-                selected_sale_ref = sale_refs[0]
-            elif len(sale_refs) > 1:
-                pick_hint = ", ".join(sale_refs[:10])
-                if len(sale_refs) > 10:
-                    pick_hint += f" ... 외 {len(sale_refs) - 10}건"
-                selected = CustomMessageBox.askstring(
-                    self.root,
-                    "SALE REF 선택",
-                    "이번 바코드 스캔 대상 SALE REF를 정확히 1개 입력하세요.\n"
-                    f"(선택 가능: {pick_hint})",
-                )
-                if not selected:
-                    return
-                selected = selected.strip()
-                if selected not in sale_refs:
-                    mb.showerror(
-                        "SALE REF 오류",
-                        "유효하지 않은 SALE REF 입니다. 목록의 값 중 1개를 정확히 입력하세요.",
-                        parent=self.root,
-                    )
-                    return
-                selected_sale_ref = selected
+            # v8.6.5: SALE REF 선택 _oh_ 헬퍼 위임
+            selected_sale_ref, _sr_cancelled = self._oh_barcode_select_sale_ref(
+                scanner,
+                prompt_msg="이번 바코드 스캔 대상 SALE REF를 정확히 1개 입력하세요.\n",
+                error_msg="유효하지 않은 SALE REF 입니다. 목록의 값 중 1개를 정확히 입력하세요.",
+            )
+            if _sr_cancelled:
+                return
 
             scanned_codes = scanner.read_scan_file(file_path)
             if not scanned_codes:
@@ -2460,28 +2315,14 @@ class OutboundHandlersMixin:
             mb.showerror("오류", f"바코드 엔진 로드 실패: {e}", parent=self.root)
             return
 
-        # SALE REF 선택(선택 강제: Target 체크 정확도)
-        selected_sale_ref = None
-        sale_refs = scanner.get_picked_sale_refs()
-        if len(sale_refs) == 1:
-            selected_sale_ref = sale_refs[0]
-        elif len(sale_refs) > 1:
-            pick_hint = ", ".join(sale_refs[:10])
-            if len(sale_refs) > 10:
-                pick_hint += f" ... 외 {len(sale_refs) - 10}건"
-            selected = CustomMessageBox.askstring(
-                self.root,
-                "SALE REF 선택",
-                "실시간 스캔 대상 SALE REF를 정확히 1개 입력하세요.\n"
-                f"(선택 가능: {pick_hint})",
-            )
-            if not selected:
-                return
-            selected = selected.strip()
-            if selected not in sale_refs:
-                mb.showerror("SALE REF 오류", "유효하지 않은 SALE REF 입니다.", parent=self.root)
-                return
-            selected_sale_ref = selected
+        # v8.6.5: SALE REF 선택 _oh_ 헬퍼 위임(선택 강제: Target 체크 정확도)
+        selected_sale_ref, _sr_cancelled = self._oh_barcode_select_sale_ref(
+            scanner,
+            prompt_msg="실시간 스캔 대상 SALE REF를 정확히 1개 입력하세요.\n",
+            error_msg="유효하지 않은 SALE REF 입니다.",
+        )
+        if _sr_cancelled:
+            return
 
         d = create_themed_toplevel(self.root)
         d.title("📟 실시간 바코드 스캔 (Phase4: 스캔=즉시 확정)")
@@ -2854,6 +2695,174 @@ class OutboundHandlersMixin:
         ttk.Button(btn_frm, text="닫기", command=dlg.destroy).pack(side=tk.RIGHT, padx=2)
 
         _load_rows()
+
+    # ------------------------------------------------------------------
+    # Shared allocation paste helpers (_oh_ prefix, v8.6.5 [SRP])
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _oh_parse_alloc_paste_rows(rows: list) -> tuple:
+        """Allocation paste 데이터 행 파싱.
+
+        Returns:
+            (parsed, parse_errors) — parsed: list[dict], parse_errors: list[str]
+        """
+        _hdr_kw = {'lot_no', 'lot no', 'lotno', 'sap_no', 'product', 'qty'}
+        if rows and str(rows[0].get('lot_no', '')).strip().lower().replace(' ', '_') in _hdr_kw:
+            rows = rows[1:]
+        parsed = []
+        parse_errors = []
+        for idx, r in enumerate(rows, 1):
+            lot_no = str(r.get('lot_no', '')).strip()
+            if not lot_no:
+                continue
+            raw_qty = str(r.get('qty_mt', '0')).replace(',', '').replace(' ', '').strip()
+            try:
+                qty = float(raw_qty) if raw_qty else 0.0
+            except (ValueError, TypeError):
+                parse_errors.append(f"행 {idx}: QTY 파싱 실패 '{r.get('qty_mt', '')}'")
+                qty = 0.0
+            if qty <= 0:
+                parse_errors.append(f"행 {idx}: {lot_no} - QTY <= 0 (건너뜀)")
+                continue
+            row = dict(r)
+            row['lot_no'] = lot_no
+            row['qty_mt'] = qty
+            parsed.append(row)
+        return parsed, parse_errors
+
+    @staticmethod
+    def _oh_merge_alloc_lots(parsed: list) -> list:
+        """파싱된 행을 LOT별로 qty 합산 병합. merged list 반환."""
+        from collections import OrderedDict
+        lot_merged = OrderedDict()
+        for row in parsed:
+            ln = row['lot_no']
+            if ln in lot_merged:
+                lot_merged[ln]['qty_mt'] += row['qty_mt']
+            else:
+                lot_merged[ln] = dict(row)
+        return list(lot_merged.values())
+
+    def _oh_validate_alloc_lot_nos(self, merged: list) -> list:
+        """LOT 가용성 DB 검증. validation_errors list 반환."""
+        lot_nos = [r['lot_no'] for r in merged]
+        validation_errors = []
+        try:
+            placeholders = ",".join("?" * len(lot_nos))
+            avail_rows = self.engine.db.fetchall(
+                f"SELECT lot_no, COUNT(*) as avail_cnt "
+                f"FROM inventory_tonbag "
+                f"WHERE lot_no IN ({placeholders}) AND status='AVAILABLE' "
+                f"AND COALESCE(is_sample,0)=0 "
+                f"GROUP BY lot_no",
+                tuple(lot_nos),
+            )
+            avail_map = {r['lot_no']: r['avail_cnt'] for r in avail_rows}
+            for row in merged:
+                if row['lot_no'] not in avail_map:
+                    validation_errors.append(f"❌ {row['lot_no']}: LOT 미등록 또는 가용 톤백 없음")
+        except Exception as e:
+            logger.warning(f"빠른 출고 사전 검증 실패 (계속 진행): {e}")
+        return validation_errors
+
+    # ------------------------------------------------------------------
+    # Barcode scan helpers (_oh_ prefix, v8.6.5 [SRP])
+    # ------------------------------------------------------------------
+
+    def _oh_barcode_select_sale_ref(
+        self,
+        scanner,
+        prompt_msg: str = "바코드 스캔 대상 SALE REF를 정확히 1개 입력하세요.\n",
+        error_msg: str = "유효하지 않은 SALE REF 입니다. 목록의 값 중 1개를 정확히 입력하세요.",
+    ) -> tuple:
+        """PICKED SALE REF 선택 플로우.
+
+        Returns:
+            (selected_sale_ref, cancelled) — cancelled=True 이면 호출자는 즉시 return.
+        """
+        import tkinter.messagebox as mb
+        sale_refs = scanner.get_picked_sale_refs()
+        if len(sale_refs) == 1:
+            return sale_refs[0], False
+        if len(sale_refs) > 1:
+            pick_hint = ", ".join(sale_refs[:10])
+            if len(sale_refs) > 10:
+                pick_hint += f" ... 외 {len(sale_refs) - 10}건"
+            selected = CustomMessageBox.askstring(
+                self.root,
+                "SALE REF 선택",
+                prompt_msg + f"(선택 가능: {pick_hint})",
+            )
+            if not selected:
+                return None, True
+            selected = selected.strip()
+            if selected not in sale_refs:
+                mb.showerror("SALE REF 오류", error_msg, parent=self.root)
+                return None, True
+            return selected, False
+        return None, False
+
+    # ------------------------------------------------------------------
+    # Picking list upload helpers (_oh_ prefix, v8.6.5 [SRP])
+    # ------------------------------------------------------------------
+
+    def _oh_picking_inject_tpl_meta(self, picking_result, tpl: dict) -> None:
+        """피킹 파싱 결과에 템플릿 메타데이터를 주입한다 (v7.4.0)."""
+        meta = picking_result.meta
+        _inject = [
+            ('contact_person',  'contact_person'),
+            ('contact_email',   'contact_email'),
+            ('port_loading',    'port_loading'),
+            ('port_discharge',  'port_discharge'),
+            ('delivery_terms',  'delivery_terms'),
+        ]
+        for tpl_key, meta_attr in _inject:
+            tpl_val = tpl.get(tpl_key, '')
+            if tpl_val and not getattr(meta, meta_attr, ''):
+                setattr(meta, meta_attr, tpl_val)
+        _meta_bag = getattr(getattr(picking_result, 'meta', None), 'bag_weight_kg', 0) or 0
+        _tpl_bag  = int(tpl.get('bag_weight_kg', 500) or 500)
+        _resolved_bag = _meta_bag if _meta_bag >= 100 else _tpl_bag
+        if not hasattr(picking_result, '_tpl_customer'):
+            picking_result._tpl_customer   = tpl.get('customer', '')
+            picking_result._tpl_cust_code  = tpl.get('customer_code', '')
+            picking_result._tpl_bag_weight = _resolved_bag
+            picking_result._tpl_storage    = tpl.get('storage_location', '1001 GY logistics')
+
+    def _oh_picking_admin_approval(self) -> tuple:
+        """관리자 코드 + 승인 사유 입력 플로우.
+
+        Returns:
+            (allow_qty_mismatch: bool, approval_reason: str, approved: bool)
+            approved=False 이면 호출자는 즉시 return.
+        """
+        configured_code = str(os.environ.get('SQM_ADMIN_CODE', '')).strip()
+        if not configured_code:
+            CustomMessageBox.showerror(
+                self.root,
+                '관리자 코드 미설정',
+                '수량 불일치 승인 진행을 위해 SQM_ADMIN_CODE 환경변수를 설정하세요.',
+            )
+            return False, '', False
+        entered = CustomMessageBox.askstring(
+            self.root,
+            '관리자 승인',
+            'Gate-1 수량 불일치 승인 코드 입력:',
+            show='*',
+        )
+        if entered is None:
+            return False, '', False
+        if str(entered).strip() != configured_code:
+            CustomMessageBox.showerror(self.root, '승인 실패', '관리자 코드가 올바르지 않습니다.')
+            return False, '', False
+        reason = CustomMessageBox.askstring(
+            self.root, '승인 사유', '승인 사유를 입력하세요 (필수):',
+        )
+        if reason is None or not str(reason).strip():
+            CustomMessageBox.showwarning(self.root, '승인 중단', '승인 사유는 필수입니다.')
+            return False, '', False
+        return True, str(reason).strip(), True
 
     def _on_s1_onestop_outbound(self) -> None:
         """S1 원스톱 출고: 4단계 워크플로우 (v6.3.1)

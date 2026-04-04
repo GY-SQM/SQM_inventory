@@ -411,8 +411,7 @@ class InventoryTabMixin:
         """재고리스트 탭 내 톤백 보기 트리 새로고침. v7.0: [전체 톤백 펼치기] 시 판매가능 전부 조회."""
         if not hasattr(self, '_inv_tonbag_tree'):
             return
-        for c in self._inv_tonbag_tree.get_children():
-            self._inv_tonbag_tree.delete(c)
+        self._inv_tonbag_tree.delete(*self._inv_tonbag_tree.get_children())
         try:
             if getattr(self, '_inv_show_all_tonbags', False):
                 # v7.0 2단계: 전체 톤백 펼치기 — inventory_tonbag WHERE status='AVAILABLE' (샘플 제외)
@@ -1041,8 +1040,7 @@ class InventoryTabMixin:
         if not hasattr(self, 'tree_inventory'):
             return
         
-        for item in self.tree_inventory.get_children():
-            self.tree_inventory.delete(item)
+        self.tree_inventory.delete(*self.tree_inventory.get_children())
 
         search_text = self.search_var.get().strip().lower()
         # v7.0 2단계: 판매가능 탭 전용 — status 필터 고정 (판매가능만 표시)
@@ -1233,11 +1231,12 @@ class InventoryTabMixin:
             _stripe_bg = ThemeColors.get('tree_stripe', _dk)
             _fg = tc('text_primary') if _dk else '#1a1a1a'
             # ★ 상태별 고유 전경색 (밝은 배경엔 짙은 글씨, 어두운 배경엔 밝은 글씨)
+            # v8.6.5: 대비 강화 — WCAG AA 4.5:1 기준 충족
             _sfg = {
                 'available': '#6ee7b7' if _dk else '#064e3b',
                 'reserved':  '#fcd34d' if _dk else '#78350f',
                 'picked':    '#c4b5fd' if _dk else '#4c1d95',
-                'shipped':   '#93c5fd' if _dk else '#1e3a5f',
+                'shipped':   '#93c5fd' if _dk else '#0a2844',
             }
             self.tree_inventory.tag_configure('available',
                 background=ThemeColors.get('available', _dk), foreground=_sfg['available'])
@@ -1248,8 +1247,8 @@ class InventoryTabMixin:
             self.tree_inventory.tag_configure('shipped',
                 background=ThemeColors.get('shipped', _dk), foreground=_sfg['shipped'])
             self.tree_inventory.tag_configure('depleted',
-                background=ThemeColors.get('bg_secondary', _dk),
-                foreground=ThemeColors.get('text_muted', _dk))
+                background='#e8e8e8' if not _dk else '#1a1a2e',
+                foreground='#666666' if not _dk else '#9a9ab0')
             self.tree_inventory.tag_configure('stripe',
                 background=_stripe_bg, foreground=_fg)
 

@@ -41,8 +41,7 @@ class LotDetailDialogMixin:
         from ..utils.ui_constants import ThemeColors
 
         # ── LOT 정보 조회 (inventory에 없어도 톤백만 보여줄 수 있음) ──
-        lot_info = self.engine.db.fetchone(
-            "SELECT * FROM inventory WHERE lot_no = ?", (lot_no,))
+        lot_info = self.engine.get_inventory_row(lot_no)
         if not lot_info:
             lot_info = {'lot_no': lot_no, 'product': '-', 'status': '-', 'initial_weight': 0, 'current_weight': 0,
                         'sap_no': '', 'bl_no': '', 'container_no': '', 'ship_date': '', 'arrival_date': '', 'warehouse': ''}

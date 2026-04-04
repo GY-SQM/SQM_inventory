@@ -291,7 +291,7 @@ def generate_outbound_confirmation(engine, lot_no: str, tonbag_ids: List[int] = 
     fn = 'MalgunGothic' if _has_malgun() else 'Helvetica'
 
     # LOT 정보
-    lot_info = engine.db.fetchone("SELECT * FROM inventory WHERE lot_no = ?", (lot_no,))
+    lot_info = engine.get_inventory_row(lot_no)
     if not lot_info:
         return None
 

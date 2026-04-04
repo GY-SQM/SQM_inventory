@@ -590,8 +590,7 @@ class TonbagTabMixin:
         lot_no = str(vals[1]).strip()
         if not lot_no:
             return
-        for c in self._tb_lot_detail_tree.get_children():
-            self._tb_lot_detail_tree.delete(c)
+        self._tb_lot_detail_tree.delete(*self._tb_lot_detail_tree.get_children())
         self._tb_split_panel.set_detail_title(f"📦 LOT 톤백 상세 — {lot_no}")
         try:
             tonbags = self.engine.db.fetchall(
@@ -649,8 +648,7 @@ class TonbagTabMixin:
         if not hasattr(self, 'tree_sublot'):
             return
         # 트리뷰 초기화
-        for item in self.tree_sublot.get_children():
-            self.tree_sublot.delete(item)
+        self.tree_sublot.delete(*self.tree_sublot.get_children())
         
         search_text = self.tonbag_search_var.get().strip().lower()
         status_filter = self.tonbag_status_var.get()
@@ -923,11 +921,12 @@ class TonbagTabMixin:
             # v6.3.2-colorful: 상태별 고유 전경색 (단일색 덮어쓰기 제거)
             _dk = is_dark()
             _fg = tc('text_primary') if _dk else '#1a1a1a'
+            # v8.6.5: 대비 강화
             _sfg = {
                 'available': '#6ee7b7' if _dk else '#064e3b',
                 'reserved':  '#fcd34d' if _dk else '#78350f',
                 'picked':    '#c4b5fd' if _dk else '#4c1d95',
-                'shipped':   '#93c5fd' if _dk else '#1e3a5f',
+                'shipped':   '#93c5fd' if _dk else '#0a2844',
             }
             self.tree_sublot.tag_configure('available',
                 background=ThemeColors.get('available', _dk), foreground=_sfg['available'])
@@ -938,8 +937,8 @@ class TonbagTabMixin:
             self.tree_sublot.tag_configure('shipped',
                 background=ThemeColors.get('shipped', _dk), foreground=_sfg['shipped'])
             self.tree_sublot.tag_configure('depleted',
-                background=ThemeColors.get('bg_secondary', _dk),
-                foreground=ThemeColors.get('text_muted', _dk))
+                background='#e8e8e8' if not _dk else '#1a1a2e',
+                foreground='#666666' if not _dk else '#9a9ab0')
             self.tree_sublot.tag_configure('stripe',
                 background=ThemeColors.get('tree_stripe', _dk), foreground=_fg)
 

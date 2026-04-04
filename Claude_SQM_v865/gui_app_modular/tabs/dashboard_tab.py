@@ -20,6 +20,7 @@ from gui_app_modular.utils.ui_constants import is_dark  # v8.0.9
 from gui_app_modular.utils.ui_constants import tc
 import logging
 import sqlite3
+import threading
 from datetime import datetime
 
 from tkinter import ttk
@@ -447,8 +448,7 @@ class DashboardTabMixin:
             rows = self._get_period_inbound_trend(months if months > 0 else 120)
             if not hasattr(self, '_trend_tree'):
                 return
-            for item in self._trend_tree.get_children():
-                self._trend_tree.delete(item)
+            self._trend_tree.delete(*self._trend_tree.get_children())
             if not rows:
                 self._trend_tree.insert('', 'end', values=('데이터 없음', '', '', ''))
                 return
@@ -549,31 +549,47 @@ class DashboardTabMixin:
 
 
     def _refresh_dashboard(self) -> None:
-        """대시보드 데이터 새로고침 (v4.0.4: 메인 스레드 직접 실행)"""
+        """대시보드 데이터 새로고침 (v8.6.5: 백그라운드 스레드 DB 조회)"""
         try:
             if not hasattr(self, '_dashboard_cards'):
                 return
+            # v8.6.5 PERF-3: 백그라운드 스레드로 DB 조회 분리
+            if hasattr(self, '_dashboard_bg_lock') and self._dashboard_bg_lock:
+                return  # 이미 진행 중
+            self._dashboard_bg_lock = True
 
-            # v8.1.9: 3구역 대시보드 갱신 순서
-            self._refresh_dashboard_cards()             # 1구역: 상태 카드
-            self._refresh_dashboard_integrity()         # 2구역: 정합성 신호등
-            # KPI 3종 먼저 수집 → _refresh_dashboard_alerts에서 한 줄 표시
-            self._refresh_dashboard_scan_fail()
-            self._refresh_dashboard_avg_lot_days()
-            self._refresh_dashboard_unassigned_location()
-            self._refresh_dashboard_alerts()            # 2구역: 알림 패널
-            self._refresh_dashboard_products()          # 3구역: 제품별 현황
+            def _bg_refresh():
+                try:
+                    self._refresh_dashboard_cards()
+                    self._refresh_dashboard_integrity()
+                    self._refresh_dashboard_scan_fail()
+                    self._refresh_dashboard_avg_lot_days()
+                    self._refresh_dashboard_unassigned_location()
+                    self._refresh_dashboard_alerts()
+                    self._refresh_dashboard_products()
 
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            if hasattr(self, 'dashboard_status'):
-                self.dashboard_status.config(text=f"마지막 갱신: {now}")
-            # v7.3.0: Hero 갱신 시각도 동기화
-            if hasattr(self, '_hero_updated_label'):
-                self._hero_updated_label.config(text=f"마지막 갱신: {now}")
+                    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    root = getattr(self, 'root', None)
+                    if root and root.winfo_exists():
+                        root.after(0, lambda: self._apply_dashboard_timestamp(now))
+                    logger.debug("대시보드 백그라운드 새로고침 완료")
+                except (ValueError, TypeError, KeyError) as e:
+                    logger.error(f"대시보드 새로고침 오류: {e}")
+                finally:
+                    self._dashboard_bg_lock = False
 
-            logger.debug("대시보드 새로고침 완료")
-        except (ValueError, TypeError, KeyError) as e:
-            logger.error(f"대시보드 새로고침 오류: {e}")
+            t = threading.Thread(target=_bg_refresh, daemon=True)
+            t.start()
+        except Exception as e:
+            self._dashboard_bg_lock = False
+            logger.error(f"대시보드 새로고침 시작 오류: {e}")
+
+    def _apply_dashboard_timestamp(self, now: str) -> None:
+        """대시보드 갱신 시각 UI 업데이트 (메인 스레드)"""
+        if hasattr(self, 'dashboard_status'):
+            self.dashboard_status.config(text=f"마지막 갱신: {now}")
+        if hasattr(self, '_hero_updated_label'):
+            self._hero_updated_label.config(text=f"마지막 갱신: {now}")
 
     def _refresh_dashboard_cards(self) -> None:
         """v8.1.5: 5단계 카드 — 톤백/샘플 구분 sub_label 포함."""
@@ -625,14 +641,14 @@ class DashboardTabMixin:
                                 w.config(bg=_card_bg)
                                 for ww in w.winfo_children():
                                     try: ww.config(bg=_card_bg)
-                                    except Exception: pass
-                            except Exception: pass
+                                    except Exception: pass  # tkinter widget config 무시 가능
+                            except Exception: pass  # tkinter widget config 무시 가능
                         # 좌측 색바 갱신 (첫 번째 자식의 첫 번째 자식)
                         try:
                             inner = card.winfo_children()[0]
                             color_bar = inner.winfo_children()[0]
                             color_bar.config(bg=color)
-                        except (IndexError, Exception): pass
+                        except (IndexError, Exception): pass  # 색바 없는 카드 무시
                         # 값/제목 레이블 색상 갱신
                         if hasattr(card, 'value_label'):
                             card.value_label.config(fg=color, bg=_card_bg)
@@ -896,8 +912,8 @@ class DashboardTabMixin:
                     _out = float(br.get('out_kg', 0) or 0)
                     _close = float(br.get('close_kg', 0) or 0)
                     bal_data[pn] = {'open': _open, 'in': _in, 'out': _out, 'close': _close}
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[dashboard] 제품별 잔고 데이터 파싱 실패: {e}")
 
             # 표시
             STATUSES = ['available', 'reserved', 'picked', 'outbound', 'return']

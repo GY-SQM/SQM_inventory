@@ -1,5 +1,7 @@
 # SQM `Claude_SQM_v867` 릴리즈 노트
 
+**전체 워킹트리(v864/v865/v866/v868 등) 동기화 요약:** 저장소 루트의 [`RELEASE_NOTES_WORKTREE_20260404.md`](../RELEASE_NOTES_WORKTREE_20260404.md) 참고.
+
 **릴리즈 날짜:** 2026-04-04  
 **코드베이스 버전 (`version.py`):** 8.6.5  
 **저장소 경로:** `Claude_SQM_v867/`

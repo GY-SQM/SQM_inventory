@@ -230,10 +230,7 @@ class ContextMenuMixin:
         lot_no = values[0]
 
         # Get current LOT data
-        lot_data = self.engine.db.fetchone(
-            "SELECT * FROM inventory WHERE lot_no = ?",
-            (lot_no,)
-        )
+        lot_data = self.engine.get_inventory_row(lot_no)
 
         if not lot_data:
             CustomMessageBox.showerror(self.root, "Error", f"LOT not found: {lot_no}")

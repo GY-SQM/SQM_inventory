@@ -362,7 +362,8 @@ class PackingMixin:
         try:
             _sap_m = re.search(r"(\d{8,11})", os.path.basename(pdf_path) or "") if pdf_path else None  # v8.6.4
             result.sap_no = _sap_m.group(1) if _sap_m else ""
-        except Exception:
+        except Exception as exc:
+            logger.debug("SAP No 파일명 추출 실패: %s", exc)
             result.sap_no = ""
 
         for lot in lots:

@@ -263,8 +263,8 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
             yield
             self.conn.commit()
             logger.debug(f"트랜잭션 커밋 완료 (mode={mode})")
-        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError, OSError) as e:
-            # Phase 3: 모든 예외에서 롤백
+        except Exception as e:
+            # Phase 3: 모든 예외에서 롤백 (TypeError/KeyError 등도 포함)
             self.conn.rollback()
             logger.error(f"트랜잭션 롤백: {type(e).__name__}: {e}")
             

@@ -158,7 +158,7 @@ Project root: G:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL
   │       ├── crud_mixin.py (532줄)     CRUD 오퍼레이션
   │       ├── query_mixin.py (722줄)    쿼리 빌드/실행
   │       ├── inbound_mixin.py (703줄)  입고 처리
-  │       ├── outbound_mixin.py (3,825줄) ★ 최대 파일 — 출고/배정
+  │       ├── outbound_mixin.py (4,040줄) ★ 최대 파일 — 출고/배정 (v865 헬퍼 19개 분해)
   │       ├── return_mixin.py (1,079줄) 반품 처리
   │       ├── tonbag_mixin.py (652줄)   톤백 관리
   │       ├── export_mixin.py (1,411줄) Excel/PDF 내보내기
@@ -369,13 +369,13 @@ Project root: G:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
   gui_app_modular/utils/ui_constants.py      (1,549줄) 전체 UI 상수
-  gui_app_modular/main_app.py                (1,375줄) 메인 윈도우 + 18개 Mixin
+  gui_app_modular/main_app.py                (1,382줄) 메인 윈도우 + 41개 Mixin
   gui_app_modular/tabs/inventory_tab.py      (1,569줄) 재고 탭
-  gui_app_modular/dialogs/onestop_inbound.py (4,175줄) 원스톱 입고
+  gui_app_modular/dialogs/onestop_inbound.py (4,175줄) 원스톱 입고 (v865: _create_dialog 530→20줄 분해)
   gui_app_modular/mixins/toolbar_mixin.py    (1,903줄) 메인 툴바 (메뉴 버튼 7개)
   gui_app_modular/mixins/custom_menubar.py   커스텀 메뉴바
   gui_app_modular/menu_registry.py           (165줄) 메뉴 단일 소스
-  engine_modules/inventory_modular/outbound_mixin.py (3,825줄) 출고/배정 엔진
+  engine_modules/inventory_modular/outbound_mixin.py (4,040줄) 출고/배정 엔진 (v865: 핵심 3함수 헬퍼 19개 분해)
   engine_modules/inventory_modular/query_mixin.py (722줄) 쿼리 빌더
   engine_modules/constants.py                (265줄) STATUS/MOVEMENT 상수
   parsers/document_parser_modular/bl_mixin.py     BL 파싱
@@ -416,7 +416,7 @@ Project root: G:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL
   STATUS_AVAILABLE   = 'AVAILABLE'
   STATUS_RESERVED    = 'RESERVED'
   STATUS_PICKED      = 'PICKED'
-  STATUS_SOLD        = 'SOLD'        (deprecated, read-only)
+  STATUS_SOLD        = 'SOLD'        (deprecated, read-only — v865: 전체 write-path OUTBOUND로 전환 완료)
   STATUS_DEPLETED    = 'DEPLETED'
   STATUS_RETURNED    = 'RETURNED'
 
@@ -447,6 +447,8 @@ Project root: G:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL
 
 3. STATUS FLOW: AVAILABLE→RESERVED→PICKED→OUTBOUND
    STATUS_SOLD = deprecated read-only. All writes → STATUS_OUTBOUND
+   ★ v865: SOLD write-path 0건 달성 (barcode_scan_engine, sales_order_engine, outbound_mixin 전부 OUTBOUND)
+   ★ read-path는 하위호환 유지 (WHERE status IN ('OUTBOUND','SOLD'))
 
 4. STOCK: CURRENT = AVAILABLE + RESERVED + PICKED + RETURN
 
@@ -1304,9 +1306,16 @@ Auto-decide everything. Never stop. Report after every step.
        Find any method > 100 lines:
          grep -rn "def " --include="*.py" → measure line spans
        Target files (known large):
-         outbound_mixin.py (3,798줄) → split reserve_from_allocation() further
-         onestop_inbound.py (4,032줄) → split _on_parse_complete()
-         gemini_parser.py (1,821줄) → split _build_prompt()
+         outbound_mixin.py (4,040줄) → v865 완료: 핵심 3함수 헬퍼 19개 분해
+           confirm_outbound: 263→82줄 (_co_* 7개)
+           execute_reserved: 202→88줄 (_er_* 6개)
+           reserve_from_allocation: 665→466줄 (_ra_* 7개 추가, 기존 10개 유지)
+         onestop_inbound.py (4,175줄) → v865 완료: _create_dialog 530→20줄
+           _cd_setup_window(36줄), _cd_build_step_indicator(66줄)
+           _cd_build_doc_file_section(141줄), _cd_build_parse_action_buttons(76줄)
+           _cd_build_carrier_and_progress(125줄), _cd_build_preview_table(77줄)
+           _amd_validate_date(16줄), _amd_calc_dates(37줄)
+         gemini_parser.py (1,821줄) → split _build_prompt() (미착수)
        Rule: Each method ≤ 80 lines. Extract sub-methods with clear names.
 
   3-B. Magic number elimination:
@@ -1527,19 +1536,171 @@ Report after every phase AND every step within each phase.
 
 ---
 
-## 기동님 실행 방법 (3단계)
+## 기동님 실행 방법
 
 ```bash
-# 1. SQM 프로젝트 폴더로 이동
-cd "G:\프로그램\Sqm 재고관리\Claude_SQM_v864_20260329_FULL"
+# 1. SQM v865 폴더로 이동
+cd "F:\프로그램\Sqm 재고관리\Claude_SQM_v865"
 
-# 2. Claude Code 실행
+# 2. Claude Code 실행 (자동 모드)
 claude --dangerously-skip-permissions \
   --system-prompt-file Claude_Code_SQM_MASTER.md
 
 #    → 자리 비우기 (3~6시간)
 #    → 돌아오면 결과 확인
 ```
+
+---
+
+## 야간 자동 실행 — P2 리팩토링 (v865)
+
+```
+YOU ARE CONTINUING the v865 refactoring session.
+All P0 and P1 tasks are DONE. Now execute P2 tasks below.
+
+Working directory: F:\프로그램\Sqm 재고관리\Claude_SQM_v865
+Git root (for commit/push): F:\프로그램\Sqm 재고관리
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[ABSOLUTE RULES — NEVER VIOLATE]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- NO DB schema change
+- NO business policy change
+- NO public method signature change
+- NO cross-file interface change
+- NO new SOLD write-path (all writes must use OUTBOUND)
+- SOLD read-path: keep WHERE status IN ('OUTBOUND','SOLD') for backward compat
+- Always run: python -m py_compile <file> after EVERY edit
+- If py_compile fails → fix immediately before moving on
+- If a change feels risky → skip it and log as DEFERRED
+- Backup each file before modifying: cp file.py file.py.bak_auto
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[TASK 1] outbound_handlers.py 분해 (2,868줄)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: gui_app_modular/handlers/outbound_handlers.py
+
+1. Read the entire file and identify all methods > 80 lines
+2. For each large method, extract helper methods with _oh_ prefix
+3. Keep public signatures unchanged
+4. Separate business logic from UI callback wiring where possible
+5. py_compile verify after each method split
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[TASK 2] advanced_dialogs_mixin.py 분해 (2,283줄)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: gui_app_modular/mixins/advanced_dialogs_mixin.py
+
+1. Read the entire file and identify all methods > 80 lines
+2. Extract helpers with _adm_ prefix
+3. Separate report generation logic from dialog UI
+4. py_compile verify
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[TASK 3] except Exception 나머지 정리 (onestop_inbound.py)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+File: gui_app_modular/dialogs/onestop_inbound.py
+
+Already done: 7 data-path exceptions standardized.
+Remaining: ~53 UI-related except Exception.
+
+Rules:
+- File I/O: except Exception → except (OSError, IOError, PermissionError)
+- JSON: except Exception → except (json.JSONDecodeError, KeyError, ValueError)
+- tkinter widget ops (winfo_exists, config, pack, grid): KEEP except Exception
+  (tkinter raises TclError, RuntimeError, etc unpredictably)
+- Template load/save: except Exception → except (OSError, json.JSONDecodeError, KeyError)
+- Add logger.warning where only logger.debug exists on recoverable errors
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[TASK 4] 중복 SQL 쿼리 통합
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Search for repeated SQL patterns across *.py:
+   grep -rn "SELECT.*FROM inventory_tonbag.*WHERE.*status" --include="*.py"
+   grep -rn "SELECT.*FROM allocation_plan.*WHERE.*status" --include="*.py"
+2. Find queries repeated >= 3 times across different files
+3. Create named methods in engine_modules/inventory_modular/query_mixin.py
+4. Replace duplicates with method calls
+5. py_compile verify all changed files
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[TASK 5] after() 호출 정리
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Search: grep -rn "\.after(" --include="*.py" | grep -v test
+2. Identify unnecessary/duplicate refresh calls
+3. Consolidate where possible (multiple after() → single deferred refresh)
+4. Do NOT remove after() calls in critical UI update paths
+5. py_compile verify
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[EXECUTION ORDER]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Execute TASK 1 → TASK 2 → TASK 3 → TASK 4 → TASK 5 in order.
+Do not stop between tasks. Do not ask. Auto-decide everything.
+If a task has ambiguity that could alter DB semantics → skip and log as DEFERRED.
+
+After EACH task, output:
+  TASK N COMPLETE:
+  - files modified: [list]
+  - methods extracted: [count]
+  - py_compile: PASS/FAIL
+  - deferred items: [list or none]
+
+After ALL tasks, output:
+  ══════════════════════════════════════
+  P2 SESSION COMPLETE — SQM v865
+  Task 1 (outbound_handlers): [summary]
+  Task 2 (advanced_dialogs): [summary]
+  Task 3 (except cleanup): [summary]
+  Task 4 (SQL consolidation): [summary]
+  Task 5 (after cleanup): [summary]
+  Total files modified: N
+  Total helpers extracted: N
+  Deferred: [list]
+  ══════════════════════════════════════
+```
+
+## v8.6.5 리팩토링 이력 (2026-04-02~03, Claude Code 세션)
+
+| 커밋 | 파일 | 내용 |
+|------|------|------|
+| def7b5e | outbound_mixin.py | 핵심 3함수 헬퍼 19개 분해 (confirm_outbound 263→82줄, execute_reserved 202→88줄, reserve_from_allocation 665→466줄) |
+| eb03ae1 | barcode_scan_engine.py, sales_order_engine.py, lot_detail_dialog.py | SOLD write-path 전면 제거 → OUTBOUND 통일 (14→0건) |
+| ca71921 | onestop_inbound.py | _create_dialog 530줄 → 20줄 오케스트레이터 + 6개 _cd_* 헬퍼 |
+| 74d86ad | onestop_inbound.py | 파싱버튼 76줄 분리 + 날짜 검증/계산 53줄 static 메서드 추출 |
+| 9a4c03d | onestop_inbound.py | 데이터 경로 except Exception 7건 → 특정 타입 표준화 |
+
+### 변경 원칙
+- DB schema 변경 없음
+- business policy 변경 없음
+- public method signature 변경 없음
+- SOLD는 read-path에서 하위호환 유지 (WHERE status IN ('OUTBOUND','SOLD'))
+
+### 41개 Mixin 분류 (SQMInventoryAppFull)
+| 그룹 | 수 | 포함 |
+|------|---|------|
+| UI 프레임 | 5 | Menu, Toolbar, StatusBar, Window, Theme |
+| 기능/단축키 | 4 | KeyBindings, ContextMenu, DragDrop, FeaturesV2 |
+| 데이터/검증 | 3 | Database, Validation, Refresh |
+| 탭 | 14 | Dashboard(2), Inventory, Allocation(2), Outbound, Picked, Sold, Scan, Tonbag, Log, Summary, Cargo, Return, Move |
+| 핸들러 | 12 | Import, Outbound(3), Backup, PDF(2), Export, Inbound(2), StatusImport, Product, SimpleExcel |
+| 대화상자 | 5 | LotAllocationAudit, LotDetail, Settings, Info, OutboundPreview |
+| 고급 | 1 | AdvancedFeatures |
+
+### 남은 P2 작업
+- UI refresh / after() 104회 정리
+- 서비스 계층 분리 (outbound/allocation/picking)
+- 41개 mixin 축소
+- gemini_parser.py _build_prompt() 분해
+
+---
 
 ## v8.6.4 업데이트 사항 (v8.6.3 대비)
 

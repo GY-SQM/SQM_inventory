@@ -96,7 +96,8 @@ def apply_auto_tooltips_in(container) -> None:
                 except Exception:
                     label = ""
                 apply_auto_tooltip(w, label)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"[tooltip] 위젯 스캔 실패: {e}")
             continue
 
 

@@ -117,17 +117,8 @@ class AdvancedDialogsMixin:
         """반품 파싱 결과 또는 Excel 경로를 받아 검증 후 DB 반영. skip_confirm=True면 확인 대화상자 생략(붙여넣기에서 이미 표시)."""
         if isinstance(parse_result_or_path, str):
             path = parse_result_or_path
-            try:
-                from features.parsers.return_inbound_parser import (
-                    parse_return_inbound_excel,
-                )
-                parse_result = parse_return_inbound_excel(path)
-            except ImportError:
-                CustomMessageBox.showerror(
-                    self.root,
-                    "반품 입고",
-                    "features.parsers.return_inbound_parser를 불러올 수 없습니다.",
-                )
+            parse_result = self._adm_parse_return_inbound_from_path(path)
+            if parse_result is None:
                 return
             source_file = path
         else:
@@ -145,50 +136,11 @@ class AdvancedDialogsMixin:
             CustomMessageBox.showwarning(self.root, "반품 입고", "처리할 행이 없습니다.")
             return
         if not skip_confirm:
-            # v6.12.1: 미리보기 편집 다이얼로그
-            _confirmed_items = [None]
-
-            def _on_preview_confirm(edited_items):
-                _confirmed_items[0] = edited_items
-
-            try:
-                from ..dialogs.return_inbound_preview import ReturnInboundPreviewDialog
-                current_theme = getattr(self, '_current_theme', 'darkly')
-                ReturnInboundPreviewDialog(
-                    self.root,
-                    parse_result.get('items', []),
-                    on_confirm=_on_preview_confirm,
-                    current_theme=current_theme,
-                )
-            except ImportError:
-                # fallback: 기존 텍스트 확인
-                if not CustomMessageBox.askyesno(
-                    self.root,
-                    "반품 입고 확인",
-                    f"총 {n}건을 반품 입고 처리합니다.\nPICKING NO 매칭 실패 시 전체가 중단됩니다.\n계속하시겠습니까?",
-                ):
-                    return
-                _confirmed_items[0] = parse_result.get('items', [])
-
-            if _confirmed_items[0] is None:
+            # v6.12.1+v6.12.2: 미리보기 편집 + 대량 관리자 확인
+            confirmed = self._adm_confirm_return_inbound_items(parse_result)
+            if confirmed is None:
                 return  # 취소
-            parse_result['items'] = _confirmed_items[0]  # 편집된 데이터로 교체
-
-            # v6.12.2: 대량 반품 관리자 확인
-            try:
-                from engine_modules.constants import RETURN_AUTO_APPROVE_MAX_TONBAGS  # STATUS_* 상단 import 사용
-                _max_auto = RETURN_AUTO_APPROVE_MAX_TONBAGS
-            except ImportError:
-                _max_auto = 5
-            _ = len(parse_result.get('items', []))  # total_items: 미사용
-            total_tb = sum(it.get('tonbag_count', 1) for it in parse_result.get('items', []))
-            if total_tb > _max_auto:
-                if not CustomMessageBox.askyesno(
-                    self.root, "⚠️ 대량 반품 관리자 확인",
-                    f"반품 톤백 {total_tb}개 (자동승인 기준 {_max_auto}개 초과)\n\n"
-                    f"대량 반품은 되돌릴 수 없습니다.\n정말 진행하시겠습니까?"
-                ):
-                    return
+            parse_result['items'] = confirmed  # 편집된 데이터로 교체
         try:
             from features.parsers.return_inbound_engine import (
                 apply_return_inbound_to_db,
@@ -339,85 +291,40 @@ class AdvancedDialogsMixin:
             reason = reason_combo.get()
             note = note_text.get("1.0", "end").strip()
 
-            # 최소 데이터: LOT 번호, Tonbag 선택, 반품 수량(kg)
-            if not lot_no or lot_no == "(등록된 LOT 없음)":
-                CustomMessageBox.showwarning(dialog, "입력 필요",
-                    "LOT 번호를 목록에서 선택하세요.\n\n화물 정합성을 위해 LOT 번호는 필수입니다.")
-                lot_combo.focus_set()
-                return
-            if not tonbag_sel or tonbag_sel == "← LOT 번호 선택 후 자동 조회" or tonbag_sel == "톤백 없음":
-                CustomMessageBox.showwarning(dialog, "입력 필요",
-                    "LOT 번호 선택 후 반품할 톤백을 선택하세요.\n\nTonbag No는 필수입니다.")
-                lot_combo.focus_set()
-                return
-            if not qty_str:
-                CustomMessageBox.showwarning(dialog, "입력 필요",
-                    "반품 수량(kg)을 입력하세요.\n\n화물 무게 정합성을 위해 반품 수량은 필수입니다.")
-                qty_entry.focus_set()
-                return
-            try:
-                qty = float(qty_str)
-                if qty <= 0:
-                    raise ValueError
-            except ValueError:
-                CustomMessageBox.showwarning(dialog, "입력 오류",
-                    "반품 수량에는 0보다 큰 숫자(kg)를 입력하세요.")
-                qty_entry.focus_set()
+            # 1) 입력 검증 → _adm_ helper
+            err = self._adm_validate_single_return_input(lot_no, tonbag_sel, qty_str)
+            if err == 'lot':
+                lot_combo.focus_set(); return
+            elif err == 'tonbag':
+                lot_combo.focus_set(); return
+            elif err == 'qty_empty':
+                qty_entry.focus_set(); return
+            elif err == 'qty_invalid':
+                qty_entry.focus_set(); return
+            elif err is not None:
                 return
 
-            # 무게 정합성: 반품 수량이 해당 톤백 무게를 초과하면 경고
-            tonbag_kg = None
-            if '(' in tonbag_sel and 'kg' in tonbag_sel:
-                try:
-                    tonbag_kg = float(tonbag_sel.split('(')[1].split('kg')[0].strip())
-                except (ValueError, TypeError, IndexError) as _e:
-                    logger.debug(f"톤백 무게 파싱: {_e}")
-            if tonbag_kg is not None and qty > tonbag_kg:
-                CustomMessageBox.showwarning(dialog, "무게 정합성 경고",
-                    f"반품 수량({qty:,.2f} kg)이 해당 톤백 무게({tonbag_kg:,.2f} kg)를 초과합니다.\n\n"
-                    "수정해 주세요. (반품 수량 ≤ 톤백 무게)")
-                qty_entry.focus_set()
-                return
+            qty = float(qty_str)
+
+            # 2) 무게 정합성 → _adm_ helper
+            weight_err = self._adm_check_return_weight(dialog, tonbag_sel, qty)
+            if weight_err:
+                qty_entry.focus_set(); return
 
             if not CustomMessageBox.askyesno(dialog, "반품 확인",
                 f"LOT: {lot_no}\n수량: {qty:,.2f} kg\n사유: {reason}\n\n반품 처리하시겠습니까?"):
                 return
+
             sub_lt_val = 1
             if tonbag_sel and tonbag_sel[0].isdigit():
                 try:
                     sub_lt_val = int(tonbag_sel.split(' ')[0])
                 except (ValueError, IndexError):
                     sub_lt_val = 1
-            if hasattr(self.engine, 'return_single_tonbag'):
-                try:
-                    result = self.engine.return_single_tonbag(
-                        lot_no=lot_no, sub_lt=sub_lt_val, reason=reason, remark=note)
-                except (ValueError, RuntimeError, sqlite3.OperationalError, sqlite3.IntegrityError) as e:
-                    CustomMessageBox.showerror(dialog, "반품 오류", f"반품 처리 중 오류:\n{str(e)[:500]}")
-                    return
-            elif hasattr(self.engine, 'process_return'):
-                try:
-                    result = self.engine.process_return([{
-                        'lot_no': lot_no, 'sub_lt': sub_lt_val,
-                        'reason': reason, 'remark': note}],
-                        source_type='RETURN_SINGLE')
-                except (ValueError, RuntimeError, sqlite3.OperationalError, sqlite3.IntegrityError) as e:
-                    CustomMessageBox.showerror(dialog, "반품 오류", f"반품 처리 중 오류:\n{str(e)[:500]}")
-                    return
-            else:
-                CustomMessageBox.showwarning(dialog, "안내", "반품 엔진을 찾을 수 없습니다.")
-                return
-            if result.get('success'):
-                self._log(f"✅ 반품 완료: {lot_no}-{sub_lt_val}")
-                CustomMessageBox.showinfo(dialog, "완료",
-                    f"반품 처리 완료\n\nLOT: {lot_no}\n톤백: {sub_lt_val}\n사유: {reason}")
-                dialog.destroy()
-                self._safe_refresh()
-                if hasattr(self, '_refresh_dashboard'):
-                    self._refresh_dashboard()
-            else:
-                errs = '\n'.join(result.get('errors', ['알 수 없는 오류']))
-                CustomMessageBox.showerror(dialog, "오류", f"반품 실패:\n{errs}")
+
+            # 3) DB 실행 → _adm_ helper
+            self._adm_execute_single_return(
+                dialog, lot_no, sub_lt_val, reason, note)
 
         s_btn = ttk.Frame(tab_single)
         s_btn.pack(pady=15)
@@ -840,13 +747,8 @@ class AdvancedDialogsMixin:
             product, bl_no = self._bret_resolve_product_bl(lot_no, bl_no, _inv_cache)
 
             # 필수 4열 검증: Lot No, BL NO, 톤백중량, 반품수량(갯수)
-            missing_this_row = []
-            if not lot_no or lot_no == 'nan':
-                missing_this_row.append('Lot No')
-            if not bl_no or bl_no == 'nan':
-                missing_this_row.append('BL NO')
-            if not qty_str or qty_str == 'nan' or return_qty_kg <= 0:
-                missing_this_row.append('반품수량(갯수)')
+            missing_this_row = self._adm_bret_check_row_required_fields(
+                lot_no, bl_no, qty_str, return_qty_kg)
 
             items_to_add = self._bret_resolve_tonbags(
                 lot_no, tonbag_str, return_qty_kg, returnable_statuses)
@@ -883,12 +785,7 @@ class AdvancedDialogsMixin:
         pv_tree.tag_configure('err', foreground=tc('danger'))
 
         if required_missing_rows:
-            lines = [f"  행 {r}: {', '.join(m)}" for r, m in required_missing_rows[:20]]
-            if len(required_missing_rows) > 20:
-                lines.append(f"  ... 외 {len(required_missing_rows) - 20}행")
-            CustomMessageBox.showerror(dialog, "필수 항목 누락",
-                "반품 업로드 시 Lot No, BL NO, 톤백중량, 반품수량(갯수) 네 열은 필수입니다.\n\n"
-                "다음 행에 필수 항목이 비어 있습니다:\n\n" + "\n".join(lines) + "\n\n수정 후 다시 업로드하세요.")
+            self._adm_bret_show_required_missing_error(dialog, required_missing_rows)
 
         summary_var.set(f"✅ 반품 가능: {ok_count}건  |  ❌ 불가: {err_count}건  |  총: {ok_count + err_count}건")
 
@@ -1160,41 +1057,15 @@ class AdvancedDialogsMixin:
                     CustomMessageBox.showwarning(dialog, "날짜 오류", "YYYY-MM-DD 형식으로 입력하세요.")
                     return
 
-                end_plus1 = (_dt.strptime(end, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
-                query = "SELECT id, lot_no, movement_type, qty_kg, '' AS customer, created_at AS movement_date, created_at FROM stock_movement WHERE 1=1"
-                params = [start, end_plus1]
-                query += " AND created_at >= ? AND created_at < ?"
-
                 mv_type = type_var.get()
-                if mv_type != '전체':
-                    query += " AND movement_type = ?"
-                    params.append(mv_type)
-
                 lot_filter = lot_var.get().strip()
-                if lot_filter:
-                    query += " AND lot_no LIKE ?"
-                    params.append(f"%{lot_filter}%")
 
-                query += " ORDER BY created_at DESC LIMIT 500"
+                # DB 조회 → _adm_ helper
+                rows = self._adm_fetch_outbound_history_rows(
+                    start, end, mv_type, lot_filter)
 
-                rows = self.engine.db.fetchall(query, tuple(params))
-                total_kg = 0
-                for r in rows:
-                    row_id = r['id'] if isinstance(r, dict) else r[0]
-                    lot = r['lot_no'] if isinstance(r, dict) else r[1]
-                    mtype = r['movement_type'] if isinstance(r, dict) else r[2]
-                    qty = r['qty_kg'] if isinstance(r, dict) else r[3]
-                    cust = r['customer'] if isinstance(r, dict) else r[4]
-                    mdate = r['movement_date'] if isinstance(r, dict) else r[5]
-                    created = r['created_at'] if isinstance(r, dict) else r[6]
-
-                    qty_val = float(qty) if qty else 0
-                    total_kg += qty_val
-
-                    tree.insert('', END, values=(
-                        row_id, lot, mtype, f"{qty_val:,.0f}",
-                        cust or '', str(mdate or '')[:10], str(created or '')[:19]
-                    ))
+                total_kg = self._adm_populate_outbound_history_tree(
+                    tree, rows, END)
 
                 summary_var.set(f"📊 {start} ~ {end} | Outbound Rows: {len(rows):,}건 | Total Weight: {total_kg:,.1f} Kg")
                 if btn_export is not None:
@@ -1221,38 +1092,8 @@ class AdvancedDialogsMixin:
             )
             if not save_path:
                 return
-            try:
-                import openpyxl
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                ws.title = "출고 현황"
-                ws.append(['ID', 'LOT No.', 'Type', 'Qty(Kg)', 'Customer', 'Movement Date', 'Created At'])
-                for iid in tree.get_children():
-                    vals = tree.item(iid, 'values')
-                    qty_txt = str(vals[3]).replace(',', '') if len(vals) > 3 else '0'
-                    try:
-                        qty_val = float(qty_txt or 0)
-                    except (ValueError, TypeError):
-                        qty_val = 0.0
-                    ws.append([
-                        vals[0] if len(vals) > 0 else '',
-                        vals[1] if len(vals) > 1 else '',
-                        vals[2] if len(vals) > 2 else '',
-                        qty_val,
-                        vals[4] if len(vals) > 4 else '',
-                        vals[5] if len(vals) > 5 else '',
-                        vals[6] if len(vals) > 6 else '',
-                    ])
-                wb.save(save_path)
-                CustomMessageBox.showinfo(dialog, "완료", f"저장 완료: {os.path.basename(save_path)}")
-                try:
-                    os.startfile(save_path)
-                except (AttributeError, OSError) as e:
-                    logger.warning(f"[do_export_excel] Suppressed: {e}")
-            except ImportError:
-                CustomMessageBox.showerror(dialog, "오류", "openpyxl이 설치되지 않았습니다.")
-            except (OSError, PermissionError) as e:
-                CustomMessageBox.showerror(dialog, "오류", f"파일 저장 실패:\n{e}")
+            # Excel 저장 → _adm_export_outbound_history_xlsx
+            self._adm_export_outbound_history_xlsx(tree, entry_start, entry_end, save_path, dialog)
 
         for label, days in [("이번 달", 0), ("최근 7일", 7), ("최근 30일", 30), ("최근 90일", 90), ("전체", -1)]:
             ttk.Button(top_inner, text=label, width=8, command=lambda d=days: _set_quick_range(d)).pack(side=LEFT, padx=2)
@@ -1384,33 +1225,9 @@ class AdvancedDialogsMixin:
                 CustomMessageBox.showwarning(dialog, "입력 필요", "고객명을 선택하세요.")
                 return
 
-            # 출고 데이터 조회 (customer 컬럼 없어도 동작)
+            # 출고 데이터 조회 + Excel 생성 (report logic → _adm_* helpers)
             try:
-                for q, p in [
-                    ("""SELECT lot_no, movement_type, qty_kg, customer, 
-                            COALESCE(movement_date, created_at) AS movement_date, created_at
-                        FROM stock_movement 
-                        WHERE customer = ? AND movement_type = 'OUTBOUND'
-                          AND COALESCE(movement_date, created_at) >= ? AND COALESCE(movement_date, created_at) <= ?
-                        ORDER BY created_at""",
-                     (customer, date_from, date_to + ' 23:59:59')),
-                    ("""SELECT lot_no, movement_type, qty_kg, '' AS customer, 
-                            created_at AS movement_date, created_at
-                        FROM stock_movement 
-                        WHERE movement_type = 'OUTBOUND'
-                          AND created_at >= ? AND created_at <= ?
-                        ORDER BY created_at""",
-                     (date_from, date_to + ' 23:59:59')),
-                ]:
-                    try:
-                        movements = self.engine.db.fetchall(q, p)
-                        break
-                    except (sqlite3.OperationalError,) as e:
-                        if "no such column" in str(e).lower():
-                            continue
-                        raise
-                else:
-                    movements = []
+                movements = self._adm_fetch_invoice_movements(customer, date_from, date_to)
 
                 if not movements:
                     CustomMessageBox.showinfo(dialog, "결과 없음", "해당 기간 출고 이력이 없습니다.")
@@ -1433,71 +1250,8 @@ class AdvancedDialogsMixin:
                 except ImportError as e:
                     logger.warning(f"[do_generate] Suppressed: {e}")
 
-                import openpyxl
-                from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                ws.title = "거래명세서"
-
-                # 스타일
-                title_font = Font(bold=True, size=16)
-                header_font = Font(bold=True, color="FFFFFF", size=10)
-                header_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
-                border = Border(
-                    left=Side(style='thin'), right=Side(style='thin'),
-                    top=Side(style='thin'), bottom=Side(style='thin'))
-
-                # 타이틀
-                ws.merge_cells('A1:F1')
-                ws['A1'] = f"거래명세서 — {customer}"
-                ws['A1'].font = title_font
-
-                ws['A2'] = f"기간: {date_from} ~ {date_to}"
-                ws['A2'].font = Font(size=10, color='666666')
-
-                # 헤더
-                headers = ['No', 'LOT NO', '수량(kg)', '수량(MT)', '출고일', '비고']
-                for col, h in enumerate(headers, 1):
-                    cell = ws.cell(row=4, column=col, value=h)
-                    cell.font = header_font
-                    cell.fill = header_fill
-                    cell.border = border
-                    cell.alignment = Alignment(horizontal='center')
-
-                # 데이터
-                total_kg = 0
-                for i, mv in enumerate(movements, 1):
-                    qty = mv['qty_kg'] or 0
-                    total_kg += qty
-
-                    row_data = [
-                        i,
-                        mv['lot_no'],
-                        f"{qty:,.0f}",
-                        f"{qty/1000:.3f}",
-                        str(mv['movement_date'] or '')[:10],
-                        ''
-                    ]
-                    for col, val in enumerate(row_data, 1):
-                        cell = ws.cell(row=4+i, column=col, value=val)
-                        cell.border = border
-                        if col in (3, 4):
-                            cell.alignment = Alignment(horizontal='right')
-
-                # 합계
-                sum_row = 5 + len(movements)
-                ws.cell(row=sum_row, column=1, value="합계").font = Font(bold=True)
-                ws.cell(row=sum_row, column=3, value=f"{total_kg:,.0f}").font = Font(bold=True)
-                ws.cell(row=sum_row, column=4, value=f"{total_kg/1000:.3f}").font = Font(bold=True)
-
-                ws.column_dimensions['A'].width = 6
-                ws.column_dimensions['B'].width = 16
-                ws.column_dimensions['C'].width = 14
-                ws.column_dimensions['D'].width = 12
-                ws.column_dimensions['E'].width = 14
-                ws.column_dimensions['F'].width = 15
-
+                wb, total_kg = self._adm_build_invoice_workbook(
+                    movements, customer, date_from, date_to)
                 wb.save(save_path)
 
                 dialog.destroy()
@@ -1885,79 +1639,13 @@ class AdvancedDialogsMixin:
             lot_kw = lot_var.get().strip()
             etype  = etype_var.get()
 
-            params = [s_date, e_date]
-            where  = ["DATE(ap.created_at) BETWEEN ? AND ?",
-                      "ap.export_type IS NOT NULL",
-                      "ap.export_type != ''"]
-
-            if status != '전체':
-                where.append("ap.status = ?")
-                params.append(status)
-            if lot_kw:
-                where.append("ap.lot_no LIKE ?")
-                params.append(f'%{lot_kw}%')
-            if etype != '전체':
-                where.append("ap.export_type = ?")
-                params.append(etype)
-
-            sql = f"""
-                SELECT
-                    ap.id,
-                    ap.lot_no,
-                    COALESCE(ap.sub_lt, '') AS sub_lt,
-                    COALESCE(ap.customer, '') AS customer,
-                    COALESCE(ap.sale_ref, '') AS sale_ref,
-                    COALESCE(ap.qty_mt, 0) AS qty_mt,
-                    COALESCE(ap.export_type, '') AS export_type,
-                    ap.status,
-                    COALESCE(ap.outbound_date, '') AS outbound_date,
-                    ap.created_at,
-                    COALESCE(ap.source_file, '') AS source_file
-                FROM allocation_plan ap
-                WHERE {' AND '.join(where)}
-                ORDER BY ap.created_at DESC
-            """
-            try:
-                rows = self.engine.db.fetchall(sql, tuple(params)) or []
-            except Exception as e:
-                logger.error(f"[반송출고현황] 쿼리 오류: {e}")
-                rows = []
-
+            # DB 쿼리 → _adm_query_return_export_data
+            rows = self._adm_query_return_export_data(s_date, e_date, status, lot_kw, etype)
             _last_rows = rows
 
-            qty_total = 0.0
-            bangsong_cnt = 0
-            for i, row in enumerate(rows):
-                vals = (
-                    row.get('id', ''),
-                    row.get('lot_no', ''),
-                    row.get('sub_lt', ''),
-                    row.get('customer', ''),
-                    row.get('sale_ref', ''),
-                    f"{float(row.get('qty_mt', 0)):.3f}",
-                    row.get('export_type', ''),
-                    row.get('status', ''),
-                    row.get('outbound_date', ''),
-                    str(row.get('created_at', ''))[:19],
-                    row.get('source_file', ''),
-                )
-                etype_val = str(row.get('export_type', ''))
-                stat_val  = str(row.get('status', ''))
-                is_bangsong = ('반송' in etype_val)
-                if is_bangsong:
-                    bangsong_cnt += 1
-                    tag = 'bangsong' if i % 2 == 0 else 'bangsong_stripe'
-                elif stat_val == 'EXECUTED':
-                    tag = 'executed'
-                elif 'CANCEL' in stat_val:
-                    tag = 'cancel'
-                else:
-                    tag = 'normal' if i % 2 == 0 else 'stripe'
-                try:
-                    qty_total += float(row.get('qty_mt', 0))
-                except (ValueError, TypeError):
-                    logger.debug("[SUPPRESSED] exception in advanced_dialogs_mixin.py")  # noqa
-                tree.insert('', 'end', values=vals, tags=(tag,))
+            # Treeview 채우기 → _adm_ helper
+            qty_total, bangsong_cnt = self._adm_populate_return_export_tree(
+                tree, rows)
 
             summary_var.set(
                 f"조회 결과: {len(rows)}건  │  반송: {bangsong_cnt}건  │  "
@@ -1978,67 +1666,8 @@ class AdvancedDialogsMixin:
             )
             if not save_path:
                 return
-            try:
-                import openpyxl
-                from openpyxl.styles import Alignment, Font, PatternFill
-                wb = openpyxl.Workbook()
-                ws = wb.active
-                ws.title = '반송출고현황'
-
-                header_fill = PatternFill('solid', fgColor='1a237e')
-                header_font = Font(bold=True, color='00e5ff', size=10)
-                col_names = [c[1] for c in COLS]
-                for ci, name in enumerate(col_names, 1):
-                    cell = ws.cell(row=1, column=ci, value=name)
-                    cell.fill = header_fill
-                    cell.font = header_font
-                    cell.alignment = Alignment(horizontal='center')
-
-                bangsong_fill = PatternFill('solid', fgColor='3e1a00')
-                normal_fill   = PatternFill('solid', fgColor='283593')
-                stripe_fill   = PatternFill('solid', fgColor='303f9f')
-
-                for ri, row in enumerate(_last_rows, 2):
-                    vals = [
-                        row.get('id', ''),
-                        row.get('lot_no', ''),
-                        row.get('sub_lt', ''),
-                        row.get('customer', ''),
-                        row.get('sale_ref', ''),
-                        float(row.get('qty_mt', 0)),
-                        row.get('export_type', ''),
-                        row.get('status', ''),
-                        row.get('outbound_date', ''),
-                        str(row.get('created_at', ''))[:19],
-                        row.get('source_file', ''),
-                    ]
-                    is_bangsong = '반송' in str(row.get('export_type', ''))
-                    for ci, val in enumerate(vals, 1):
-                        cell = ws.cell(row=ri, column=ci, value=val)
-                        if is_bangsong:
-                            cell.fill = bangsong_fill
-                            cell.font = Font(color='ff9100')
-                        else:
-                            cell.fill = normal_fill if ri % 2 == 0 else stripe_fill
-                            cell.font = Font(color='ffffff')
-                        cell.alignment = Alignment(horizontal='center')
-
-                # 컬럼 너비
-                for ci, (_, cname, cw, _) in enumerate(COLS, 1):
-                    ws.column_dimensions[
-                        openpyxl.utils.get_column_letter(ci)
-                    ].width = max(10, len(cname) + 4)
-                ws.column_dimensions['D'].width = 25  # 고객
-                ws.column_dimensions['K'].width = 35  # 소스파일
-
-                wb.save(save_path)
-                if _mb:
-                    _mb.showinfo(dialog, '저장 완료',
-                                 f'Excel 저장 완료:\n{save_path}')
-            except Exception as e:
-                logger.error(f"[반송출고현황] Excel 저장 오류: {e}")
-                if _mb:
-                    _mb.showerror(dialog, '오류', f'저장 실패:\n{e}')
+            # Excel 저장 → _adm_export_return_history_xlsx
+            self._adm_export_return_history_xlsx(_last_rows, COLS, save_path, dialog, _mb)
 
         # 초기 조회
         _do_query()
@@ -2223,11 +1852,281 @@ class AdvancedDialogsMixin:
         if not result_holder:
             return
 
-        sale_ref    = result_holder['sale_ref']
-        out_date    = result_holder['out_date']
-        output_path = result_holder['output_path']
+        # ── 생성 실행 (report logic → _adm_execute_outbound_report) ─────────
+        self._adm_execute_outbound_report(
+            mode=mode,
+            title_str=title_str,
+            sale_ref=result_holder['sale_ref'],
+            out_date=result_holder['out_date'],
+            output_path=result_holder['output_path'],
+        )
 
-        # ── 생성 실행 ────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────────
+    # _adm_* : private helpers extracted from large methods  (v8.6.5 SRP)
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _adm_validate_single_return_input(
+        self, lot_no: str, tonbag_sel: str, qty_str: str
+    ):
+        """단건 반품 입력 검증. 오류 코드 문자열 반환 (None=정상).
+
+        Returns:
+            None          — 유효
+            'lot'         — LOT 미선택
+            'tonbag'      — 톤백 미선택
+            'qty_empty'   — 수량 미입력
+            'qty_invalid' — 수량 숫자 아님 / 0 이하
+        """
+        if not lot_no or lot_no == "(등록된 LOT 없음)":
+            CustomMessageBox.showwarning(self.root, "입력 필요",
+                "LOT 번호를 목록에서 선택하세요.\n\n화물 정합성을 위해 LOT 번호는 필수입니다.")
+            return 'lot'
+        if not tonbag_sel or tonbag_sel == "← LOT 번호 선택 후 자동 조회" or tonbag_sel == "톤백 없음":
+            CustomMessageBox.showwarning(self.root, "입력 필요",
+                "LOT 번호 선택 후 반품할 톤백을 선택하세요.\n\nTonbag No는 필수입니다.")
+            return 'tonbag'
+        if not qty_str:
+            CustomMessageBox.showwarning(self.root, "입력 필요",
+                "반품 수량(kg)을 입력하세요.\n\n화물 무게 정합성을 위해 반품 수량은 필수입니다.")
+            return 'qty_empty'
+        try:
+            qty = float(qty_str)
+            if qty <= 0:
+                raise ValueError
+        except ValueError:
+            CustomMessageBox.showwarning(self.root, "입력 오류",
+                "반품 수량에는 0보다 큰 숫자(kg)를 입력하세요.")
+            return 'qty_invalid'
+        return None
+
+    def _adm_check_return_weight(self, dialog, tonbag_sel: str, qty: float) -> bool:
+        """톤백 무게 초과 검사. True면 초과로 중단 필요."""
+        tonbag_kg = None
+        if '(' in tonbag_sel and 'kg' in tonbag_sel:
+            try:
+                tonbag_kg = float(tonbag_sel.split('(')[1].split('kg')[0].strip())
+            except (ValueError, TypeError, IndexError) as _e:
+                logger.debug(f"톤백 무게 파싱: {_e}")
+        if tonbag_kg is not None and qty > tonbag_kg:
+            CustomMessageBox.showwarning(dialog, "무게 정합성 경고",
+                f"반품 수량({qty:,.2f} kg)이 해당 톤백 무게({tonbag_kg:,.2f} kg)를 초과합니다.\n\n"
+                "수정해 주세요. (반품 수량 ≤ 톤백 무게)")
+            return True
+        return False
+
+    def _adm_execute_single_return(
+        self, dialog, lot_no: str, sub_lt_val: int, reason: str, note: str
+    ) -> None:
+        """단건 반품 DB 실행 + 결과 처리."""
+        result = None
+        if hasattr(self.engine, 'return_single_tonbag'):
+            try:
+                result = self.engine.return_single_tonbag(
+                    lot_no=lot_no, sub_lt=sub_lt_val, reason=reason, remark=note)
+            except (ValueError, RuntimeError, sqlite3.OperationalError, sqlite3.IntegrityError) as e:
+                CustomMessageBox.showerror(dialog, "반품 오류", f"반품 처리 중 오류:\n{str(e)[:500]}")
+                return
+        elif hasattr(self.engine, 'process_return'):
+            try:
+                result = self.engine.process_return([{
+                    'lot_no': lot_no, 'sub_lt': sub_lt_val,
+                    'reason': reason, 'remark': note}],
+                    source_type='RETURN_SINGLE')
+            except (ValueError, RuntimeError, sqlite3.OperationalError, sqlite3.IntegrityError) as e:
+                CustomMessageBox.showerror(dialog, "반품 오류", f"반품 처리 중 오류:\n{str(e)[:500]}")
+                return
+        else:
+            CustomMessageBox.showwarning(dialog, "안내", "반품 엔진을 찾을 수 없습니다.")
+            return
+        if result and result.get('success'):
+            self._log(f"✅ 반품 완료: {lot_no}-{sub_lt_val}")
+            CustomMessageBox.showinfo(dialog, "완료",
+                f"반품 처리 완료\n\nLOT: {lot_no}\n톤백: {sub_lt_val}\n사유: {reason}")
+            dialog.destroy()
+            self._safe_refresh()
+            if hasattr(self, '_refresh_dashboard'):
+                self._refresh_dashboard()
+        else:
+            errs = '\n'.join((result or {}).get('errors', ['알 수 없는 오류']))
+            CustomMessageBox.showerror(dialog, "오류", f"반품 실패:\n{errs}")
+
+    def _adm_parse_return_inbound_from_path(self, path: str):
+        """Excel 경로에서 반품 입고 파싱 결과를 반환. 실패 시 에러 다이얼로그 표시 후 None 반환."""
+        try:
+            from features.parsers.return_inbound_parser import parse_return_inbound_excel
+            return parse_return_inbound_excel(path)
+        except ImportError:
+            CustomMessageBox.showerror(
+                self.root,
+                "반품 입고",
+                "features.parsers.return_inbound_parser를 불러올 수 없습니다.",
+            )
+            return None
+
+    def _adm_confirm_return_inbound_items(self, parse_result: dict):
+        """반품 미리보기 다이얼로그 표시 + 대량 관리자 확인.
+        확인된 items 리스트 반환. 취소 시 None 반환."""
+        _confirmed_items = [None]
+
+        def _on_preview_confirm(edited_items):
+            _confirmed_items[0] = edited_items
+
+        try:
+            from ..dialogs.return_inbound_preview import ReturnInboundPreviewDialog
+            current_theme = getattr(self, '_current_theme', 'darkly')
+            ReturnInboundPreviewDialog(
+                self.root,
+                parse_result.get('items', []),
+                on_confirm=_on_preview_confirm,
+                current_theme=current_theme,
+            )
+        except ImportError:
+            n = len(parse_result.get('items', []))
+            if not CustomMessageBox.askyesno(
+                self.root,
+                "반품 입고 확인",
+                f"총 {n}건을 반품 입고 처리합니다.\nPICKING NO 매칭 실패 시 전체가 중단됩니다.\n계속하시겠습니까?",
+            ):
+                return None
+            _confirmed_items[0] = parse_result.get('items', [])
+
+        if _confirmed_items[0] is None:
+            return None  # 취소
+
+        # v6.12.2: 대량 반품 관리자 확인
+        try:
+            from engine_modules.constants import RETURN_AUTO_APPROVE_MAX_TONBAGS
+            _max_auto = RETURN_AUTO_APPROVE_MAX_TONBAGS
+        except ImportError:
+            _max_auto = 5
+        total_tb = sum(it.get('tonbag_count', 1) for it in _confirmed_items[0])
+        if total_tb > _max_auto:
+            if not CustomMessageBox.askyesno(
+                self.root, "⚠️ 대량 반품 관리자 확인",
+                f"반품 톤백 {total_tb}개 (자동승인 기준 {_max_auto}개 초과)\n\n"
+                f"대량 반품은 되돌릴 수 없습니다.\n정말 진행하시겠습니까?"
+            ):
+                return None
+        return _confirmed_items[0]
+
+    def _adm_bret_check_row_required_fields(
+        self, lot_no: str, bl_no: str, qty_str: str, return_qty_kg: float
+    ) -> list:
+        """반품 미리보기 행의 필수 항목 누락 검사. 누락된 항목 이름 리스트 반환."""
+        missing = []
+        if not lot_no or lot_no == 'nan':
+            missing.append('Lot No')
+        if not bl_no or bl_no == 'nan':
+            missing.append('BL NO')
+        if not qty_str or qty_str == 'nan' or return_qty_kg <= 0:
+            missing.append('반품수량(갯수)')
+        return missing
+
+    def _adm_bret_show_required_missing_error(self, dialog, required_missing_rows: list) -> None:
+        """필수 항목 누락 행 에러 다이얼로그 표시."""
+        from ..utils.custom_messagebox import CustomMessageBox as _CMB
+        lines_msg = [f"  행 {r}: {', '.join(m)}" for r, m in required_missing_rows[:20]]
+        if len(required_missing_rows) > 20:
+            lines_msg.append(f"  ... 외 {len(required_missing_rows) - 20}행")
+        _CMB.showerror(dialog, "필수 항목 누락",
+            "반품 업로드 시 Lot No, BL NO, 톤백중량, 반품수량(갯수) 네 열은 필수입니다.\n\n"
+            "다음 행에 필수 항목이 비어 있습니다:\n\n" + "\n".join(lines_msg)
+            + "\n\n수정 후 다시 업로드하세요.")
+
+    def _adm_fetch_invoice_movements(
+        self, customer: str, date_from: str, date_to: str
+    ) -> list:
+        """거래명세서용 출고 데이터 DB 조회. movements list 반환."""
+        for q, p in [
+            ("""SELECT lot_no, movement_type, qty_kg, customer,
+                    COALESCE(movement_date, created_at) AS movement_date, created_at
+                FROM stock_movement
+                WHERE customer = ? AND movement_type = 'OUTBOUND'
+                  AND COALESCE(movement_date, created_at) >= ?
+                  AND COALESCE(movement_date, created_at) <= ?
+                ORDER BY created_at""",
+             (customer, date_from, date_to + ' 23:59:59')),
+            ("""SELECT lot_no, movement_type, qty_kg, '' AS customer,
+                    created_at AS movement_date, created_at
+                FROM stock_movement
+                WHERE movement_type = 'OUTBOUND'
+                  AND created_at >= ? AND created_at <= ?
+                ORDER BY created_at""",
+             (date_from, date_to + ' 23:59:59')),
+        ]:
+            try:
+                movements = self.engine.db.fetchall(q, p)
+                return movements or []
+            except sqlite3.OperationalError as _e:
+                if "no such column" in str(_e).lower():
+                    continue
+                raise
+        return []
+
+    def _adm_build_invoice_workbook(
+        self, movements: list, customer: str, date_from: str, date_to: str
+    ):
+        """거래명세서 Excel 워크북 생성. (wb, total_kg) 튜플 반환."""
+        import openpyxl
+        from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "거래명세서"
+
+        title_font = Font(bold=True, size=16)
+        header_font = Font(bold=True, color="FFFFFF", size=10)
+        header_fill = PatternFill(start_color="2C3E50", end_color="2C3E50", fill_type="solid")
+        border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin'))
+
+        ws.merge_cells('A1:F1')
+        ws['A1'] = f"거래명세서 — {customer}"
+        ws['A1'].font = title_font
+        ws['A2'] = f"기간: {date_from} ~ {date_to}"
+        ws['A2'].font = Font(size=10, color='666666')
+
+        headers = ['No', 'LOT NO', '수량(kg)', '수량(MT)', '출고일', '비고']
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=4, column=col, value=h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = border
+            cell.alignment = Alignment(horizontal='center')
+
+        total_kg = 0
+        for i, mv in enumerate(movements, 1):
+            qty = mv['qty_kg'] or 0
+            total_kg += qty
+            row_data = [
+                i, mv['lot_no'], f"{qty:,.0f}", f"{qty/1000:.3f}",
+                str(mv['movement_date'] or '')[:10], ''
+            ]
+            for col, val in enumerate(row_data, 1):
+                cell = ws.cell(row=4 + i, column=col, value=val)
+                cell.border = border
+                if col in (3, 4):
+                    cell.alignment = Alignment(horizontal='right')
+
+        sum_row = 5 + len(movements)
+        ws.cell(row=sum_row, column=1, value="합계").font = Font(bold=True)
+        ws.cell(row=sum_row, column=3, value=f"{total_kg:,.0f}").font = Font(bold=True)
+        ws.cell(row=sum_row, column=4, value=f"{total_kg/1000:.3f}").font = Font(bold=True)
+        ws.column_dimensions['A'].width = 6
+        ws.column_dimensions['B'].width = 16
+        ws.column_dimensions['C'].width = 14
+        ws.column_dimensions['D'].width = 12
+        ws.column_dimensions['E'].width = 14
+        ws.column_dimensions['F'].width = 15
+        return wb, total_kg
+
+    def _adm_execute_outbound_report(
+        self, mode: str, title_str: str, sale_ref, out_date, output_path: str
+    ) -> None:
+        """출고 보고서 파일 생성 및 결과 안내 (mode='outbound'|'dn')."""
+        from ..utils.custom_messagebox import CustomMessageBox as _CMB
+        is_dn = (mode == 'dn')
         try:
             if is_dn:
                 actual = self.engine._export_sales_order_dn_report(
@@ -2235,7 +2134,8 @@ class AdvancedDialogsMixin:
                 # v8.6.2: 미완료 Sales Order → 경고 팝업 후 중단
                 if actual and str(actual).startswith("INCOMPLETE:"):
                     progress_info = actual.replace("INCOMPLETE:", "")
-                    out_cnt, total_cnt = progress_info.split("/") if "/" in progress_info else ("?", "?")
+                    out_cnt, total_cnt = (
+                        progress_info.split("/") if "/" in progress_info else ("?", "?"))
                     warn_msg = (
                         f"Sales Order '{sale_ref}' 의 모든 화물이 출고 완료되지 않았습니다.\n\n"
                         f"  출고 완료: {out_cnt}개 LOT\n"
@@ -2243,22 +2143,19 @@ class AdvancedDialogsMixin:
                         f"모든 화물 출고 완료 후 Sales Order DN을 생성할 수 있습니다.\n"
                         f"(출고 현황은 화물 총괄 탭에서 확인하세요)"
                     )
-                    CustomMessageBox.showwarning(
-                        self.root, "Sales Order 미완료", warn_msg
-                    )
+                    _CMB.showwarning(self.root, "Sales Order 미완료", warn_msg)
                     return
             else:
                 actual = self.engine._export_outbound_report(
                     output_path, sale_ref=sale_ref, outbound_date=out_date)
 
             if not actual:
-                CustomMessageBox.showwarning(
+                _CMB.showwarning(
                     self.root, "데이터 없음",
                     "해당 조건의 출고 데이터가 없습니다.\n"
                     "출고 처리(confirm_outbound) 완료 후 다시 시도하세요.")
                 return
 
-            # PDF 경로 안내
             pdf_path = actual.rsplit('.', 1)[0] + '.pdf'
             pdf_exists = os.path.exists(pdf_path)
             msg = (f"✅ 생성 완료\n\n"
@@ -2267,17 +2164,232 @@ class AdvancedDialogsMixin:
                    f"폴더: {os.path.dirname(actual)}\n\n"
                    f"파일을 여시겠습니까?")
 
-            if CustomMessageBox.askyesno(self.root, title_str, msg):
-                import subprocess, sys
+            if _CMB.askyesno(self.root, title_str, msg):
+                import subprocess
+                import sys
                 try:
                     if sys.platform == 'win32':
                         os.startfile(actual)
                     else:
                         subprocess.Popen(['xdg-open', actual])
-                except Exception as e:
-                    logger.warning(f"[UI] 파일 열기 실패: {actual}: {e}")
+                except Exception as _e:
+                    logger.warning(f"[UI] 파일 열기 실패: {actual}: {_e}")
 
         except Exception as e:
             logger.error(f"[{title_str}] 생성 오류: {e}", exc_info=True)
-            CustomMessageBox.showerror(self.root, "오류",
+            _CMB.showerror(self.root, "오류",
                 f"보고서 생성 중 오류가 발생했습니다:\n{e}")
+
+    def _adm_export_return_history_xlsx(
+        self, rows: list, COLS: list, save_path: str, dialog, _mb
+    ) -> None:
+        """반송 출고 현황 Excel 저장 (rows, COLS 컬럼정의, save_path)."""
+        try:
+            import openpyxl
+            from openpyxl.styles import Alignment, Font, PatternFill
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = '반송출고현황'
+
+            header_fill = PatternFill('solid', fgColor='1a237e')
+            header_font = Font(bold=True, color='00e5ff', size=10)
+            col_names = [c[1] for c in COLS]
+            for ci, name in enumerate(col_names, 1):
+                cell = ws.cell(row=1, column=ci, value=name)
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center')
+
+            bangsong_fill = PatternFill('solid', fgColor='3e1a00')
+            normal_fill   = PatternFill('solid', fgColor='283593')
+            stripe_fill   = PatternFill('solid', fgColor='303f9f')
+
+            for ri, row in enumerate(rows, 2):
+                vals = [
+                    row.get('id', ''), row.get('lot_no', ''), row.get('sub_lt', ''),
+                    row.get('customer', ''), row.get('sale_ref', ''),
+                    float(row.get('qty_mt', 0)),
+                    row.get('export_type', ''), row.get('status', ''),
+                    row.get('outbound_date', ''),
+                    str(row.get('created_at', ''))[:19],
+                    row.get('source_file', ''),
+                ]
+                is_bangsong = '반송' in str(row.get('export_type', ''))
+                for ci, val in enumerate(vals, 1):
+                    cell = ws.cell(row=ri, column=ci, value=val)
+                    if is_bangsong:
+                        cell.fill = bangsong_fill
+                        cell.font = Font(color='ff9100')
+                    else:
+                        cell.fill = normal_fill if ri % 2 == 0 else stripe_fill
+                        cell.font = Font(color='ffffff')
+                    cell.alignment = Alignment(horizontal='center')
+
+            for ci, (_, cname, _cw, _anch) in enumerate(COLS, 1):
+                ws.column_dimensions[
+                    openpyxl.utils.get_column_letter(ci)
+                ].width = max(10, len(cname) + 4)
+            ws.column_dimensions['D'].width = 25  # 고객
+            ws.column_dimensions['K'].width = 35  # 소스파일
+
+            wb.save(save_path)
+            if _mb:
+                _mb.showinfo(dialog, '저장 완료', f'Excel 저장 완료:\n{save_path}')
+        except Exception as e:
+            logger.error(f"[반송출고현황] Excel 저장 오류: {e}")
+            if _mb:
+                _mb.showerror(dialog, '오류', f'저장 실패:\n{e}')
+
+    def _adm_populate_return_export_tree(self, tree, rows: list) -> tuple:
+        """반송 출고 현황 Treeview에 rows 삽입. (qty_total, bangsong_cnt) 반환."""
+        qty_total = 0.0
+        bangsong_cnt = 0
+        for i, row in enumerate(rows):
+            vals = (
+                row.get('id', ''),
+                row.get('lot_no', ''),
+                row.get('sub_lt', ''),
+                row.get('customer', ''),
+                row.get('sale_ref', ''),
+                f"{float(row.get('qty_mt', 0)):.3f}",
+                row.get('export_type', ''),
+                row.get('status', ''),
+                row.get('outbound_date', ''),
+                str(row.get('created_at', ''))[:19],
+                row.get('source_file', ''),
+            )
+            etype_val = str(row.get('export_type', ''))
+            stat_val  = str(row.get('status', ''))
+            is_bangsong = ('반송' in etype_val)
+            if is_bangsong:
+                bangsong_cnt += 1
+                tag = 'bangsong' if i % 2 == 0 else 'bangsong_stripe'
+            elif stat_val == 'EXECUTED':
+                tag = 'executed'
+            elif 'CANCEL' in stat_val:
+                tag = 'cancel'
+            else:
+                tag = 'normal' if i % 2 == 0 else 'stripe'
+            try:
+                qty_total += float(row.get('qty_mt', 0))
+            except (ValueError, TypeError):
+                logger.debug("[SUPPRESSED] exception in advanced_dialogs_mixin.py")  # noqa
+            tree.insert('', 'end', values=vals, tags=(tag,))
+        return qty_total, bangsong_cnt
+
+    def _adm_query_return_export_data(
+        self, s_date: str, e_date: str, status: str, lot_kw: str, etype: str
+    ) -> list:
+        """반송 출고 현황 allocation_plan DB 쿼리. rows list 반환."""
+        params = [s_date, e_date]
+        where  = ["DATE(ap.created_at) BETWEEN ? AND ?",
+                  "ap.export_type IS NOT NULL",
+                  "ap.export_type != ''"]
+        if status != '전체':
+            where.append("ap.status = ?")
+            params.append(status)
+        if lot_kw:
+            where.append("ap.lot_no LIKE ?")
+            params.append(f'%{lot_kw}%')
+        if etype != '전체':
+            where.append("ap.export_type = ?")
+            params.append(etype)
+        sql = f"""
+            SELECT
+                ap.id, ap.lot_no,
+                COALESCE(ap.sub_lt, '') AS sub_lt,
+                COALESCE(ap.customer, '') AS customer,
+                COALESCE(ap.sale_ref, '') AS sale_ref,
+                COALESCE(ap.qty_mt, 0) AS qty_mt,
+                COALESCE(ap.export_type, '') AS export_type,
+                ap.status,
+                COALESCE(ap.outbound_date, '') AS outbound_date,
+                ap.created_at,
+                COALESCE(ap.source_file, '') AS source_file
+            FROM allocation_plan ap
+            WHERE {' AND '.join(where)}
+            ORDER BY ap.created_at DESC
+        """
+        try:
+            return self.engine.db.fetchall(sql, tuple(params)) or []
+        except Exception as e:
+            logger.error(f"[반송출고현황] 쿼리 오류: {e}")
+            return []
+
+    def _adm_fetch_outbound_history_rows(
+        self, start: str, end: str, mv_type: str, lot_filter: str
+    ) -> list:
+        """출고 현황 DB 조회. start/end=YYYY-MM-DD, mv_type/lot_filter=필터."""
+        from datetime import datetime as _dt, timedelta
+        end_plus1 = (_dt.strptime(end, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+        query = ("SELECT id, lot_no, movement_type, qty_kg, '' AS customer, "
+                 "created_at AS movement_date, created_at "
+                 "FROM stock_movement WHERE 1=1"
+                 " AND created_at >= ? AND created_at < ?")
+        params = [start, end_plus1]
+        if mv_type != '전체':
+            query += " AND movement_type = ?"
+            params.append(mv_type)
+        if lot_filter:
+            query += " AND lot_no LIKE ?"
+            params.append(f"%{lot_filter}%")
+        query += " ORDER BY created_at DESC LIMIT 500"
+        return self.engine.db.fetchall(query, tuple(params)) or []
+
+    def _adm_populate_outbound_history_tree(self, tree, rows, end_const) -> float:
+        """출고 현황 Treeview에 rows를 삽입하고 total_kg 반환."""
+        total_kg = 0.0
+        for r in rows:
+            row_id = r['id'] if isinstance(r, dict) else r[0]
+            lot = r['lot_no'] if isinstance(r, dict) else r[1]
+            mtype = r['movement_type'] if isinstance(r, dict) else r[2]
+            qty = r['qty_kg'] if isinstance(r, dict) else r[3]
+            cust = r['customer'] if isinstance(r, dict) else r[4]
+            mdate = r['movement_date'] if isinstance(r, dict) else r[5]
+            created = r['created_at'] if isinstance(r, dict) else r[6]
+            qty_val = float(qty) if qty else 0
+            total_kg += qty_val
+            tree.insert('', end_const, values=(
+                row_id, lot, mtype, f"{qty_val:,.0f}",
+                cust or '', str(mdate or '')[:10], str(created or '')[:19]
+            ))
+        return total_kg
+
+    def _adm_export_outbound_history_xlsx(
+        self, tree, entry_start, entry_end, save_path: str, dialog
+    ) -> None:
+        """출고 현황 Treeview 데이터를 Excel로 저장."""
+        from ..utils.custom_messagebox import CustomMessageBox as _CMB
+        try:
+            import openpyxl
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "출고 현황"
+            ws.append(['ID', 'LOT No.', 'Type', 'Qty(Kg)', 'Customer',
+                       'Movement Date', 'Created At'])
+            for iid in tree.get_children():
+                vals = tree.item(iid, 'values')
+                qty_txt = str(vals[3]).replace(',', '') if len(vals) > 3 else '0'
+                try:
+                    qty_val = float(qty_txt or 0)
+                except (ValueError, TypeError):
+                    qty_val = 0.0
+                ws.append([
+                    vals[0] if len(vals) > 0 else '',
+                    vals[1] if len(vals) > 1 else '',
+                    vals[2] if len(vals) > 2 else '',
+                    qty_val,
+                    vals[4] if len(vals) > 4 else '',
+                    vals[5] if len(vals) > 5 else '',
+                    vals[6] if len(vals) > 6 else '',
+                ])
+            wb.save(save_path)
+            _CMB.showinfo(dialog, "완료", f"저장 완료: {os.path.basename(save_path)}")
+            try:
+                os.startfile(save_path)
+            except (AttributeError, OSError) as _e:
+                logger.warning(f"[_adm_export_outbound_history_xlsx] Suppressed: {_e}")
+        except ImportError:
+            _CMB.showerror(dialog, "오류", "openpyxl이 설치되지 않았습니다.")
+        except (OSError, PermissionError) as e:
+            _CMB.showerror(dialog, "오류", f"파일 저장 실패:\n{e}")

@@ -295,8 +295,7 @@ class InboundUploadMixin:
 
                 if lot_no:
                     try:
-                        existing = self.engine.db.fetchone(
-                            "SELECT 1 FROM inventory WHERE lot_no = ?", (lot_no,))
+                        existing = self.engine.inventory_lot_exists(lot_no)
                         if existing:
                             self._log_safe(f"  ⏭ LOT {lot_no}: 이미 존재 (건너뜀)")
                             skipped_lots.append(lot_no)
