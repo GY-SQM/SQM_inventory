@@ -1,0 +1,421 @@
+{
+  "version": "3.0",
+  "lastUpdated": "2026-04-07T06:28:09.180Z",
+  "activeFeatures": [
+    "Claude_SQM_v869",
+    "web",
+    "routes",
+    "Claude_SQM_v870",
+    "Claude_SQM_v871",
+    "validators",
+    "repositories",
+    "features",
+    "react_api"
+  ],
+  "primaryFeature": "Claude_SQM_v869",
+  "features": {
+    "Claude_SQM_v869": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-05T14:27:36.676Z",
+        "lastUpdated": "2026-04-05T14:38:39.212Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v869\\run_master.ps1"
+    },
+    "web": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-05T14:45:39.536Z",
+        "lastUpdated": "2026-04-05T14:52:38.272Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v869\\web\\src\\pages\\SettingsPage.jsx"
+    },
+    "routes": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-05T14:47:52.482Z",
+        "lastUpdated": "2026-04-05T14:48:28.960Z"
+      },
+      "lastFile": "F:\\프로그램\\Sqm 재고관리\\Claude_SQM_v869\\react_api\\routes\\tools.py"
+    },
+    "Claude_SQM_v870": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-07T04:27:53.634Z",
+        "lastUpdated": "2026-04-07T04:27:53.634Z"
+      },
+      "lastFile": "D:\\program\\Sqm jaego\\Claude_SQM_v870\\run_master.bat"
+    },
+    "Claude_SQM_v871": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-07T04:34:08.023Z",
+        "lastUpdated": "2026-04-07T05:05:38.599Z"
+      },
+      "lastFile": "D:\\program\\Sqm jaego\\Claude_SQM_v871\\run_master.bat"
+    },
+    "validators": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-07T05:06:10.977Z",
+        "lastUpdated": "2026-04-07T05:06:26.049Z"
+      },
+      "lastFile": "D:\\program\\Sqm jaego\\Claude_SQM_v871\\features\\validators\\inbound_validator.py"
+    },
+    "repositories": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-07T05:06:43.513Z",
+        "lastUpdated": "2026-04-07T05:08:21.922Z"
+      },
+      "lastFile": "D:\\program\\Sqm jaego\\Claude_SQM_v871\\features\\repositories\\inbound_repository.py"
+    },
+    "features": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-07T05:07:09.249Z",
+        "lastUpdated": "2026-04-07T05:07:20.833Z"
+      },
+      "lastFile": "D:\\program\\Sqm jaego\\Claude_SQM_v871\\features\\services\\inbound_service.py"
+    },
+    "react_api": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-04-07T06:22:06.822Z",
+        "lastUpdated": "2026-04-07T06:28:09.180Z"
+      },
+      "lastFile": "D:\\program\\Sqm jaego\\Claude_SQM_v871\\react_api\\utils\\db.py"
+    }
+  },
+  "pipeline": {
+    "currentPhase": 1,
+    "level": "Dynamic",
+    "phaseHistory": []
+  },
+  "session": {
+    "startedAt": "2026-04-05T14:16:34.226Z",
+    "onboardingCompleted": false,
+    "lastActivity": "2026-04-07T06:28:09.180Z"
+  },
+  "history": [
+    {
+      "timestamp": "2026-04-05T14:27:36.677Z",
+      "feature": "Claude_SQM_v869",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:35:41.713Z",
+      "feature": "Claude_SQM_v869",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:38:39.213Z",
+      "feature": "Claude_SQM_v869",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:45:39.537Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:47:05.057Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:47:30.642Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:47:38.675Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:47:43.858Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:47:52.483Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:48:28.962Z",
+      "feature": "routes",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:48:54.094Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:49:07.092Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:49:21.193Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:49:37.059Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:49:41.911Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:49:47.019Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:49:59.594Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:50:07.655Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:50:15.716Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:50:19.183Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:50:56.269Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:51:23.243Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:51:51.019Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:52:09.917Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:52:22.135Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:52:27.843Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-05T14:52:38.273Z",
+      "feature": "web",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T04:27:53.637Z",
+      "feature": "Claude_SQM_v870",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T04:34:08.024Z",
+      "feature": "Claude_SQM_v871",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:05:32.505Z",
+      "feature": "Claude_SQM_v871",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:05:38.599Z",
+      "feature": "Claude_SQM_v871",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:06:10.977Z",
+      "feature": "validators",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:06:26.049Z",
+      "feature": "validators",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:06:43.513Z",
+      "feature": "repositories",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:07:02.468Z",
+      "feature": "repositories",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:07:09.250Z",
+      "feature": "features",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:07:20.834Z",
+      "feature": "features",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:08:09.925Z",
+      "feature": "repositories",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:08:15.286Z",
+      "feature": "repositories",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T05:08:21.923Z",
+      "feature": "repositories",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T06:22:06.823Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T06:24:28.334Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-04-07T06:28:09.180Z",
+      "feature": "react_api",
+      "phase": "do",
+      "action": "updated"
+    }
+  ],
+  "stateMachine": {
+    "defaultWorkflow": "default",
+    "activeWorkflows": {},
+    "totalTransitions": 0
+  },
+  "automation": {
+    "globalLevel": 2,
+    "trustScore": 40,
+    "pendingApprovals": 0,
+    "lastGateResult": null
+  },
+  "team": {
+    "enabled": true,
+    "stateFile": ".bkit/runtime/agent-state.json",
+    "eventsFile": ".bkit/runtime/agent-events.jsonl"
+  }
+}

@@ -1,0 +1,124 @@
+:root {
+  /* Light theme (default) */
+  --bg-primary: #f0f5fc;
+  --bg-secondary: #ffffff;
+  --bg-card: #f8fafc;
+  --text-primary: #162040;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --success: #22c55e;
+  --warning: #eab308;
+  --error: #ef4444;
+  --nav-bg: #1e293b;
+  --nav-text: #cbd5e1;
+  --nav-accent: #38bdf8;
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+}
+
+/* Dark theme */
+body.dark {
+  --bg-primary: #0b1322;
+  --bg-secondary: #111827;
+  --bg-card: #1e293b;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #38bdf8;
+  --accent-light: #1e3a5f;
+  --border: #334155;
+  --border-strong: #475569;
+  --nav-bg: #0f172a;
+  --nav-text: #94a3b8;
+  --nav-accent: #38bdf8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  transition: background 0.2s, color 0.2s;
+}
+
+#root {
+  max-width: 100%;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4 {
+  color: var(--text-primary);
+  margin-top: 0;
+}
+
+input, select, textarea {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+button {
+  font-family: var(--sans);
+  cursor: pointer;
+}
+
+table {
+  color: var(--text-primary);
+}
+
+th {
+  background: var(--bg-card) !important;
+  color: var(--text-primary);
+  border-bottom-color: var(--border-strong) !important;
+}
+
+td {
+  border-bottom-color: var(--border) !important;
+}
+
+tr:hover {
+  background: var(--bg-card) !important;
+}
+
+code {
+  font-family: var(--mono);
+  background: var(--bg-card);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ── 글꼴 크기 스케일 (JS에서 --sqm-font-scale 동적 설정) ── */
+:root {
+  --sqm-font-scale: 1.0;
+}
+
+body {
+  font-size: calc(14px * var(--sqm-font-scale));
+}
+
+/* 글꼴 스케일이 적용될 주요 요소들 */
+input, button, select, textarea {
+  font-size: calc(13px * var(--sqm-font-scale));
+}
+
+table td, table th {
+  font-size: calc(12px * var(--sqm-font-scale));
+}

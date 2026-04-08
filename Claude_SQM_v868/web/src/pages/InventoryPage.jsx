@@ -1,14 +1,40 @@
 import { useEffect, useState } from 'react';
 import { getInventoryFilters, searchInventory } from '../api/inventoryApi';
 
+const COLUMN_DEFS = [
+  { key: 'no', label: 'No.', defaultVisible: true, align: 'center', render: (row, idx, page) => (page - 1) * 50 + idx + 1 },
+  { key: 'lot_no', label: 'LOT NO', defaultVisible: true, align: 'left', isLink: true },
+  { key: 'sap_no', label: 'SAP NO', defaultVisible: true, align: 'left' },
+  { key: 'bl_no', label: 'BL NO', defaultVisible: true, align: 'left' },
+  { key: 'product_name', label: 'PRODUCT', defaultVisible: true, align: 'left' },
+  { key: 'status', label: 'STATUS', defaultVisible: true, align: 'center', isBadge: true },
+  { key: 'current_weight', label: 'Balance(Kg)', defaultVisible: true, align: 'right', fmt: true },
+  { key: 'net_weight', label: 'NET(Kg)', defaultVisible: true, align: 'right', fmt: true },
+  { key: 'container_no', label: 'CONTAINER', defaultVisible: true, align: 'left' },
+  { key: 'mxbg_pallet', label: 'MXBG', defaultVisible: true, align: 'center' },
+  { key: 'tonbag_uid', label: 'TONBAG UID', defaultVisible: false, align: 'left' },
+  { key: 'tonbag_no', label: 'TONBAG NO', defaultVisible: false, align: 'center' },
+  { key: 'location', label: 'LOCATION', defaultVisible: true, align: 'center' },
+  { key: 'weight_kg', label: 'Weight(Kg)', defaultVisible: false, align: 'right', fmt: true },
+  { key: 'salar_invoice_no', label: 'INVOICE NO', defaultVisible: true, align: 'left' },
+  { key: 'ship_date', label: 'SHIP DATE', defaultVisible: true, align: 'center' },
+  { key: 'arrival_date', label: 'ARRIVAL', defaultVisible: true, align: 'center' },
+  { key: 'con_return', label: 'CON RETURN', defaultVisible: true, align: 'center' },
+  { key: 'free_time', label: 'FREE TIME', defaultVisible: true, align: 'center' },
+  { key: 'warehouse', label: 'WH', defaultVisible: false, align: 'center' },
+  { key: 'customs', label: 'CUSTOMS', defaultVisible: false, align: 'center' },
+  { key: 'initial_weight', label: 'Inbound(Kg)', defaultVisible: false, align: 'right', fmt: true },
+  { key: 'picked_weight', label: 'Outbound(Kg)', defaultVisible: false, align: 'right', fmt: true },
+  { key: 'is_sample', label: 'SAMPLE', defaultVisible: false, align: 'center', render: (row) => row.is_sample ? 'Y' : '' },
+  { key: 'inbound_date', label: 'INBOUND', defaultVisible: false, align: 'center' },
+];
+
 const thStyle = {
   padding: '8px 6px', textAlign: 'center', background: '#f8fafc',
   borderBottom: '2px solid #e2e8f0', fontSize: 11, fontWeight: 700,
   position: 'sticky', top: 0, whiteSpace: 'nowrap',
 };
-const tdStyle = { padding: '5px 6px', borderBottom: '1px solid #f1f5f9', fontSize: 12, whiteSpace: 'nowrap' };
-const tdRight = { ...tdStyle, textAlign: 'right' };
-const tdCenter = { ...tdStyle, textAlign: 'center' };
+const tdBase = { padding: '5px 6px', borderBottom: '1px solid #f1f5f9', fontSize: 12, whiteSpace: 'nowrap' };
 
 function StatusBadge({ status }) {
   const colors = {
@@ -31,11 +57,18 @@ function fmt(v) {
   return n ? n.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '0';
 }
 
+function initVisibleCols() {
+  const v = {};
+  COLUMN_DEFS.forEach(c => { v[c.key] = c.defaultVisible; });
+  return v;
+}
+
 export default function InventoryPage({ onLotClick }) {
   const [filters, setFilters] = useState(null);
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [visibleCols, setVisibleCols] = useState(initVisibleCols);
 
   const [search, setSearch] = useState({
     keyword: '', status: '', product_name: '', location: '', lot_no: '', page: 1,
@@ -63,11 +96,26 @@ export default function InventoryPage({ onLotClick }) {
   const onReset = () => setSearch({ keyword: '', status: '', product_name: '', location: '', lot_no: '', page: 1 });
   const totalPages = results ? Math.max(1, Math.ceil(results.total / 50)) : 1;
 
+  const toggleCol = (key) => setVisibleCols(prev => ({ ...prev, [key]: !prev[key] }));
+  const activeCols = COLUMN_DEFS.filter(c => visibleCols[c.key]);
+
+  const renderCell = (col, row, idx) => {
+    if (col.render) return col.render(row, idx, results?.page || 1);
+    if (col.isBadge) return <StatusBadge status={row[col.key]} />;
+    if (col.isLink) return (
+      <span style={{ cursor: onLotClick ? 'pointer' : 'default', color: onLotClick ? '#2563eb' : undefined, textDecoration: onLotClick ? 'underline' : undefined }}
+            onClick={() => onLotClick && onLotClick(row.lot_no)}>{row.lot_no}</span>
+    );
+    const val = row[col.key];
+    if (col.fmt) return fmt(val);
+    return val || '-';
+  };
+
   return (
     <div style={{ padding: 24 }}>
       <h2 style={{ marginBottom: 16 }}>SQM Inventory Search</h2>
 
-      <form onSubmit={onSearch} style={{ marginBottom: 14, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+      <form onSubmit={onSearch} style={{ marginBottom: 10, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         <input placeholder="Keyword" value={search.keyword}
           onChange={(e) => setSearch((s) => ({ ...s, keyword: e.target.value }))}
           style={{ padding: 5, width: 180, fontSize: 12 }} />
@@ -93,6 +141,22 @@ export default function InventoryPage({ onLotClick }) {
         <button type="button" onClick={onReset} style={{ padding: '5px 10px', fontSize: 12 }}>Reset</button>
       </form>
 
+      {/* Column Toggle Bar */}
+      <div style={{
+        display: 'flex', flexWrap: 'wrap', gap: '2px 10px', padding: '6px 10px',
+        background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, marginBottom: 10,
+        fontSize: 11, alignItems: 'center',
+      }}>
+        <span style={{ fontWeight: 700, color: '#475569', marginRight: 4 }}>Columns:</span>
+        {COLUMN_DEFS.map(col => (
+          <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: '#64748b' }}>
+            <input type="checkbox" checked={!!visibleCols[col.key]} onChange={() => toggleCol(col.key)}
+              style={{ width: 13, height: 13 }} />
+            {col.label}
+          </label>
+        ))}
+      </div>
+
       {error && <div style={{ color: 'red', marginBottom: 8, padding: 8, background: '#fef2f2', borderRadius: 6, fontSize: 12 }}>Error: {error}</div>}
       {loading && <div style={{ padding: 12, color: '#475569' }}>Loading...</div>}
 
@@ -108,63 +172,27 @@ export default function InventoryPage({ onLotClick }) {
           </div>
 
           <div style={{ overflow: 'auto', maxHeight: '72vh', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 2200 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: activeCols.length * 100 }}>
               <thead>
                 <tr>
-                  <th style={thStyle}>No.</th>
-                  <th style={thStyle}>LOT NO</th>
-                  <th style={thStyle}>SAP NO</th>
-                  <th style={thStyle}>BL NO</th>
-                  <th style={thStyle}>PRODUCT</th>
-                  <th style={thStyle}>STATUS</th>
-                  <th style={thStyle}>Balance(Kg)</th>
-                  <th style={thStyle}>NET(Kg)</th>
-                  <th style={thStyle}>CONTAINER</th>
-                  <th style={thStyle}>MXBG</th>
-                  <th style={thStyle}>TONBAG UID</th>
-                  <th style={thStyle}>TONBAG NO</th>
-                  <th style={thStyle}>LOCATION</th>
-                  <th style={thStyle}>Weight(Kg)</th>
-                  <th style={thStyle}>INVOICE NO</th>
-                  <th style={thStyle}>SHIP DATE</th>
-                  <th style={thStyle}>ARRIVAL</th>
-                  <th style={thStyle}>CON RETURN</th>
-                  <th style={thStyle}>FREE TIME</th>
-                  <th style={thStyle}>WAREHOUSE</th>
-                  <th style={thStyle}>SAMPLE</th>
-                  <th style={thStyle}>INBOUND</th>
+                  {activeCols.map(col => (
+                    <th key={col.key} style={thStyle}>{col.label}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {results.rows.length === 0 ? (
-                  <tr><td colSpan={22} style={{ ...tdCenter, padding: 24, color: '#94a3b8' }}>No results found</td></tr>
+                  <tr><td colSpan={activeCols.length} style={{ ...tdBase, textAlign: 'center', padding: 24, color: '#94a3b8' }}>No results found</td></tr>
                 ) : (
                   results.rows.map((row, idx) => (
                     <tr key={row.tonbag_id}
                         onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
                         onMouseLeave={(e) => e.currentTarget.style.background = ''}>
-                      <td style={tdCenter}>{(results.page - 1) * 50 + idx + 1}</td>
-                      <td style={{ ...tdStyle, cursor: onLotClick ? 'pointer' : 'default', color: onLotClick ? '#2563eb' : undefined, textDecoration: onLotClick ? 'underline' : undefined }} onClick={() => onLotClick && onLotClick(row.lot_no)}>{row.lot_no}</td>
-                      <td style={tdStyle}>{row.sap_no || '-'}</td>
-                      <td style={tdStyle}>{row.bl_no || '-'}</td>
-                      <td style={tdStyle}>{row.product_name || '-'}</td>
-                      <td style={tdCenter}><StatusBadge status={row.status} /></td>
-                      <td style={tdRight}>{fmt(row.current_weight)}</td>
-                      <td style={tdRight}>{fmt(row.net_weight)}</td>
-                      <td style={tdStyle}>{row.container_no || '-'}</td>
-                      <td style={tdCenter}>{row.mxbg_pallet || '-'}</td>
-                      <td style={tdStyle}>{row.tonbag_uid || '-'}</td>
-                      <td style={tdCenter}>{row.tonbag_no || '-'}</td>
-                      <td style={tdCenter}>{row.location || '-'}</td>
-                      <td style={tdRight}>{fmt(row.weight_kg)}</td>
-                      <td style={tdStyle}>{row.salar_invoice_no || '-'}</td>
-                      <td style={tdCenter}>{row.ship_date || '-'}</td>
-                      <td style={tdCenter}>{row.arrival_date || '-'}</td>
-                      <td style={tdCenter}>{row.con_return || '-'}</td>
-                      <td style={tdCenter}>{row.free_time || '-'}</td>
-                      <td style={tdCenter}>{row.warehouse || '-'}</td>
-                      <td style={tdCenter}>{row.is_sample ? 'Y' : ''}</td>
-                      <td style={tdCenter}>{row.inbound_date || '-'}</td>
+                      {activeCols.map(col => (
+                        <td key={col.key} style={{ ...tdBase, textAlign: col.align || 'left' }}>
+                          {renderCell(col, row, idx)}
+                        </td>
+                      ))}
                     </tr>
                   ))
                 )}

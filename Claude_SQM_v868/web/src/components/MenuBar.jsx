@@ -19,12 +19,21 @@ const menuData = [
     label: '입고',
     items: [
       { label: '입고 파싱 (PDF/Excel)', action: 'inboundModal' },
+      { label: '반품(재입고)', action: 'returnPage' },
+      { label: 'D/O 후속 연결', action: 'doUpdateModal' },
     ],
   },
   {
     label: '출고',
     items: [
       { label: '출고 처리', action: 'outboundModal' },
+      { label: 'Allocation 입력', action: 'allocationModal' },
+    ],
+  },
+  {
+    label: '위치',
+    items: [
+      { label: '위치 매핑', action: 'locationMapModal' },
     ],
   },
 ];
@@ -37,6 +46,12 @@ const navLinks = [
   { to: '/outbound', label: 'Outbound' },
   { to: '/picked', label: 'Picked' },
   { to: '/sold', label: 'Sold' },
+  { to: '/move', label: 'Move' },
+  { to: '/scan', label: 'Scan' },
+  { to: '/log', label: 'Log' },
+  { to: '/summary', label: 'Summary' },
+  { to: '/cargo', label: 'Cargo' },
+  { to: '/return', label: 'Return' },
 ];
 
 const styles = {
@@ -86,7 +101,7 @@ const styles = {
   },
 };
 
-export default function MenuBar({ onAction }) {
+export default function MenuBar({ onAction, dark, toggleTheme }) {
   const [openMenu, setOpenMenu] = useState(null);
   const barRef = useRef(null);
   const location = useLocation();
@@ -157,6 +172,12 @@ export default function MenuBar({ onAction }) {
           </NavLink>
         ))}
         <span style={styles.currentTab}>[ {currentTab} ]</span>
+        {toggleTheme && (
+          <button onClick={toggleTheme} title={dark ? 'Light Mode' : 'Dark Mode'}
+            style={{ marginLeft: 8, padding: '4px 8px', fontSize: 14, background: 'none', border: '1px solid #475569', borderRadius: 4, cursor: 'pointer', color: '#cbd5e1' }}>
+            {dark ? '☀️' : '🌙'}
+          </button>
+        )}
       </div>
     </nav>
   );

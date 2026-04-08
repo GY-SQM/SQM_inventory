@@ -29,6 +29,10 @@ htmlcov/
 venv/
 .venv/
 
+# Node.js
+node_modules/
+.vite/
+
 # Database (런타임 생성)
 *.db
 *.db-journal
@@ -135,3 +139,10 @@ Claude_SQM_v854 - 복사본 (2)/
 Claude_SQM_v865 - 복사본/
 Claude_SQM_v867 - 복사본/
 Claude_SQM_v867 - 복사본 (2)/
+
+# GPT 패치/임시 폴더
+GPT_Claude_SQM_v870_FULL_FIXED_20260406/
+GPT_v870_menu_patch_and_run.ps1
+
+# 런타임 생성 폴더
+found/

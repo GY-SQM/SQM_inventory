@@ -1,0 +1,235 @@
+/* ═══════════════════════════════════════════════════════════════════
+   SQM V869 반응형 CSS — Ruby | 2026-04-06
+   브레이크포인트:
+     PC       : 1024px 초과
+     태블릿   : 600px ~ 1024px
+     모바일   : 600px 미만
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── 기본 리셋 ─────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; overflow-x: hidden; }
+
+/* ── 태블릿 (600px ~ 1024px) ───────────────────────────────────── */
+@media (max-width: 1024px) {
+
+  /* MenuBar: 메뉴 버튼 글자 축소 + 가로 스크롤 허용 */
+  nav[data-sqm-menubar] button {
+    padding: 6px 7px !important;
+    font-size: 11px !important;
+  }
+
+  /* 사이드바: 아이콘만 표시 (라벨 숨김) */
+  aside[data-sqm-sidebar] {
+    width: 52px !important;
+    min-width: 52px !important;
+  }
+  aside[data-sqm-sidebar] span[data-label] {
+    display: none !important;
+  }
+  aside[data-sqm-sidebar] button {
+    width: 44px !important;
+    padding: 8px 0 !important;
+  }
+
+  /* 메인 콘텐츠 패딩 축소 */
+  .sqm-main-content {
+    padding: 8px 10px !important;
+  }
+
+  /* 재고 및 확인 패널: 폰트 축소 */
+  .sqm-summary-panel table {
+    font-size: 10px !important;
+  }
+  .sqm-summary-panel th,
+  .sqm-summary-panel td {
+    padding: 3px 6px !important;
+  }
+
+  /* 테이블 가로 스크롤 */
+  .sqm-table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 검색바 줄바꿈 허용 */
+  .sqm-searchbar {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .sqm-searchbar input,
+  .sqm-searchbar select {
+    font-size: 11px !important;
+    padding: 4px 8px !important;
+  }
+}
+
+/* ── 모바일 (600px 미만) ───────────────────────────────────────── */
+@media (max-width: 600px) {
+
+  /* MenuBar: 브랜드명만 표시, 메뉴버튼 햄버거로 대체 */
+  nav[data-sqm-menubar] .sqm-menu-btn-group {
+    display: none !important;
+  }
+  nav[data-sqm-menubar] .sqm-hamburger {
+    display: flex !important;
+  }
+  nav[data-sqm-menubar] {
+    padding: 0 8px !important;
+    min-height: 46px !important;
+  }
+
+  /* 사이드바: 하단 탭바로 전환 */
+  aside[data-sqm-sidebar] {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    height: 56px !important;
+    flex-direction: row !important;
+    justify-content: space-around !important;
+    align-items: center !important;
+    padding: 0 !important;
+    border-right: none !important;
+    border-top: 1px solid #1e293b !important;
+    z-index: 100 !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+  }
+  aside[data-sqm-sidebar] .sqm-sidebar-bottom {
+    display: none !important;
+  }
+  aside[data-sqm-sidebar] .sqm-sep {
+    display: none !important;
+  }
+  aside[data-sqm-sidebar] button {
+    width: auto !important;
+    min-width: 52px !important;
+    flex-direction: column !important;
+    padding: 4px 8px !important;
+    border-left: none !important;
+    border-top: 3px solid transparent !important;
+    font-size: 9px !important;
+  }
+  aside[data-sqm-sidebar] button.active {
+    border-left: none !important;
+    border-top: 3px solid var(--tab-color, #38bdf8) !important;
+  }
+  aside[data-sqm-sidebar] span[data-label] {
+    display: block !important;
+    font-size: 8px !important;
+    margin-top: 2px !important;
+  }
+
+  /* 메인 콘텐츠: 하단 탭바 여백 */
+  .sqm-page-content {
+    padding-bottom: 64px !important;
+  }
+
+  /* 재고 및 확인 패널: 접기/펼치기 기본 접힘 */
+  .sqm-summary-panel {
+    font-size: 10px !important;
+  }
+  .sqm-summary-panel th,
+  .sqm-summary-panel td {
+    padding: 2px 4px !important;
+    font-size: 9px !important;
+    white-space: nowrap !important;
+  }
+
+  /* LOT 리스트 테이블: 핵심 컬럼만 표시 */
+  .sqm-lot-table th:nth-child(n+8),
+  .sqm-lot-table td:nth-child(n+8) {
+    display: none !important;
+  }
+
+  /* ALERTS 패널 */
+  .sqm-alerts {
+    font-size: 11px !important;
+  }
+  .sqm-alerts-footer {
+    flex-wrap: wrap !important;
+    gap: 4px !important;
+    font-size: 10px !important;
+  }
+
+  /* 검색바: 세로 배치 */
+  .sqm-searchbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .sqm-searchbar input,
+  .sqm-searchbar select {
+    width: 100% !important;
+    font-size: 13px !important;
+    padding: 8px 10px !important;
+  }
+  .sqm-searchbar button {
+    width: 100% !important;
+    padding: 8px !important;
+    font-size: 13px !important;
+  }
+
+  /* 카드: 2열 그리드 */
+  .sqm-status-cards {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+  }
+
+  /* 모달: 전체 화면 */
+  .sqm-modal-content {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    border-radius: 0 !important;
+    overflow-y: auto !important;
+  }
+
+  /* 페이지네이션 */
+  .sqm-pagination {
+    font-size: 11px !important;
+  }
+  .sqm-pagination button {
+    padding: 4px 10px !important;
+    font-size: 11px !important;
+  }
+
+  /* 헤더 패딩 */
+  .sqm-panel-header {
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+  }
+}
+
+/* ── 터치 디바이스 공통 ────────────────────────────────────────── */
+@media (hover: none) and (pointer: coarse) {
+  /* 터치 영역 최소 44px */
+  button, a, select, input[type="checkbox"] {
+    min-height: 36px;
+  }
+  /* 테이블 행 터치 영역 확대 */
+  table tbody tr td {
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+  }
+  /* 호버 효과 제거 */
+  button:hover {
+    opacity: 0.85;
+  }
+}
+
+/* ── 가로모드 모바일 ───────────────────────────────────────────── */
+@media (max-width: 900px) and (orientation: landscape) {
+  aside[data-sqm-sidebar] {
+    height: 48px !important;
+  }
+  aside[data-sqm-sidebar] button {
+    font-size: 8px !important;
+    padding: 2px 6px !important;
+  }
+  .sqm-page-content {
+    padding-bottom: 56px !important;
+  }
+}

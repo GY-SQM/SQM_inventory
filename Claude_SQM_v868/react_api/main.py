@@ -30,6 +30,10 @@ from react_api.routes.search import router as search_router
 from react_api.routes.tools import router as tools_router
 from react_api.routes.advanced import router as advanced_router
 from react_api.routes.ai_dashboard import router as ai_router
+from react_api.routes.return_tab import router as return_router
+from react_api.routes.return_write import router as return_write_router
+from react_api.routes.do_update import router as do_update_router
+from react_api.routes.location_bulk import router as location_bulk_router
 
 app = FastAPI(
     title="SQM API",
@@ -61,6 +65,10 @@ app.include_router(search_router)
 app.include_router(tools_router)
 app.include_router(advanced_router)
 app.include_router(ai_router)
+app.include_router(return_router)
+app.include_router(return_write_router)
+app.include_router(do_update_router)
+app.include_router(location_bulk_router)
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])

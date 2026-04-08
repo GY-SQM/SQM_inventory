@@ -1,102 +1,78 @@
 @echo off
-chcp 65001 >nul
-title SQM v867 Master Runner
+chcp 949 > nul
 
-echo ============================================
-echo   SQM v867 Master Runner
-echo   %date% %time%
-echo ============================================
+F:
+cd "F:\���α׷�\Sqm �������\Claude_SQM_v868"
+echo.
+echo ROOT: %CD%
 echo.
 
-cd /d "%~dp0"
-set "LOG=logs\run_log.txt"
-
-:: logs 디렉토리 확인
-if not exist logs mkdir logs
-
-:: ===== Pre-Test =====
-echo [Pre-Test] 시작...
-echo %date% %time% [Pre-Test] 시작 >> %LOG%
-
-:: 1. .env 확인
-if not exist .env (
-    echo [FAIL] .env 파일 없음
-    echo %date% %time% [FAIL] .env 없음 >> %LOG%
-    goto :fail
+if not exist "react_api\main.py" (
+    echo [FAIL] react_api not found
+    exit /b 1
 )
-echo   [OK] .env 존재
+echo [OK] react_api
 
-:: 2. MASTER.md 확인
-if not exist "MASTER_FINAL_v867_통합완성본.md" (
-    echo [FAIL] MASTER 파일 없음
-    echo %date% %time% [FAIL] MASTER 없음 >> %LOG%
-    goto :fail
+if not exist ".env" (
+    echo [FAIL] .env not found
+    exit /b 1
 )
-echo   [OK] MASTER 파일 존재
+echo [OK] .env
 
-:: 3. Bridge 파일 확인
 if not exist "scripts\telegram_bridge.py" (
-    echo [FAIL] telegram_bridge.py 없음
-    echo %date% %time% [FAIL] bridge 없음 >> %LOG%
-    goto :fail
+    echo [FAIL] telegram_bridge.py not found
+    exit /b 1
 )
-echo   [OK] Bridge 파일 존재
+echo [OK] telegram_bridge.py
 
-:: 4. requests 패키지 확인
-python -c "import requests" 2>nul
-if %errorlevel% neq 0 (
-    echo [INFO] requests 패키지 설치 중...
-    pip install requests -q
+if not exist "scripts\watchdog.py" (
+    echo [FAIL] watchdog.py not found
+    exit /b 1
 )
-echo   [OK] requests 패키지
+echo [OK] watchdog.py
 
-:: 5. 절전 방지
-powercfg -change -standby-timeout-ac 0
-powercfg -change -monitor-timeout-ac 0
-powercfg -change -hibernate-timeout-ac 0
-echo   [OK] 절전 방지 설정
+if not exist "MASTER_FINAL_v868_���տϼ���.md" (
+    echo [FAIL] MASTER not found
+    exit /b 1
+)
+echo [OK] MASTER file found
+
+"C:\Users\���⵿\.local\bin\claude.exe" --version > nul 2>&1
+if errorlevel 1 (
+    echo [FAIL] Claude not found
+    exit /b 1
+)
+echo [OK] Claude Code OK
 
 echo.
-echo [Pre-Test] 모두 통과!
-echo %date% %time% [Pre-Test] 모두 통과 >> %LOG%
-echo.
-
-:: ===== 실행 모드 선택 =====
-echo 실행 모드:
-echo   1. Telegram Bridge (권장 - 원격 모니터링 가능)
-echo   2. Claude 직접 실행 (질문 없이 자동 진행)
-echo   3. 종료
-echo.
-set /p MODE="선택 (1/2/3): "
-
-if "%MODE%"=="1" (
-    echo.
-    echo Telegram Bridge 실행...
-    echo %date% %time% Bridge 실행 >> %LOG%
-    python scripts\telegram_bridge.py
-) else if "%MODE%"=="2" (
-    echo.
-    echo Claude 직접 실행...
-    echo %date% %time% Claude 직접 실행 >> %LOG%
-    claude --dangerously-skip-permissions -p "이 파일을 읽고 모든 지시를 수행하라: MASTER_FINAL_v867_통합완성본.md"
-) else (
-    echo 종료.
-)
-
-:: 절전 복구
-powercfg -change -standby-timeout-ac 30
-powercfg -change -monitor-timeout-ac 10
-
-goto :end
-
-:fail
+echo [ALL PRE-TESTS PASSED]
 echo.
 echo ============================================
-echo   Pre-Test 실패. 다음 단계 진행 금지.
+echo   1. Telegram Bridge + Watchdog
+echo      Claude Code : NEW window
+echo      Bridge      : THIS window
+echo   2. Claude Direct Run
+echo   3. Exit
 echo ============================================
-echo %date% %time% [ABORT] Pre-Test 실패 >> %LOG%
-pause
+echo.
+choice /C 123 /T 10 /D 1 /M "Select (auto 1 after 10sec)"
+if errorlevel 3 goto end
+if errorlevel 2 goto direct
+goto bridge
+
+:bridge
+echo.
+echo [STEP 1] Claude Code new window opening...
+start "Claude Code" cmd /k "F: && cd "F:\���α׷�\Sqm �������\Claude_SQM_v868" && "C:\Users\���⵿\.local\bin\claude.exe" --dangerously-skip-permissions"
+timeout /t 3 > nul
+echo [STEP 2] Starting Watchdog + Bridge...
+python "scripts\watchdog.py"
+goto end
+
+:direct
+echo.
+"C:\Users\���⵿\.local\bin\claude.exe" --dangerously-skip-permissions
+goto end
 
 :end
-echo.
-echo %date% %time% 실행 완료 >> %LOG%
+echo Done: %date% %time%

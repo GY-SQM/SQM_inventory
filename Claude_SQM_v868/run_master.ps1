@@ -17,7 +17,7 @@ function Write-Log($msg) {
 }
 
 Write-Host "============================================"
-Write-Host "  SQM v867 Master Runner (PowerShell)"
+Write-Host "  SQM v868 Master Runner (PowerShell)"
 Write-Host "  $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Write-Host "============================================"
 Write-Host ""
@@ -33,7 +33,7 @@ if (-not (Test-Path ".env")) {
 Write-Host "  [OK] .env 존재"
 
 # 2. MASTER
-$MasterFile = "MASTER_FINAL_v867_통합완성본.md"
+$MasterFile = "MASTER_FINAL_v868_통합완성본.md"
 if (-not (Test-Path $MasterFile)) {
     Write-Log "[FAIL] MASTER 파일 없음"
     exit 1
