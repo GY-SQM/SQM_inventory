@@ -1,0 +1,66 @@
+/* ═══════════════════════════════════════════════════════════════════
+   SQM V869 레이아웃 CSS — Ruby | 2026-04-06
+   PC 전용 시스템 — 사이드바 항상 좌측 고정
+   반응형(모바일/태블릿) 제거
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── 기본 리셋 ─────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; overflow-x: hidden; }
+
+/* ── 사이드바: 항상 좌측 고정 (PC 전용) ───────────────────────── */
+aside[data-sqm-sidebar] {
+  position: relative !important;
+  width: 72px !important;
+  min-width: 72px !important;
+  height: calc(100vh - 42px) !important;
+  flex-direction: column !important;
+  flex-shrink: 0 !important;
+  bottom: auto !important;
+  left: auto !important;
+  right: auto !important;
+  border-right: 1px solid var(--nav-border) !important;
+  border-top: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+aside[data-sqm-sidebar] span[data-label] {
+  display: block !important;
+  font-size: 9px !important;
+}
+
+aside[data-sqm-sidebar] button {
+  width: 100% !important;
+  flex-direction: column !important;
+  padding: 8px 4px !important;
+  border-left: 3px solid transparent !important;
+  border-top: none !important;
+}
+
+aside[data-sqm-sidebar] .sqm-sidebar-bottom {
+  display: flex !important;
+}
+
+/* ── 메인 콘텐츠 ───────────────────────────────────────────────── */
+.sqm-page-content {
+  padding-bottom: 0 !important;
+  overflow-x: auto !important;
+}
+
+/* ── 테이블 가로 스크롤 ────────────────────────────────────────── */
+.sqm-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── 재고 및 확인 패널 ─────────────────────────────────────────── */
+.sqm-summary-panel table {
+  font-size: 12px;
+}
+
+/* ── 검색바 ────────────────────────────────────────────────────── */
+.sqm-searchbar {
+  flex-wrap: wrap;
+  gap: 6px;
+}
