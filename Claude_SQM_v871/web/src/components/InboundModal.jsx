@@ -29,6 +29,25 @@ const DOC_DEFS = [
   { key: 'do', label: '🚢 DO (선택)',          required: false, color: '#64748b' },
 ];
 
+/**
+ * 파일명에서 문서 유형(bl/pl/fa/do)을 자동 감지합니다.
+ * Android에서 폴더 선택 대신 여러 파일을 선택할 때 사용합니다.
+ * 우선순위: DO > BL > PL > FA (DO/BL은 고유 키워드로 오탐이 적음)
+ * @param {string} name - 파일명
+ * @returns {'bl'|'pl'|'fa'|'do'|null}
+ */
+export function detectDocType(name) {
+  const n = name.toLowerCase();
+  // _ 도 구분자로 처리: (?:^|[^a-z0-9]) ... (?:[^a-z0-9]|$)
+  // [_\s.-]? 로 구분자 제한 (임의 문자 .? 미사용)
+  const has = (pat) => pat.test(n);
+  if (has(/delivery[_\s.-]?order/) || has(/(?:^|[^a-z0-9])do(?:[^a-z0-9]|$)/)) return 'do';
+  if (has(/bill[_\s.-]?of[_\s.-]?lading/) || has(/선하증권/) || has(/(?:^|[^a-z0-9])bl(?:[^a-z0-9]|$)/)) return 'bl';
+  if (has(/packing[_\s.-]?list/) || has(/packinglist/) || has(/(?:^|[^a-z0-9])pl(?:[^a-z0-9]|$)/)) return 'pl';
+  if (has(/commercial[_\s.-]?invoice/) || has(/invoice/) || has(/(?:^|[^a-z0-9])fa(?:[^a-z0-9]|$)/)) return 'fa';
+  return null;
+}
+
 function DocCard({ def, file, onChange }) {
   return (
     <div style={{
@@ -56,6 +75,91 @@ function DocCard({ def, file, onChange }) {
             클릭하여 PDF 선택
           </div>
         </label>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 안드로이드/모바일에서 여러 PDF를 한 번에 선택해 자동 분류하는 컴포넌트.
+ * Android 브라우저는 webkitdirectory를 지원하지 않으므로
+ * multiple 속성으로 여러 파일을 선택한 뒤 파일명으로 자동 분류합니다.
+ */
+function AndroidMultiUpload({ onAssign }) {
+  const [preview, setPreview] = useState(null); // { bl, pl, fa, do, unmatched }
+
+  const handleChange = (e) => {
+    const selected = Array.from(e.target.files || []);
+    if (!selected.length) return;
+
+    const result = { bl: null, pl: null, fa: null, do: null, unmatched: [], duplicates: [] };
+    for (const file of selected) {
+      const type = detectDocType(file.name);
+      if (type && !result[type]) {
+        result[type] = file;
+      } else if (type && result[type]) {
+        // 같은 유형이 이미 배정됨 → 중복으로 별도 처리
+        result.duplicates.push({ file, type });
+      } else {
+        result.unmatched.push(file);
+      }
+    }
+    setPreview(result);
+    // 미리보기를 설정하면 상위 컴포넌트에 즉시 반영
+    onAssign({ bl: result.bl, pl: result.pl, fa: result.fa, do: result.do });
+  };
+
+  return (
+    <div style={{
+      background: '#0c1a2e', border: '2px dashed #1d4ed8',
+      borderRadius: 10, padding: '14px 16px', marginBottom: 14,
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#60a5fa', marginBottom: 8 }}>
+        📱 안드로이드 / 모바일 파일 선택
+      </div>
+      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>
+        여러 PDF 파일을 한 번에 선택하면 파일명 기준으로 자동 분류합니다.<br />
+        <span style={{ color: '#94a3b8' }}>
+          (파일명에 BL / PL / FA / DO 포함 시 자동 배정)
+        </span>
+      </div>
+      <label style={{
+        display: 'inline-block', padding: '8px 18px',
+        background: '#1d4ed8', color: '#fff', borderRadius: 6,
+        fontSize: 13, fontWeight: 600, cursor: 'pointer',
+      }}>
+        📂 파일 선택 (여러 개)
+        <input
+          type="file"
+          accept=".pdf"
+          multiple
+          onChange={handleChange}
+          style={{ display: 'none' }}
+        />
+      </label>
+
+      {preview && (
+        <div style={{ marginTop: 12, fontSize: 11 }}>
+          {DOC_DEFS.map(def => (
+            <div key={def.key} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '3px 0', color: preview[def.key] ? def.color : '#475569',
+            }}>
+              <span style={{ width: 28, fontWeight: 700 }}>{def.key.toUpperCase()}</span>
+              <span>{preview[def.key] ? `✅ ${preview[def.key].name}` : '— 미배정'}</span>
+            </div>
+          ))}
+          {preview.duplicates?.length > 0 && (
+            <div style={{ marginTop: 6, color: '#f97316' }}>
+              ⚠️ 중복 유형(미배정): {preview.duplicates.map(d => `${d.file.name}(${d.type.toUpperCase()})`).join(', ')}
+            </div>
+          )}
+          {preview.unmatched.length > 0 && (
+            <div style={{ marginTop: 4, color: '#fbbf24' }}>
+              ❓ 유형 미감지: {preview.unmatched.map(f => f.name).join(', ')}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -205,9 +309,17 @@ export default function InboundModal({ open, onClose }) {
       {/* ── Step 1: PDF 서류 업로드 ───────────────────────────────────────── */}
       {step === 'upload' && (
         <div>
-          <p style={{ fontSize: 12, color: '#64748b', marginBottom: 16 }}>
+          <p style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>
             BL + PL + FA 3종 필수 / DO 선택. 선택 후 [파싱 미리보기] 클릭.
           </p>
+
+          {/* ── 안드로이드/모바일: 여러 파일 한 번에 선택 ── */}
+          <AndroidMultiUpload onAssign={assigned => setFiles(prev => ({ ...prev, ...assigned }))} />
+
+          {/* ── PC: 개별 카드 선택 ── */}
+          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+            또는 아래에서 파일을 개별 선택하세요.
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
             {DOC_DEFS.map(def => (
               <DocCard key={def.key} def={def} file={files[def.key]} onChange={f => setFile(def.key, f)} />
