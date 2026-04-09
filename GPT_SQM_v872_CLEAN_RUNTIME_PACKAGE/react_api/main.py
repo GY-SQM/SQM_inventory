@@ -115,8 +115,8 @@ async def lifespan(app: FastAPI):
 # ================================================================
 app = FastAPI(
     title="SQM API",
-    version="0.6.1",                          #  버전 업 (0.6.0 → 0.6.1)
-    description="SQM v871 — P2 개선 #3 에러 알림 적용",
+    version="0.6.2",                          #  버전 업 (0.6.1 → 0.6.2)
+    description="SQM v872 — Clean Runtime Package",
     lifespan=lifespan,
 )
 

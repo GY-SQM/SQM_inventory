@@ -1,9 +1,9 @@
-# SQM v8.6.8 환경변수 설정
-# 파일 위치: F:\프로그램\Sqm 재고관리\Claude_SQM_v868\.env
+# SQM v8.7.2 환경변수 설정
+# 복사 후 이름을 .env 로 변경하세요
 
 # Telegram 봇 설정
-BOT_TOKEN=8665850610:AAFx9Jcti2_jCKqjs1ZxFcHd18FtywO5-h8
-CHAT_ID=538125119
+BOT_TOKEN=YOUR_BOT_TOKEN_HERE
+CHAT_ID=YOUR_CHAT_ID_HERE
 
 # Bridge 설정
 IDLE_TIMEOUT=120
@@ -13,4 +13,4 @@ POLL_INTERVAL=2
 DB_PATH=data/db/sqm_inventory.db
 
 # 관리자 토큰 (API 보안용)
-ADMIN_TOKEN=sqm_admin_2026
+ADMIN_TOKEN=YOUR_ADMIN_TOKEN_HERE

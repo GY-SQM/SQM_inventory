@@ -1,6 +1,6 @@
 {
   "name": "sqm-desktop",
-  "version": "8.7.1",
+  "version": "8.7.2",
   "description": "SQM 재고관리 데스크탑 앱",
   "main": "electron/main.js",
   "scripts": {
