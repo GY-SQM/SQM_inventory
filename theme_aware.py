@@ -23,6 +23,7 @@ SQM v6.3.1 — theme_aware.py (테마 가시성 근본 해결)
   # 3) 기존 하드코딩 색상 안전 변환
   safe_red = ThemeAware.safe_color('#dc2626')  # 다크면 밝은 빨강 반환
 """
+from gui_app_modular.utils.ui_constants import tc
 import logging
 import tkinter as tk
 from tkinter import ttk
@@ -77,7 +78,14 @@ class ThemeAware:
 
     @classmethod
     def is_dark(cls) -> bool:
-        """현재 테마가 다크 모드인지 확인"""
+        """현재 테마가 다크 모드인지 확인 (v8.6.4: _GLOBAL_IS_DARK 우선 참조)"""
+        # 1순위: ui_constants 전역 상태 (set_global_theme에서 관리)
+        try:
+            from gui_app_modular.utils.ui_constants import _GLOBAL_IS_DARK
+            return _GLOBAL_IS_DARK
+        except ImportError:
+            pass
+        # 2순위: 실제 ttk 배경색으로 판단
         try:
             style = ttk.Style()
             bg = style.lookup('TFrame', 'background') or style.lookup('.', 'background')
@@ -156,7 +164,7 @@ class ThemeAware:
             # 다이얼로그 자체 배경 (tk.Toplevel은 네이티브)
             dialog.configure(bg=theme_bg)
         except (tk.TclError, RuntimeError):
-            pass
+            logger.debug("[THEME-FAIL] file=exception in theme_aware.py reason=theme_apply_error")  # noqa
 
         # 생성 후 100ms 후 자식 위젯 스캔 (위젯 생성 완료 보장)
         def _fix_children():
@@ -187,6 +195,11 @@ class ThemeAware:
             visited.add(w_id)
 
             try:
+                # v8.6.4: _tc_skip=True 위젯은 테마 변경에서 보호
+                if getattr(w, '_tc_skip', False):
+                    children = w.winfo_children()
+                    stack.extend(children)
+                    continue
                 # ★ 핵심 수정 #1: ttk.Label hardcoded foreground 처리
                 if isinstance(w, ttk.Label):
                     try:
@@ -197,7 +210,7 @@ class ThemeAware:
                                 safe = cls.safe_color(current_fg)
                                 w.configure(foreground=safe)
                     except (tk.TclError, RuntimeError):
-                        pass
+                        logger.debug("[THEME-FAIL] file=exception in theme_aware.py reason=theme_apply_error")  # noqa
 
                 # tk.Text, tk.Listbox: 배경/전경 동기화
                 elif isinstance(w, (tk.Text, tk.Listbox)):
@@ -205,10 +218,10 @@ class ThemeAware:
                         w.configure(fg=theme_fg, bg=theme_bg,
                                     insertbackground=theme_fg if isinstance(w, tk.Text) else theme_fg)
                         if isinstance(w, tk.Listbox):
-                            w.configure(selectbackground='#2471a3' if is_dark else '#d6eaf8',
-                                        selectforeground='#ffffff' if is_dark else '#1a5276')
+                            w.configure(selectbackground=tc('select_bg'),
+                                        selectforeground=tc('text_primary') if is_dark else '#1a5276')
                     except (tk.TclError, RuntimeError):
-                        pass
+                        logger.debug("[THEME-FAIL] file=exception in theme_aware.py reason=theme_apply_error")  # noqa
 
                 # tk.Label (not ttk): 대비 확인
                 elif isinstance(w, tk.Label) and not isinstance(w, ttk.Label):
@@ -218,21 +231,21 @@ class ThemeAware:
                         if cls._low_contrast(current_fg, current_bg, w):
                             w.configure(fg=theme_fg, bg=theme_bg)
                     except (tk.TclError, RuntimeError):
-                        pass
+                        logger.debug("[THEME-FAIL] file=exception in theme_aware.py reason=theme_apply_error")  # noqa
 
                 # tk.Frame 배경
                 elif isinstance(w, tk.Frame) and not isinstance(w, ttk.Frame):
                     try:
                         w.configure(bg=theme_bg)
                     except (tk.TclError, RuntimeError):
-                        pass
+                        logger.debug("[THEME-FAIL] file=exception in theme_aware.py reason=theme_apply_error")  # noqa
 
                 # 자식 탐색
                 children = w.winfo_children()
                 stack.extend(children)
 
-            except (tk.TclError, RuntimeError):
-                continue
+            except (tk.TclError, RuntimeError) as _e:
+                logger.debug(f"[SUPPRESSED] exception in theme_aware.py: {_e}")  # noqa
 
     @classmethod
     def _needs_fix(cls, fg_color: str, bg_color: str, is_dark: bool) -> bool:
@@ -274,7 +287,7 @@ class ThemeAware:
                 r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
                 return (r * 299 + g * 587 + b * 114) / 1000
         except (ValueError, IndexError):
-            pass
+            logger.debug("[THEME-FAIL] file=exception in theme_aware.py reason=theme_apply_error")  # noqa
         return None
 
     @staticmethod

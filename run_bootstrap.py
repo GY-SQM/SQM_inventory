@@ -1,349 +1,235 @@
 """
-SQM - 실행 부트스트랩 (P3: run.py 슬림화)
-==========================================
-진단, 백업, GUI/CLI 실행 진입 로직.
-run.py는 이 모듈을 import하여 main()만 유지.
+run_bootstrap.py — SQM v8.1.0
+==============================
+
+run.py의 진단·백업·GUI/CLI 로직 분리 모듈.
+run.py에서 import하여 사용.
+
+필수 함수:
+  check_dependencies()       — 필수 패키지 존재 확인
+  print_self_check_report()  — 점검 결과 출력
+  run_backup_only()          — 백업만 실행
+  run_cli()                  — CLI 테스트 모드
+  run_gui()                  — GUI 실행 (메인)
+  run_self_check()           — 환경 점검
+  run_self_diagnostic()      — 상세 진단
+
+[수정이력]
+  2026-03-20  v8.1.0  신규 생성 (run.py에서 분리)
 """
 
 import logging
 import os
 import sys
-from builtins import print as _builtin_print
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+# ─────────────────────────────────────────────────────────────
+# 1. 의존성 확인
+# ─────────────────────────────────────────────────────────────
 
-def _cli_log(*args, **kwargs):
-    """CLI 출력과 파일 로그를 동시에 남기는 공통 출력기."""
-    msg = " ".join(str(a) for a in args)
-    logger.info(msg)
-    _builtin_print(*args, **kwargs)
+REQUIRED_PACKAGES = [
+    ("tkinter",       "tkinter"),
+    ("ttkbootstrap",  "ttkbootstrap"),
+    ("sqlite3",       "sqlite3"),
+]
+
+OPTIONAL_PACKAGES = [
+    ("pandas",        "pandas"),
+    ("openpyxl",      "openpyxl"),
+    ("pdfplumber",    "pdfplumber"),
+    ("fitz",          "PyMuPDF"),
+    ("PIL",           "Pillow"),
+]
 
 
-print = _cli_log
-
-try:
-    from version import APP_NAME, __version__
-except ImportError:
-    __version__ = "0.0.0"
-    APP_NAME = "SQM 재고관리 시스템"
-
-
-def run_self_diagnostic():
-    """
-    부팅 시 Self-Diagnostic.
-    누락 모듈/설정/DB 경로/권한/모델 존재 여부 점검.
-    """
-    print("=" * 50)
-    print(f"🔍 {APP_NAME} v{__version__} 시스템 점검")
-    print("=" * 50)
-
-    issues = []
-    warnings = []
-
-    print("\n1️⃣ 필수 모듈 확인...")
-    required_modules = [
-        ('pandas', 'pandas'),
-        ('openpyxl', 'openpyxl'),
-        ('fitz', 'pymupdf'),
-        ('tkinter', 'tkinter (시스템)'),
-        ('google.genai', 'google-genai (Gemini API) ★필수★'),
-    ]
-    for module, name in required_modules:
+def check_dependencies() -> bool:
+    """필수 패키지 존재 여부 확인. 하나라도 없으면 False."""
+    all_ok = True
+    for mod_name, pkg_name in REQUIRED_PACKAGES:
         try:
-            __import__(module)
-            print(f"   ✅ {name}")
+            __import__(mod_name)
         except ImportError:
-            print(f"   ❌ {name} - 미설치")
-            issues.append(f"필수 모듈 누락: {name}")
-            if module == 'google.genai':
-                print("      → 자동 설치 시도 중...")
-                try:
-                    import subprocess
-                    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'google-genai', '-q'])
-                    __import__(module)
-                    print(f"   ✅ {name} - 자동 설치 성공!")
-                    issues.remove(f"필수 모듈 누락: {name}")
-                except (ValueError, TypeError, KeyError) as e:
-                    print(f"      ❌ 자동 설치 실패: {e}")
-                    print("      → 수동 설치: pip install google-genai")
+            logger.error(f"[의존성] 필수 패키지 없음: {pkg_name}  →  pip install {pkg_name}")
+            all_ok = False
+    return all_ok
 
-    print("\n2️⃣ 선택적 모듈 확인...")
-    for module, name in [
-        ('ttkbootstrap', 'ttkbootstrap (UI 테마)'),
-        ('reportlab', 'reportlab (PDF 생성)'),
-        ('docx', 'python-docx (Word 생성)'),
-    ]:
+
+# ─────────────────────────────────────────────────────────────
+# 2. 자가 점검
+# ─────────────────────────────────────────────────────────────
+
+def run_self_check() -> dict:
+    """환경 점검 — DB 경로, 패키지, 폴더 구조 확인."""
+    results = {
+        "passed": True,
+        "checks": [],
+    }
+
+    def _add(name: str, ok: bool, msg: str = ""):
+        results["checks"].append({"name": name, "ok": ok, "msg": msg})
+        if not ok:
+            results["passed"] = False
+
+    # Python 버전
+    major, minor = sys.version_info[:2]
+    _add("Python 버전", major >= 3 and minor >= 9,
+         f"Python {major}.{minor} (권장: 3.9+)")
+
+    # 필수 패키지
+    for mod_name, pkg_name in REQUIRED_PACKAGES:
         try:
-            __import__(module)
-            print(f"   ✅ {name}")
+            __import__(mod_name)
+            _add(f"패키지 {pkg_name}", True)
         except ImportError:
-            print(f"   ⚠️ {name} - 미설치 (선택적)")
-            warnings.append(f"선택적 모듈 누락: {name}")
+            _add(f"패키지 {pkg_name}", False, f"pip install {pkg_name}")
 
-    print("\n3️⃣ 설정 파일 확인...")
-    try:
-        from core.config import API_KEY_SOURCE, DB_PATH, GEMINI_API_KEY, SETTINGS_FILE
-        if SETTINGS_FILE.exists():
-            print("   ✅ settings.ini 존재")
-        else:
-            print("   ⚠️ settings.ini 없음 (기본값 사용)")
-            warnings.append("settings.ini 없음")
-        if API_KEY_SOURCE == 'ENV':
-            print("   ✅ API 키: 환경변수 (안전)")
-        elif API_KEY_SOURCE == 'INI':
-            print("   ⚠️ API 키: settings.ini (보안 주의)")
-            warnings.append("API 키가 ini에 평문 저장됨")
-        else:
-            print("   ℹ️ API 키: 미설정")
-    except (ValueError, TypeError, KeyError) as e:
-        print(f"   ❌ 설정 로드 실패: {e}")
-        issues.append(f"설정 로드 실패: {e}")
-
-    print("\n4️⃣ 데이터베이스 확인...")
-    try:
-        from core.config import DB_DIR, DB_PATH
-        if DB_DIR.exists():
-            print(f"   ✅ DB 디렉토리 존재: {DB_DIR}")
-        else:
-            print(f"   ℹ️ DB 디렉토리 생성 예정: {DB_DIR}")
-        if DB_PATH.exists():
-            print(f"   ✅ DB 파일 존재: {DB_PATH.name}")
-            if os.access(DB_PATH, os.W_OK):
-                print("   ✅ DB 쓰기 권한 있음")
-            else:
-                print("   ❌ DB 쓰기 권한 없음")
-                issues.append("DB 쓰기 권한 없음")
-        else:
-            print("   ℹ️ DB 파일 없음 (첫 실행 시 생성)")
-    except (ValueError, TypeError, KeyError) as e:
-        print(f"   ❌ DB 경로 확인 실패: {e}")
-        issues.append(f"DB 경로 확인 실패: {e}")
-
-    logger.debug("\n5️⃣ Gemini API 확인...")
-    try:
-        from core.config import GEMINI_API_KEY, GEMINI_MODEL
-        if GEMINI_API_KEY and not GEMINI_API_KEY.startswith('your-'):
-            print("   ✅ API 키 설정됨")
-            print(f"   ℹ️ 모델: {GEMINI_MODEL}")
-            try:
-                from google import genai
-                client = genai.Client(api_key=GEMINI_API_KEY)
-                models = list(client.models.list())
-                print(f"   ✅ Gemini 연결 성공 ({len(models)}개 모델 사용 가능)")
-            except (ValueError, TypeError, KeyError) as api_e:
-                print(f"   ⚠️ Gemini 연결 실패: {api_e}")
-                warnings.append("Gemini API 연결 실패")
-        else:
-            print("   ℹ️ API 키 미설정 (정규식 파서 사용)")
-    except ImportError:
-        print("   ⚠️ google-genai 미설치")
-    except (ValueError, TypeError, KeyError) as e:
-        print(f"   ⚠️ Gemini 확인 실패: {e}")
-
-    logger.debug("\n" + "=" * 50)
-    if issues:
-        print(f"❌ 심각한 문제 {len(issues)}개:")
-        for issue in issues:
-            logger.debug(f"   • {issue}")
-    if warnings:
-        print(f"⚠️ 경고 {len(warnings)}개:")
-        for warn in warnings:
-            logger.debug(f"   • {warn}")
-    if not issues and not warnings:
-        print("✅ 모든 점검 통과!")
-    print("=" * 50)
-    return len(issues) == 0
-
-
-def check_dependencies():
-    """필수 라이브러리 확인"""
-    missing = []
-    optional_missing = []
-    try:
-        __import__("pandas")
-    except ImportError:
-        missing.append("pandas")
-    try:
-        __import__("openpyxl")
-    except ImportError:
-        missing.append("openpyxl")
-    try:
-        import fitz  # noqa: F401
-    except ImportError:
-        optional_missing.append("pymupdf")
-    try:
-        __import__("tkinter")
-    except ImportError:
-        missing.append("tkinter")
-    if optional_missing:
-        print(f"  ⚠️ 선택 라이브러리 미설치: {', '.join(optional_missing)}")
-        print(f"     → PDF 파싱 기능 제한. pip install {' '.join(optional_missing)}")
-    if missing:
-        print("필수 라이브러리가 설치되지 않았습니다:")
-        for lib in missing:
-            print(f"   - {lib}")
-        print("\n설치 명령어:")
-        print(f"   pip install {' '.join(missing)}")
-        return False
-    return True
-
-
-def run_auto_backup():
-    """프로그램 시작 시 자동 백업"""
-    try:
-        from utils.backup import auto_backup_on_startup
-        success, msg = auto_backup_on_startup()
-        if success:
-            print(f"📦 {msg}")
-        else:
-            print(f"⚠️ 백업: {msg}")
-        return success
-    except (ValueError, TypeError, KeyError) as e:
-        print(f"⚠️ 백업 모듈 로드 실패: {e}")
-        return False
-
-
-def run_gui():
-    """GUI 모드 실행"""
-    try:
-        run_auto_backup()
+    # 선택 패키지 (경고만)
+    for mod_name, pkg_name in OPTIONAL_PACKAGES:
         try:
-            print("✅ ttkbootstrap 테마 사용")
+            __import__(mod_name)
+            _add(f"선택 {pkg_name}", True)
         except ImportError:
-            print("ℹ️ 기본 ttk 테마 사용 (ttkbootstrap 미설치)")
-        try:
-            from core.config import GEMINI_API_KEY
-            if GEMINI_API_KEY and len(GEMINI_API_KEY) > 10:
-                print(f"✅ Gemini API 키 로드됨 ({GEMINI_API_KEY[:10]}...)")
-            else:
-                print("ℹ️ Gemini API 키 미설정 (settings.ini 확인)")
-        except ImportError:
-            print("ℹ️ Gemini API 설정 없음")
-        from gui_app_modular import SQMInventoryApp
-        logger.debug("🚀 SQM 재고관리 시스템 GUI 시작...")
-        app = SQMInventoryApp()
-        app.run()
-    except (ValueError, TypeError, KeyError) as e:
-        print(f"❌ GUI 실행 오류: {str(e)}")
-        import traceback
-        traceback.print_exc()
+            # 선택 패키지 없어도 passed=True 유지
+            logger.debug(f"[점검] 선택 패키지 없음: {pkg_name}")
 
-
-def run_backup_only():
-    """백업만 실행"""
-    try:
-        from utils.backup import force_backup, list_backups
-        print("\n📦 강제 백업 실행 중...")
-        success, msg = force_backup()
-        logger.debug(f"   결과: {msg}")
-        print("\n📋 백업 목록:")
-        for backup in list_backups():
-            logger.debug(f"   - {backup['filename']} ({backup['size_str']}) - {backup['created_str']}")
-    except (ValueError, TypeError, KeyError) as e:
-        print(f"❌ 백업 오류: {e}")
-
-
-def run_cli():
-    """CLI 테스트 모드"""
-    try:
-        from dev_tools.test_real_files import test_real_files
-        test_real_files()
-    except ImportError:
-        print("❌ test_real_files 모듈을 찾을 수 없습니다.")
-
-
-def run_self_check():
-    """
-    프로그램 시작 전 환경 점검.
-    DB 경로/권한, 공유폴더, 백업/출력 폴더 권한, 필수 라이브러리.
-    """
-    from pathlib import Path
-    results = {'passed': True, 'checks': [], 'warnings': [], 'errors': []}
-    try:
-        from core.config import BACKUP_DIR, DB_PATH, OUTPUT_DIR
-    except ImportError:
-        results['errors'].append("config.py를 찾을 수 없습니다")
-        results['passed'] = False
-        return results
-
-    db_path = Path(DB_PATH)
-    db_dir = db_path.parent
-    if db_dir.exists():
-        results['checks'].append(f"✅ DB 디렉토리 존재: {db_dir}")
-    else:
+    # data/db 폴더
+    db_dir = Path("data") / "db"
+    if not db_dir.exists():
         try:
             db_dir.mkdir(parents=True, exist_ok=True)
-            results['checks'].append(f"✅ DB 디렉토리 생성됨: {db_dir}")
-        except (OSError, IOError, PermissionError) as e:
-            results['errors'].append(f"❌ DB 디렉토리 생성 실패: {e}")
-            results['passed'] = False
-
-    db_str = str(DB_PATH)
-    is_network = db_str.startswith('\\\\') or db_str.startswith('//')
-    if not is_network and sys.platform == 'win32' and len(db_str) >= 2 and db_str[1] == ':':
-        try:
-            import ctypes
-            drive = db_str[0].upper() + ':'
-            drive_type = ctypes.windll.kernel32.GetDriveTypeW(drive + '\\')
-            if drive_type == 4:
-                is_network = True
-        except (ValueError, TypeError, AttributeError) as e:
-            logger.debug(f"Suppressed: Windows drive type check: {e}")
-    if is_network:
-        results['warnings'].append("⚠️ 공유폴더 감지됨 - DELETE 모드로 동작합니다")
-        results['warnings'].append("⚠️ 동시 사용자가 있으면 DB 쓰기 대기 발생 가능")
-        try:
-            __import__("filelock")
-            results['checks'].append("✅ filelock 라이브러리 설치됨 (락 관리 가능)")
-        except ImportError:
-            results['warnings'].append("⚠️ filelock 미설치 - pip install filelock 권장")
+            _add("DB 폴더", True, f"{db_dir} 생성됨")
+        except Exception as e:
+            _add("DB 폴더", False, str(e))
     else:
-        results['checks'].append("✅ 로컬 경로 - WAL 모드 사용 가능")
-
-    try:
-        test_db = db_dir / ".write_test.tmp"
-        test_db.write_text("test")
-        test_db.unlink()
-        results['checks'].append("✅ DB 폴더 쓰기 권한 확인")
-    except (OSError, IOError, PermissionError) as e:
-        results['errors'].append(f"❌ DB 폴더 쓰기 권한 없음: {e}")
-        results['passed'] = False
-
-    backup_dir = Path(BACKUP_DIR)
-    try:
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        test_file = backup_dir / ".write_test.tmp"
-        test_file.write_text("test")
-        test_file.unlink()
-        results['checks'].append(f"✅ 백업 폴더 쓰기 권한 확인: {backup_dir}")
-    except (OSError, IOError, PermissionError) as e:
-        results['warnings'].append(f"⚠️ 백업 폴더 쓰기 실패: {e}")
-
-    output_dir = Path(OUTPUT_DIR)
-    try:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        results['checks'].append(f"✅ 출력 폴더 준비됨: {output_dir}")
-    except (OSError, IOError, PermissionError) as e:
-        results['warnings'].append(f"⚠️ 출력 폴더 생성 실패: {e}")
+        _add("DB 폴더", True, str(db_dir))
 
     return results
 
 
 def print_self_check_report(results: dict) -> None:
-    """Self-Check 결과 출력"""
-    print("=" * 60)
-    print(f"  SQM 환경 점검 (v{__version__})")
-    print("=" * 60)
-    for check in results['checks']:
-        print(f"  {check}")
-    for warning in results['warnings']:
-        print(f"  {warning}")
-    for error in results['errors']:
-        print(f"  {error}")
-    print("-" * 60)
-    if results['passed']:
-        print("  환경 점검 통과 - 프로그램 시작")
-    else:
-        print("  환경 점검 실패 - 위 오류를 해결해 주세요")
-    print("=" * 60)
+    """점검 결과 로그 출력."""
+    logger.info("─" * 40)
+    logger.info("[환경 점검 결과]")
+    for c in results.get("checks", []):
+        mark = "✅" if c["ok"] else "❌"
+        msg  = f"  {c['msg']}" if c.get("msg") else ""
+        logger.info(f"  {mark} {c['name']}{msg}")
+    status = "통과" if results["passed"] else "실패"
+    logger.info(f"[환경 점검] {status}")
+    logger.info("─" * 40)
+
+
+def run_self_diagnostic() -> bool:
+    """상세 진단 모드 (--check 옵션)."""
+    logger.info("[진단 모드] 시작")
+    results = run_self_check()
+    print_self_check_report(results)
+
+    # 선택 패키지 상세 출력
+    for mod_name, pkg_name in OPTIONAL_PACKAGES:
+        try:
+            m = __import__(mod_name)
+            ver = getattr(m, "__version__", "?")
+            logger.info(f"  ℹ️  {pkg_name} {ver}")
+        except ImportError:
+            logger.info(f"  ⚠️  {pkg_name} 미설치 (선택 패키지)")
+
+    logger.info("[진단 모드] 완료")
+    return results["passed"]
+
+
+# ─────────────────────────────────────────────────────────────
+# 3. 백업
+# ─────────────────────────────────────────────────────────────
+
+def run_backup_only() -> None:
+    """--backup 옵션: DB 백업만 실행 후 종료."""
+    logger.info("[백업 모드] 시작")
+    try:
+        from utils.backup import run_backup
+        ok = run_backup()
+        logger.info(f"[백업 모드] {'완료' if ok else '실패'}")
+    except ImportError:
+        # utils/backup.py 없으면 sqlite3로 직접 백업
+        import shutil, sqlite3
+        from datetime import datetime
+        db_path = Path("data") / "db" / "sqm_inventory.db"
+        if db_path.exists():
+            ts  = datetime.now().strftime("%Y%m%d_%H%M%S")
+            dst = db_path.parent / f"sqm_inventory_backup_{ts}.db"
+            shutil.copy2(db_path, dst)
+            logger.info(f"[백업 모드] {dst}")
+        else:
+            logger.warning(f"[백업 모드] DB 없음: {db_path}")
+    except Exception as e:
+        logger.error(f"[백업 모드] 오류: {e}")
+
+
+# ─────────────────────────────────────────────────────────────
+# 4. CLI 모드
+# ─────────────────────────────────────────────────────────────
+
+def run_cli() -> None:
+    """--cli 옵션: CLI 테스트 모드."""
+    logger.info("[CLI 모드] 시작")
+    try:
+        from engine_modules.inventory_modular.engine import SQMInventoryEngineV3
+        db_path = str(Path("data") / "db" / "sqm_inventory.db")
+        engine  = SQMInventoryEngineV3(db_path)
+        logger.info(f"[CLI 모드] Engine OK: {db_path}")
+
+        # 간단 상태 조회
+        try:
+            rows = engine.db.fetchall(
+                "SELECT status, COUNT(*) as cnt FROM inventory_tonbag GROUP BY status"
+            )
+            for r in rows:
+                logger.info(f"  {r.get('status','?')}: {r.get('cnt',0)}개")
+        except Exception as qe:
+            logger.debug(f"[CLI] 조회 무시: {qe}")
+
+    except Exception as e:
+        logger.error(f"[CLI 모드] 오류: {e}")
+    logger.info("[CLI 모드] 종료")
+
+
+# ─────────────────────────────────────────────────────────────
+# 5. GUI 실행 (메인)
+# ─────────────────────────────────────────────────────────────
+
+def run_gui() -> None:
+    """메인 GUI 실행."""
+    logger.info("[GUI] 시작")
+    try:
+        from gui_app_modular.main_app import SQMInventoryAppFull
+
+        app = SQMInventoryAppFull()
+
+        has_root = hasattr(app, "root") and app.root is not None
+        logger.info(
+            "[GUI] 인스턴스 점검: type=%s has_run=%s has_mainloop=%s has_root=%s",
+            type(app).__name__,
+            hasattr(app, "run") and callable(getattr(app, "run")),
+            hasattr(app, "mainloop") and callable(getattr(app, "mainloop")),
+            has_root,
+        )
+        if has_root:
+            logger.info("[GUI] root type=%s", type(app.root).__name__)
+
+        if hasattr(app, "run") and callable(getattr(app, "run")):
+            app.run()
+        elif hasattr(app, "mainloop") and callable(getattr(app, "mainloop")):
+            app.mainloop()
+        elif has_root and hasattr(app.root, "mainloop"):
+            app.root.mainloop()
+        else:
+            raise RuntimeError(
+                "GUI 실행 실패: app.run / app.mainloop / app.root.mainloop 을 사용할 수 없습니다."
+            )
+    except Exception as e:
+        logger.critical(f"[GUI] 치명적 오류: {e}", exc_info=True)
+        raise
+    finally:
+        logger.info("[GUI] 종료")

@@ -30,6 +30,9 @@ _ORIG_STDOUT = sys.__stdout__
 _ORIG_STDERR = sys.__stderr__
 
 
+# 클래스 내부 suppress 로그용 모듈 전역 logger
+logger = logging.getLogger(__name__)
+
 class _StreamTeeToLogger:
     """stdout/stderr를 콘솔에 유지하면서 로그 파일에도 기록."""
 
@@ -109,8 +112,10 @@ def setup_logging():
     logger.handlers.clear()
 
     # 콘솔 핸들러는 원본 stdout에 고정 (stdout/stderr 브리지와 재귀 방지)
+    # pytest 실행 중이면 콘솔 노이즈 억제 (pytest.ini log_level 존중)
+    _in_pytest = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
     console_handler = logging.StreamHandler(stream=_ORIG_STDOUT)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.CRITICAL if _in_pytest else logging.INFO)
     console_handler.setFormatter(logging.Formatter(LOG_FORMAT, LOG_DATE_FORMAT))
     logger.addHandler(console_handler)
 
