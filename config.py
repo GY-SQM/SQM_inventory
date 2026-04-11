@@ -100,16 +100,31 @@ DB_PATH = DB_DIR / "sqm_inventory.db"
 DB_TIMEOUT = 30.0  # 초
 DB_WAL_MODE = True  # WAL 모드 활성화
 
+# v8.1.5: Picking List 자재코드 상수
+PICKING_MAIN_MATERIAL_CODE   = "30000008"   # 리튬카보네이트 본품
+PICKING_SAMPLE_MATERIAL_CODE = "30000010"   # 리튬카보네이트 샘플
+PICKING_DEFAULT_CONTAINERS   = 15           # 컨테이너 수 기본값
+
+# Export 경로
+EXPORT_DIR = OUTPUT_DIR
+
+def _safe_int(env_key: str, default: int) -> int:
+    """환경변수를 안전하게 int로 변환 (잘못된 값이면 기본값 사용)"""
+    try:
+        return int(os.environ.get(env_key, str(default)))
+    except (ValueError, TypeError):
+        return default
+
 # PostgreSQL 설정 (DB_TYPE='postgresql' 일 때 사용)
 PG_HOST = os.environ.get('SQM_PG_HOST', 'localhost')
-PG_PORT = int(os.environ.get('SQM_PG_PORT', '5432'))
+PG_PORT = _safe_int('SQM_PG_PORT', 5432)
 PG_DATABASE = os.environ.get('SQM_PG_DATABASE', 'sqm_inventory')
 PG_USER = os.environ.get('SQM_PG_USER', 'postgres')
 PG_PASSWORD = os.environ.get('SQM_PG_PASSWORD', 'postgres')
 
 # PostgreSQL 연결 풀 설정
-PG_MIN_CONNECTIONS = int(os.environ.get('SQM_PG_MIN_CONN', '2'))
-PG_MAX_CONNECTIONS = int(os.environ.get('SQM_PG_MAX_CONN', '10'))
+PG_MIN_CONNECTIONS = _safe_int('SQM_PG_MIN_CONN', 2)
+PG_MAX_CONNECTIONS = _safe_int('SQM_PG_MAX_CONN', 10)
 
 def get_pg_connection_string():
     """PostgreSQL 연결 문자열 반환"""
@@ -166,7 +181,7 @@ def _load_settings():
         'api_key': '',
         'model': 'gemini-2.5-flash',
         'use_gemini': 'true',
-        'theme': 'flatly',
+        'theme': 'darkly',
         'openai_api_key': '',
         'openai_model': 'gpt-4o',
         'save_raw_gemini_response': False,   # v5.5.2: 디버깅 시 Gemini 원문을 logs/에 저장 (ON/OFF)
@@ -176,7 +191,7 @@ def _load_settings():
     # ★★★ 1순위: 환경변수 ★★★
     env_api_key = os.environ.get('GEMINI_API_KEY', '')
     env_model = os.environ.get('GEMINI_MODEL', '')
-    env_db_path = os.environ.get('SQM_DB_PATH', '')
+    os.environ.get('SQM_DB_PATH', '')
     env_openai_key = os.environ.get('OPENAI_API_KEY', '')
     env_openai_model = os.environ.get('OPENAI_MODEL', '')
     env_save_raw = os.environ.get('SQM_SAVE_RAW_GEMINI_RESPONSE', '')
@@ -218,8 +233,8 @@ def _load_settings():
                 if ini_key and not ini_key.startswith('your-'):
                     result['api_key'] = ini_key
                     result['api_key_source'] = 'INI'
-                    print("⚠️ [보안경고] API 키가 settings.ini에 평문 저장되어 있습니다!")
-                    print("   자동으로 OS 자격증명에 이관을 시도합니다...")
+                    logger.debug("⚠️ [보안경고] API 키가 settings.ini에 평문 저장되어 있습니다!")
+                    logger.debug("   자동으로 OS 자격증명에 이관을 시도합니다...")
                     # v3.9.7: keyring으로 자동 이관 시도
                     _migrate_api_key_to_keyring(ini_key, config)
 
@@ -251,13 +266,13 @@ def _migrate_api_key_to_keyring(api_key: str, config: configparser.ConfigParser)
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
             config.write(f)
 
-        print("   ✅ API 키가 OS 자격증명 관리자로 안전하게 이관되었습니다.")
+        logger.debug("   ✅ API 키가 OS 자격증명 관리자로 안전하게 이관되었습니다.")
         return True
     except ImportError:
-        print("   ℹ️ keyring 미설치. pip install keyring 으로 설치하면 자동 이관됩니다.")
+        logger.debug("   ℹ️ keyring 미설치. pip install keyring 으로 설치하면 자동 이관됩니다.")
         return False
     except (OSError, IOError, PermissionError) as e:
-        print(f"   ⚠️ keyring 이관 실패: {e}")
+        logger.info(f"   ⚠️ keyring 이관 실패: {e}")
         return False
 
 
@@ -352,8 +367,8 @@ def get_settings():
 # UI 설정
 # =============================================================================
 
-UI_THEME = "flatly"  # v3.0: 고급스러운 기본 테마  # ttkbootstrap 테마
-UI_DARK_MODE = False
+UI_THEME = "darkly"  # v8.5.6: 다크 프로페셔널 테마 통일
+UI_DARK_MODE = True
 WINDOW_SIZE = "1200x800"
 WINDOW_MIN_SIZE = (900, 600)
 
@@ -379,10 +394,10 @@ PACKING_UNITS = {
 VALIDATION = {
     'LOT_NO_MIN_LENGTH': 5,
     'LOT_NO_MAX_LENGTH': 20,
-    'LOT_NO_PATTERN': r'^\d{10}$',  # 10자리 숫자 (권장)
+    'LOT_NO_PATTERN': r'^\d{8,11}$',  # 8~11자리 숫자 (OCR 오독 허용)
     'WEIGHT_MIN': 0,
     'WEIGHT_MAX': 50000,  # 50톤
-    'SAP_NO_PATTERN': r'^\d{10}$',  # 10자리 숫자
+    'SAP_NO_PATTERN': r'^\d{10}$',  # SAP No는 정확히 10자리 유지
 }
 
 # =============================================================================
@@ -464,8 +479,8 @@ def validate_api_key_with_gui(parent=None):
             if parent is None:
                 temp_root.destroy()
 
-        except (RuntimeError, ValueError) as e:
-            print(f"⚠️ API 키 미설정: {api_error}")
+        except (RuntimeError, ValueError):
+            logger.info(f"⚠️ API 키 미설정: {api_error}")
 
     return True  # 실행은 허용 (경고만 표시)
 
