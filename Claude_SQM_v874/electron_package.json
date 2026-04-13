@@ -1,0 +1,54 @@
+{
+  "name": "sqm-desktop",
+  "version": "8.7.4",
+  "description": "SQM 재고관리 데스크탑 앱",
+  "main": "electron/main.js",
+  "scripts": {
+    "electron": "electron electron/main.js",
+    "electron:build": "electron-builder --win --x64",
+    "prebuild": "cd web && npm run build",
+    "build": "npm run prebuild && electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.gylogistics.sqm",
+    "productName": "SQM 재고관리",
+    "directories": {
+      "output": "dist_electron"
+    },
+    "files": [
+      "electron/**/*",
+      "web/dist/**/*",
+      "!node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "data",
+        "to":   "data"
+      },
+      {
+        "from": ".env",
+        "to":   ".env"
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "electron/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowDirChange": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "SQM 재고관리",
+      "installerIcon": "electron/icon.ico",
+      "uninstallerIcon": "electron/icon.ico",
+      "runAfterFinish": true
+    }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^27.2.0",
+    "electron-builder": "^24.6.4"
+  }
+}

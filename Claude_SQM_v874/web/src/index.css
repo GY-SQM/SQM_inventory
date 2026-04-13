@@ -1,0 +1,223 @@
+:root {
+  /* Light theme (default) */
+  --bg-primary: #f0f5fc;
+  --bg-secondary: #ffffff;
+  --bg-card: #f8fafc;
+  --text-primary: #162040;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --success: #22c55e;
+  --warning: #eab308;
+  --error: #ef4444;
+  --nav-bg: #1e293b;
+  --nav-text: #e2e8f0;
+  --nav-text-active: #ffffff;
+  --nav-accent: #38bdf8;
+  --nav-bg-hover: rgba(56,189,248,0.12);
+  --nav-bg-active: rgba(56,189,248,0.18);
+
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
+}
+
+/* Dark theme */
+body.dark {
+  --bg-primary: #0b1322;
+  --bg-secondary: #111827;
+  --bg-card: #1e293b;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #38bdf8;
+  --accent-light: #1e3a5f;
+  --border: #334155;
+  --border-strong: #475569;
+  --nav-bg: #0f172a;
+  --nav-text: #e2e8f0;
+  --nav-text-active: #ffffff;
+  --nav-accent: #38bdf8;
+  --nav-bg-hover: rgba(56,189,248,0.12);
+  --nav-bg-active: rgba(56,189,248,0.18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  transition: background 0.2s, color 0.2s;
+}
+
+#root {
+  max-width: 100%;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4 {
+  color: var(--text-primary);
+  margin-top: 0;
+}
+
+input, select, textarea {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+button {
+  font-family: var(--sans);
+  cursor: pointer;
+}
+
+table {
+  color: var(--text-primary);
+}
+
+th {
+  background: var(--bg-card) !important;
+  color: var(--text-primary);
+  border-bottom-color: var(--border-strong) !important;
+}
+
+td {
+  border-bottom: 1px dashed rgba(51, 65, 85, 0.4) !important;
+}
+
+body:not(.dark) td {
+  border-bottom: 1px dashed rgba(203, 213, 225, 0.5) !important;
+}
+
+tr:hover {
+  background: var(--bg-card) !important;
+}
+
+code {
+  font-family: var(--mono);
+  background: var(--bg-card);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ── 테마 프리셋 ──────────────────────────────────────── */
+
+/* Light themes */
+body[data-theme="cosmo"] {
+  --bg-primary: #ffffff; --bg-secondary: #f8f9fa; --bg-card: #ffffff;
+  --text-primary: #212529; --text-secondary: #6c757d; --accent: #2780e3;
+  --border: #dee2e6; --border-strong: #ced4da;
+  --nav-bg: #2780e3; --nav-accent: #ffffff; --nav-bg-hover: rgba(255,255,255,0.15);
+}
+body[data-theme="litera"] {
+  --bg-primary: #ffffff; --bg-secondary: #f8f9fa; --bg-card: #ffffff;
+  --text-primary: #343a40; --text-secondary: #868e96; --accent: #4582ec;
+  --border: #e9ecef; --border-strong: #dee2e6;
+  --nav-bg: #343a40; --nav-accent: #4582ec; --nav-bg-hover: rgba(69,130,236,0.15);
+}
+body[data-theme="minty"] {
+  --bg-primary: #f8f9fa; --bg-secondary: #ffffff; --bg-card: #ffffff;
+  --text-primary: #212529; --text-secondary: #6c757d; --accent: #78c2ad;
+  --border: #d1ecf1; --border-strong: #bee5eb;
+  --nav-bg: #78c2ad; --nav-accent: #ffffff; --nav-bg-hover: rgba(255,255,255,0.2);
+}
+
+/* Dark themes */
+body[data-theme="darkly"] {
+  --bg-primary: #222222; --bg-secondary: #303030; --bg-card: #303030;
+  --text-primary: #ffffff; --text-secondary: #adb5bd; --accent: #375a7f;
+  --border: #444444; --border-strong: #555555;
+  --nav-bg: #375a7f; --nav-accent: #00bc8c; --nav-bg-hover: rgba(0,188,140,0.15);
+}
+body[data-theme="cyborg"] {
+  --bg-primary: #060606; --bg-secondary: #111111; --bg-card: #1a1a1a;
+  --text-primary: #adafae; --text-secondary: #888888; --accent: #2a9fd6;
+  --border: #282828; --border-strong: #333333;
+  --nav-bg: #060606; --nav-accent: #2a9fd6; --nav-bg-hover: rgba(42,159,214,0.15);
+}
+body[data-theme="superhero"] {
+  --bg-primary: #2b3e50; --bg-secondary: #3a5269; --bg-card: #3a5269;
+  --text-primary: #ebebeb; --text-secondary: #adb5bd; --accent: #df691a;
+  --border: #4e5d6c; --border-strong: #5e6d7c;
+  --nav-bg: #2b3e50; --nav-accent: #df691a; --nav-bg-hover: rgba(223,105,26,0.15);
+}
+body[data-theme="journal"] {
+  --bg-primary: #ffffff; --bg-secondary: #f8f9fa; --bg-card: #ffffff;
+  --text-primary: #333333; --text-secondary: #999999; --accent: #eb6864;
+  --accent-light: #fde8e8; --border: #dddddd; --border-strong: #cccccc;
+  --nav-bg: #333333; --nav-text: #e2e8f0; --nav-text-active: #ffffff;
+  --nav-accent: #eb6864; --nav-bg-hover: rgba(235,104,100,0.15);
+  --nav-bg-active: rgba(235,104,100,0.25);
+}
+body[data-theme="yeti"] {
+  --bg-primary: #ffffff; --bg-secondary: #f6f6f6; --bg-card: #ffffff;
+  --text-primary: #333333; --text-secondary: #888888; --accent: #008cba;
+  --accent-light: #d6eef5; --border: #e0e0e0; --border-strong: #cccccc;
+  --nav-bg: #333333; --nav-text: #e2e8f0; --nav-text-active: #ffffff;
+  --nav-accent: #008cba; --nav-bg-hover: rgba(0,140,186,0.15);
+  --nav-bg-active: rgba(0,140,186,0.25);
+}
+body[data-theme="morph"] {
+  --bg-primary: #f0f0f0; --bg-secondary: #e8e8e8; --bg-card: #f5f5f5;
+  --text-primary: #333333; --text-secondary: #777777; --accent: #378dfc;
+  --accent-light: #d6e6ff; --border: #d0d0d0; --border-strong: #bbbbbb;
+  --nav-bg: #3a3a3a; --nav-text: #e2e8f0; --nav-text-active: #ffffff;
+  --nav-accent: #378dfc; --nav-bg-hover: rgba(55,141,252,0.15);
+  --nav-bg-active: rgba(55,141,252,0.25);
+}
+body[data-theme="solar"] {
+  --bg-primary: #002b36; --bg-secondary: #073642; --bg-card: #073642;
+  --text-primary: #839496; --text-secondary: #586e75; --accent: #b58900;
+  --accent-light: #1a3a00; --border: #0a4a5a; --border-strong: #2aa198;
+  --nav-bg: #073642; --nav-text: #839496; --nav-text-active: #fdf6e3;
+  --nav-accent: #b58900; --nav-bg-hover: rgba(181,137,0,0.15);
+  --nav-bg-active: rgba(181,137,0,0.25);
+}
+body[data-theme="vapor"] {
+  --bg-primary: #170229; --bg-secondary: #1a0933; --bg-card: #2d1b4e;
+  --text-primary: #e0e0e0; --text-secondary: #aa88cc; --accent: #6f42c1;
+  --accent-light: #3d1f6e; --border: #3d2066; --border-strong: #5533aa;
+  --nav-bg: #1a0933; --nav-text: #e0e0e0; --nav-text-active: #ffffff;
+  --nav-accent: #6f42c1; --nav-bg-hover: rgba(111,66,193,0.15);
+  --nav-bg-active: rgba(111,66,193,0.25);
+}
+
+/* ReturnPage 호환 변수 */
+:root {
+  --card-bg: var(--bg-card);
+  --border-color: var(--border);
+  --nav-border: var(--border);
+}
+
+/* ── 글꼴 크기 스케일 (JS에서 --sqm-font-scale 동적 설정) ── */
+:root {
+  --sqm-font-scale: 1.5;
+}
+
+body {
+  font-size: calc(14px * var(--sqm-font-scale));
+}
+
+/* 글꼴 스케일이 적용될 주요 요소들 */
+input, button, select, textarea {
+  font-size: calc(13px * var(--sqm-font-scale));
+}
+
+table td, table th {
+  font-size: calc(12px * var(--sqm-font-scale));
+}

@@ -1,0 +1,210 @@
+/* ═══════════════════════════════════════════════════════════════════
+   SQM V873 레이아웃 CSS — Ruby | 2026-04-12
+   P2-S1: 모바일 반응형 추가
+   P2-S4: 공통 로딩/에러 스타일
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── 기본 리셋 ─────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; overflow-x: hidden; }
+
+/* ── 사이드바: 항상 좌측 고정 (PC 전용) ───────────────────────── */
+aside[data-sqm-sidebar] {
+  position: relative !important;
+  width: 72px !important;
+  min-width: 72px !important;
+  height: calc(100vh - 42px) !important;
+  flex-direction: column !important;
+  flex-shrink: 0 !important;
+  bottom: auto !important;
+  left: auto !important;
+  right: auto !important;
+  border-right: 1px solid var(--nav-border) !important;
+  border-top: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+aside[data-sqm-sidebar] span[data-label] {
+  display: block !important;
+  font-size: 9px !important;
+}
+
+aside[data-sqm-sidebar] button {
+  width: 100% !important;
+  flex-direction: column !important;
+  padding: 8px 4px !important;
+  border-left: 3px solid transparent !important;
+  border-top: none !important;
+}
+
+aside[data-sqm-sidebar] .sqm-sidebar-bottom {
+  display: flex !important;
+}
+
+/* ── 메인 콘텐츠 ───────────────────────────────────────────────── */
+.sqm-page-content {
+  padding-bottom: 0 !important;
+  overflow-x: auto !important;
+}
+
+/* ── 테이블 가로 스크롤 ────────────────────────────────────────── */
+.sqm-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── 재고 및 확인 패널 ─────────────────────────────────────────── */
+.sqm-summary-panel table {
+  font-size: 12px;
+}
+
+/* ── 검색바 ────────────────────────────────────────────────────── */
+.sqm-searchbar {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   P2-S1: 모바일 반응형 (768px 이하)
+═══════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* 사이드바 숨기기 — 모바일에서는 하단 내비로 전환 */
+  aside[data-sqm-sidebar] {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    height: auto !important;
+    max-height: 56px !important;
+    flex-direction: row !important;
+    border-right: none !important;
+    border-top: 1px solid var(--nav-border) !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    z-index: 100;
+  }
+
+  aside[data-sqm-sidebar] button {
+    flex-direction: column !important;
+    padding: 4px 8px !important;
+    min-width: 56px !important;
+    border-left: none !important;
+    border-top: 2px solid transparent !important;
+    font-size: 18px !important;
+  }
+
+  aside[data-sqm-sidebar] span[data-label] {
+    font-size: 8px !important;
+  }
+
+  aside[data-sqm-sidebar] .sqm-sidebar-bottom {
+    display: none !important;
+  }
+
+  /* 메인 콘텐츠: 하단 내비 높이만큼 패딩 */
+  .sqm-page-content {
+    padding-bottom: 64px !important;
+  }
+
+  /* 테이블: 강제 가로 스크롤 */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  /* 카드 그리드: 1열로 */
+  div[style*="gridTemplateColumns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 헤더 폰트 축소 */
+  h2 { font-size: 14px !important; }
+
+  /* 버튼 터치 영역 확대 */
+  button {
+    min-height: 36px;
+  }
+
+  /* 메뉴바 폰트 축소 */
+  nav[data-sqm-menubar] {
+    font-size: 11px !important;
+  }
+
+  nav[data-sqm-menubar] button {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   P2-S4: 공통 로딩/에러 스타일
+═══════════════════════════════════════════════════════════════════ */
+
+/* 로딩 스피너 */
+.sqm-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  color: #64748b;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.sqm-loading::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: sqm-spin 0.8s linear infinite;
+}
+
+@keyframes sqm-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 에러 카드 */
+.sqm-error {
+  padding: 12px 16px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.sqm-error::before {
+  content: '❌ ';
+}
+
+/* 빈 상태 */
+.sqm-empty {
+  text-align: center;
+  padding: 32px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* 성공 메시지 */
+.sqm-success {
+  padding: 12px 16px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  color: #166534;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.sqm-success::before {
+  content: '✅ ';
+}

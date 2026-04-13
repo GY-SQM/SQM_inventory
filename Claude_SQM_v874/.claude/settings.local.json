@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(python -m py_compile gui_app_modular/dialogs/onestop_inbound.py)",
+      "Bash(python -m py_compile gui_app_modular/dialogs/inbound_preview_service.py)",
+      "Bash(python -m py_compile gui_app_modular/dialogs/inbound_write_service.py)",
+      "Bash(python -m py_compile gui_app_modular/dialogs/inbound_template_service.py)",
+      "Bash(python -m py_compile gui_app_modular/handlers/simple_outbound_flow.py)",
+      "Bash(python -m py_compile gui_app_modular/handlers/audit_flow.py)",
+      "Bash(python -m py_compile gui_app_modular/handlers/allocation_flow.py)",
+      "Bash(python -m py_compile gui_app_modular/handlers/picking_flow.py)",
+      "Bash(python -m py_compile gui_app_modular/handlers/outbound_ui_helpers.py)",
+      "Bash(python -m py_compile gui_app_modular/handlers/outbound_handlers.py)",
+      "Bash(python -m pytest tests/ --tb=short -q)",
+      "Bash(python -m pytest tests/ -k \"inbound or outbound or smoke\" --tb=short -q --ignore=tests/stage_gates/test_api_write_endpoints.py --ignore=tests/stage_gates/test_p1_do_update.py --ignore=tests/stage_gates/test_p1_location_bulk.py --ignore=tests/stage_gates/test_p1_return_api.py --ignore=tests/stage_gates/test_p2_integrity.py)",
+      "Bash(python -m pytest tests/stage_gates/test_b07_inbound_dialog_smoke.py tests/test_p2_inbound_refactor.py tests/stage_gates/test_b05_outbound_handlers_smoke.py tests/stage_gates/test_b02_outbound_rollback.py tests/stage_gates/test_b02_transaction_guard.py tests/stage_gates/test_b03_status_flow.py --tb=long -q)",
+      "Bash(python -c ':*)",
+      "Bash(python -m pytest tests/stage_gates/test_b07_inbound_dialog_smoke.py tests/test_p2_inbound_refactor.py -v --tb=short -q)",
+      "Bash(python -m pytest tests/stage_gates/test_b02_outbound_rollback.py tests/stage_gates/test_b02_transaction_guard.py tests/stage_gates/test_b03_status_flow.py tests/stage_gates/test_b05_outbound_handlers_smoke.py --tb=short -q)",
+      "Bash(python -m pytest tests/ -k \"inbound or outbound or smoke or status or rollback or transaction\" --ignore=tests/stage_gates/test_api_write_endpoints.py --ignore=tests/stage_gates/test_p1_do_update.py --ignore=tests/stage_gates/test_p1_location_bulk.py --ignore=tests/stage_gates/test_p1_return_api.py --ignore=tests/stage_gates/test_p2_integrity.py --tb=short -q)",
+      "Bash(npx vite:*)",
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(py -3.12 --version)",
+      "Bash(py -3.13 --version)",
+      "Bash(py -3.11 --version)",
+      "Bash(py -3.12 -m pip show pythonnet)",
+      "Bash(py -3.12 -c \"import sys; print\\(sys.executable\\)\")",
+      "Bash(pyw -3.12 --version)",
+      "Bash(ls \"F:/program/Sqm_jaego/Claude_SQM_v874_FULL/web/dist/favicon\"*)",
+      "Bash(ls \"F:/program/Sqm_jaego/Claude_SQM_v874_FULL/web/dist/\"*.ico)",
+      "Bash(ls \"F:/program/Sqm_jaego/Claude_SQM_v874_FULL/web/dist/\"*.png)",
+      "Bash(ls run*.py run*.bat)",
+      "Bash(py -3.12 -m py_compile features/ai/smart_document_parser.py)",
+      "Bash(py -3.12 -m py_compile features/ai/confidence_scorer.py)",
+      "Bash(py -3.12 -m py_compile features/ai/cross_validator.py)",
+      "Bash(py -3.12 -m py_compile features/ai/template_learner.py)",
+      "Bash(py -3.12 -m py_compile react_api/routes/editor.py)",
+      "Bash(py -3.12 -m py_compile react_api/routes/backup.py)"
+    ]
+  }
+}

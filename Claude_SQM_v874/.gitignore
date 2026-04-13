@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.spec
+
+# 환경
+.env
+*.bak
+*.tmp
+*.log
+
+# DB
+data/db/*.db
+data/db/*.db-wal
+data/db/*.db-shm
+
+# IDE
+.vscode/
+.idea/
+
+# Node
+node_modules/
+web/node_modules/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Secrets
+config_gemini.json

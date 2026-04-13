@@ -1,0 +1,23 @@
+{
+  "width": 1796,
+  "height": 900,
+  "x": 3516,
+  "y": 94,
+  "zoomed": false,
+  "dialogs": {
+    "onestop_outbound_dialog": "900x630+2251+185",
+    "inbound_history_dialog": "1723x630+743+495",
+    "inbound_template_dialog": "708x757+1879+414",
+    "allocation_status_win": "800x574+519+177",
+    "allocation_dialog": "1613x982+91+45",
+    "import_upload_choice_dialog": "449x280+2849+404",
+    "do_update_dialog": "718x450+2422+331",
+    "tonbag_location_choice_win": "718x450+3604+205",
+    "move_approval_dialog": "760x480+2363+229",
+    "return_statistics_dialog": "1077x630+2363+229",
+    "allocation_approval_queue": "1077x630+2193+261",
+    "allocation_approval_history": "1077x630+2190+249",
+    "swap_report_dialog": "1077x630+2110+260",
+    "picking_template_dialog": "1077x630+2139+271"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "enabled": true,
+  "teamName": "",
+  "feature": "dialogs",
+  "pdcaPhase": "do",
+  "orchestrationPattern": "leader",
+  "ctoAgent": "opus",
+  "startedAt": "2026-04-12T14:32:55.972Z",
+  "lastUpdated": "2026-04-12T14:32:55.979Z",
+  "teammates": [
+    {
+      "name": "a9c29e5c554b08fe4",
+      "role": "general-purpose",
+      "model": "sonnet",
+      "status": "spawning",
+      "currentTask": null,
+      "taskId": null,
+      "startedAt": "2026-04-12T14:32:55.979Z",
+      "lastActivityAt": "2026-04-12T14:32:55.979Z"
+    }
+  ],
+  "progress": {
+    "totalTasks": 0,
+    "completedTasks": 0,
+    "inProgressTasks": 0,
+    "failedTasks": 0,
+    "pendingTasks": 0
+  },
+  "recentMessages": [],
+  "sessionId": "7a2dc424-899e-4e57-9a3e-8603a836021e"
+}

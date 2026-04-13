@@ -1,0 +1,38 @@
+# SQM v7.0.0 — 런타임 의존성
+# 최종 업데이트: 2026-03-08
+# 설치: pip install -r requirements.txt
+
+# ── 런타임 필수 ────────────────────────────────────────
+pandas>=2.2              # Excel 입출고 처리
+openpyxl>=3.1            # Excel 읽기/쓰기
+reportlab>=4.2           # PDF 리포트 생성
+Pillow>=10.0             # 이미지 처리
+ttkbootstrap>=1.10       # GUI 테마/위젯
+PyMuPDF>=1.23            # PDF → 이미지 변환 (fitz)
+pdfplumber>=0.11         # PDF 텍스트 추출
+numpy>=1.26              # 수치 계산
+python-barcode>=0.15     # 바코드 생성
+keyring>=25.0            # API Key 보안 저장
+
+# ── AI / 문서 파싱 ─────────────────────────────────────
+google-generativeai>=0.5 # Gemini Vision API (기본 파서)
+                         # 검증버전: 0.8.x / max_output_tokens=65536 권장
+
+# ── API 서버 (선택 — FastAPI 기반 REST API 사용 시) ───
+fastapi==0.104.1         # v8.7.4 호환성 고정 (Electron 28.0.0)
+uvicorn[standard]==0.24.0
+httpx>=0.24
+slowapi>=0.1.9
+bcrypt>=4.0               # 비밀번호 해싱 (v8.5.8 보안 강화)
+
+# ── 데스크톱 실행 (선택 — Electron 사용 시 불필요) ──
+# pywebview는 순수 Python GUI용이므로 Electron 환경에서는 제거
+# Electron은 이미 WebView를 제공하므로 pywebview 필요 없음
+# (순수 Python 데스크톱이 필요한 경우만: pywebview>=5.2)
+
+# ── 선택 패키지 ────────────────────────────────────────
+# tkinterdnd2>=0.3       # 드래그&드롭 입고 (있으면 활성화)
+# pytesseract>=0.3       # OCR (Tesseract 별도 설치 필요)
+# opencv-python>=4.9     # OpenCV (OCR 보조)
+# qrcode>=7.4            # QR코드 생성
+# python-docx>=1.1       # Word 문서 출력
