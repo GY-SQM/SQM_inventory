@@ -32,3 +32,28 @@ Thumbs.db
 
 # Secrets
 config_gemini.json
+
+# cache
+__pycache__/
+.pytest_cache/
+
+# logs
+logs/
+
+# python
+*.pyc
+
+# backup
+*.bak*
+*.zip
+
+# temp
+*.tmp
+*.log
+
+# node
+node_modules/
+dist/
+
+# windows
+desktop.ini
