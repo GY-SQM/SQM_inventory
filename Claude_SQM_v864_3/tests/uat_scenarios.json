@@ -1,0 +1,158 @@
+{
+  "version": "1.0",
+  "generated": "2026-04-21",
+  "author": "Ruby (Tier 3 S4)",
+  "description": "사용자 수용 테스트 (UAT) 시나리오 20종 — 사장님 실무 기준",
+  "priority_levels": {
+    "P0": "치명 — 즉시 수정",
+    "P1": "중대 — Tier 3 종결 전 수정",
+    "P2": "경미 — 알려진 이슈로 기록"
+  },
+  "scenarios": [
+    {
+      "id": "UAT-01",
+      "title": "PDF 입고 → 자동 파싱 → 저장",
+      "steps": [
+        "툴바 📄 PDF 입고 클릭",
+        "샘플 PDF 선택",
+        "파싱 결과 화면에 LOT 정보 표시 확인",
+        "저장 버튼 → Toast '입고 완료' 확인"
+      ],
+      "expected": "Dashboard '판매 가능' 카운터 +1",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-02",
+      "title": "즉시 출고 단일 LOT",
+      "steps": ["🚀 즉시 출고 클릭", "LOT 선택", "수량 입력", "출고 확정"],
+      "expected": "출고 완료 카운터 +1, 활동 로그 추가",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-03",
+      "title": "재고 조회 + 필터",
+      "steps": ["📋 재고 조회", "제품 필터 LITHIUM CARBONATE", "결과 확인"],
+      "expected": "필터링된 행만 표시",
+      "priority": "P1"
+    },
+    {
+      "id": "UAT-04",
+      "title": "정합성 검사 — 차이 없음",
+      "steps": ["✅ 정합성 클릭"],
+      "expected": "모든 LOT OK 표시, ALERTS 변동 없음",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-05",
+      "title": "정합성 검사 — 톤백 무결성 이슈",
+      "steps": ["인위적 불일치 데이터 삽입", "✅ 정합성 클릭"],
+      "expected": "ALERTS 패널에 '톤백 무결성 이슈' 표시",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-06",
+      "title": "백업 → 즉시 복원",
+      "steps": ["💾 백업 클릭", "프로그램 종료", "DB 파일 변경", "프로그램 재시작", "tools/rollback.py --to-backup latest"],
+      "expected": "복원 후 백업 시점 데이터 일치",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-07",
+      "title": "Dark/Light 토글 + 재시작 복원",
+      "steps": ["☀ Light 클릭", "프로그램 종료/재시작"],
+      "expected": "재시작 후에도 Light 유지",
+      "priority": "P1"
+    },
+    {
+      "id": "UAT-08",
+      "title": "9탭 전환 (사이드바)",
+      "steps": ["사이드바 9개 탭 순차 클릭"],
+      "expected": "각 탭 콘텐츠 정상 렌더 (4탭 중 하나라도 깨지면 FAIL)",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-09",
+      "title": "메뉴바 7개 → 드롭다운 → 항목 클릭",
+      "steps": ["파일/입고/출고/재고/보고서/설정/도움말 각 메뉴 hover", "임의 항목 클릭"],
+      "expected": "Toast 또는 동작 발생, 'unknown' 에러 0건",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-10",
+      "title": "단축키 13개 작동",
+      "steps": ["F1, F5, Ctrl+F, Ctrl+S, Ctrl+P, Ctrl+B, Ctrl+I, Ctrl+O, Ctrl+R, Ctrl+L, Esc 순차"],
+      "expected": "각 단축키 해당 동작 + Toast 안내",
+      "priority": "P1"
+    },
+    {
+      "id": "UAT-11",
+      "title": "돈백/LOT/MT 라디오 전환",
+      "steps": ["우측 라디오 3종 순차 클릭"],
+      "expected": "Dashboard 테이블 단위 변경, localStorage 저장",
+      "priority": "P1"
+    },
+    {
+      "id": "UAT-12",
+      "title": "ALERTS 30초 자동 갱신",
+      "steps": ["프로그램 실행 후 35초 대기"],
+      "expected": "마지막 경신 타임스탬프 갱신, ALERTS 재로드",
+      "priority": "P1"
+    },
+    {
+      "id": "UAT-13",
+      "title": "위치 미배정 톤백 처리",
+      "steps": ["사이드바 Allocation", "미배정 LOT 선택", "위치(행/열/단) 입력", "저장"],
+      "expected": "ALERTS 의 '위치 미배정' 카운터 감소",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-14",
+      "title": "출고 예정 → 즉시 출고 전환",
+      "steps": ["사이드바 Outbound → Picked", "LOT 선택", "출고 확정"],
+      "expected": "Picked 목록에서 사라지고 출고 완료에 추가",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-15",
+      "title": "반품 처리",
+      "steps": ["🔄 반품", "원 LOT 선택", "수량 입력", "사유 기재", "저장"],
+      "expected": "Return 페이지에 추가, Dashboard 반품 +1",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-16",
+      "title": "활동 로그 1000건 조회",
+      "steps": ["📝 Log", "최근 1000 선택"],
+      "expected": "1000행 이내 표시, 페이지 응답 < 2초",
+      "priority": "P1"
+    },
+    {
+      "id": "UAT-17",
+      "title": "Excel 내보내기",
+      "steps": ["보고서 → Excel 내보내기"],
+      "expected": "임시 폴더에 xlsx 생성, 자동 열기",
+      "priority": "P1"
+    },
+    {
+      "id": "UAT-18",
+      "title": "스캔 — 키보드 직접 입력",
+      "steps": ["📷 Scan", "LOT 번호 직접 입력 + Enter"],
+      "expected": "재고 조회 결과 표시",
+      "priority": "P1"
+    },
+    {
+      "id": "UAT-19",
+      "title": "로그 수집기 → ZIP 생성",
+      "steps": ["python tools/log_collector.py"],
+      "expected": "%TEMP%/sqm_diagnostics_*.zip 생성",
+      "priority": "P0"
+    },
+    {
+      "id": "UAT-20",
+      "title": "헬스체크 + Swagger UI",
+      "steps": ["http://127.0.0.1:8765/api/health", "http://127.0.0.1:8765/docs"],
+      "expected": "health 200 OK, Swagger 페이지 로드",
+      "priority": "P0"
+    }
+  ]
+}

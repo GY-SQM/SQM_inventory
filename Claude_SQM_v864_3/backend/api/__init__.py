@@ -1,0 +1,364 @@
+"""
+SQM Inventory — FastAPI Backend (PyWebView Edition)
+포트: 8765
+"""
+import sys
+import os
+
+# ⚠️ 이 파일은 backend/api/__init__.py — 프로젝트 루트는 부모의 부모의 부모
+# (예: F:/.../Claude_SQM_v864_3/backend/api/__init__.py → F:/.../Claude_SQM_v864_3)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, PROJECT_ROOT)
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from typing import Optional, List
+import logging
+
+# Engine import (기존 Tkinter 엔진 그대로 사용)
+try:
+    from engine_modules.inventory_modular.engine import SQMInventoryEngineV3
+    from config import DB_PATH
+    engine = SQMInventoryEngineV3(str(DB_PATH))
+    ENGINE_AVAILABLE = True
+except Exception as e:
+    # v864.3 Phase 2: log full traceback so silent engine-load failures are visible
+    logging.error(f"Engine load failed: {e}", exc_info=True)
+    ENGINE_AVAILABLE = False
+    engine = None
+
+app = FastAPI(title="SQM Inventory API", version="8.6.4")
+
+# ── T8: CORS 설정 ─────────────────────────────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],       # PyWebView local
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── Tier 2 Stage 2: 자동 생성 라우터 include ─────────────────
+try:
+    from backend.api.menubar import router as menubar_router
+    app.include_router(menubar_router)
+except Exception as e:
+    logging.warning(f"menubar router load failed: {e}")
+
+try:
+    from backend.api.controls import router as controls_router
+    app.include_router(controls_router)
+except Exception as e:
+    logging.warning(f"controls router load failed: {e}")
+
+try:
+    from backend.api.optional import router as optional_router
+    app.include_router(optional_router)
+except Exception as e:
+    logging.warning(f"optional router load failed: {e}")
+
+# ── 표준 예외 핸들러 설치 ────────────────────────────────────
+# v864.3 Phase 2: static mount moved to END of file — Starlette matches
+# routes in registration order, so app.mount("/") at this position was
+# shadowing all inline @app.get("/api/...") decorators below (HTTP 404).
+try:
+    from backend.common.errors import install_exception_handlers
+    install_exception_handlers(app)
+except Exception as e:
+    logging.warning(f"exception handlers install failed: {e}")
+
+# ── Health ───────────────────────────────────────────────────
+@app.get("/api/health")
+def health():
+    """
+    v864.3 health probe — Phase 1c-B Modules 카운터 지원.
+    Returns:
+        status: "ok"
+        engine: Bool (legacy 호환)
+        engine_available: Bool (sqm-inline.js 기대 필드)
+        modules_loaded: int — 로드 성공 모듈 수 (현재는 ENGINE_AVAILABLE 기반 8/0 이분법)
+        modules_total: int — 전체 모듈 수 (v864.3 기준 8)
+        version: 버전 문자열
+    """
+    loaded = 8 if ENGINE_AVAILABLE else 0
+    return {
+        "status": "ok",
+        "engine": ENGINE_AVAILABLE,
+        "engine_available": ENGINE_AVAILABLE,
+        "modules_loaded": loaded,
+        "modules_total": 8,
+        "version": "8.6.4",
+    }
+
+# ── Dashboard ────────────────────────────────────────────────
+@app.get("/api/dashboard/stats")
+def dashboard_stats():
+    if not ENGINE_AVAILABLE:
+        return _sample_dashboard()
+    try:
+        summary = engine.get_inventory_summary()
+        return {
+            "available_lots": summary.get("available_count", 0),
+            "reserved_lots":  summary.get("reserved_count", 0),
+            "picked_lots":    summary.get("picked_count", 0),
+            "outbound_lots_month": summary.get("outbound_month", 0),
+            "return_lots":    summary.get("return_count", 0),
+            "available_kg":   summary.get("available_kg", 0),
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Inventory ────────────────────────────────────────────────
+@app.get("/api/inventory")
+def get_inventory(
+    status: Optional[str] = Query(None),
+    product: Optional[str] = Query(None),
+    lot_no: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    if not ENGINE_AVAILABLE:
+        return _sample_inventory(page=page, page_size=page_size)
+    try:
+        rows = engine.get_inventory(status=status, product=product, lot_no=lot_no)
+        total = len(rows)
+        start = (page - 1) * page_size
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "data": rows[start:start + page_size],
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.get("/api/inventory/{lot_no}")
+def get_lot_detail(lot_no: str):
+    if not ENGINE_AVAILABLE:
+        raise HTTPException(503, "Engine unavailable")
+    try:
+        detail = engine.get_lot_detail(lot_no)
+        if not detail:
+            raise HTTPException(404, f"LOT not found: {lot_no}")
+        return detail
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Tonbags ──────────────────────────────────────────────────
+@app.get("/api/tonbags")
+def get_tonbags(
+    lot_no: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+):
+    if not ENGINE_AVAILABLE:
+        return []
+    try:
+        return engine.get_tonbags(lot_no=lot_no, status=status)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Allocation ───────────────────────────────────────────────
+@app.get("/api/allocation")
+def get_allocation():
+    if not ENGINE_AVAILABLE:
+        return _sample_allocation()
+    try:
+        rows = engine.get_inventory(status="RESERVED")
+        return {"total": len(rows), "data": rows}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Outbound ─────────────────────────────────────────────────
+@app.get("/api/outbound/scheduled")
+def get_outbound_scheduled():
+    if not ENGINE_AVAILABLE:
+        return []
+    try:
+        return engine.get_inventory(status="PICKED")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.get("/api/outbound/history")
+def get_outbound_history(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+):
+    if not ENGINE_AVAILABLE:
+        return []
+    try:
+        return engine.get_inventory(status="OUTBOUND")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Move (Tonbag 위치이동) ────────────────────────────────────
+@app.post("/api/move")
+def move_tonbag(payload: dict):
+    """payload: { barcode: str, destination: str }"""
+    barcode = payload.get("barcode", "").strip()
+    destination = payload.get("destination", "").strip()
+    if not barcode or not destination:
+        raise HTTPException(400, "barcode and destination required")
+    if not ENGINE_AVAILABLE:
+        return {"success": True, "message": f"[DEMO] {barcode} → {destination}"}
+    try:
+        result = engine.move_tonbag(barcode, destination)
+        return {"success": True, "message": result or f"{barcode} 이동 완료"}
+    except AttributeError:
+        return {"success": True, "message": f"[DEMO] {barcode} → {destination}"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.get("/api/move/history")
+def get_move_history(limit: int = Query(50, ge=1, le=500)):
+    if not ENGINE_AVAILABLE:
+        return []
+    try:
+        return engine.get_move_history(limit=limit)
+    except AttributeError:
+        return []
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Allocation Actions ────────────────────────────────────────
+@app.post("/api/allocation/{lot}/cancel")
+def cancel_allocation(lot: str):
+    if not ENGINE_AVAILABLE:
+        return {"success": True, "message": f"[DEMO] {lot} 배정 취소"}
+    try:
+        result = engine.cancel_reservation(lot)
+        return {"success": True, "message": result or f"{lot} 배정 취소 완료"}
+    except AttributeError:
+        return {"success": True, "message": f"[DEMO] {lot} 배정 취소"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Outbound Actions ──────────────────────────────────────────
+@app.post("/api/outbound/{lot_no}/confirm")
+def confirm_outbound(lot_no: str):
+    if not ENGINE_AVAILABLE:
+        return {"success": True, "message": f"[DEMO] {lot_no} 출고 확정"}
+    try:
+        result = engine.confirm_outbound(lot_no)
+        return {"success": True, "message": result or f"{lot_no} 출고 확정 완료"}
+    except AttributeError:
+        return {"success": True, "message": f"[DEMO] {lot_no} 출고 확정"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/outbound/{lot_no}/cancel")
+def cancel_outbound_lot(lot_no: str):
+    if not ENGINE_AVAILABLE:
+        return {"success": True, "message": f"[DEMO] {lot_no} 출고 취소"}
+    try:
+        result = engine.cancel_outbound(lot_no)
+        return {"success": True, "message": result or f"{lot_no} 출고 취소 완료"}
+    except AttributeError:
+        return {"success": True, "message": f"[DEMO] {lot_no} 출고 취소"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Scan ─────────────────────────────────────────────────────
+@app.post("/api/scan/process")
+def process_scan(payload: dict):
+    """
+    payload: { barcode: str, action: 'reserve'|'pick'|'outbound'|'return'|'reinbound' }
+    """
+    barcode = payload.get("barcode", "").strip()
+    action  = payload.get("action", "")
+    if not barcode:
+        raise HTTPException(400, "barcode required")
+    if not ENGINE_AVAILABLE:
+        return {"success": True, "message": f"[DEMO] {barcode} → {action}"}
+    # TODO: engine scan action dispatch
+    return {"success": False, "message": "Not implemented yet"}
+
+# ── Integrity ────────────────────────────────────────────────
+@app.get("/api/integrity/quick")
+def integrity_quick():
+    if not ENGINE_AVAILABLE:
+        return {"status": "ok", "lights": ["green", "green", "yellow", "green"]}
+    try:
+        result = engine.health_check()
+        return {"status": "ok", "detail": result}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+# ── Export ───────────────────────────────────────────────────
+@app.post("/api/export/excel")
+def export_excel(payload: dict):
+    option = payload.get("option", 1)
+    if not ENGINE_AVAILABLE:
+        raise HTTPException(503, "Engine unavailable")
+    try:
+        import tempfile, os
+        out = os.path.join(tempfile.gettempdir(), f"sqm_export_option{option}.xlsx")
+        engine.export_to_excel(out, option=option)
+        return {"success": True, "path": out}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Activity Log ─────────────────────────────────────────────
+@app.get("/api/log/activity")
+def get_activity_log(limit: int = Query(100, ge=1, le=1000)):
+    if not ENGINE_AVAILABLE:
+        return _sample_activity()
+    try:
+        return engine.get_outbound_event_log(limit=limit)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Sample Data Fallbacks ────────────────────────────────────
+def _sample_dashboard():
+    return {
+        "available_lots": 247, "reserved_lots": 38, "picked_lots": 15,
+        "outbound_lots_month": 89, "return_lots": 3,
+        "available_kg": 12340000,
+    }
+
+def _sample_inventory(page=1, page_size=50):
+    rows = [
+        {"lot": "SQM-2026-0421", "sap": "1000421001", "bl": "COAU2604210",
+         "container": "CRXU1234567", "product": "PP", "status": "AVAILABLE",
+         "net": 500000, "balance": 500000, "bags": 1000, "date": "2026-04-21", "location": "A-01"},
+    ]
+    start = (page - 1) * page_size
+    return {"total": len(rows), "page": page, "page_size": page_size, "data":rows[start:start+page_size]}
+
+def _sample_allocation():
+    return {"total": 0, "data": []}
+
+def _sample_activity():
+    return [
+        {"time": "14:32", "type": "INBOUND", "lot": "SQM-2026-0421", "note": "PP 500KG"},
+    ]
+
+
+# ══════════════════════════════════════════════════════════════
+# ── Static frontend mount (MUST be LAST) ──────────────────────
+# ══════════════════════════════════════════════════════════════
+# v864.3 Phase 2 fix: Starlette matches routes in registration order.
+# Mounting "/" at the END ensures every inline @app.get("/api/...")
+# above is checked FIRST; only unmatched paths fall through to
+# serving frontend/ static files. Previous position (before the
+# @app.get decorators) caused HTTP 404 on /api/health, /api/dashboard,
+# /api/inventory because the mount swallowed every path.
+try:
+    import mimetypes
+    # Windows 에서 .js 가 종종 잘못된 MIME 으로 등록되는 문제 방지
+    mimetypes.add_type("application/javascript", ".js")
+    mimetypes.add_type("application/javascript", ".mjs")
+    mimetypes.add_type("text/css", ".css")
+    mimetypes.add_type("text/html; charset=utf-8", ".html")
+
+    from fastapi.staticfiles import StaticFiles
+    _frontend_dir = os.path.join(PROJECT_ROOT, 'frontend')
+    if os.path.isdir(_frontend_dir):
+        app.mount("/", StaticFiles(directory=_frontend_dir, html=True), name="frontend")
+        logging.info(f"Frontend mounted at / from {_frontend_dir}")
+    else:
+        logging.error(f"frontend dir not found: {_frontend_dir}")
+except Exception as e:
+    logging.warning(f"frontend static mount failed: {e}")

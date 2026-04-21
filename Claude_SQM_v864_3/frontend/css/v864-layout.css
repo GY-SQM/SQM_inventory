@@ -1,0 +1,433 @@
+/* ══════════════════════════════════════════════════════════════════════
+   SQM v864.3 — v864.2 Golden Reference 레이아웃
+   작성: Ruby, Tier 2 긴급 UI 복구, 2026-04-21
+   목적: v864.2 스크린샷과 시각적 일치 (메뉴바/툴바/사이드바/라디오/상태바)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Reset & Base ─────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  height: 100vh;
+  font-family: 'Malgun Gothic', 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+  background: var(--bg, #f5f5f5);
+  color: var(--fg, #222);
+}
+
+/* ── Theme Tokens (light/dark) ────────────────────────────────────── */
+:root,
+html[data-theme="light"] {
+  --bg: #f5f5f5;
+  --fg: #1a1a1a;
+  --panel: #ffffff;
+  --panel-border: #d0d0d0;
+  --menubar-bg: #dfe6f0;
+  --menubar-fg: #1a3a6e;
+  --toolbar-bg: #ffffff;
+  --toolbar-border: #cccccc;
+  --sidebar-bg: #ffffff;
+  --sidebar-fg: #333;
+  --sidebar-active-bg: #1e88e5;
+  --sidebar-active-fg: #fff;
+  --alert-bg: #fff5f5;
+  --alert-border: #ffb8b8;
+  --alert-text: #c62828;
+  --status-bg: #f0f3f7;
+  --status-fg: #555;
+  --accent: #1e88e5;
+  --btn-hover: rgba(30,136,229,0.12);
+  --table-header: #e9eef5;
+  --table-row-alt: #fafafa;
+}
+
+html[data-theme="dark"] {
+  --bg: #0f1520;
+  --fg: #e6e6e6;
+  --panel: #1a2130;
+  --panel-border: #2a3340;
+  --menubar-bg: #1e2a3e;
+  --menubar-fg: #7fb3ff;
+  --toolbar-bg: #1a2130;
+  --toolbar-border: #2a3340;
+  --sidebar-bg: #1a2130;
+  --sidebar-fg: #c0c8d4;
+  --sidebar-active-bg: #2962ff;
+  --sidebar-active-fg: #fff;
+  --alert-bg: #2a1a1a;
+  --alert-border: #5a2a2a;
+  --alert-text: #ff7a7a;
+  --status-bg: #131823;
+  --status-fg: #9aa3b0;
+  --accent: #4a9eff;
+  --btn-hover: rgba(74,158,255,0.18);
+  --table-header: #212a3a;
+  --table-row-alt: #1e2531;
+}
+
+/* ── App Titlebar (창 제목) ───────────────────────────────────────── */
+.app-titlebar {
+  height: 28px;
+  background: var(--menubar-bg);
+  color: var(--menubar-fg);
+  display: flex; align-items: center;
+  padding: 0 12px;
+  font-weight: 600;
+  font-size: 12px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+/* ── Menubar (상단 가로 메뉴 7개) ──────────────────────────────────── */
+.menubar {
+  display: flex; align-items: stretch;
+  background: var(--menubar-bg);
+  height: 44px;
+  padding: 4px 8px;
+  gap: 2px;
+  border-bottom: 2px solid var(--panel-border);
+}
+
+.menu-btn {
+  position: relative;
+  padding: 0 14px;
+  background: transparent;
+  border: none;
+  color: var(--menubar-fg);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 6px;
+  display: flex; align-items: center; gap: 4px;
+}
+.menu-btn:hover { background: var(--btn-hover); }
+.menu-btn .caret { font-size: 10px; opacity: 0.7; }
+
+.menu-dropdown {
+  display: none !important;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  padding: 4px 0;
+  border-radius: 6px;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.menu-btn:hover > .menu-dropdown,
+.menu-btn:focus-within > .menu-dropdown,
+.menu-btn.open > .menu-dropdown {
+  display: block !important;
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+}
+.menu-btn.open { background: var(--btn-hover); }
+.menu-dropdown button {
+  display: block; width: 100%; text-align: left;
+  padding: 8px 14px;
+  background: transparent; border: none; color: var(--fg);
+  font-size: 13px; cursor: pointer;
+}
+.menu-dropdown button:hover { background: var(--btn-hover); }
+
+.menubar-spacer { flex: 1; }
+
+.topbar-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--menubar-fg);
+  font-size: 13px; font-weight: 600;
+  padding: 0 10px; height: 32px; border-radius: 4px;
+  cursor: pointer;
+  margin: 0 2px;
+}
+.topbar-btn:hover { background: var(--btn-hover); }
+.topbar-sep { color: var(--panel-border); margin: 0 4px; }
+
+/* ── Action Toolbar (📄PDF입고 🚀즉시출고 🔄반품 📋재고조회 ✅정합성 💾백업 ⚙️설정) ── */
+.action-toolbar {
+  display: flex; align-items: center;
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--toolbar-border);
+  padding: 6px 10px;
+  gap: 6px;
+  height: 40px;
+}
+.tool-btn {
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--fg);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.tool-btn:hover { background: var(--btn-hover); border-color: var(--accent); }
+.tool-btn.tool-pdf {
+  background: #4caf50; color: #fff; font-weight: 700;
+}
+.tool-btn.tool-pdf:hover { background: #43a047; }
+
+/* ── App Body (사이드바 + 메인) ───────────────────────────────────── */
+.app-body {
+  display: flex;
+  height: calc(100vh - 28px - 44px - 40px - 40px); /* title+menubar+toolbar+statusbar */
+}
+
+/* ── Sidebar (9탭) ────────────────────────────────────────────────── */
+.sidebar {
+  width: 90px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--panel-border);
+  display: flex; flex-direction: column;
+  padding: 12px 6px;
+  gap: 6px;
+  overflow-y: auto;
+}
+.side-btn {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 4px;
+  padding: 10px 4px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--sidebar-fg);
+  font-size: 11px;
+  font-weight: 600;
+}
+.side-btn:hover { background: var(--btn-hover); }
+.side-btn.active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-fg);
+}
+.side-icon { font-size: 20px; }
+.side-label { font-size: 11px; letter-spacing: 0.3px; }
+
+/* ── Main Area ────────────────────────────────────────────────────── */
+.main-area {
+  flex: 1;
+  display: flex; flex-direction: column;
+  padding: 12px 18px;
+  overflow: hidden;
+  background: var(--bg);
+}
+.main-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.main-title {
+  margin: 0; font-size: 16px; font-weight: 700;
+  color: var(--fg);
+}
+
+/* ── View Mode Radios (돈백/LOT/MT) ───────────────────────────────── */
+.view-mode-group {
+  display: flex; gap: 14px;
+  background: var(--panel); padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--panel-border);
+}
+.view-mode-item {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  color: var(--fg);
+}
+.view-mode-item input { margin: 0; cursor: pointer; }
+
+/* ── Page Container (라우터 렌더 영역) ────────────────────────────── */
+.page-container {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 12px;
+  overflow: auto;
+}
+
+/* ── Data Table (재고 및 확인 스타일) ─────────────────────────────── */
+.data-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th {
+  background: var(--table-header);
+  padding: 8px 10px;
+  text-align: right;
+  font-weight: 700;
+  border-bottom: 2px solid var(--panel-border);
+  color: var(--fg);
+}
+.data-table th:first-child,
+.data-table th:nth-child(2),
+.data-table th:nth-child(3) { text-align: left; }
+.data-table td {
+  padding: 7px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--panel-border);
+}
+.data-table td:first-child,
+.data-table td:nth-child(2),
+.data-table td:nth-child(3) { text-align: left; }
+.data-table tr:nth-child(even) td { background: var(--table-row-alt); }
+.data-table tr.total-row td {
+  font-weight: 700;
+  background: var(--table-header);
+  border-top: 2px solid var(--panel-border);
+}
+
+/* ── ALERTS Panel (하단 빨간 경고 2건) ────────────────────────────── */
+.alerts-panel {
+  margin-top: 12px;
+  background: var(--alert-bg);
+  border: 1px solid var(--alert-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  min-height: 80px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.alerts-header {
+  display: flex; justify-content: space-between;
+  align-items: center;
+  font-weight: 700;
+  color: var(--alert-text);
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.alerts-counter {
+  color: #d32f2f; font-weight: 800;
+}
+.alerts-list {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.alert {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--alert-text);
+  line-height: 1.4;
+}
+.alert.alert-warning { color: #e65100; }
+.alert.alert-error { color: #c62828; }
+.alert-icon { flex-shrink: 0; font-size: 14px; }
+.alert-text { flex: 1; }
+.alert-link {
+  color: var(--accent); text-decoration: underline; font-weight: 600;
+}
+
+/* ── Statusbar (하단) ─────────────────────────────────────────────── */
+.statusbar-wrap {
+  height: 28px;
+  background: var(--status-bg);
+  border-top: 1px solid var(--panel-border);
+  display: flex; align-items: center;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--status-fg);
+  gap: 10px;
+}
+.statusbar { display: flex; align-items: center; gap: 10px; width: 100%; }
+.sb-sep { color: var(--panel-border); }
+.sb-flex { flex: 1; }
+.sb-auto { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.sb-auto input { margin: 0; }
+
+/* ── Toolbar Mini (페이지 내부 작은 툴바) ─────────────────────────── */
+.toolbar-mini {
+  display: flex; gap: 6px; margin-bottom: 10px;
+}
+.btn {
+  padding: 6px 12px; border-radius: 4px; border: 1px solid var(--panel-border);
+  background: var(--panel); color: var(--fg); cursor: pointer;
+  font-size: 12px;
+}
+.btn-secondary { background: var(--panel); }
+.btn:hover { background: var(--btn-hover); }
+.select {
+  padding: 5px 8px; border-radius: 4px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel); color: var(--fg);
+}
+.loading, .empty {
+  padding: 20px; text-align: center; color: var(--status-fg);
+}
+
+/* ── Toast (기존 design-system.css 와 겹쳐도 안전) ────────────────── */
+#toast-container {
+  position: fixed; top: 80px; right: 20px;
+  z-index: 10000;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+  min-width: 240px; max-width: 400px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  display: flex; gap: 8px; align-items: center;
+  font-size: 13px; color: var(--fg);
+}
+.toast.success { border-left: 4px solid #4caf50; }
+.toast.info    { border-left: 4px solid #2196f3; }
+.toast.warning { border-left: 4px solid #ff9800; }
+.toast.error   { border-left: 4px solid #f44336; }
+
+/* ── 기본 페이지 섹션 ─────────────────────────────────────────────── */
+.page { padding: 4px 0; }
+.page h2 { margin: 0 0 12px 0; font-size: 15px; color: var(--fg); }
+
+/* ── Dashboard Split Layout ───────────────────────────────────────── */
+.dashboard-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  height: 100%;
+}
+.panel-half {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 8px;
+  overflow: auto;
+}
+
+/* Theme toggle 시 body 에도 적용되도록 */
+body[data-theme="dark"],
+html[data-theme="dark"] body { background: var(--bg); color: var(--fg); }
+
+/* Sidebar 활성 탭 강조 개선 */
+.side-btn.active .side-label { text-shadow: 0 0 2px rgba(255,255,255,0.3); }
+
+
+/* ── HARDEN: 메뉴 드롭다운 강제 숨김 (specificity 강화) ─────────── */
+/* HTML: <div class="menu-btn"> 이므로 button/div 모두 안전하게 커버 */
+nav.menubar .menu-btn > .menu-dropdown,
+.menubar .menu-btn > .menu-dropdown {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+}
+nav.menubar .menu-btn:hover > .menu-dropdown,
+nav.menubar .menu-btn:focus-within > .menu-dropdown,
+nav.menubar .menu-btn.open > .menu-dropdown,
+.menubar .menu-btn:hover > .menu-dropdown,
+.menubar .menu-btn:focus-within > .menu-dropdown,
+.menubar .menu-btn.open > .menu-dropdown {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
