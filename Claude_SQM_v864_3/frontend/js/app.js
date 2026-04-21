@@ -49,6 +49,7 @@ function navigateTo(page) {
 document.getElementById('sidebar-toggle').addEventListener('click', () => {
   state.sidebarExpanded = !state.sidebarExpanded;
   document.getElementById('app').classList.toggle('sidebar-expanded', state.sidebarExpanded);
+  try { localStorage.setItem('sqm_sidebar', state.sidebarExpanded ? 'expanded' : 'collapsed'); } catch (_) {}
 });
 
 // ── Nav Click ────────────────────────────────────────────────
@@ -222,8 +223,10 @@ document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
   applyTheme(saved);
 
   navigateTo('dashboard');
-  // 사이드바 기본 상태: 접힘 (icon-only)
-  document.getElementById('app').classList.remove('sidebar-expanded');
+  // 사이드바 상태 복원 (기본: 펼침)
+  const savedSidebar = localStorage.getItem('sqm_sidebar') !== 'collapsed';
+  state.sidebarExpanded = savedSidebar;
+  document.getElementById('app').classList.toggle('sidebar-expanded', savedSidebar);
   // 진행바 초기화 (Tier 1 완료 상태)
   updateProgressBar({ implementedFeatures: 0, currentTier: 1 });
 })();
