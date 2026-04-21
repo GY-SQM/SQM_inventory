@@ -100,6 +100,35 @@
     </div>
 
     <div class="sidebar-footer">
+      <!-- ── 마이그레이션 진행률 ── -->
+      <div class="migration-progress" id="migration-progress">
+        <div class="migration-progress-mini" title="마이그레이션 진행률">
+          <svg class="ring-svg" viewBox="0 0 32 32">
+            <circle class="ring-bg"   cx="16" cy="16" r="13" />
+            <circle class="ring-fill" cx="16" cy="16" r="13" id="ring-fill" />
+          </svg>
+          <span class="ring-pct" id="ring-pct">0%</span>
+        </div>
+        <div class="migration-progress-detail">
+          <div class="mp-header">
+            <span class="mp-title">마이그레이션 진행률</span>
+            <span class="mp-pct" id="mp-pct-label">0%</span>
+          </div>
+          <div class="mp-bar-wrap">
+            <div class="mp-bar" id="mp-bar"></div>
+          </div>
+          <div class="mp-stats">
+            <span id="mp-feat">기능 0 / 85</span>
+            <span class="mp-tier" id="mp-tier">Tier 1 / 3</span>
+          </div>
+          <div class="mp-tiers">
+            <div class="mp-tier-dot done"  title="Tier 1 완료">T1</div>
+            <div class="mp-tier-dot"       title="Tier 2 진행 예정">T2</div>
+            <div class="mp-tier-dot"       title="Tier 3 진행 예정">T3</div>
+          </div>
+        </div>
+      </div>
+
       <a class="nav-item" data-page="settings" style="--accent-color: #94a3b8">
         <span class="nav-icon">⚙️</span>
         <span class="nav-label">설정</span>

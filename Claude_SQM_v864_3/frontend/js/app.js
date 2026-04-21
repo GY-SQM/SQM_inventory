@@ -167,6 +167,34 @@ document.addEventListener('keydown', e => {
   if (e.key === 'F5') { e.preventDefault(); showToast('success', '새로고침 완료'); }
 });
 
+// ── Migration Progress ───────────────────────────────────────
+const PROGRESS = {
+  totalFeatures: 85,
+  implementedFeatures: 0,   // Tier 2 구현 시마다 증가
+  currentTier: 1,
+  totalTiers: 3,
+};
+
+function updateProgressBar(opts = {}) {
+  Object.assign(PROGRESS, opts);
+  const pct = Math.round((PROGRESS.implementedFeatures / PROGRESS.totalFeatures) * 100);
+  const circumference = 81.68; // 2π×13
+
+  // 미니 링
+  const ringFill = document.getElementById('ring-fill');
+  const ringPct  = document.getElementById('ring-pct');
+  if (ringFill) ringFill.style.strokeDashoffset = circumference - (circumference * pct / 100);
+  if (ringPct)  ringPct.textContent = pct + '%';
+
+  // 상세 바
+  const bar      = document.getElementById('mp-bar');
+  const pctLabel = document.getElementById('mp-pct-label');
+  const feat     = document.getElementById('mp-feat');
+  if (bar)      bar.style.width = pct + '%';
+  if (pctLabel) pctLabel.textContent = pct + '%';
+  if (feat)     feat.textContent = `기능 ${PROGRESS.implementedFeatures} / ${PROGRESS.totalFeatures}`;
+}
+
 // ── Theme Toggle ─────────────────────────────────────────────
 const THEME_KEY = 'sqm_theme';
 
@@ -196,4 +224,6 @@ document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
   navigateTo('dashboard');
   // 사이드바 기본 상태: 접힘 (icon-only)
   document.getElementById('app').classList.remove('sidebar-expanded');
+  // 진행바 초기화 (Tier 1 완료 상태)
+  updateProgressBar({ implementedFeatures: 0, currentTier: 1 });
 })();
