@@ -290,45 +290,147 @@
       : (v == null ? '-' : v);
   }
 
+  // Phase 3 Q1 — KPI 카드 HTML 생성 헬퍼
+  function kpiCard(id, label, icon, unit){
+    return '<div class="kpi-card" style="'+
+      'background:var(--panel,#1e1e2e);border:1px solid var(--panel-border,#444);'+
+      'border-radius:6px;padding:12px 16px;text-align:center;min-width:0">'+
+      '<div style="font-size:1.4em;margin-bottom:4px">'+icon+'</div>'+
+      '<div style="font-size:0.75em;color:var(--text-muted,#aaa);margin-bottom:6px">'+label+'</div>'+
+      '<div id="'+id+'" style="font-size:1.6em;font-weight:700;color:var(--accent,#58a6ff)">—</div>'+
+      '<div style="font-size:0.7em;color:var(--text-muted,#aaa);margin-top:2px">'+unit+'</div>'+
+    '</div>';
+  }
+
+  // Phase 3 Q1 — KPI 숫자 카운트업 애니메이션 (300ms ease-out)
+  function animateKpi(id, target){
+    var el = document.getElementById(id);
+    if (!el) return;
+    var start = 0;
+    var dur = 300;
+    var t0 = performance.now();
+    var isFloat = (target % 1 !== 0);
+    function step(now){
+      var p = Math.min((now - t0) / dur, 1);
+      var ease = 1 - Math.pow(1 - p, 3);  // ease-out cubic
+      var cur = start + (target - start) * ease;
+      el.textContent = isFloat
+        ? cur.toLocaleString('ko-KR',{minimumFractionDigits:1, maximumFractionDigits:1})
+        : Math.round(cur).toLocaleString('ko-KR');
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Phase 3 Q1 — KPI 폴링 (5초 interval, 전역 1개만 유지)
+  var _kpiTimer = null;
+  function startKpiPolling(){
+    if (_kpiTimer) clearInterval(_kpiTimer);
+    fetchKpi();                              // 즉시 1회
+    _kpiTimer = setInterval(fetchKpi, 5000); // 5초마다
+  }
+  function stopKpiPolling(){
+    if (_kpiTimer){ clearInterval(_kpiTimer); _kpiTimer = null; }
+  }
+
+  function fetchKpi(){
+    // KPI 카드가 DOM 에 없으면 폴링 중단
+    if (!document.getElementById('kpi-inbound')){ stopKpiPolling(); return; }
+    fetch(API_BASE + '/api/dashboard/kpi')
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){
+        if (!j || !j.data) return;
+        var d = j.data;
+        var ok = (j.ok !== false);
+        // ok=false → 회색 "—" 표시
+        if (!ok){
+          ['kpi-inbound','kpi-outbound','kpi-stock','kpi-unloc'].forEach(function(id){
+            var el = document.getElementById(id);
+            if (el){ el.textContent = '—'; el.style.color = 'var(--text-muted,#aaa)'; }
+          });
+          return;
+        }
+        animateKpi('kpi-inbound',  d.today_inbound_mt   || 0);
+        animateKpi('kpi-outbound', d.today_outbound_mt  || 0);
+        animateKpi('kpi-stock',    d.current_stock_lots  || 0);
+        animateKpi('kpi-unloc',    d.unassigned_locations || 0);
+        // 갱신 시각 표시
+        var ts = document.getElementById('kpi-updated-at');
+        if (ts && d.updated_at) ts.textContent = '최종 갱신: ' + d.updated_at.replace('T',' ').slice(0,19);
+      })
+      .catch(function(e){
+        console.warn('[SQM kpi poll 실패]', e);
+      });
+  }
+
   function loadDashboard(){
     var el = document.getElementById('page-container');
     if (!el) return;
+
+    // ── KPI 카드 4개 + 기존 테이블 레이아웃 ──────────────────────
+    el.innerHTML =
+      // KPI 카드 행
+      '<div style="padding:8px 8px 0">'+
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">'+
+          kpiCard('kpi-inbound',  '오늘 입고',     '📥', 'MT') +
+          kpiCard('kpi-outbound', '오늘 출고',     '📤', 'MT') +
+          kpiCard('kpi-stock',    '현재 재고',     '📦', 'LOT') +
+          kpiCard('kpi-unloc',    '위치 미배정',   '📍', '개') +
+        '</div>'+
+        '<div id="kpi-updated-at" style="font-size:0.7em;color:var(--text-muted,#aaa);text-align:right;margin-bottom:4px"></div>'+
+      '</div>'+
+      // 기존 제품별/LOT 테이블 (로딩 placeholder)
+      '<div id="dash-tables" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 8px 8px;height:calc(100% - 130px)">'+
+        '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px;overflow:auto">'+
+          '<div class="loading">재고 테이블 로딩 중…</div></div>'+
+        '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px;overflow:auto">'+
+          '<div class="loading">LOT 테이블 로딩 중…</div></div>'+
+      '</div>';
+
+    // KPI 폴링 시작
+    startKpiPolling();
+
+    // 기존 테이블 데이터 로드
     apiCall('GET', '/api/dashboard/stats', null, function(err, data){
+      var tables = document.getElementById('dash-tables');
+      if (!tables) return;
+
       var products = [{name:'LITHIUM CARBONATE', sellable:200.0, reserved:0, committed:0, outbound_done:0, return_wait:0, total:200.0, sample:40}];
       var lots = [{opening:200.0, inbound:0, outbound:0, ending:200.0, status:'OK'}];
       if (!err && data) {
         if (data.products) products = data.products;
-        if (data.lots) lots = data.lots;
+        if (data.lots)     lots     = data.lots;
       }
+
       var prodRows = products.map(function(r,i){
         return '<tr><td>'+(i+1)+'</td><td style="text-align:left">'+r.name+'</td>'+
           '<td>'+fmt(r.sellable)+'</td><td>'+fmt(r.reserved)+'</td><td>'+fmt(r.committed)+'</td>'+
           '<td>'+fmt(r.outbound_done)+'</td><td>'+fmt(r.return_wait)+'</td>'+
           '<td><b>'+fmt(r.total)+'</b></td><td>'+(r.sample||'-')+'</td></tr>';
       }).join('');
-      var totalSum = products.reduce(function(a,r){ return a+(r.total||0); }, 0);
+      var totalSum  = products.reduce(function(a,r){ return a+(r.total||0); }, 0);
       var sampleSum = products.reduce(function(a,r){ return a+(r.sample||0); }, 0);
       prodRows += '<tr class="total-row"><td></td><td style="text-align:left"><b>합계</b></td>'+
                   '<td>'+fmt(totalSum)+'</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td>'+
                   '<td><b>'+fmt(totalSum)+'</b></td><td>'+sampleSum+'</td></tr>';
+
       var lotRows = lots.map(function(r,i){
         return '<tr><td>'+(i+1)+'</td><td>'+fmt(r.opening)+'</td><td>'+fmt(r.inbound)+'</td>'+
           '<td>'+fmt(r.outbound)+'</td><td>'+fmt(r.ending)+'</td>'+
           '<td><span style="color:#2e7d32;font-weight:700">'+(r.status||'OK')+'</span></td></tr>';
       }).join('');
-      el.innerHTML =
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;height:100%">'+
-          '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px;overflow:auto">'+
-            '<table class="data-table"><thead><tr>'+
-              '<th style="width:40px">순번</th><th style="text-align:left">Product</th>'+
-              '<th>판매가능</th><th>판매배정</th><th>판매화물</th>'+
-              '<th>출고완료</th><th>반품대기</th><th>합계</th><th>샘플</th>'+
-            '</tr></thead><tbody>'+prodRows+'</tbody></table></div>'+
-          '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px;overflow:auto">'+
-            '<table class="data-table"><thead><tr>'+
-              '<th style="width:40px">순번</th><th>기초재고</th><th>입고</th><th>출고</th><th>기말재고</th><th>검증</th>'+
-            '</tr></thead><tbody>'+lotRows+'</tbody></table></div>'+
-        '</div>';
+
+      tables.innerHTML =
+        '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px;overflow:auto">'+
+          '<table class="data-table"><thead><tr>'+
+            '<th style="width:40px">순번</th><th style="text-align:left">Product</th>'+
+            '<th>판매가능</th><th>판매배정</th><th>판매화물</th>'+
+            '<th>출고완료</th><th>반품대기</th><th>합계</th><th>샘플</th>'+
+          '</tr></thead><tbody>'+prodRows+'</tbody></table></div>'+
+        '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px;overflow:auto">'+
+          '<table class="data-table"><thead><tr>'+
+            '<th style="width:40px">순번</th><th>기초재고</th><th>입고</th><th>출고</th><th>기말재고</th><th>검증</th>'+
+          '</tr></thead><tbody>'+lotRows+'</tbody></table></div>';
     });
   }
 
@@ -370,8 +472,10 @@
         var engineOk = (h.engine_available != null) ? h.engine_available : h.engine;
         var loaded = (h.modules_loaded != null) ? h.modules_loaded : (engineOk ? 8 : 0);
         var total = (h.modules_total != null) ? h.modules_total : 8;
+        // Phase 3 Q2: 🟢/🔴 이모지 + "Engine X/Y" 형식
+        var color = (loaded === total && total > 0) ? '🟢' : '🔴';
         var sb = document.getElementById('sb-modules');
-        if (sb) sb.textContent = 'Modules: ' + loaded + '/' + total;
+        if (sb) sb.textContent = color + ' Engine ' + loaded + '/' + total;
       }).catch(function(){ /* 무시 — placeholder 유지 */ });
     } catch(e){ /* 무시 */ }
   }

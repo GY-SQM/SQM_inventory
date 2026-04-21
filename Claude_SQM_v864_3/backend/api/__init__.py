@@ -52,6 +52,14 @@ try:
 except Exception as e:
     logging.warning(f"controls router load failed: {e}")
 
+# Phase 3 Q1: Dashboard KPI 실데이터 라우터
+try:
+    from backend.api.dashboard import router as dashboard_kpi_router
+    app.include_router(dashboard_kpi_router)
+    logging.info("dashboard_kpi router loaded OK")
+except Exception as e:
+    logging.warning(f"dashboard_kpi router load failed: {e}")
+
 try:
     from backend.api.optional import router as optional_router
     app.include_router(optional_router)
