@@ -446,20 +446,16 @@
     }, 5000);
   }
 
-  var SAMPLE_PRODUCTS = [{
-    name:'LITHIUM CARBONATE', sellable:200, reserved:0, committed:0,
-    outbound_done:0, return_wait:0, total:200, sample:40
-  }];
-  var SAMPLE_LOTS = [{opening:200, inbound:0, outbound:0, ending:200, status:'OK'}];
-
   function loadDashboardTables() {
     apiGet('/api/dashboard/stats').then(function(res){
       var d = res.data || res || {};
-      renderDashProducts(d.products || SAMPLE_PRODUCTS);
-      renderDashLots(d.lots || SAMPLE_LOTS);
+      renderStatusCards(d.status_summary || {});
+      renderProductMatrix(d.product_matrix || []);
+      renderIntegrity(d.integrity || {});
     }).catch(function(){
-      renderDashProducts(SAMPLE_PRODUCTS);
-      renderDashLots(SAMPLE_LOTS);
+      renderStatusCards({});
+      renderProductMatrix([]);
+      renderIntegrity({});
     });
   }
 
@@ -467,27 +463,113 @@
     if (typeof v !== 'number') return (v == null ? '-' : v);
     return v.toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:1});
   }
-
-  function renderDashProducts(rows) {
-    var tbody = document.getElementById('dash-products');
-    if (!tbody) return;
-    var tot = rows.reduce(function(a,r){
-      return {sellable:a.sellable+(r.sellable||0),reserved:a.reserved+(r.reserved||0),
-              committed:a.committed+(r.committed||0),outbound_done:a.outbound_done+(r.outbound_done||0),
-              return_wait:a.return_wait+(r.return_wait||0),total:a.total+(r.total||0),sample:a.sample+(r.sample||0)};
-    },{sellable:0,reserved:0,committed:0,outbound_done:0,return_wait:0,total:0,sample:0});
-    tbody.innerHTML = rows.map(function(r,i){
-      return '<tr><td>'+(i+1)+'</td><td style="text-align:left">'+escapeHtml(r.name)+'</td><td>'+fmtN(r.sellable)+'</td><td>'+fmtN(r.reserved)+'</td><td>'+fmtN(r.committed)+'</td><td>'+fmtN(r.outbound_done)+'</td><td>'+fmtN(r.return_wait)+'</td><td><b>'+fmtN(r.total)+'</b></td><td>'+(r.sample!=null?r.sample:'-')+'</td></tr>';
-    }).join('') +
-    '<tr class="total-row"><td></td><td style="text-align:left"><b>Total</b></td><td>'+fmtN(tot.sellable)+'</td><td>'+fmtN(tot.reserved)+'</td><td>'+fmtN(tot.committed)+'</td><td>'+fmtN(tot.outbound_done)+'</td><td>'+fmtN(tot.return_wait)+'</td><td>'+fmtN(tot.total)+'</td><td>'+tot.sample+'</td></tr>';
+  function fmtW(kg) {
+    if (typeof kg !== 'number') return '-';
+    return (kg / 1000).toLocaleString('ko-KR',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' MT';
   }
 
-  function renderDashLots(rows) {
-    var tbody = document.getElementById('dash-lots');
-    if (!tbody) return;
-    tbody.innerHTML = rows.map(function(r,i){
-      return '<tr><td>'+(i+1)+'</td><td>'+fmtN(r.opening)+'</td><td>'+fmtN(r.inbound)+'</td><td>'+fmtN(r.outbound)+'</td><td>'+fmtN(r.ending)+'</td><td><span style="color:#2e7d32;font-weight:700">'+escapeHtml(r.status||'OK')+'</span></td></tr>';
-    }).join('');
+  /* -- 5단계 재고 상태 카드 -- */
+  var STATUS_CARD_META = [
+    {key:'available', label:'Available (판매가능)', icon:'\u2705', color:'#22c55e'},
+    {key:'reserved',  label:'Reserved (배정)',      icon:'\uD83D\uDCCB', color:'#3b82f6'},
+    {key:'picked',    label:'Picked (피킹)',        icon:'\uD83D\uDCE6', color:'#f59e0b'},
+    {key:'outbound',  label:'Outbound (출고)',      icon:'\uD83D\uDE9A', color:'#ef4444'},
+    {key:'return',    label:'Return (반품)',         icon:'\uD83D\uDD04', color:'#8b5cf6'}
+  ];
+
+  function renderStatusCards(summary) {
+    var el = document.getElementById('dashboard-detail');
+    if (!el) return;
+    var html = '<div style="margin-bottom:16px"><h3 style="margin:0 0 8px 0;font-size:15px;color:var(--text-primary,#e0e0e0)">';
+    html += '5\uB2E8\uACC4 \uC7AC\uACE0 \uD604\uD669</h3>';
+    html += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
+    STATUS_CARD_META.forEach(function(m){
+      var s = summary[m.key] || {lots:0, tonbags:0, weight_kg:0};
+      html += '<div style="flex:1;min-width:160px;background:var(--bg-card,#1e1e2e);border-left:4px solid '+m.color+';border-radius:8px;padding:12px 14px">';
+      html += '<div style="font-size:13px;color:'+m.color+';font-weight:700;margin-bottom:6px">'+m.icon+' '+m.label+'</div>';
+      html += '<div style="font-size:22px;font-weight:700;color:var(--text-primary,#e0e0e0)">'+s.tonbags+'<span style="font-size:12px;font-weight:400;color:var(--text-muted,#888)"> \uD1A4\uBC31</span></div>';
+      html += '<div style="font-size:12px;color:var(--text-muted,#888);margin-top:2px">'+s.lots+' LOT \u00B7 '+fmtW(s.weight_kg)+'</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+    html += '<div id="dash-matrix-area"></div>';
+    html += '<div id="dash-integrity-area"></div>';
+    el.innerHTML = html;
+  }
+
+  /* -- 제품x상태 매트릭스 테이블 -- */
+  function renderProductMatrix(rows) {
+    var el = document.getElementById('dash-matrix-area');
+    if (!el) return;
+    if (!rows.length) {
+      el.innerHTML = '<p style="color:var(--text-muted,#888);font-size:13px">\uC81C\uD488\uBCC4 \uB370\uC774\uD130 \uC5C6\uC74C</p>';
+      return;
+    }
+    var totals = {available:0, reserved:0, picked:0, outbound:0, return_cnt:0, total:0};
+    rows.forEach(function(r){
+      totals.available += (r.available||0);
+      totals.reserved  += (r.reserved||0);
+      totals.picked    += (r.picked||0);
+      totals.outbound  += (r.outbound||0);
+      totals.return_cnt+= (r['return']||0);
+      totals.total     += (r.total||0);
+    });
+    var html = '<h3 style="margin:16px 0 8px 0;font-size:15px;color:var(--text-primary,#e0e0e0)">';
+    html += '\uC81C\uD488\u00D7\uC0C1\uD0DC \uB9E4\uD2B8\uB9AD\uC2A4 (\uD1A4\uBC31 \uC218)</h3>';
+    html += '<div style="overflow-x:auto"><table class="sqm-table" style="width:100%;font-size:13px;border-collapse:collapse">';
+    html += '<thead><tr style="background:var(--bg-header,#2a2a3e)">';
+    html += '<th style="text-align:left;padding:6px 10px">\uC81C\uD488</th>';
+    html += '<th style="padding:6px 8px;color:#22c55e">Available</th>';
+    html += '<th style="padding:6px 8px;color:#3b82f6">Reserved</th>';
+    html += '<th style="padding:6px 8px;color:#f59e0b">Picked</th>';
+    html += '<th style="padding:6px 8px;color:#ef4444">Outbound</th>';
+    html += '<th style="padding:6px 8px;color:#8b5cf6">Return</th>';
+    html += '<th style="padding:6px 8px;font-weight:700">Total</th>';
+    html += '</tr></thead><tbody>';
+    rows.forEach(function(r){
+      html += '<tr>';
+      html += '<td style="text-align:left;padding:5px 10px;font-weight:600">'+escapeHtml(r.product)+'</td>';
+      html += '<td style="text-align:right;padding:5px 8px">'+(r.available||0)+'</td>';
+      html += '<td style="text-align:right;padding:5px 8px">'+(r.reserved||0)+'</td>';
+      html += '<td style="text-align:right;padding:5px 8px">'+(r.picked||0)+'</td>';
+      html += '<td style="text-align:right;padding:5px 8px">'+(r.outbound||0)+'</td>';
+      html += '<td style="text-align:right;padding:5px 8px">'+(r['return']||0)+'</td>';
+      html += '<td style="text-align:right;padding:5px 8px;font-weight:700">'+(r.total||0)+'</td>';
+      html += '</tr>';
+    });
+    html += '<tr style="border-top:2px solid var(--border-color,#444);font-weight:700">';
+    html += '<td style="text-align:left;padding:5px 10px">Total</td>';
+    html += '<td style="text-align:right;padding:5px 8px">'+totals.available+'</td>';
+    html += '<td style="text-align:right;padding:5px 8px">'+totals.reserved+'</td>';
+    html += '<td style="text-align:right;padding:5px 8px">'+totals.picked+'</td>';
+    html += '<td style="text-align:right;padding:5px 8px">'+totals.outbound+'</td>';
+    html += '<td style="text-align:right;padding:5px 8px">'+totals.return_cnt+'</td>';
+    html += '<td style="text-align:right;padding:5px 8px">'+totals.total+'</td>';
+    html += '</tr></tbody></table></div>';
+    el.innerHTML = html;
+  }
+
+  /* -- 정합성 요약 -- */
+  function renderIntegrity(data) {
+    var el = document.getElementById('dash-integrity-area');
+    if (!el) return;
+    if (!data || data.total_inbound_kg === undefined) {
+      el.innerHTML = '';
+      return;
+    }
+    var ok = data.ok;
+    var color = ok ? '#22c55e' : '#ef4444';
+    var icon  = ok ? '\u2705' : '\u26A0\uFE0F';
+    var label = ok ? '\uC815\uD569\uC131 OK' : '\uBD88\uC77C\uCE58 \uAC10\uC9C0';
+    var html = '<div style="margin-top:16px;padding:12px 16px;background:var(--bg-card,#1e1e2e);border-left:4px solid '+color+';border-radius:8px">';
+    html += '<h3 style="margin:0 0 8px 0;font-size:15px;color:'+color+'">'+icon+' \uC815\uD569\uC131 \uAC80\uC99D \u2014 '+label+'</h3>';
+    html += '<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:13px;color:var(--text-primary,#e0e0e0)">';
+    html += '<div>\uCD1D\uC785\uACE0: <b>'+fmtW(data.total_inbound_kg)+'</b></div>';
+    html += '<div>\uD604\uC7AC\uC7AC\uACE0: <b>'+fmtW(data.current_stock_kg)+'</b></div>';
+    html += '<div>\uCD9C\uACE0\uB204\uACC4: <b>'+fmtW(data.outbound_total_kg)+'</b></div>';
+    html += '<div>\uCC28\uC774: <b style="color:'+color+'">'+fmtN(data.diff_kg)+' kg</b></div>';
+    html += '</div></div>';
+    el.innerHTML = html;
   }
 
   /* ===================================================
@@ -2144,7 +2226,7 @@
     'onExport':          {m:'GET',  u:'/api/action/export-lot-excel',            lbl:'Excel 내보내기'},
     /* v864.3 Phase 4-B: D/O 후속 연결 네이티브 폼 */
     'onDoUpdate':        {m:'JS', u:'do-update', lbl:'D/O 후속 연결'},
-    'onReturnDialog':    {m:'POST', u:'/api/menu/-show-return-dialog',           lbl:'반품 (재입고)'},
+    'onReturnDialog':    {m:'JS',   u:'return',                                  lbl:'반품 (재입고)'},
     /* v864.3 Phase 4-B: 반품 입고 — 네이티브 Excel 업로드 모달 */
     'onReturnInboundUpload': {m:'JS', u:'return-upload', lbl:'반품 입고 Excel'},
     'onReturnStatistics': {m:'GET', u:'/api/q2/return-stats',                   lbl:'반품 사유 통계'},

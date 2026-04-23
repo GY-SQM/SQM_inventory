@@ -120,3 +120,199 @@ def get_dashboard_kpi():
             },
             "error": str(exc),
         }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/dashboard/stats  — 대시보드 통계 패널
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@router.get("/stats")
+def get_dashboard_stats():
+    """
+    Dashboard 통계 — 5단계 상태 요약 + 제품x상태 매트릭스 + 정합성 검증.
+
+    v864.2 대응: dashboard_data_mixin._get_status_four_phase_stats()
+                + dashboard_data_mixin._get_integrity_summary()
+    """
+    try:
+        db_path = _get_db_path()
+        db = sqlite3.connect(db_path, timeout=10)
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("PRAGMA busy_timeout=3000")
+        c = db.cursor()
+
+        # ── 기본 통계 (기존 호환) ──
+        total_lots  = c.execute("SELECT COUNT(*) FROM inventory").fetchone()[0]
+        total_tbags = c.execute("SELECT COUNT(*) FROM inventory_tonbag").fetchone()[0]
+        stock_lots  = c.execute("SELECT COUNT(*) FROM inventory WHERE status='STOCK'").fetchone()[0]
+        sold_lots   = c.execute("SELECT COUNT(*) FROM inventory WHERE status IN ('SOLD','RESERVED','PICKING','PICKED')").fetchone()[0]
+        total_wt    = c.execute("SELECT COALESCE(SUM(current_weight),0) FROM inventory").fetchone()[0]
+        avail_wt    = c.execute("SELECT COALESCE(SUM(current_weight),0) FROM inventory WHERE status='STOCK'").fetchone()[0]
+
+        # ── 5단계 상태 요약 (inventory_tonbag 기준) ──
+        # OUTBOUND + SOLD 을 하나로 합침 (SOLD = deprecated alias)
+        status_rows = c.execute("""
+            SELECT
+                CASE
+                    WHEN status IN ('OUTBOUND', 'SOLD', 'SHIPPED', 'CONFIRMED') THEN 'outbound'
+                    WHEN status = 'AVAILABLE' THEN 'available'
+                    WHEN status = 'RESERVED'  THEN 'reserved'
+                    WHEN status = 'PICKED'    THEN 'picked'
+                    WHEN status = 'RETURN'    THEN 'return'
+                    ELSE 'other'
+                END AS grp,
+                COUNT(DISTINCT lot_no) AS lots,
+                COUNT(*)               AS tonbags,
+                COALESCE(SUM(weight), 0) AS weight_kg
+            FROM inventory_tonbag
+            WHERE COALESCE(is_sample, 0) = 0
+            GROUP BY grp
+        """).fetchall()
+
+        status_summary = {}
+        for grp_name in ('available', 'reserved', 'picked', 'outbound', 'return'):
+            status_summary[grp_name] = {"lots": 0, "tonbags": 0, "weight_kg": 0.0}
+        for row in status_rows:
+            grp, lots, tonbags, weight_kg = row
+            if grp in status_summary:
+                status_summary[grp] = {
+                    "lots": lots,
+                    "tonbags": tonbags,
+                    "weight_kg": round(float(weight_kg), 1),
+                }
+
+        # ── 제품x상태 매트릭스 (제품별 톤백 수량) ──
+        matrix_rows = c.execute("""
+            SELECT
+                COALESCE(i.product, '(미지정)') AS product,
+                SUM(CASE WHEN tb.status = 'AVAILABLE' THEN 1 ELSE 0 END) AS available,
+                SUM(CASE WHEN tb.status = 'RESERVED'  THEN 1 ELSE 0 END) AS reserved,
+                SUM(CASE WHEN tb.status = 'PICKED'    THEN 1 ELSE 0 END) AS picked,
+                SUM(CASE WHEN tb.status IN ('OUTBOUND','SOLD','SHIPPED','CONFIRMED') THEN 1 ELSE 0 END) AS outbound,
+                SUM(CASE WHEN tb.status = 'RETURN'    THEN 1 ELSE 0 END) AS return_cnt,
+                COUNT(*) AS total
+            FROM inventory_tonbag tb
+            LEFT JOIN inventory i ON tb.lot_no = i.lot_no
+            WHERE COALESCE(tb.is_sample, 0) = 0
+            GROUP BY COALESCE(i.product, '(미지정)')
+            ORDER BY COALESCE(i.product, '(미지정)')
+        """).fetchall()
+
+        product_matrix = []
+        for row in matrix_rows:
+            product_matrix.append({
+                "product":   row[0],
+                "available": row[1],
+                "reserved":  row[2],
+                "picked":    row[3],
+                "outbound":  row[4],
+                "return":    row[5],
+                "total":     row[6],
+            })
+
+        # ── 정합성 요약 (총입고 = 현재재고 + 출고누계) ──
+        # 총 입고 중량 (stock_movement INBOUND 누적)
+        total_inbound_kg = c.execute("""
+            SELECT COALESCE(SUM(qty_kg), 0) FROM stock_movement
+            WHERE movement_type = 'INBOUND'
+        """).fetchone()[0]
+
+        # 현재 재고 중량 (AVAILABLE + RESERVED + PICKED + RETURN)
+        current_stock_kg = c.execute("""
+            SELECT COALESCE(SUM(weight), 0) FROM inventory_tonbag
+            WHERE status IN ('AVAILABLE', 'RESERVED', 'PICKED', 'RETURN')
+              AND COALESCE(is_sample, 0) = 0
+        """).fetchone()[0]
+
+        # 출고 누계 중량 (OUTBOUND + SOLD 상태 톤백)
+        outbound_total_kg = c.execute("""
+            SELECT COALESCE(SUM(weight), 0) FROM inventory_tonbag
+            WHERE status IN ('OUTBOUND', 'SOLD', 'SHIPPED', 'CONFIRMED')
+              AND COALESCE(is_sample, 0) = 0
+        """).fetchone()[0]
+
+        diff_kg = round(float(total_inbound_kg) - float(current_stock_kg) - float(outbound_total_kg), 1)
+        integrity = {
+            "total_inbound_kg":  round(float(total_inbound_kg), 1),
+            "current_stock_kg":  round(float(current_stock_kg), 1),
+            "outbound_total_kg": round(float(outbound_total_kg), 1),
+            "diff_kg":           diff_kg,
+            "ok":                abs(diff_kg) <= 1.0,
+        }
+
+        db.close()
+
+        return {
+            # 기존 호환 필드
+            "total_lots":      total_lots,
+            "total_tbags":     total_tbags,
+            "stock_lots":      stock_lots,
+            "sold_lots":       sold_lots,
+            "total_weight_mt": round(total_wt / 1000.0, 2),
+            "available_mt":    round(avail_wt / 1000.0, 2),
+            # 신규: 5단계 상태 요약
+            "status_summary":  status_summary,
+            # 신규: 제품x상태 매트릭스
+            "product_matrix":  product_matrix,
+            # 신규: 정합성 검증
+            "integrity":       integrity,
+        }
+    except Exception as e:
+        logger.error("[dashboard/stats] 집계 실패: %s", e, exc_info=True)
+        return {"error": str(e)}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/dashboard/alerts — ALERTS 패널
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@router.get("/alerts")
+def get_dashboard_alerts():
+    try:
+        db_path = _get_db_path()
+        db = sqlite3.connect(db_path, timeout=10)
+        c  = db.cursor()
+        alerts = []
+        # 프리타임 만료 임박 LOT
+        ft_rows = c.execute("""
+            SELECT i.lot_no, i.container_no, fi.free_time_date
+            FROM freetime_info fi
+            JOIN inventory i ON i.lot_no = fi.lot_no
+            WHERE fi.free_time_date IS NOT NULL
+              AND date(fi.free_time_date) <= date('now', '+7 days')
+              AND i.status NOT IN ('RETURNED','CANCELLED')
+            LIMIT 5
+        """).fetchall()
+        for r in ft_rows:
+            alerts.append({
+                "type": "warning",
+                "message": f"FREE TIME 임박: LOT {r[0]} / {r[1]} ({r[2]})",
+                "level": "WARNING"
+            })
+        # 위치 미배정 톤백
+        no_loc = c.execute("""
+            SELECT COUNT(*) FROM inventory_tonbag
+            WHERE (location IS NULL OR location='') AND status='STOCK'
+        """).fetchone()[0]
+        if no_loc > 0:
+            alerts.append({
+                "type": "info",
+                "message": f"위치 미배정 톤백 {no_loc}개 있음",
+                "level": "INFO"
+            })
+        # 최근 감사로그 에러
+        err_rows = c.execute("""
+            SELECT event_type, event_data FROM audit_log
+            WHERE event_type LIKE '%ERROR%' OR event_type LIKE '%FAIL%'
+            ORDER BY created_at DESC LIMIT 3
+        """).fetchall()
+        for r in err_rows:
+            alerts.append({
+                "type": "error",
+                "message": f"[{r[0]}] {str(r[1])[:80]}",
+                "level": "ERROR"
+            })
+        db.close()
+        if not alerts:
+            alerts.append({"type": "ok", "message": "정상 — 경고 없음", "level": "OK"})
+        return alerts
+    except Exception as e:
+        return [{"type": "error", "message": str(e), "level": "ERROR"}]
