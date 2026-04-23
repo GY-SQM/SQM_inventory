@@ -1216,6 +1216,31 @@
   }
   window.showReturnInboundUploadModal = showReturnInboundUploadModal;
 
+  /* Allocation 입력 (F014) — 출고 예약 Excel 업로드 */
+  function showAllocationUploadModal() {
+    _showExcelUploadModal({
+      title: '📍 Allocation 입력 — Excel 업로드',
+      subtitle: 'Allocation Excel 파일을 선택하세요. 컬럼: <code>lot_no, sold_to, sale_ref, qty_mt, outbound_date, sublot_count</code>',
+      endpoint: '/api/allocation/bulk-import-excel',
+      onSuccess: function(d) {
+        var warnHtml = '';
+        if (d.errors && d.errors.length) {
+          warnHtml = '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--warning)">⚠️ 경고 ' + d.errors.length + '건</summary><pre style="white-space:pre-wrap;font-size:.8rem;margin-top:8px;max-height:200px;overflow:auto">' +
+            escapeHtml(d.errors.join('\n')) + '</pre></details>';
+        }
+        var detailHtml = '';
+        if (d.error_details && d.error_details.length) {
+          detailHtml = '<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--text-muted)">상세 (' + d.error_details.length + '건)</summary><pre style="white-space:pre-wrap;font-size:.8rem;margin-top:8px;max-height:200px;overflow:auto">' +
+            escapeHtml(JSON.stringify(d.error_details, null, 2)) + '</pre></details>';
+        }
+        return '<div style="color:var(--text-muted);font-size:.85rem">파일: ' + escapeHtml(d.filename||'-') +
+               ' · <strong style="color:var(--accent)">' + (d.reserved||0) + '건</strong> 예약 / 총 ' + (d.total_rows||0) + '행 · 매핑: ' + ((d.matched_columns||[]).join(', ')) +
+               '</div>' + warnHtml + detailHtml;
+      }
+    });
+  }
+  window.showAllocationUploadModal = showAllocationUploadModal;
+
   function renderInfoModal(title, endpoint) {
     showDataModal(title,'<div style="padding:20px;text-align:center">Loading...</div>');
     apiGet(endpoint).then(function(res){
@@ -1335,7 +1360,8 @@
     /* ── 재고 메뉴 ── */
     'onInventoryList':   {m:'JS',   u:'inventory',                               lbl:'재고 조회'},
     'onInventoryMove':   {m:'POST', u:'/api/menu/-on-tonbag-location-upload',    lbl:'위치 이동'},
-    'onInventoryAllocation': {m:'POST', u:'/api/menu/-on-allocation-input-unified', lbl:'위치 배정'},
+    /* v864.3 Phase 4-B: Allocation 입력(출고 예약) 네이티브 Excel 업로드 */
+    'onInventoryAllocation': {m:'JS', u:'allocation-upload', lbl:'Allocation 입력'},
     'onIntegrityCheck':  {m:'GET',  u:'/api/action/integrity-check',             lbl:'정합성 검사'},
     'onInventoryReport': {m:'GET',  u:'/api/q/inventory-report',                 lbl:'재고 현황 보고서'},
     'onInventoryTrend':  {m:'GET',  u:'/api/q/inventory-trend',                  lbl:'재고 추이 차트'},
@@ -1417,6 +1443,10 @@
       }
       if (conf.u === 'return-upload') {
         showReturnInboundUploadModal();
+        return;
+      }
+      if (conf.u === 'allocation-upload') {
+        showAllocationUploadModal();
         return;
       }
       if (conf.u === 'wip') {

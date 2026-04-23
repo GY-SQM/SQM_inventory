@@ -47,6 +47,14 @@ try:
 except Exception as e:
     logging.warning(f"debug_log router load failed: {e}")
 
+# ── v864.3 Phase 4-B: Allocation 입력 (F014) 네이티브 ─────
+try:
+    from backend.api.allocation_api import router as allocation_router
+    app.include_router(allocation_router)
+    logging.info("allocation_api router loaded OK (POST /api/allocation/bulk-import-excel)")
+except Exception as e:
+    logging.warning(f"allocation_api router load failed: {e}")
+
 # ── Tier 2 Stage 2: 자동 생성 라우터 include ─────────────────
 try:
     from backend.api.menubar import router as menubar_router
