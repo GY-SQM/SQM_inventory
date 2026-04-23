@@ -1,0 +1,218 @@
+[
+  {
+    "test": "top_menu_count",
+    "expected": 7,
+    "actual": 7,
+    "pass": true,
+    "detail": [
+      "출고",
+      "파일",
+      "보고서",
+      "도구",
+      "View",
+      "도움말",
+      "품목"
+    ]
+  },
+  {
+    "test": "menu_출고_items",
+    "count": 13,
+    "actions": [
+      "onOnQuickOutbound",
+      "onQuickOutboundPaste",
+      "onPickingListUpload",
+      "onBarcodeScanUpload",
+      "onGoScanTab",
+      "onInventoryAllocation",
+      "onApprovalQueue",
+      "onApplyApproved",
+      "onApprovalHistory",
+      "onGoAllocationTab",
+      "onOutboundStatus",
+      "onOutboundConfirm",
+      "onPickingTemplateManage"
+    ],
+    "pass": true
+  },
+  {
+    "test": "menu_파일_items",
+    "count": 24,
+    "actions": [
+      "onOnPdfInbound",
+      "onInboundManual",
+      "onDoUpdate",
+      "onInventoryMove",
+      "onMoveApprovalQueue",
+      "onReturnDialog",
+      "onReturnInboundUpload",
+      "onReturnStatistics",
+      "onInboundList",
+      "onInboundTemplateManage",
+      "onProductMaster",
+      "onEmailConfig",
+      "onIntegrityReport",
+      "onFixLotIntegrity",
+      "onExportCustoms",
+      "onExportRubyli",
+      "onExportTonbag",
+      "onExportIntegrated",
+      "onOnBackup",
+      "onRestore",
+      "onBackupList",
+      "onAutoBackupSettings",
+      "onRecentFiles",
+      "onExit"
+    ],
+    "pass": true
+  },
+  {
+    "test": "menu_보고서_items",
+    "count": 12,
+    "actions": [
+      "onInvoiceGenerate",
+      "onDetailOfOutbound",
+      "onSalesOrderDN",
+      "onDnCrossCheck",
+      "onReportCustom",
+      "onReportTemplates",
+      "onReportHistory",
+      "onInventoryReport",
+      "onMovementHistory",
+      "onReportMonthly",
+      "onReportDaily",
+      "onLotDetailPdf"
+    ],
+    "pass": true
+  },
+  {
+    "test": "menu_도구_items",
+    "count": 10,
+    "actions": [
+      "onProductMaster",
+      "onProductInventoryReport",
+      "onLotAllocationAudit",
+      "onDoUpdate",
+      "onDocConvert",
+      "onIntegrityCheck",
+      "onOptimizeDb",
+      "onCleanupLogs",
+      "onDbInfo",
+      "onTestDbReset"
+    ],
+    "pass": true
+  },
+  {
+    "test": "menu_View_items",
+    "count": 11,
+    "actions": [
+      "refresh-all",
+      "onGoInventoryTab",
+      "onGoAllocationTab",
+      "onGoPickedTab",
+      "onGoOutboundTab",
+      "onGoReturnTab",
+      "onGoMoveTab",
+      "onGoDashboardTab",
+      "onGoLogTab",
+      "onGoScanTab",
+      "onToggleTheme"
+    ],
+    "pass": true
+  },
+  {
+    "test": "menu_도움말_items",
+    "count": 6,
+    "actions": [
+      "onHelp",
+      "onShortcuts",
+      "onStatusGuide",
+      "onBackupGuide",
+      "onSystemInfo",
+      "onAbout"
+    ],
+    "pass": true
+  },
+  {
+    "test": "menu_품목_items",
+    "count": 3,
+    "actions": [
+      "onProductSummary",
+      "onProductLotLookup",
+      "onProductMovement"
+    ],
+    "pass": true
+  },
+  {
+    "test": "sidebar_count",
+    "expected": 9,
+    "actual": 9,
+    "pass": true,
+    "detail": [
+      "inventory",
+      "allocation",
+      "picked",
+      "outbound",
+      "return",
+      "move",
+      "dashboard",
+      "log",
+      "scan"
+    ]
+  },
+  {
+    "test": "toolbar_count",
+    "expected": 7,
+    "actual": 7,
+    "pass": true,
+    "detail": [
+      "tb-pdf-inbound",
+      "tb-quick-outbound",
+      "tb-return",
+      "tb-inventory",
+      "tb-integrity",
+      "tb-backup",
+      "tb-settings"
+    ]
+  },
+  {
+    "test": "sidebar_inventory_click",
+    "pass": true
+  },
+  {
+    "test": "sidebar_allocation_click",
+    "pass": true
+  },
+  {
+    "test": "sidebar_picked_click",
+    "pass": true
+  },
+  {
+    "test": "sidebar_outbound_click",
+    "pass": true
+  },
+  {
+    "test": "sidebar_return_click",
+    "pass": true
+  },
+  {
+    "test": "sidebar_move_click",
+    "pass": true
+  },
+  {
+    "test": "sidebar_dashboard_click",
+    "pass": true
+  },
+  {
+    "test": "sidebar_log_click",
+    "pass": true
+  },
+  {
+    "test": "sidebar_scan_click",
+    "pass": true
+  },
+  {
+    "test": "statusbar",
+    "pass": true,
+    "text": "Engine: OK (42 LOTs)\n|\nLOT 42 / Tonbag 482\n|\nStock 200.1 MT\n|\nAvailable 0.0 MT\nLast refresh: 오후 6:32"
+  }
+]
