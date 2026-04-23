@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SQM 재고관리 시스템 v8.6.4.3</title>
   <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <link rel="stylesheet" href="css/design-system.css?v=20260423a">
-  <link rel="stylesheet" href="css/v864-layout.css?v=20260422c">
+  <link rel="stylesheet" href="css/design-system.css?v=20260423b">
+  <link rel="stylesheet" href="css/v864-layout.css?v=20260423b">
 </head>
 <body data-theme="light">
 
@@ -18,98 +18,162 @@
 </header>
 
 <nav class="menubar" id="menubar">
+  <!-- ══ v864.2 메뉴 1: 출고 (첫 번째 — v864.2 순서 유지) ══ -->
+  <div class="menu-btn" data-menu="출고" tabindex="0" role="menuitem">📤 <span>출고</span> <span class="caret">▼</span>
+    <div class="menu-dropdown">
+      <div class="menu-section-label">즉시 출고</div>
+      <button data-action="onOnQuickOutbound">🚀 즉시 출고 (원스톱)</button>
+      <button data-action="onQuickOutboundPaste">📤 빠른 출고 (붙여넣기)</button>
+      <hr class="menu-sep">
+      <div class="menu-section-label">스캔/피킹</div>
+      <button data-action="onPickingListUpload">📋 Picking List 업로드 (PDF)</button>
+      <button data-action="onBarcodeScanUpload">📊 바코드 스캔 업로드</button>
+      <button data-action="onGoScanTab">📷 스캔 탭으로 이동</button>
+      <hr class="menu-sep">
+      <div class="menu-section-label">Allocation (사전 예약)</div>
+      <button data-action="onInventoryAllocation">📋 Allocation 입력</button>
+      <button data-action="onApprovalQueue">✅ 승인 대기</button>
+      <button data-action="onApplyApproved">📌 예약 반영 (승인분)</button>
+      <button data-action="onApprovalHistory">📜 승인 이력 조회</button>
+      <button data-action="onGoAllocationTab">📋 판매 배정 탭으로 이동</button>
+      <hr class="menu-sep">
+      <div class="menu-section-label">조회/기타</div>
+      <button data-action="onOutboundStatus">📋 출고 현황 조회</button>
+      <button data-action="onOutboundConfirm">✅ 출고 확정</button>
+      <button data-action="onPickingTemplateManage">📦 출고 피킹 템플릿 관리</button>
+    </div>
+  </div>
+
+  <!-- ══ v864.2 메뉴 2: 파일 (입고/내보내기/백업/도구/최근파일/종료) ══ -->
   <div class="menu-btn" data-menu="파일" tabindex="0" role="menuitem">📁 <span>파일</span> <span class="caret">▼</span>
     <div class="menu-dropdown">
-      <button data-action="onOpen">📄 열기</button>
-      <button data-action="onSave">💾 저장</button>
-      <button data-action="onExport">📤 내보내기</button>
+      <div class="menu-section-label">📥 입고</div>
+      <button data-action="onOnPdfInbound">📄 PDF 스캔 입고</button>
+      <button data-action="onInboundManual">📊 엑셀 파일 수동 입고</button>
+      <hr class="menu-sep">
       <button data-action="onDoUpdate">📋 D/O 후속 연결</button>
+      <button data-action="onInventoryMove">📍 톤백 위치 매핑</button>
+      <button data-action="onMoveApprovalQueue">✅ 대량 이동 승인</button>
+      <hr class="menu-sep">
+      <div class="menu-section-label">반품</div>
       <button data-action="onReturnDialog">🔄 반품 (재입고)</button>
       <button data-action="onReturnInboundUpload">📂 반품 입고 (Excel)</button>
       <button data-action="onReturnStatistics">📊 반품 사유 통계</button>
+      <hr class="menu-sep">
+      <button data-action="onInboundList">📋 입고 현황 조회</button>
+      <button data-action="onInboundTemplateManage">📝 입고 파싱 템플릿 관리</button>
+      <button data-action="onProductMaster">📦 제품 마스터 관리</button>
+      <button data-action="onEmailConfig">⚙️ 이메일 설정</button>
+      <hr class="menu-sep">
+      <button data-action="onIntegrityReport">🔍 정합성 검증 (시각화)</button>
+      <button data-action="onFixLotIntegrity">🛠️ LOT 상태 정합성 복구</button>
+      <hr class="menu-sep">
+      <div class="menu-section-label">💾 내보내기</div>
+      <button data-action="onExportCustoms">📋 통관요청 양식</button>
+      <button data-action="onExportRubyli">📊 루비리 양식</button>
+      <button data-action="onExportTonbag">🎒 톤백 현황</button>
+      <button data-action="onExportIntegrated">⭐ 통합 현황</button>
+      <hr class="menu-sep">
+      <div class="menu-section-label">🔐 백업</div>
+      <button data-action="onOnBackup">💾 백업 생성</button>
+      <button data-action="onRestore">🔄 복원</button>
+      <button data-action="onBackupList">📋 백업 목록</button>
+      <button data-action="onAutoBackupSettings">⏰ 자동 백업 설정</button>
+      <hr class="menu-sep">
       <button data-action="onRecentFiles">📂 최근 파일</button>
-      <button data-action="onExit">🚪 종료</button>
+      <button data-action="onExit">❌ 종료</button>
     </div>
   </div>
-  <div class="menu-btn" data-menu="입고" tabindex="0" role="menuitem">📥 <span>입고</span> <span class="caret">▼</span>
+
+  <!-- ══ v864.2 메뉴 3: 보고서 ══ -->
+  <div class="menu-btn" data-menu="보고서" tabindex="0" role="menuitem">📝 <span>보고서</span> <span class="caret">▼</span>
     <div class="menu-dropdown">
-      <button data-action="onOnPdfInbound">📄 PDF 스캔 입고</button>
-      <button data-action="onInboundManual">✍️ 수동 입고</button>
-      <button data-action="onInboundList">📋 입고 목록</button>
-      <button data-action="onInboundCancel">↩️ 입고 취소</button>
-    </div>
-  </div>
-  <div class="menu-btn" data-menu="출고" tabindex="0" role="menuitem">📤 <span>출고</span> <span class="caret">▼</span>
-    <div class="menu-dropdown">
-      <button data-action="onOnQuickOutbound">🚀 즉시 출고</button>
-      <button data-action="onQuickOutboundPaste">📤 빠른 출고 (붙여넣기)</button>
-      <button data-action="onPickingListUpload">📋 Picking List 업로드 (PDF)</button>
-      <button data-action="onOutboundScheduled">📅 출고 예정</button>
-      <button data-action="onOutboundConfirm">✅ 출고 확정</button>
-      <button data-action="onOutboundHistory">📜 출고 이력</button>
-      <button data-action="onOutboundStatus">📋 출고 현황 조회</button>
-      <button data-action="onApprovalHistory">📜 승인 이력 조회</button>
-    </div>
-  </div>
-  <div class="menu-btn" data-menu="재고" tabindex="0" role="menuitem">📦 <span>재고</span> <span class="caret">▼</span>
-    <div class="menu-dropdown">
-      <button data-action="onInventoryList">📋 재고 조회</button>
-      <button data-action="onInventoryMove">🔀 위치 이동</button>
-      <button data-action="onInventoryAllocation">📍 위치 배정</button>
-      <button data-action="onIntegrityCheck">✅ 정합성 검사</button>
-      <button data-action="onInventoryReport">📦 재고 현황 보고서</button>
-      <button data-action="onInventoryTrend">📊 재고 추이 차트</button>
-    </div>
-  </div>
-  <div class="menu-btn" data-menu="보고서" tabindex="0" role="menuitem">📊 <span>보고서</span> <span class="caret">▼</span>
-    <div class="menu-dropdown">
-      <button data-action="onReportDaily">📅 일일 보고서</button>
-      <button data-action="onReportMonthly">📆 월간 보고서</button>
-      <button data-action="onReportCustom">🎯 맞춤 보고서</button>
       <button data-action="onInvoiceGenerate">📄 거래명세서 생성</button>
+      <hr class="menu-sep">
       <button data-action="onDetailOfOutbound">📦 Detail of Outbound</button>
       <button data-action="onSalesOrderDN">📋 Sales Order DN</button>
       <button data-action="onDnCrossCheck">🔍 DN 교차검증</button>
-      <button data-action="onLotDetailPdf">🔖 LOT 상세</button>
-      <button data-action="onLotListExcel">📊 LOT 리스트 Excel</button>
-      <button data-action="onTonbagListExcel">🎒 톤백리스트 Excel</button>
-      <button data-action="onReportExport">📤 Excel 내보내기</button>
+      <hr class="menu-sep">
+      <button data-action="onReportCustom">📝 고객 보고서 생성</button>
+      <button data-action="onReportTemplates">📂 보고서 양식 관리</button>
+      <button data-action="onReportHistory">📋 보고서 이력 조회</button>
+      <hr class="menu-sep">
+      <button data-action="onInventoryReport">📦 재고 현황 보고서</button>
       <button data-action="onMovementHistory">📈 입출고 내역</button>
-      <button data-action="onAuditLog">📋 감사 로그</button>
+      <button data-action="onReportMonthly">📅 월간 실적 PDF</button>
+      <button data-action="onReportDaily">📊 일일 현황 PDF</button>
+      <button data-action="onLotDetailPdf">🔖 LOT 상세</button>
     </div>
   </div>
-  <div class="menu-btn" data-menu="설정/도구" tabindex="0" role="menuitem">⚙️ <span>설정/도구</span> <span class="caret">▼</span>
+
+  <!-- ══ v864.2 메뉴 4: 도구 ══ -->
+  <div class="menu-btn" data-menu="도구" tabindex="0" role="menuitem">🔧 <span>도구</span> <span class="caret">▼</span>
     <div class="menu-dropdown">
-      <button data-action="onSettings">⚙️ 환경 설정</button>
       <button data-action="onProductMaster">📦 제품 마스터 관리</button>
       <button data-action="onProductInventoryReport">📊 제품별 재고 현황</button>
-      <button data-action="onIntegrityRepair">🔧 정합성 검사/복구</button>
-      <button data-action="onOptimizeDb">⚡ DB 최적화</button>
+      <button data-action="onLotAllocationAudit">📊 LOT Allocation 톤백 현황</button>
+      <hr class="menu-sep">
+      <button data-action="onDoUpdate">📋 D/O 후속 연결</button>
+      <hr class="menu-sep">
+      <button data-action="onDocConvert">📷 문서 변환 (OCR/PDF)</button>
+      <hr class="menu-sep">
+      <button data-action="onIntegrityCheck">🩺 데이터 정합성 검사</button>
+      <hr class="menu-sep">
+      <button data-action="onOptimizeDb">🔧 DB 최적화</button>
       <button data-action="onCleanupLogs">📋 로그 정리</button>
       <button data-action="onDbInfo">ℹ️ DB 정보</button>
-      <button data-action="onOnBackup">💾 백업 생성</button>
-      <button data-action="onBackupList">📋 백업 목록</button>
-      <button data-action="onRestore">↩️ 복원</button>
-      <button data-action="onAiTools">🤖 AI 도구</button>
-      <button data-action="onSaveWindowSize">💾 창 크기 저장</button>
-      <button data-action="onResetWindowSize">↩️ 창 크기 초기화</button>
+      <hr class="menu-sep">
+      <button data-action="onTestDbReset">🗑️ 테스트 DB 초기화</button>
     </div>
   </div>
+
+  <!-- ══ v864.2 메뉴 5: View ══ -->
+  <div class="menu-btn" data-menu="View" tabindex="0" role="menuitem">👁️ <span>View</span> <span class="caret">▼</span>
+    <div class="menu-dropdown">
+      <button data-action="refresh-all">🔄 Refresh (F5)</button>
+      <hr class="menu-sep">
+      <button data-action="onGoInventoryTab">📦 Inventory</button>
+      <button data-action="onGoAllocationTab">📋 Allocation</button>
+      <button data-action="onGoPickedTab">🚛 Picked</button>
+      <button data-action="onGoOutboundTab">📤 Outbound</button>
+      <button data-action="onGoReturnTab">🔄 Return</button>
+      <button data-action="onGoMoveTab">🔀 Move</button>
+      <hr class="menu-sep">
+      <button data-action="onGoDashboardTab">📊 Dashboard</button>
+      <button data-action="onGoLogTab">📝 Log</button>
+      <button data-action="onGoScanTab">📷 Scan</button>
+      <hr class="menu-sep">
+      <button data-action="onToggleTheme">🎨 Theme</button>
+    </div>
+  </div>
+
+  <!-- ══ v864.2 메뉴 6: 도움말 ══ -->
   <div class="menu-btn" data-menu="도움말" tabindex="0" role="menuitem">❓ <span>도움말</span> <span class="caret">▼</span>
     <div class="menu-dropdown">
-      <button data-action="onHelp">📖 사용자 매뉴얼</button>
-      <button data-action="onShortcuts">⌨️ 단축키</button>
+      <button data-action="onHelp">📖 사용법</button>
+      <button data-action="onShortcuts">⌨️ 단축키 안내</button>
+      <hr class="menu-sep">
       <button data-action="onStatusGuide">📊 STATUS 상태값 안내</button>
-      <button data-action="onBackupGuide">💾 백업/복구 가이드</button>
-      <button data-action="onAbout">ℹ️ 정보</button>
-      <button data-action="onGoScanTab">📷 스캔 탭으로 이동</button>
-      <button data-action="onGoAllocationTab">📋 배정 탭으로 이동</button>
+      <button data-action="onBackupGuide">💾 DB 백업/복구 가이드</button>
+      <hr class="menu-sep">
+      <button data-action="onSystemInfo">ℹ️ 시스템 정보</button>
+      <button data-action="onAbout">📝 버전 정보</button>
+    </div>
+  </div>
+
+  <!-- ══ v864.2 메뉴 7: 품목 ══ -->
+  <div class="menu-btn" data-menu="품목" tabindex="0" role="menuitem">📦 <span>품목</span> <span class="caret">▼</span>
+    <div class="menu-dropdown">
+      <button data-action="onProductSummary">📋 품목별 재고 요약</button>
+      <button data-action="onProductLotLookup">🔍 품목별 LOT 조회</button>
+      <hr class="menu-sep">
+      <button data-action="onProductMovement">📊 품목별 입출고 현황</button>
     </div>
   </div>
 
   <div class="menubar-spacer"></div>
 
-  <button class="topbar-btn" data-action="refresh-all">🔁 새로고침</button>
+  <button class="topbar-btn" data-action="refresh-all">🔄 새로고침</button>
   <span class="topbar-sep">|</span>
   <button class="topbar-btn" data-action="theme-dark">🌙 Dark</button>
   <button class="topbar-btn" data-action="theme-light">☀️ Light</button>
@@ -220,6 +284,6 @@
 </div>
 
 <!-- JS: sqm-inline (메인 핸들러) -->
-<script src="js/sqm-inline.js?v=864.3.30"></script>
+<script src="js/sqm-inline.js?v=864.3.35"></script>
 </body>
 </html>
