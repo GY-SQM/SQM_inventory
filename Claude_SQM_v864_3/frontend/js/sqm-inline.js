@@ -482,31 +482,29 @@
     if (!c) return;
     c.innerHTML = [
       '<section class="page" data-page="picked">',
-      '<h2>Picked - Outbound Queue</h2>',
-      '<div class="toolbar-mini"><button class="btn btn-secondary" onclick="renderPage(\'picked\')">Refresh</button></div>',
-      '<div id="picked-loading" style="padding:40px;text-align:center">Loading...</div>',
+      '<h2>Picked - 피킹 완료 (화물 결정)</h2>',
+      '<div class="toolbar-mini"><button class="btn btn-secondary" onclick="renderPage(\'picked\')">🔁 새로고침</button></div>',
+      '<div id="picked-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
       '<table class="data-table" id="picked-table" style="display:none">',
-      '<thead><tr><th>LOT No</th><th>Product</th><th>Weight(MT)</th><th>Tonbags</th><th>Date</th><th>Warehouse</th><th>Status</th></tr></thead>',
+      '<thead><tr><th>LOT No</th><th>피킹No</th><th>고객사</th><th>톤백수</th><th>중량(kg)</th><th>피킹일</th></tr></thead>',
       '<tbody id="picked-tbody"></tbody></table>',
       '<div class="empty" id="picked-empty" style="display:none">No data</div>',
       '</section>'
     ].join('');
-    apiGet('/api/q2/outbound-confirm-list').then(function(res){
+    apiGet('/api/q/picked-list').then(function(res){
       if (_currentRoute !== route) return;
       var rows = extractRows(res);
       document.getElementById('picked-loading').style.display = 'none';
       if (!rows.length) { document.getElementById('picked-empty').style.display='block'; return; }
       var tbody = document.getElementById('picked-tbody');
       if (tbody) tbody.innerHTML = rows.map(function(r){
-        var wt = r.picked_mt != null ? fmtN(r.picked_mt) : (r.current_weight != null ? fmtN(r.current_weight/1000) : (r.tonbag_count||'-'));
         return '<tr>' +
-          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot_no||r.lot||'')+'</td>' +
-          '<td>'+escapeHtml(r.product||'')+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+wt+'</td>' +
-          '<td class="mono-cell">'+(r.tonbag_count||r.picked_tonbags||'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.inbound_date||r.date||'')+'</td>' +
-          '<td>'+escapeHtml(r.warehouse||r.location||'-')+'</td>' +
-          '<td>'+escapeHtml(r.status||'')+'</td>' +
+          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot_no||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.picking_no||'')+'</td>' +
+          '<td>'+escapeHtml(r.customer||'')+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+(r.tonbag_count||0)+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+(r.total_kg!=null?fmtN(r.total_kg):'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.picking_date||'')+'</td>' +
           '</tr>';
       }).join('');
       document.getElementById('picked-table').style.display = '';
@@ -658,15 +656,15 @@
     c.innerHTML = [
       '<section class="page" data-page="outbound">',
       '<div style="display:flex;align-items:center;gap:12px;padding:8px 0 12px">',
-      '<h2 style="margin:0">📤 출고 현황 (Outbound Status)</h2>',
+      '<h2 style="margin:0">📤 출고 완료 (Sold / Outbound)</h2>',
       '<button class="btn btn-secondary" onclick="renderPage(\'outbound\')" style="margin-left:auto">🔁 새로고침</button>',
       '</div>',
       '<div id="outbound-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
       '<div style="overflow-x:auto">',
       '<table class="data-table" id="outbound-table" style="display:none">',
       '<thead><tr>',
-      '<th>#</th><th>LOT No</th><th>고객사</th><th>출고량(MT)</th>',
-      '<th>출발지</th><th>도착지</th><th>출고일자</th><th>유형</th><th>담당자</th><th>비고</th>',
+      '<th>#</th><th>LOT No</th><th>판매주문No</th><th>고객사</th>',
+      '<th>톤백수</th><th>중량(kg)</th><th>판매일</th>',
       '</tr></thead>',
       '<tbody id="outbound-tbody"></tbody>',
       '</table>',
@@ -675,10 +673,9 @@
       '</section>'
     ].join('');
 
-    apiGet('/api/q/outbound-status').then(function(res){
+    apiGet('/api/q/sold-list').then(function(res){
       if (_currentRoute !== route) return;
       var rows = extractRows(res);
-      var total = (res.data && res.data.total) || rows.length;
       document.getElementById('outbound-loading').style.display = 'none';
       if (!rows.length) {
         document.getElementById('outbound-empty').style.display = 'block';
@@ -686,23 +683,18 @@
       }
       var tbody = document.getElementById('outbound-tbody');
       if (tbody) tbody.innerHTML = rows.map(function(r, i){
-        var qtyMT = r.qty_kg != null ? fmtN(r.qty_kg / 1000) : '-';
-        var date  = (r.movement_date||'').slice(0,10) || '-';
         return '<tr>' +
           '<td class="mono-cell" style="color:var(--text-muted)">'+(i+1)+'</td>' +
           '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+escapeHtml(r.lot_no||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.sales_order_no||'-')+'</td>' +
           '<td>'+escapeHtml(r.customer||'-')+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+qtyMT+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.from_location||'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.to_location||'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(date)+'</td>' +
-          '<td><span class="tag">'+escapeHtml(r.source_type||'-')+'</span></td>' +
-          '<td>'+escapeHtml(r.actor||'-')+'</td>' +
-          '<td style="font-size:11px;color:var(--text-muted)">'+escapeHtml((r.remarks||'').slice(0,40))+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+(r.tonbag_count||0)+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+(r.total_kg!=null?fmtN(r.total_kg):'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.sold_date||'-')+'</td>' +
           '</tr>';
       }).join('');
       document.getElementById('outbound-table').style.display = '';
-      dbgLog('📤','outbound-page','total='+total+' rows='+rows.length,'#4caf50');
+      dbgLog('📤','outbound-page','rows='+rows.length,'#4caf50');
     }).catch(function(e){
       if (_currentRoute !== route) return;
       document.getElementById('outbound-loading').style.display = 'none';
