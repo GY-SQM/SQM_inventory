@@ -1241,6 +1241,159 @@
   }
   window.showAllocationUploadModal = showAllocationUploadModal;
 
+  /* ===================================================
+     8c. 즉시 출고 (F015) — 폼 기반 네이티브 구현
+     엔진 quick_outbound(lot_no, count, customer, reason, operator) 직접 호출
+     =================================================== */
+  function showQuickOutboundModal() {
+    var html = [
+      '<div style="max-width:560px">',
+      '  <h2 style="margin:0 0 12px 0">🚀 즉시 출고 (원스톱)</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 16px 0;font-size:.9rem">',
+      '    Allocation 없이 소량 톤백을 바로 출고합니다. (AVAILABLE → PICKED)',
+      '  </p>',
+      '  <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:12px">',
+      '    <label style="font-weight:600">LOT 번호</label>',
+      '    <input type="text" id="qo-lot" placeholder="예: 1126013063" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '    <label style="font-weight:600">톤백 수</label>',
+      '    <input type="number" id="qo-count" min="1" value="1" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;width:120px">',
+      '    <label style="font-weight:600">고객명</label>',
+      '    <input type="text" id="qo-customer" placeholder="예: ACME Corp" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    <label style="font-weight:600">사유 <span style="color:var(--text-muted);font-weight:400;font-size:.8rem">(선택)</span></label>',
+      '    <input type="text" id="qo-reason" placeholder="" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    <label style="font-weight:600">작업자 <span style="color:var(--text-muted);font-weight:400;font-size:.8rem">(선택)</span></label>',
+      '    <input type="text" id="qo-operator" placeholder="" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '  </div>',
+      '  <div id="qo-info" style="padding:10px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;color:var(--text-muted);margin-bottom:12px;min-height:38px">',
+      '    LOT 번호를 입력하면 가용 톤백 정보가 표시됩니다',
+      '  </div>',
+      '  <div id="qo-result" style="margin-bottom:12px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="qo-cancel-btn" class="btn btn-ghost">닫기</button>',
+      '    <button id="qo-submit-btn" class="btn btn-primary" disabled>출고 확정</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+
+    showDataModal('', html);
+
+    var lotInput = document.getElementById('qo-lot');
+    var countInput = document.getElementById('qo-customer');
+    var cntInput = document.getElementById('qo-count');
+    var customerInput = document.getElementById('qo-customer');
+    var reasonInput = document.getElementById('qo-reason');
+    var operatorInput = document.getElementById('qo-operator');
+    var infoBox  = document.getElementById('qo-info');
+    var resultBox = document.getElementById('qo-result');
+    var submitBtn = document.getElementById('qo-submit-btn');
+    var cancelBtn = document.getElementById('qo-cancel-btn');
+
+    function validate() {
+      var ok = !!(lotInput.value.trim() && customerInput.value.trim() && parseInt(cntInput.value, 10) > 0);
+      submitBtn.disabled = !ok;
+    }
+
+    var _lotDebounce = null;
+    function fetchLotInfo() {
+      var lot = lotInput.value.trim();
+      if (!lot) {
+        infoBox.innerHTML = 'LOT 번호를 입력하면 가용 톤백 정보가 표시됩니다';
+        infoBox.style.borderLeft = 'none';
+        return;
+      }
+      infoBox.innerHTML = '⏳ 조회 중...';
+      infoBox.style.borderLeft = 'none';
+      apiGet('/api/outbound/quick/info?lot_no=' + encodeURIComponent(lot))
+        .then(function(res) {
+          if (!res || !res.ok) {
+            infoBox.innerHTML = '❌ 조회 실패';
+            return;
+          }
+          var d = res.data || {};
+          var color = d.available_count > 0 ? 'var(--success)' : 'var(--warning)';
+          infoBox.innerHTML =
+            '<span style="color:' + color + ';font-weight:600">LOT ' + escapeHtml(lot) + '</span> · ' +
+            '가용 톤백 <strong>' + d.available_count + '개</strong> (' + (d.total_weight_mt||0).toFixed(3) + ' MT) · ' +
+            '최대 ' + d.max_count + '개';
+          infoBox.style.borderLeft = '4px solid ' + color;
+          infoBox.style.paddingLeft = '10px';
+          // 톤백 수 max 조정
+          cntInput.max = Math.min(d.available_count, d.max_count);
+          if (parseInt(cntInput.value, 10) > cntInput.max) cntInput.value = cntInput.max;
+        })
+        .catch(function(e) {
+          infoBox.innerHTML = '❌ 조회 실패: ' + escapeHtml(e.message || String(e));
+        });
+    }
+
+    lotInput.addEventListener('input', function() {
+      validate();
+      if (_lotDebounce) clearTimeout(_lotDebounce);
+      _lotDebounce = setTimeout(fetchLotInfo, 400);
+    });
+    cntInput.addEventListener('input', validate);
+    customerInput.addEventListener('input', validate);
+
+    cancelBtn.addEventListener('click', function() {
+      document.getElementById('sqm-modal').style.display = 'none';
+    });
+
+    submitBtn.addEventListener('click', function() {
+      var payload = {
+        lot_no: lotInput.value.trim(),
+        count: parseInt(cntInput.value, 10),
+        customer: customerInput.value.trim(),
+        reason: reasonInput.value.trim(),
+        operator: operatorInput.value.trim(),
+      };
+      if (!confirm('LOT ' + payload.lot_no + ' 에서 ' + payload.count + '개 톤백을 ' + payload.customer + ' 로 출고하시겠습니까?')) return;
+
+      submitBtn.disabled = true;
+      cancelBtn.disabled = true;
+      resultBox.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 출고 처리 중...</div>';
+
+      apiPost('/api/outbound/quick', payload)
+        .then(function(res) {
+          if (res && res.ok) {
+            var d = res.data || {};
+            resultBox.innerHTML =
+              '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)">' +
+              '<div style="font-weight:600;margin-bottom:4px">✅ ' + escapeHtml(res.message||'출고 완료') + '</div>' +
+              '<div style="color:var(--text-muted);font-size:.85rem">LOT ' + escapeHtml(d.lot_no||'-') + ' · ' + (d.picked_count||0) + '개 톤백 · ' + (d.total_weight_mt||0).toFixed(3) + ' MT · ' + escapeHtml(d.customer||'-') + '</div>' +
+              '</div>';
+            showToast('success', res.message || '출고 완료');
+            dbgLog('🟢','QUICK-OUTBOUND OK', res.message, '#66bb6a');
+            // refresh
+            if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+            if (typeof loadKpi === 'function') loadKpi();
+          } else {
+            var errs = (res && res.data && res.data.errors) || [];
+            var errMsg = (res && (res.message || res.error)) || '출고 실패';
+            resultBox.innerHTML =
+              '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)">' +
+              '<div style="font-weight:600">❌ ' + escapeHtml(errMsg) + '</div>' +
+              (errs.length ? '<ul style="margin:8px 0 0 18px;color:var(--text-muted);font-size:.85rem">' + errs.map(function(e){return '<li>'+escapeHtml(e)+'</li>';}).join('') + '</ul>' : '') +
+              '</div>';
+            showToast('error', errMsg);
+            dbgLog('🔴','QUICK-OUTBOUND FAIL', errMsg, '#ef5350');
+            submitBtn.disabled = false;
+            cancelBtn.disabled = false;
+          }
+        })
+        .catch(function(e) {
+          resultBox.innerHTML =
+            '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)">' +
+            '<div style="font-weight:600">❌ 요청 실패</div>' +
+            '<div style="color:var(--text-muted);font-size:.85rem;margin-top:4px">' + escapeHtml(e.message || String(e)) + '</div>' +
+            '</div>';
+          showToast('error', '출고 실패: ' + (e.message || String(e)));
+          submitBtn.disabled = false;
+          cancelBtn.disabled = false;
+        });
+    });
+  }
+  window.showQuickOutboundModal = showQuickOutboundModal;
+
   function renderInfoModal(title, endpoint) {
     showDataModal(title,'<div style="padding:20px;text-align:center">Loading...</div>');
     apiGet(endpoint).then(function(res){
@@ -1350,7 +1503,8 @@
     'onInboundCancel':   {m:'JS',   u:'wip',                                     lbl:'입고 취소'},
 
     /* ── 출고 메뉴 ── */
-    'onOnQuickOutbound': {m:'POST', u:'/api/menu/-on-s1-onestop-outbound',       lbl:'즉시 출고'},
+    /* v864.3 Phase 4-B: 즉시 출고 네이티브 폼 */
+    'onOnQuickOutbound': {m:'JS', u:'quick-outbound', lbl:'즉시 출고'},
     'onOutboundScheduled': {m:'JS', u:'wip',                                     lbl:'출고 예정'},
     'onOutboundConfirm': {m:'JS',   u:'wip',                                     lbl:'출고 확정'},
     'onOutboundHistory': {m:'GET',  u:'/api/q/outbound-status',                  lbl:'출고 이력'},
@@ -1409,7 +1563,8 @@
 
     /* ── 툴바 ── */
     'tb-pdf-inbound':    {m:'JS',   u:'scan',                                     lbl:'PDF 입고'},
-    'tb-quick-outbound': {m:'POST', u:'/api/menu/-on-s1-onestop-outbound',        lbl:'즉시 출고'},
+    /* 툴바 '즉시 출고' 도 네이티브 폼으로 */
+    'tb-quick-outbound': {m:'JS', u:'quick-outbound', lbl:'즉시 출고'},
     'tb-return':         {m:'JS',   u:'return',                                   lbl:'반품'},
     'tb-inventory':      {m:'JS',   u:'inventory',                                lbl:'재고 조회'},
     'tb-integrity':      {m:'GET',  u:'/api/action/integrity-check',              lbl:'정합성'},
@@ -1447,6 +1602,10 @@
       }
       if (conf.u === 'allocation-upload') {
         showAllocationUploadModal();
+        return;
+      }
+      if (conf.u === 'quick-outbound') {
+        showQuickOutboundModal();
         return;
       }
       if (conf.u === 'wip') {

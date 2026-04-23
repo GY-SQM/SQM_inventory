@@ -55,6 +55,14 @@ try:
 except Exception as e:
     logging.warning(f"allocation_api router load failed: {e}")
 
+# ── v864.3 Phase 4-B: 즉시 출고 (F015) 네이티브 ─────
+try:
+    from backend.api.outbound_api import router as outbound_api_router
+    app.include_router(outbound_api_router)
+    logging.info("outbound_api router loaded OK (POST /api/outbound/quick)")
+except Exception as e:
+    logging.warning(f"outbound_api router load failed: {e}")
+
 # ── Tier 2 Stage 2: 자동 생성 라우터 include ─────────────────
 try:
     from backend.api.menubar import router as menubar_router
