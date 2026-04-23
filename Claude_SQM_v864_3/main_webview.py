@@ -1,37 +1,111 @@
 """
 SQM Inventory — PyWebView 진입점 (Tkinter 대체)
 실행: python main_webview.py
+
+=== v864.3 Debug Visibility 패치 (에러 은폐 차단) ===
+1. sys.excepthook / threading.excepthook — 미포획 예외 전부 파일 기록
+2. FileHandler — 모든 로그를 sqm_debug.log 에 항상 기록 (frozen 아닐 때도)
+3. uvicorn log_level="debug" + access_log=True — 백엔드 요청/에러 완전 노출
+4. JS window.onerror / unhandledrejection — 프론트 에러 → /api/log/frontend-error 전송
 """
 import threading
 import time
 import os
 import sys
 import logging
+import traceback
 
-# PyInstaller frozen exe (console=False) 에서 stdout/stderr가 None →
-# logging StreamHandler가 터지는 것을 방지: 로그 파일로 리다이렉트
-if getattr(sys, 'frozen', False) and sys.stdout is None:
-    _log_path = os.path.join(os.path.dirname(sys.executable), 'sqm_webview.log')
-    _log_file = open(_log_path, 'a', encoding='utf-8', buffering=1)
-    sys.stdout = _log_file
-    sys.stderr = _log_file
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-log = logging.getLogger(__name__)
-
+# ─────────────────────────────────────────────────────────────
+# [Patch 1] 로그 파일 기본 경로 결정 + stdout/stderr 폴백
+# ─────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(BASE_DIR, 'frontend')
 API_HOST = '127.0.0.1'
 API_PORT = 8765
 
+# frozen(EXE)이면 exe 옆, 아니면 프로젝트 루트에 로그 파일 생성
+if getattr(sys, 'frozen', False):
+    LOG_DIR = os.path.dirname(sys.executable)
+else:
+    LOG_DIR = BASE_DIR
+LOG_PATH = os.path.join(LOG_DIR, 'sqm_debug.log')
+
+# PyInstaller frozen exe (console=False) 에서 stdout/stderr가 None →
+# logging StreamHandler가 터지는 것을 방지: 로그 파일로 리다이렉트
+if getattr(sys, 'frozen', False) and sys.stdout is None:
+    _log_file = open(LOG_PATH, 'a', encoding='utf-8', buffering=1)
+    sys.stdout = _log_file
+    sys.stderr = _log_file
+
+# ─────────────────────────────────────────────────────────────
+# [Patch 2] 로그 설정 — 콘솔 + 파일 동시 기록 (DEBUG 레벨)
+# ─────────────────────────────────────────────────────────────
+_fmt = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+_root_logger = logging.getLogger()
+_root_logger.setLevel(logging.DEBUG)
+# 중복 방지: 기존 핸들러 제거
+for _h in list(_root_logger.handlers):
+    _root_logger.removeHandler(_h)
+# 콘솔 핸들러 (INFO 이상)
+_console_h = logging.StreamHandler()
+_console_h.setLevel(logging.INFO)
+_console_h.setFormatter(logging.Formatter(_fmt))
+_root_logger.addHandler(_console_h)
+# 파일 핸들러 (DEBUG 이상 전부)
+try:
+    _file_h = logging.FileHandler(LOG_PATH, encoding='utf-8')
+    _file_h.setLevel(logging.DEBUG)
+    _file_h.setFormatter(logging.Formatter(_fmt))
+    _root_logger.addHandler(_file_h)
+except Exception as _e:
+    print(f"[WARN] 로그 파일 핸들러 실패: {_e}")
+
+log = logging.getLogger(__name__)
+log.info(f"=== SQM v864.3 시작 — 로그 파일: {LOG_PATH} ===")
+
+# ─────────────────────────────────────────────────────────────
+# [Patch 3] 전역 예외 훅 — 미포획 예외 전부 로그 파일에 기록
+# ─────────────────────────────────────────────────────────────
+def _excepthook(exc_type, exc_value, exc_tb):
+    """메인 스레드의 미포획 예외"""
+    if issubclass(exc_type, KeyboardInterrupt):
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+        return
+    tb_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+    log.critical(f"[UNCAUGHT-MAIN] {exc_type.__name__}: {exc_value}\n{tb_text}")
+
+def _thread_excepthook(args):
+    """서브 스레드(FastAPI/uvicorn 등)의 미포획 예외"""
+    tb_text = "".join(traceback.format_exception(
+        args.exc_type, args.exc_value, args.exc_traceback
+    ))
+    log.critical(
+        f"[UNCAUGHT-THREAD] thread={args.thread.name if args.thread else '?'} "
+        f"{args.exc_type.__name__}: {args.exc_value}\n{tb_text}"
+    )
+
+sys.excepthook = _excepthook
+threading.excepthook = _thread_excepthook
+log.debug("전역 예외 훅 설치 완료 (main + thread)")
+
 def run_api_server():
-    """FastAPI 서버를 별도 스레드에서 실행"""
+    """FastAPI 서버를 별도 스레드에서 실행
+
+    [Patch] v864.3: log_level="debug" + access_log=True
+    → 모든 HTTP 요청/응답/500 에러 전부 콘솔+파일에 기록
+    """
     try:
         import uvicorn
         from backend.api import app
-        uvicorn.run(app, host=API_HOST, port=API_PORT, log_level="warning")
+        uvicorn.run(
+            app,
+            host=API_HOST,
+            port=API_PORT,
+            log_level="debug",       # warning → debug (모든 요청 보임)
+            access_log=True,         # 요청 로그 활성화
+        )
     except Exception as e:
-        log.error(f"API 서버 시작 실패: {e}")
+        log.exception(f"API 서버 시작 실패: {e}")
 
 def is_port_open(host, port):
     """TCP 소켓이 LISTEN 상태인지 (다른 프로세스가 점유 중인지) 확인"""
@@ -149,10 +223,61 @@ def main():
         )
 
         def on_loaded():
-            # JS 브릿지 초기화
+            # JS 브릿지 초기화 + [Patch] 프론트 에러 자동 전송
             window.evaluate_js(f'''
                 window.SQM_API_BASE = "http://{API_HOST}:{API_PORT}";
                 console.log("[SQM] API Base:", window.SQM_API_BASE);
+
+                // ── v864.3 Debug: JS 에러를 백엔드 로그로 전송 ──
+                (function installErrorBridge() {{
+                    function report(payload) {{
+                        try {{
+                            fetch(window.SQM_API_BASE + "/api/log/frontend-error", {{
+                                method: "POST",
+                                headers: {{ "Content-Type": "application/json" }},
+                                body: JSON.stringify(payload),
+                                keepalive: true
+                            }}).catch(function(_){{}});
+                        }} catch(_) {{}}
+                    }}
+                    // 1) 동기 JS 에러
+                    window.addEventListener("error", function(e) {{
+                        report({{
+                            kind: "error",
+                            message: String(e.message || ""),
+                            source: String(e.filename || ""),
+                            line: e.lineno || 0,
+                            col: e.colno || 0,
+                            stack: (e.error && e.error.stack) ? String(e.error.stack) : "",
+                            url: String(location.href),
+                            ua: String(navigator.userAgent)
+                        }});
+                    }}, true);
+                    // 2) Promise rejection
+                    window.addEventListener("unhandledrejection", function(e) {{
+                        var r = e.reason || {{}};
+                        report({{
+                            kind: "unhandledrejection",
+                            message: String(r.message || r),
+                            stack: r.stack ? String(r.stack) : "",
+                            url: String(location.href),
+                            ua: String(navigator.userAgent)
+                        }});
+                    }});
+                    // 3) console.error 후크 (원본 호출 유지)
+                    var _origErr = console.error;
+                    console.error = function() {{
+                        try {{
+                            var msg = Array.prototype.map.call(arguments, function(a) {{
+                                try {{ return typeof a === "string" ? a : JSON.stringify(a); }}
+                                catch(_) {{ return String(a); }}
+                            }}).join(" ");
+                            report({{ kind: "console.error", message: msg, url: String(location.href) }});
+                        }} catch(_) {{}}
+                        return _origErr.apply(console, arguments);
+                    }};
+                    console.log("[SQM] Error bridge installed");
+                }})();
             ''')
 
         window.events.loaded += on_loaded

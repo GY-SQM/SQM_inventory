@@ -39,6 +39,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── v864.3 Debug Visibility: 프론트엔드 에러 수집 라우터 ─────
+try:
+    from backend.api.debug_log import router as debug_log_router
+    app.include_router(debug_log_router)
+    logging.info("debug_log router loaded OK (POST /api/log/frontend-error)")
+except Exception as e:
+    logging.warning(f"debug_log router load failed: {e}")
+
 # ── Tier 2 Stage 2: 자동 생성 라우터 include ─────────────────
 try:
     from backend.api.menubar import router as menubar_router
@@ -60,11 +68,83 @@ try:
 except Exception as e:
     logging.warning(f"dashboard_kpi router load failed: {e}")
 
+# Phase 4-A Group 2: 정적 응답 (info.py — F057~F062)
+try:
+    from backend.api.info import router as info_router
+    app.include_router(info_router)
+    logging.info("info router loaded OK")
+except Exception as e:
+    logging.warning(f"info router load failed: {e}")
+
+# Phase 4-A Group 3: SQL 직접 조회 (queries.py — F009,F023,F025,F031,F034,F037,F038,F046,F047,F055)
+try:
+    from backend.api.queries import router as queries_router
+    app.include_router(queries_router)
+    logging.info("queries router loaded OK")
+except Exception as e:
+    logging.warning(f"queries router load failed: {e}")
+
+# Phase 4-A Group 4: 엔진+SQL 혼합 (actions.py — F013,F029,F035,F050,F061)
+try:
+    from backend.api.actions import router as actions_router
+    app.include_router(actions_router)
+    logging.info("actions router loaded OK")
+except Exception as e:
+    logging.warning(f"actions router load failed: {e}")
+
 try:
     from backend.api.optional import router as optional_router
     app.include_router(optional_router)
 except Exception as e:
     logging.warning(f"optional router load failed: {e}")
+
+# Phase 4-B: queries2 + actions2
+try:
+    from backend.api.queries2 import router as queries2_router
+    app.include_router(queries2_router)
+    logging.info("queries2 router loaded OK")
+except Exception as e:
+    logging.warning(f"queries2 router load failed: {e}")
+
+try:
+    from backend.api.actions2 import router as actions2_router
+    app.include_router(actions2_router)
+    logging.info("actions2 router loaded OK")
+except Exception as e:
+    logging.warning(f"actions2 router load failed: {e}")
+
+# Phase 4-C: queries3 + actions3
+try:
+    from backend.api.queries3 import router as queries3_router
+    app.include_router(queries3_router)
+    logging.info("queries3 router loaded OK")
+except Exception as e:
+    logging.warning(f"queries3 router load failed: {e}")
+
+try:
+    from backend.api.actions3 import router as actions3_router
+    app.include_router(actions3_router)
+    logging.info("actions3 router loaded OK")
+except Exception as e:
+    logging.warning(f"actions3 router load failed: {e}")
+
+# Phase 4-D: inbound (PDF upload)
+try:
+    from backend.api.inbound import router as inbound_router
+    app.include_router(inbound_router)
+    logging.info("inbound router loaded OK")
+except Exception as e:
+    logging.warning(f"inbound router load failed: {e}")
+try:
+    from backend.api.inventory_api import inv_router, alloc_router, tb_router, scan_router, health_router
+    app.include_router(inv_router)
+    app.include_router(alloc_router)
+    app.include_router(tb_router)
+    app.include_router(scan_router)
+    app.include_router(health_router)
+    logging.info("inventory_api routers loaded OK (inventory/allocation/tonbags/scan/health)")
+except Exception as e:
+    logging.warning(f"inventory_api routers load failed: {e}")
 
 # ── 표준 예외 핸들러 설치 ────────────────────────────────────
 # v864.3 Phase 2: static mount moved to END of file — Starlette matches
@@ -369,4 +449,4 @@ try:
     else:
         logging.error(f"frontend dir not found: {_frontend_dir}")
 except Exception as e:
-    logging.warning(f"frontend static mount failed: {e}")
+    logging.warning(f"Frontend static mount failed: {e}")

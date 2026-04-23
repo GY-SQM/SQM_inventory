@@ -1,519 +1,1412 @@
-/* SQM v864.3 — INLINE Handlers (ESM 의존 없는 fallback 보증판)
-   type="module" 아닌 일반 script 로 로드 — IIFE, XHR, no import.
-   2026-04-21 Ruby 수정: 클릭 기반 드롭다운 + 디버그 로그 + 엔드포인트 교정. */
-(function(){
+/* =======================================================================
+   SQM Inventory v864.3 - sqm-inline.js (Phase 5 + Hotfix: menu click + debug panel)
+   Rebuilt: 2026-04-21  Ruby (Senior Software Architect)
+   Hotfix:  2026-04-22  menu dropdown .menu-btn selector fix + on-screen debug log
+   ======================================================================= */
+(function () {
   'use strict';
-  var VERSION = 'v864.3-inline-2026-04-21b';
-  console.info('[SQM inline] 핸들러 바인딩 시작', VERSION);
 
-  var API_BASE = (window && window.SQM_API_BASE) || 'http://127.0.0.1:8765';
+  var API = 'http://127.0.0.1:8765';
 
-  // ── Toast ──────────────────────────────────────────────────────────
-  function toast(type, msg, dur){
-    dur = dur || 3000;
-    try {
-      var c = document.getElementById('toast-container');
-      if (!c) { c = document.createElement('div'); c.id='toast-container'; document.body.appendChild(c); }
-      var el = document.createElement('div');
-      el.className = 'toast ' + type;
-      var icons = {success:'OK', info:'i', warning:'!', error:'X'};
-      el.innerHTML = '<span>'+(icons[type]||'')+'</span><span>'+msg+'</span>';
-      c.appendChild(el);
-      setTimeout(function(){
-        el.style.opacity='0';
-        el.style.transition='opacity 300ms';
-        setTimeout(function(){ try{ el.remove(); }catch(e){} }, 300);
-      }, dur);
-    } catch (e) {
-      console.error('[SQM toast 실패]', e, type, msg);
-    }
-  }
-  window.showToast = toast;
+  /* ===================================================
+     0. ON-SCREEN DEBUG LOG PANEL
+     F12 없이 화면 우측 하단에서 직접 확인
+     F8 토글 / 기본: 숨김 (Ctrl+Shift+D → 알캡처 충돌로 F8 변경)
+     =================================================== */
+  var _dbgLogs = [];
+  var _dbgMax  = 30;
+  var _dbgEl   = null;
 
-  // ── API call (XHR, no Promise 의존) ───────────────────────────────
-  function apiCall(method, path, body, cb){
-    try {
-      var xhr = new XMLHttpRequest();
-      xhr.open(method, API_BASE + path, true);
-      xhr.setRequestHeader('Content-Type','application/json');
-      xhr.timeout = 5000;
-      xhr.onload  = function(){
-        var data = null;
-        try { data = JSON.parse(xhr.responseText); } catch(e) { data = xhr.responseText; }
-        cb(null, data, xhr.status);
-      };
-      xhr.onerror   = function(){ cb(new Error('network')); };
-      xhr.ontimeout = function(){ cb(new Error('timeout')); };
-      xhr.send(body ? JSON.stringify(body) : null);
-    } catch (e) {
-      cb(e);
-    }
+  function dbgLog(icon, label, detail, color) {
+    var ts = new Date().toTimeString().slice(0,8);
+    _dbgLogs.push({ts:ts, icon:icon, label:label, detail:detail, color:color||'#aaa'});
+    if (_dbgLogs.length > _dbgMax) _dbgLogs.shift();
+    _dbgRefresh();
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  // 1) 메뉴 드롭다운: 클릭 기반 토글 (hover 만으로는 PyWebView/Chromium
-  //    flex-container 에서 간헐적으로 hover 가 끊겨 submenu 클릭이
-  //    등록되지 않는 버그가 재현됨 → 클릭 기반으로 전환).
-  // ══════════════════════════════════════════════════════════════════
-  function closeAllMenus(except){
-    var opens = document.querySelectorAll('.menu-btn.open');
-    for (var i=0;i<opens.length;i++){
-      if (opens[i] !== except) opens[i].classList.remove('open');
-    }
+  function _dbgRefresh() {
+    if (!_dbgEl || !_dbgEl.__body) return;
+    _dbgEl.__body.innerHTML = _dbgLogs.slice().reverse().map(function(r){
+      return '<div style="padding:2px 0;border-bottom:1px solid #222;color:'+r.color+'">'+
+        '<span style="opacity:.6;font-size:10px">'+r.ts+'</span> '+
+        r.icon+' <b>'+escapeHtml(r.label)+'</b>'+
+        (r.detail ? '<div style="font-size:10px;color:#888;padding-left:8px">'+escapeHtml(String(r.detail).slice(0,120))+'</div>' : '')+
+        '</div>';
+    }).join('');
   }
 
-  document.addEventListener('click', function(ev){
-    // 1-A. 메뉴바 버튼 자체 클릭 (data-menu 있고 data-action 없음) → 드롭다운 토글
-    var menuBtn = ev.target && ev.target.closest && ev.target.closest('.menu-btn[data-menu]');
-    var actionEl = ev.target && ev.target.closest && ev.target.closest('[data-action]');
+  function _dbgBuild() {
+    var wrap = document.createElement('div');
+    wrap.id = 'sqm-debug-panel';
+    wrap.style.cssText = [
+      'position:fixed','bottom:8px','right:8px','width:340px','z-index:99999',
+      'font-family:monospace','font-size:11px','border-radius:6px',
+      'box-shadow:0 2px 12px rgba(0,0,0,.6)','display:none'
+    ].join(';');
 
-    if (menuBtn && !actionEl) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      var wasOpen = menuBtn.classList.contains('open');
-      closeAllMenus();
-      if (!wasOpen) menuBtn.classList.add('open');
-      console.debug('[SQM menu] toggle', menuBtn.dataset.menu, 'open=', !wasOpen);
-      return;
+    var hdr = document.createElement('div');
+    hdr.style.cssText = 'background:#1a1a2e;color:#00e5ff;padding:4px 8px;border-radius:6px 6px 0 0;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none';
+    hdr.innerHTML = '<span>🔍 SQM Debug Log</span><span style="font-size:10px;opacity:.6">(F8 토글)</span><button id="sqm-dbg-clear" style="margin-left:auto;background:#c00;color:#fff;border:none;border-radius:3px;padding:0 6px;cursor:pointer;font-size:10px">Clear</button>';
+
+    var body = document.createElement('div');
+    body.style.cssText = 'background:#0d0d1a;color:#ccc;padding:6px;max-height:260px;overflow-y:auto;border-radius:0 0 6px 6px';
+
+    wrap.appendChild(hdr);
+    wrap.appendChild(body);
+    document.body.appendChild(wrap);
+
+    wrap.__body = body;
+    _dbgEl = wrap;
+
+    hdr.querySelector('#sqm-dbg-clear').addEventListener('click', function(e){
+      e.stopPropagation();
+      _dbgLogs = [];
+      _dbgRefresh();
+    });
+
+    // F8 토글 (Ctrl+Shift+D 는 알캡처 전역 단축키 충돌)
+    document.addEventListener('keydown', function(e){
+      if (e.key==='F8') {
+        wrap.style.display = (wrap.style.display==='none') ? 'block' : 'none';
+      }
+    });
+
+    dbgLog('🟢','Debug panel ready','F8 키로 토글 (Ctrl+Shift+D 알캡처 충돌 → F8 변경)','#4caf50');
+  }
+
+  /* ===================================================
+     1. UTILITIES
+     =================================================== */
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) {
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
+    });
+  }
+
+  function ensureToastContainer() {
+    var c = document.getElementById('toast-container');
+    if (!c) {
+      c = document.createElement('div');
+      c.id = 'toast-container';
+      document.body.appendChild(c);
     }
+    return c;
+  }
 
-    // 1-B. 메뉴 밖 클릭 → 전부 닫기
-    if (!actionEl && !menuBtn) {
-      closeAllMenus();
-    }
-  }, true); // capture-phase: 다른 스크립트가 stopPropagation 해도 작동
+  var TOAST_ICONS = {success:'&#x2705;', info:'&#x2139;&#xFE0F;', warning:'&#x26A0;&#xFE0F;', error:'&#x274C;'};
 
-  // ESC 로 드롭다운 닫기
-  document.addEventListener('keydown', function(ev){
-    if (ev.key === 'Escape') closeAllMenus();
-  });
+  function showToast(type, message, duration) {
+    if (!['success','info','warning','error'].includes(type)) type = 'info';
+    duration = duration || 3000;
+    var c = ensureToastContainer();
+    var t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.innerHTML = '<span>' + (TOAST_ICONS[type]||'') + '</span><span>' + escapeHtml(message) + '</span>';
+    c.appendChild(t);
+    setTimeout(function () {
+      t.style.opacity = '0';
+      t.style.transition = 'opacity 300ms';
+      setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 300);
+    }, duration);
+  }
+  window.showToast = showToast;
 
-  // ══════════════════════════════════════════════════════════════════
-  // 2) data-action 핸들러 (메뉴 아이템 + 툴바 + topbar)
-  // ══════════════════════════════════════════════════════════════════
-  document.addEventListener('click', function(ev){
-    var el = ev.target && ev.target.closest && ev.target.closest('[data-action]');
-    if (!el) return;
-    ev.preventDefault();
+  /* ===================================================
+     2. API CLIENT
+     =================================================== */
+  var DEFAULT_TIMEOUT = 8000;
 
-    var action = el.dataset.action;
-    var label  = (el.textContent || '').trim() || action;
-    console.debug('[SQM action]', action, '→', label);
-
-    // 테마/새로고침 처리
-    if (action === 'theme-dark') {
-      document.documentElement.setAttribute('data-theme','dark');
-      document.body.setAttribute('data-theme','dark');
-      try { localStorage.setItem('sqm_theme','dark'); } catch(e){}
-      toast('success','다크 모드'); closeAllMenus(); return;
-    }
-    if (action === 'theme-light') {
-      document.documentElement.setAttribute('data-theme','light');
-      document.body.setAttribute('data-theme','light');
-      try { localStorage.setItem('sqm_theme','light'); } catch(e){}
-      toast('success','라이트 모드'); closeAllMenus(); return;
-    }
-    if (action === 'refresh-all') {
-      toast('info','새로고침 중...');
-      loadDashboard(); loadAlerts(); loadStatusbar();
-      closeAllMenus();
-      return;
-    }
-
-    // 실제 엔드포인트가 있으면 호출, 없으면 안내 토스트
-    // (backend/api/menubar.py 실존 경로에 맞춰 교정됨)
-    var ENDPOINTS = {
-      // Toolbar
-      'tb-pdf-inbound':       {m:'POST', p:'/api/menu/-on-pdf-inbound'},
-      'tb-quick-outbound':    {m:'POST', p:'/api/menu/-on-quick-outbound-paste'},
-      'tb-return':            {m:'POST', p:'/api/menu/-show-return-dialog'},
-      'tb-inventory':         {m:'GET',  p:'/api/inventory'},
-      'tb-integrity':         {m:'GET',  p:'/api/integrity/quick'},
-      'tb-backup':            {m:'POST', p:'/api/menu/-on-backup-click'},
-      'tb-settings':          {m:'POST', p:'/api/menu/-show-email-config'},
-      // File 메뉴
-      'onExport':             {m:'POST', p:'/api/export/excel'},
-      // File 메뉴 (Phase 1c 추가: v864.2 P0 복구)
-      'onDoUpdate':           {m:'POST', p:'/api/menu/-on-do-update'},
-      'onReturnDialog':       {m:'POST', p:'/api/menu/-show-return-dialog'},
-      'onReturnInboundUpload':{m:'POST', p:'/api/menu/-on-return-inbound-upload'},
-      'onReturnStatistics':   {m:'GET',  p:'/api/menu/-show-return-statistics'},
-      // 입고
-      'onOnPdfInbound':       {m:'POST', p:'/api/menu/-on-pdf-inbound'},
-      // 출고
-      'onOnQuickOutbound':    {m:'POST', p:'/api/menu/-on-quick-outbound-paste'},
-      'onOutboundScheduled':  {m:'GET',  p:'/api/outbound/scheduled'},
-      'onOutboundHistory':    {m:'GET',  p:'/api/outbound/history'},
-      // 출고 (Phase 1c 추가: v864.2 재고메뉴 이전)
-      'onOutboundStatus':     {m:'GET',  p:'/api/menu/-show-outbound-history'},
-      // 재고
-      'onInventoryList':      {m:'GET',  p:'/api/inventory'},
-      'onIntegrityCheck':     {m:'GET',  p:'/api/integrity/quick'},
-      // 보고서
-      'onReportExport':       {m:'POST', p:'/api/export/excel'},
-      // 보고서 (Phase 1c 추가: v864.2 P0 복구 + 재고메뉴 이전)
-      'onInvoiceGenerate':    {m:'POST', p:'/api/menu/-generate-outbound-invoice'},
-      'onDetailOfOutbound':   {m:'POST', p:'/api/menu/-on-detail-of-outbound-report'},
-      'onSalesOrderDN':       {m:'POST', p:'/api/menu/-on-sales-order-dn-report'},
-      'onDnCrossCheck':       {m:'POST', p:'/api/menu/-on-dn-cross-check'},
-      'onLotDetailPdf':       {m:'POST', p:'/api/menu/-generate-lot-detail-pdf'},
-      'onLotListExcel':       {m:'POST', p:'/api/export/excel?option=3'},
-      'onTonbagListExcel':    {m:'POST', p:'/api/export/excel?option=4'},
-      // 설정/도구
-      'onOnBackup':           {m:'POST', p:'/api/menu/-on-backup-click'},
-      'onRestore':            {m:'POST', p:'/api/menu/-on-restore-click'},
-      'onSettings':           {m:'POST', p:'/api/menu/-show-email-config'},
-      // 설정/도구 (Phase 1c 추가: v864.2 P0 복구)
-      'onProductMaster':      {m:'POST', p:'/api/menu/-show-product-master'},
-      'onProductInventoryReport': {m:'GET', p:'/api/menu/-show-product-inventory-report'},
-      'onIntegrityRepair':    {m:'POST', p:'/api/menu/-on-integrity-check'},
-      'onOptimizeDb':         {m:'POST', p:'/api/menu/-on-optimize-db'},
-      'onCleanupLogs':        {m:'POST', p:'/api/menu/-on-cleanup-logs'},
-      'onDbInfo':             {m:'GET',  p:'/api/menu/-show-db-info'}
+  function apiCall(method, path, body, opts) {
+    opts = opts || {};
+    var timeout = opts.timeout || DEFAULT_TIMEOUT;
+    var retries = (opts.retries !== undefined) ? opts.retries : 2;
+    var url = (path.indexOf('http') === 0) ? path : API + path;
+    var fetchOpts = {
+      method: method.toUpperCase(),
+      headers: {'Content-Type':'application/json'}
     };
+    if (body !== null && body !== undefined &&
+        ['POST','PUT','DELETE'].includes(fetchOpts.method)) {
+      fetchOpts.body = JSON.stringify(body);
+    }
+    // Debug log: request
+    dbgLog('🔵', method.toUpperCase()+' '+path, null, '#64b5f6');
+    function attempt(n) {
+      var timer;
+      var timeoutP = new Promise(function(_, rej) {
+        timer = setTimeout(function(){ var e = new Error('timeout'); e.status=0; rej(e); }, timeout);
+      });
+      return Promise.race([fetch(url, fetchOpts), timeoutP])
+        .then(function(res) {
+          clearTimeout(timer);
+          if (!res.ok) {
+            return res.json().catch(function(){return null;}).then(function(detail){
+              var e = new Error('HTTP ' + res.status);
+              e.status = res.status; e.detail = detail;
+              // Debug log: HTTP error
+              var msg = (detail && (detail.detail||detail.message)) ? (detail.detail||detail.message) : '';
+              dbgLog(res.status===501?'🟡':'🔴', 'HTTP '+res.status+' '+path, msg||'', res.status===501?'#ffa726':'#ef5350');
+              throw e;
+            });
+          }
+          // Debug log: success
+          dbgLog('🟢', 'OK '+path, null, '#66bb6a');
+          return res.json().catch(function(){return {};});
+        })
+        .catch(function(e) {
+          clearTimeout(timer);
+          if (e.status === 0) dbgLog('🔴','TIMEOUT '+path,'백엔드 응답 없음 (8초)','#ef5350');
+          if (e.status === 501 || e.status === 404) throw e;
+          if (n < retries) {
+            return new Promise(function(r){ setTimeout(r, 500 * Math.pow(2,n)); })
+              .then(function(){ return attempt(n+1); });
+          }
+          throw e;
+        });
+    }
+    return attempt(0);
+  }
 
-    var ep = ENDPOINTS[action];
+  function apiGet(path, opts) { return apiCall('GET', path, null, opts); }
+  function apiPost(path, body, opts) { return apiCall('POST', path, body, opts); }
+
+  window.apiCall = apiCall;
+  window.apiGet  = apiGet;
+  window.apiPost = apiPost;
+
+  /* ===================================================
+     3. STATE / THEME
+     =================================================== */
+  function getStore() {
+    try {
+      localStorage.setItem('__probe__','1');
+      localStorage.removeItem('__probe__');
+      return localStorage;
+    } catch {}
+    try { return sessionStorage; } catch {}
+    var m = {};
+    return { getItem:function(k){return m[k]||null;},
+             setItem:function(k,v){m[k]=String(v);},
+             removeItem:function(k){delete m[k];} };
+  }
+
+  function applyTheme() {
+    var store = getStore();
+    var theme = store.getItem('sqm_theme') || 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    var vm = store.getItem('sqm_view_mode') || 'mt';
+    document.documentElement.setAttribute('data-view-mode', vm);
+  }
+
+  function toggleTheme() {
+    var cur = document.documentElement.getAttribute('data-theme') || 'dark';
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { getStore().setItem('sqm_theme', next); } catch {}
+    showToast('info', (next === 'dark' ? '&#x1F319; Dark' : '&#x2600;&#xFE0F; Light') + ' theme');
+  }
+
+  /* ===================================================
+     4. MENU CLOSE
+     =================================================== */
+  var _menuJustOpened = false;  // PyWebView/WebView2: stopPropagation 우회 방지 플래그
+
+  function closeAllMenus() {
+    // Fix: HTML uses .menu-btn[data-menu], not .menu-item — add both for safety
+    document.querySelectorAll('.menu-btn.open').forEach(function(el){
+      el.classList.remove('open');
+    });
+    document.querySelectorAll('.menu-dropdown.open,.menu-dropdown.active').forEach(function(el){
+      el.classList.remove('open'); el.classList.remove('active');
+    });
+    document.querySelectorAll('.menu-item.active,.nav-item.open').forEach(function(el){
+      el.classList.remove('active'); el.classList.remove('open');
+    });
+  }
+
+  /* ===================================================
+     5. ROUTER
+     =================================================== */
+  var _currentRoute = null;
+
+  function showPage(route) {
+    var dash = document.getElementById('dashboard-container');
+    var page = document.getElementById('page-container');
+    if (route === 'dashboard') {
+      if (dash) { dash.style.display = 'block'; dash.style.removeProperty('display'); }
+      if (page) page.style.display = 'none';
+    } else {
+      if (dash) dash.style.display = 'none';
+      /* PyWebView/WebView2: style.display='' 이 inline none을 못 제거하는 경우 있음 → block 명시 */
+      if (page) {
+        page.style.removeProperty('display');
+        page.style.display = 'block';
+      }
+    }
+    /* 치수 측정 — height 0이면 flex 레이아웃 문제 */
+    setTimeout(function(){
+      var r1 = page ? page.getBoundingClientRect() : null;
+      var r2 = page && page.parentElement ? page.parentElement.getBoundingClientRect() : null;
+      dbgLog('📐','page-container rect',
+        'W='+Math.round(r1?r1.width:0)+' H='+Math.round(r1?r1.height:0)+
+        ' | wrapper H='+Math.round(r2?r2.height:0), '#ff9800');
+    }, 300);
+    dbgLog('🖥️','showPage', 'route='+route+
+      ' dash='+(dash?dash.style.display:'?')+
+      ' page='+(page?page.style.display:'?'), '#ab47bc');
+    document.querySelectorAll('[data-route]').forEach(function(el){
+      el.classList.toggle('active', el.dataset.route === route);
+    });
+  }
+
+  function renderPage(route) {
+    _currentRoute = route;
     closeAllMenus();
-
-    if (!ep) {
-      toast('info', label + ' (엔진 연결 예정)');
-      return;
+    showPage(route);
+    try { getStore().setItem('sqm_last_tab', route); } catch {}
+    if (history.replaceState) history.replaceState(null,'','#' + route);
+    switch (route) {
+      case 'dashboard':  loadDashboard();     break;
+      case 'inventory':  loadInventoryPage();  break;
+      case 'allocation': loadAllocationPage(); break;
+      case 'picked':     loadPickedPage();     break;
+      case 'inbound':    loadInboundPage();    break;
+      case 'outbound':   loadOutboundPage();   break;
+      case 'return':     loadReturnPage();     break;
+      case 'move':       loadMovePage();       break;
+      case 'log':        loadLogPage();        break;
+      case 'scan':       loadScanPage();       break;
+      case 'tonbag':     loadTonbagPage();     break;
+      default:           loadStubPage(route);  break;
     }
-
-    // pending 토스트 → 결과 토스트
-    toast('info', label + ' 요청 중…', 1200);
-    apiCall(ep.m, ep.p, null, function(err, data, status){
-      if (err) {
-        console.warn('[SQM api 실패]', action, err);
-        toast('error', label + ' — ' + err.message);
-        return;
-      }
-      // v864.3 Phase 2 Step 3 — 새 계약: 200 + body.ok=false (NOT_READY soft-fail)
-      var isNotReady = (data && data.ok === false &&
-                        data.detail && data.detail.code === 'NOT_READY');
-      if (isNotReady) {
-        toast('info', label + ' — 준비 중 (아직 구현되지 않음)');
-        return;
-      }
-      if (status >= 200 && status < 300) {
-        if (data && data.ok === false) {
-          toast('warning', label + ' — ' + (data.error || 'soft-fail'));
-        } else {
-          toast('success', label + ' 완료');
-        }
-      } else if (status === 404) {
-        toast('warning', label + ' — 엔드포인트 없음 (' + ep.p + ')');
-      } else if (status === 501) {
-        // legacy path (should no longer trigger after Phase 2 Step 3)
-        toast('info', label + ' — 엔진 메서드 준비 중');
-      } else {
-        toast('warning', label + ' — HTTP ' + status);
-      }
-    });
-  });
-
-  // ══════════════════════════════════════════════════════════════════
-  // 3) 사이드바 라우터 (data-route)
-  // ══════════════════════════════════════════════════════════════════
-  function renderPage(route){
-    var el = document.getElementById('page-container');
-    if (!el) return;
-    var labels = {
-      dashboard:'Dashboard', inventory:'Inventory', allocation:'Allocation',
-      picked:'Picked', outbound:'Outbound', return:'Return', move:'Move',
-      log:'Log', scan:'Scan'
-    };
-    if (route === 'dashboard') { loadDashboard(); return; }
-    el.innerHTML = '<div style="padding:20px"><h3>'+labels[route]+'</h3><div class="loading">데이터 로딩 중…</div></div>';
-    var endpoints = {
-      inventory: '/api/inventory',
-      allocation: '/api/allocation',
-      picked: '/api/outbound/scheduled',
-      outbound: '/api/outbound/history',
-      return: '/api/inventory?status=RETURN',
-      move: '/api/move/history',
-      log: '/api/log/activity?limit=100',
-      scan: null
-    };
-    var p = endpoints[route];
-    if (!p) {
-      el.innerHTML = '<div style="padding:20px"><h3>'+labels[route]+'</h3><div class="empty">표시할 데이터가 없습니다</div></div>';
-      return;
-    }
-    apiCall('GET', p, null, function(err, data, status){
-      if (err) {
-        el.innerHTML = '<div style="padding:20px"><h3>'+labels[route]+'</h3><div class="empty">로드 실패: '+err.message+'</div></div>';
-        return;
-      }
-      var rows = (data && (data.data || data)) || [];
-      if (!Array.isArray(rows)) rows = (rows && rows.data) || [];
-      if (!rows.length) {
-        el.innerHTML = '<div style="padding:20px"><h3>'+labels[route]+'</h3><div class="empty">데이터 없음</div></div>';
-        return;
-      }
-      var keys = Object.keys(rows[0] || {});
-      var thead = '<tr>' + keys.map(function(k){ return '<th>'+k+'</th>'; }).join('') + '</tr>';
-      var tbody = rows.slice(0,100).map(function(r){
-        return '<tr>' + keys.map(function(k){ return '<td>'+(r[k] == null ? '' : r[k])+'</td>'; }).join('') + '</tr>';
-      }).join('');
-      el.innerHTML = '<div style="padding:8px"><h3>'+labels[route]+' ('+rows.length+'건)</h3>'+
-                     '<table class="data-table"><thead>'+thead+'</thead><tbody>'+tbody+'</tbody></table></div>';
-    });
   }
 
-  document.addEventListener('click', function(ev){
-    var el = ev.target && ev.target.closest && ev.target.closest('[data-route]');
-    if (!el) return;
-    ev.preventDefault();
-    console.debug('[SQM route]', el.dataset.route);
-    var all = document.querySelectorAll('[data-route]');
-    for (var i=0;i<all.length;i++) all[i].classList.remove('active');
-    el.classList.add('active');
-    renderPage(el.dataset.route);
-  });
-
-  document.addEventListener('change', function(ev){
-    var el = ev.target && ev.target.closest && ev.target.closest('[data-view-mode]');
-    if (!el) return;
-    var mode = el.dataset.viewMode;
-    document.documentElement.setAttribute('data-view-mode', mode);
-    try { localStorage.setItem('sqm_view_mode', mode); } catch(e){}
-    toast('info', '뷰 모드: ' + mode.toUpperCase());
-  });
-
-  // ══════════════════════════════════════════════════════════════════
-  // 4) 대시보드 / 경고 / 상태바 로더
-  // ══════════════════════════════════════════════════════════════════
-  function fmt(v){
-    return typeof v==='number'
-      ? v.toLocaleString('ko-KR',{minimumFractionDigits:1, maximumFractionDigits:1})
-      : (v == null ? '-' : v);
+  function loadStubPage(route) {
+    var c = document.getElementById('page-container');
+    if (c) c.innerHTML = '<div class="empty" style="padding:60px;text-align:center;color:var(--text-muted)">Preparing: ' + escapeHtml(route) + '</div>';
   }
 
-  // Phase 3 Q1 — KPI 카드 HTML 생성 헬퍼
-  function kpiCard(id, label, icon, unit){
-    return '<div class="kpi-card" style="'+
-      'background:var(--panel,#1e1e2e);border:1px solid var(--panel-border,#444);'+
-      'border-radius:6px;padding:12px 16px;text-align:center;min-width:0">'+
-      '<div style="font-size:1.4em;margin-bottom:4px">'+icon+'</div>'+
-      '<div style="font-size:0.75em;color:var(--text-muted,#aaa);margin-bottom:6px">'+label+'</div>'+
-      '<div id="'+id+'" style="font-size:1.6em;font-weight:700;color:var(--accent,#58a6ff)">—</div>'+
-      '<div style="font-size:0.7em;color:var(--text-muted,#aaa);margin-top:2px">'+unit+'</div>'+
-    '</div>';
-  }
+  window.renderPage = renderPage;
 
-  // Phase 3 Q1 — KPI 숫자 카운트업 애니메이션 (300ms ease-out)
-  function animateKpi(id, target){
-    var el = document.getElementById(id);
-    if (!el) return;
-    var start = 0;
-    var dur = 300;
-    var t0 = performance.now();
-    var isFloat = (target % 1 !== 0);
-    function step(now){
-      var p = Math.min((now - t0) / dur, 1);
-      var ease = 1 - Math.pow(1 - p, 3);  // ease-out cubic
-      var cur = start + (target - start) * ease;
-      el.textContent = isFloat
-        ? cur.toLocaleString('ko-KR',{minimumFractionDigits:1, maximumFractionDigits:1})
-        : Math.round(cur).toLocaleString('ko-KR');
-      if (p < 1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
-  }
-
-  // Phase 3 Q1 — KPI 폴링 (5초 interval, 전역 1개만 유지)
+  /* ===================================================
+     6. DASHBOARD
+     =================================================== */
   var _kpiTimer = null;
-  function startKpiPolling(){
-    if (_kpiTimer) clearInterval(_kpiTimer);
-    fetchKpi();                              // 즉시 1회
-    _kpiTimer = setInterval(fetchKpi, 5000); // 5초마다
-  }
-  function stopKpiPolling(){
-    if (_kpiTimer){ clearInterval(_kpiTimer); _kpiTimer = null; }
+
+  function loadDashboard() {
+    loadKpi();
+    loadDashboardTables();
   }
 
-  function fetchKpi(){
-    // KPI 카드가 DOM 에 없으면 폴링 중단
-    if (!document.getElementById('kpi-inbound')){ stopKpiPolling(); return; }
-    fetch(API_BASE + '/api/dashboard/kpi')
-      .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(j){
-        if (!j || !j.data) return;
-        var d = j.data;
-        var ok = (j.ok !== false);
-        // ok=false → 회색 "—" 표시
-        if (!ok){
-          ['kpi-inbound','kpi-outbound','kpi-stock','kpi-unloc'].forEach(function(id){
-            var el = document.getElementById(id);
-            if (el){ el.textContent = '—'; el.style.color = 'var(--text-muted,#aaa)'; }
-          });
+  function loadKpi() {
+    apiGet('/api/dashboard/kpi').then(function(res) {
+      var d = res.data || res || {};
+      function sv(id, v) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = (v === null || v === undefined) ? '-' : String(v);
+      }
+      sv('kpi-inbound-val',        d.inbound_today   !== undefined ? d.inbound_today   : (d.inbound   || '-'));
+      sv('kpi-outbound-today-val', d.outbound_today  !== undefined ? d.outbound_today  : (d.outbound  || '-'));
+      sv('kpi-stock-lots-val',     d.stock_lots       !== undefined ? d.stock_lots      : (d.lots      || '-'));
+      sv('kpi-unassigned-val',     d.unassigned_bags  !== undefined ? d.unassigned_bags : (d.unassigned|| '-'));
+    }).catch(function(){});
+  }
+
+  function startKpiPolling() {
+    if (_kpiTimer) clearInterval(_kpiTimer);
+    _kpiTimer = setInterval(function(){
+      if (_currentRoute === 'dashboard' && document.visibilityState !== 'hidden') loadKpi();
+    }, 5000);
+  }
+
+  var SAMPLE_PRODUCTS = [{
+    name:'LITHIUM CARBONATE', sellable:200, reserved:0, committed:0,
+    outbound_done:0, return_wait:0, total:200, sample:40
+  }];
+  var SAMPLE_LOTS = [{opening:200, inbound:0, outbound:0, ending:200, status:'OK'}];
+
+  function loadDashboardTables() {
+    apiGet('/api/dashboard/stats').then(function(res){
+      var d = res.data || res || {};
+      renderDashProducts(d.products || SAMPLE_PRODUCTS);
+      renderDashLots(d.lots || SAMPLE_LOTS);
+    }).catch(function(){
+      renderDashProducts(SAMPLE_PRODUCTS);
+      renderDashLots(SAMPLE_LOTS);
+    });
+  }
+
+  function fmtN(v) {
+    if (typeof v !== 'number') return (v == null ? '-' : v);
+    return v.toLocaleString('ko-KR',{minimumFractionDigits:1,maximumFractionDigits:1});
+  }
+
+  function renderDashProducts(rows) {
+    var tbody = document.getElementById('dash-products');
+    if (!tbody) return;
+    var tot = rows.reduce(function(a,r){
+      return {sellable:a.sellable+(r.sellable||0),reserved:a.reserved+(r.reserved||0),
+              committed:a.committed+(r.committed||0),outbound_done:a.outbound_done+(r.outbound_done||0),
+              return_wait:a.return_wait+(r.return_wait||0),total:a.total+(r.total||0),sample:a.sample+(r.sample||0)};
+    },{sellable:0,reserved:0,committed:0,outbound_done:0,return_wait:0,total:0,sample:0});
+    tbody.innerHTML = rows.map(function(r,i){
+      return '<tr><td>'+(i+1)+'</td><td style="text-align:left">'+escapeHtml(r.name)+'</td><td>'+fmtN(r.sellable)+'</td><td>'+fmtN(r.reserved)+'</td><td>'+fmtN(r.committed)+'</td><td>'+fmtN(r.outbound_done)+'</td><td>'+fmtN(r.return_wait)+'</td><td><b>'+fmtN(r.total)+'</b></td><td>'+(r.sample!=null?r.sample:'-')+'</td></tr>';
+    }).join('') +
+    '<tr class="total-row"><td></td><td style="text-align:left"><b>Total</b></td><td>'+fmtN(tot.sellable)+'</td><td>'+fmtN(tot.reserved)+'</td><td>'+fmtN(tot.committed)+'</td><td>'+fmtN(tot.outbound_done)+'</td><td>'+fmtN(tot.return_wait)+'</td><td>'+fmtN(tot.total)+'</td><td>'+tot.sample+'</td></tr>';
+  }
+
+  function renderDashLots(rows) {
+    var tbody = document.getElementById('dash-lots');
+    if (!tbody) return;
+    tbody.innerHTML = rows.map(function(r,i){
+      return '<tr><td>'+(i+1)+'</td><td>'+fmtN(r.opening)+'</td><td>'+fmtN(r.inbound)+'</td><td>'+fmtN(r.outbound)+'</td><td>'+fmtN(r.ending)+'</td><td><span style="color:#2e7d32;font-weight:700">'+escapeHtml(r.status||'OK')+'</span></td></tr>';
+    }).join('');
+  }
+
+  /* ===================================================
+     7a. PAGE: Inventory
+     =================================================== */
+  function loadInventoryPage() {
+    var route = _currentRoute;
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    c.innerHTML = '<div style="padding:40px;text-align:center">Loading inventory...</div>';
+    apiGet('/api/inventory').then(function(res){
+      if (_currentRoute !== route) return;
+      var rows = Array.isArray(res) ? res : (res.data || res.rows || []);
+      if (!rows.length) {
+        c.innerHTML = '<div class="empty" style="padding:60px;text-align:center">No inventory data</div>';
+        return;
+      }
+      var html = '<div style="overflow-x:auto"><table class="data-table"><thead><tr>' +
+        '<th>LOT</th><th>SAP</th><th>BL</th><th>Container</th><th>Product</th>' +
+        '<th>Status</th><th>Net(MT)</th><th>Balance</th><th>Bags</th><th>Date</th><th>Location</th><th></th>' +
+        '</tr></thead><tbody>';
+      html += rows.map(function(r){
+        return '<tr>' +
+          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.sap||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.bl||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.container||'')+'</td>' +
+          '<td><span class="tag">'+escapeHtml(r.product||'')+'</span></td>' +
+          '<td>'+escapeHtml(r.status||'')+'</td>' +
+          '<td class="mono-cell">'+(r.net!=null?Number(r.net).toLocaleString():'-')+'</td>' +
+          '<td class="mono-cell">'+(r.balance!=null?Number(r.balance).toLocaleString():'-')+'</td>' +
+          '<td class="mono-cell">'+(r.bags||'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.date||'')+'</td>' +
+          '<td><span class="tag">'+escapeHtml(r.location||'-')+'</span></td>' +
+          '<td><button class="btn btn-ghost btn-xs" onclick="window.showLotDetail(\''+escapeHtml(r.lot||'')+'\')">Detail</button></td>' +
+          '</tr>';
+      }).join('');
+      html += '</tbody></table></div>';
+      c.innerHTML = html;
+    }).catch(function(e){
+      if (_currentRoute !== route) return;
+      c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
+      showToast('error', 'Inventory load failed');
+    });
+  }
+
+  /* ===================================================
+     7b. PAGE: Allocation
+     =================================================== */
+  function loadAllocationPage() {
+    var route = _currentRoute;
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    c.innerHTML = '<div style="padding:40px;text-align:center">Loading allocation...</div>';
+    apiGet('/api/allocation').then(function(res){
+      if (_currentRoute !== route) return;
+      var rows = res.data || res.rows || (Array.isArray(res)?res:[]);
+      if (!rows.length) {
+        c.innerHTML = '<div class="empty" style="padding:60px;text-align:center">No allocation data</div>';
+        return;
+      }
+      var html = '<div style="overflow-x:auto"><table class="data-table"><thead><tr>' +
+        '<th>LOT</th><th>Product</th><th>Customer</th><th>Sale Ref</th>' +
+        '<th>Balance</th><th>Bags</th><th>Ship Date</th><th>Status</th><th>Cancel</th>' +
+        '</tr></thead><tbody>';
+      html += rows.map(function(r){
+        return '<tr>' +
+          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot||'')+'</td>' +
+          '<td><span class="tag">'+escapeHtml(r.product||'')+'</span></td>' +
+          '<td>'+escapeHtml(r.customer||'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.sale_ref||'-')+'</td>' +
+          '<td class="mono-cell" style="color:var(--accent)">'+(r.balance!=null?Number(r.balance).toLocaleString():'-')+'</td>' +
+          '<td class="mono-cell">'+(r.bags||'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.ship_date||'-')+'</td>' +
+          '<td>RESERVED</td>' +
+          '<td><button class="btn btn-ghost btn-xs" onclick="window.cancelAllocation(\''+escapeHtml(r.lot||'')+'\')">Cancel</button></td>' +
+          '</tr>';
+      }).join('');
+      html += '</tbody></table></div>';
+      c.innerHTML = html;
+    }).catch(function(e){
+      if (_currentRoute !== route) return;
+      c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
+      showToast('error', 'Allocation load failed');
+    });
+  }
+
+  window.cancelAllocation = function(lot) {
+    if (!confirm(lot + ': cancel allocation?')) return;
+    apiPost('/api/allocation/' + encodeURIComponent(lot) + '/cancel', {})
+      .then(function(){ showToast('success', lot + ' allocation cancelled'); loadAllocationPage(); })
+      .catch(function(e){ showToast('error', 'Cancel failed: ' + (e.message||String(e))); });
+  };
+
+  /* ===================================================
+     7c. PAGE: Picked
+     =================================================== */
+  function loadPickedPage() {
+    var route = _currentRoute;
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    c.innerHTML = [
+      '<section class="page" data-page="picked">',
+      '<h2>Picked - Outbound Queue</h2>',
+      '<div class="toolbar-mini"><button class="btn btn-secondary" onclick="renderPage(\'picked\')">Refresh</button></div>',
+      '<div id="picked-loading" style="padding:40px;text-align:center">Loading...</div>',
+      '<table class="data-table" id="picked-table" style="display:none">',
+      '<thead><tr><th>LOT</th><th>Product</th><th>Qty</th><th>Date</th><th>Location</th></tr></thead>',
+      '<tbody id="picked-tbody"></tbody></table>',
+      '<div class="empty" id="picked-empty" style="display:none">No data</div>',
+      '</section>'
+    ].join('');
+    apiGet('/api/q2/outbound-confirm-list').then(function(res){
+      if (_currentRoute !== route) return;
+      var rows = res.data || res.rows || (Array.isArray(res)?res:[]);
+      document.getElementById('picked-loading').style.display = 'none';
+      if (!rows.length) { document.getElementById('picked-empty').style.display='block'; return; }
+      var tbody = document.getElementById('picked-tbody');
+      if (tbody) tbody.innerHTML = rows.map(function(r){
+        return '<tr><td>'+escapeHtml(r.lot||'')+'</td><td>'+escapeHtml(r.product||'')+'</td><td>'+(r.qty||r.bags||'')+'</td><td>'+escapeHtml(r.date||'')+'</td><td>'+escapeHtml(r.location||'')+'</td></tr>';
+      }).join('');
+      document.getElementById('picked-table').style.display = '';
+    }).catch(function(e){
+      if (_currentRoute !== route) return;
+      document.getElementById('picked-loading').style.display = 'none';
+      var el = document.getElementById('picked-empty');
+      if (el) { el.textContent = 'Load failed: '+(e.message||String(e)); el.style.display='block'; }
+      if (e.status !== 501) showToast('error', 'Picked load failed');
+    });
+  }
+
+  /* ===================================================
+     7c-2. PAGE: Inbound (입고 목록 — F009)
+     /api/q/inbound-status → res.data.items
+     columns: lot_no, lot_sqm, sap_no, bl_no, product,
+              net_weight, current_weight, tonbag_count,
+              status, inbound_date, arrival_date, warehouse, vessel
+     =================================================== */
+  /* _inboundAllRows: 전체 행 캐시 (필터용) */
+  var _inboundAllRows = [];
+
+  var STATUS_COLOR = {
+    'INBOUND':'#1976d2','ALLOCATED':'#7b1fa2','PICKED':'#f57c00',
+    'OUTBOUND':'#388e3c','RETURN':'#c62828','HOLD':'#616161'
+  };
+
+  function _renderInboundRows(rows) {
+    var tbody = document.getElementById('inbound-tbody');
+    var empty = document.getElementById('inbound-empty');
+    var tbl   = document.getElementById('inbound-table');
+    if (!tbody) return;
+    if (!rows.length) {
+      if (tbl)   tbl.style.display   = 'none';
+      if (empty) { empty.textContent = '📭 해당 상태의 데이터 없음'; empty.style.display = 'block'; }
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    tbody.innerHTML = rows.map(function(r, i){
+      var sc     = STATUS_COLOR[r.status] || '#888';
+      var netMT  = r.net_weight     != null ? fmtN(r.net_weight     / 1000) : '-';
+      var curMT  = r.current_weight != null ? fmtN(r.current_weight / 1000) : '-';
+      return '<tr>' +
+        '<td class="mono-cell" style="color:var(--text-muted)">'+(i+1)+'</td>' +
+        '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+escapeHtml(r.lot_no||'')+'</td>' +
+        '<td class="mono-cell">'+escapeHtml(r.lot_sqm||'-')+'</td>' +
+        '<td class="mono-cell">'+escapeHtml(r.sap_no||'-')+'</td>' +
+        '<td class="mono-cell">'+escapeHtml(r.bl_no||'-')+'</td>' +
+        '<td><span class="tag">'+escapeHtml(r.product||'-')+'</span></td>' +
+        '<td class="mono-cell" style="text-align:right">'+netMT+'</td>' +
+        '<td class="mono-cell" style="text-align:right">'+curMT+'</td>' +
+        '<td class="mono-cell" style="text-align:center">'+(r.tonbag_count||0)+'</td>' +
+        '<td><span style="color:'+sc+';font-weight:600;font-size:11px">'+escapeHtml(r.status||'-')+'</span></td>' +
+        '<td class="mono-cell">'+escapeHtml((r.inbound_date||'').slice(0,10)||'-')+'</td>' +
+        '<td class="mono-cell">'+escapeHtml((r.arrival_date||'').slice(0,10)||'-')+'</td>' +
+        '<td><span class="tag">'+escapeHtml(r.warehouse||'-')+'</span></td>' +
+        '<td>'+escapeHtml(r.vessel||'-')+'</td>' +
+        '</tr>';
+    }).join('');
+    if (tbl) tbl.style.display = '';
+    dbgLog('📋','inbound-table shown', 'rows='+rows.length+' tbl='+(tbl?tbl.style.display:'?'), '#4caf50');
+  }
+
+  function _inboundFilter(status) {
+    /* 필터 버튼 active 상태 갱신 */
+    document.querySelectorAll('.inbound-filter-btn').forEach(function(b){
+      b.style.fontWeight = (b.dataset.status === status) ? '700' : '400';
+      b.style.opacity    = (b.dataset.status === status) ? '1'   : '0.55';
+    });
+    var filtered = status === 'ALL'
+      ? _inboundAllRows
+      : _inboundAllRows.filter(function(r){ return r.status === status; });
+    var count = document.getElementById('inbound-count');
+    if (count) count.textContent = filtered.length + ' / ' + _inboundAllRows.length + '건';
+    _renderInboundRows(filtered);
+  }
+  window._inboundFilter = _inboundFilter;   /* HTML onclick에서 호출 */
+
+  function loadInboundPage() {
+    var route = _currentRoute;
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    _inboundAllRows = [];
+
+    var FILTERS = ['ALL','INBOUND','ALLOCATED','PICKED','OUTBOUND','RETURN','HOLD'];
+    var filterBtns = FILTERS.map(function(s){
+      var col = STATUS_COLOR[s] || '#555';
+      return '<button class="inbound-filter-btn" data-status="'+s+'" '+
+        'onclick="_inboundFilter(\''+s+'\')" '+
+        'style="border:1px solid '+col+';color:'+col+';background:transparent;'+
+        'border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;font-weight:400;opacity:0.55">'+s+'</button>';
+    }).join('');
+
+    c.innerHTML = [
+      '<section class="page" data-page="inbound">',
+      '<div style="display:flex;align-items:center;gap:12px;padding:8px 0 10px;flex-wrap:wrap">',
+      '<h2 style="margin:0;white-space:nowrap">📥 입고 목록</h2>',
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+filterBtns+'</div>',
+      '<span id="inbound-count" style="margin-left:auto;font-size:12px;color:var(--text-muted)">--</span>',
+      '<button class="btn btn-secondary" onclick="renderPage(\'inbound\')" style="white-space:nowrap">🔁 새로고침</button>',
+      '</div>',
+      '<div id="inbound-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
+      '<div style="overflow-x:auto">',
+      '<table class="data-table" id="inbound-table" style="display:none">',
+      '<thead><tr>',
+      '<th>#</th><th>LOT No</th><th>SQM LOT</th><th>SAP No</th><th>BL No</th>',
+      '<th>제품</th><th>순중량(MT)</th><th>현재중량(MT)</th><th>톤백수</th>',
+      '<th>상태</th><th>입고일자</th><th>도착일자</th><th>창고</th><th>선박</th>',
+      '</tr></thead>',
+      '<tbody id="inbound-tbody"></tbody>',
+      '</table>',
+      '</div>',
+      '<div class="empty" id="inbound-empty" style="display:none;padding:60px;text-align:center;color:var(--text-muted)">📭 입고 데이터 없음</div>',
+      '</section>'
+    ].join('');
+
+    apiGet('/api/q/inbound-status').then(function(res){
+      if (_currentRoute !== route) return;
+      _inboundAllRows = (res.data && res.data.items) || [];
+      var total = _inboundAllRows.length;
+      document.getElementById('inbound-loading').style.display = 'none';
+      if (!total) {
+        document.getElementById('inbound-empty').style.display = 'block';
+        return;
+      }
+      _inboundFilter('ALL');   /* ALL 버튼 active + 전체 렌더 */
+      dbgLog('📥','inbound-page','total='+total,'#4caf50');
+    }).catch(function(e){
+      if (_currentRoute !== route) return;
+      document.getElementById('inbound-loading').style.display = 'none';
+      var el = document.getElementById('inbound-empty');
+      if (el) { el.textContent = '❌ 로드 실패: '+(e.message||String(e)); el.style.display = 'block'; }
+      showToast('error', '입고 목록 로드 실패');
+      dbgLog('❌','inbound-page',String(e),'#f44336');
+    });
+  }
+
+  /* ===================================================
+     7d. PAGE: Outbound (출고 현황 — F025/F037)
+     /api/q/outbound-status → res.data.items
+     columns: lot_no, movement_type, qty_kg, customer,
+              from_location, to_location, movement_date,
+              source_type, actor, remarks
+     =================================================== */
+  function loadOutboundPage() {
+    var route = _currentRoute;
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    c.innerHTML = [
+      '<section class="page" data-page="outbound">',
+      '<div style="display:flex;align-items:center;gap:12px;padding:8px 0 12px">',
+      '<h2 style="margin:0">📤 출고 현황 (Outbound Status)</h2>',
+      '<button class="btn btn-secondary" onclick="renderPage(\'outbound\')" style="margin-left:auto">🔁 새로고침</button>',
+      '</div>',
+      '<div id="outbound-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
+      '<div style="overflow-x:auto">',
+      '<table class="data-table" id="outbound-table" style="display:none">',
+      '<thead><tr>',
+      '<th>#</th><th>LOT No</th><th>고객사</th><th>출고량(MT)</th>',
+      '<th>출발지</th><th>도착지</th><th>출고일자</th><th>유형</th><th>담당자</th><th>비고</th>',
+      '</tr></thead>',
+      '<tbody id="outbound-tbody"></tbody>',
+      '</table>',
+      '</div>',
+      '<div class="empty" id="outbound-empty" style="display:none;padding:60px;text-align:center;color:var(--text-muted)">📭 출고 데이터 없음</div>',
+      '</section>'
+    ].join('');
+
+    apiGet('/api/q/outbound-status').then(function(res){
+      if (_currentRoute !== route) return;
+      var rows = (res.data && res.data.items) || [];
+      var total = (res.data && res.data.total) || rows.length;
+      document.getElementById('outbound-loading').style.display = 'none';
+      if (!rows.length) {
+        document.getElementById('outbound-empty').style.display = 'block';
+        return;
+      }
+      var tbody = document.getElementById('outbound-tbody');
+      if (tbody) tbody.innerHTML = rows.map(function(r, i){
+        var qtyMT = r.qty_kg != null ? fmtN(r.qty_kg / 1000) : '-';
+        var date  = (r.movement_date||'').slice(0,10) || '-';
+        return '<tr>' +
+          '<td class="mono-cell" style="color:var(--text-muted)">'+(i+1)+'</td>' +
+          '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+escapeHtml(r.lot_no||'')+'</td>' +
+          '<td>'+escapeHtml(r.customer||'-')+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+qtyMT+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.from_location||'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.to_location||'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(date)+'</td>' +
+          '<td><span class="tag">'+escapeHtml(r.source_type||'-')+'</span></td>' +
+          '<td>'+escapeHtml(r.actor||'-')+'</td>' +
+          '<td style="font-size:11px;color:var(--text-muted)">'+escapeHtml((r.remarks||'').slice(0,40))+'</td>' +
+          '</tr>';
+      }).join('');
+      document.getElementById('outbound-table').style.display = '';
+      dbgLog('📤','outbound-page','total='+total+' rows='+rows.length,'#4caf50');
+    }).catch(function(e){
+      if (_currentRoute !== route) return;
+      document.getElementById('outbound-loading').style.display = 'none';
+      var el = document.getElementById('outbound-empty');
+      if (el) { el.textContent = '❌ 로드 실패: '+(e.message||String(e)); el.style.display = 'block'; }
+      showToast('error', '출고 현황 로드 실패');
+      dbgLog('❌','outbound-page',String(e),'#f44336');
+    });
+  }
+
+  /* ===================================================
+     7e. PAGE: Return
+     =================================================== */
+  function loadReturnPage() {
+    var route = _currentRoute;
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    c.innerHTML = [
+      '<section class="page" data-page="return">',
+      '<h2>Return - Re-inbound</h2>',
+      '<div class="toolbar-mini"><button class="btn btn-secondary" onclick="renderPage(\'return\')">Refresh</button></div>',
+      '<div id="return-loading" style="padding:40px;text-align:center">Loading...</div>',
+      '<table class="data-table" id="return-table" style="display:none">',
+      '<thead><tr><th>LOT</th><th>Product</th><th>Qty</th><th>Date</th><th>Reason</th></tr></thead>',
+      '<tbody id="return-tbody"></tbody></table>',
+      '<div class="empty" id="return-empty" style="display:none">No return data</div>',
+      '</section>'
+    ].join('');
+    apiGet('/api/q2/return-stats').then(function(res){
+      if (_currentRoute !== route) return;
+      var rows = res.data || res.rows || res.items || (Array.isArray(res)?res:[]);
+      renderReturnRows(rows, route);
+    }).catch(function(){
+      if (_currentRoute !== route) return;
+      // fallback to inventory?status=RETURN
+      apiGet('/api/inventory?status=RETURN').then(function(res2){
+        if (_currentRoute !== route) return;
+        renderReturnRows(res2.data || (Array.isArray(res2)?res2:[]), route);
+      }).catch(function(){
+        if (_currentRoute !== route) return;
+        document.getElementById('return-loading').style.display = 'none';
+        document.getElementById('return-empty').style.display = 'block';
+      });
+    });
+  }
+
+  function renderReturnRows(rows, route) {
+    if (_currentRoute !== route) return;
+    document.getElementById('return-loading').style.display = 'none';
+    if (!rows.length) { document.getElementById('return-empty').style.display='block'; return; }
+    var tbody = document.getElementById('return-tbody');
+    if (tbody) tbody.innerHTML = rows.map(function(r){
+      return '<tr><td>'+escapeHtml(r.lot||'')+'</td><td>'+escapeHtml(r.product||'')+'</td><td>'+(r.bags||r.qty||'')+'</td><td>'+escapeHtml(r.date||'')+'</td><td>'+escapeHtml(r.reason||'')+'</td></tr>';
+    }).join('');
+    document.getElementById('return-table').style.display = '';
+  }
+
+  /* ===================================================
+     7f. PAGE: Move
+     =================================================== */
+  function loadMovePage() {
+    var route = _currentRoute;
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    c.innerHTML = [
+      '<section class="page" data-page="move">',
+      '<h2>Move - Inventory Relocation</h2>',
+      '<div class="card" style="padding:20px;margin-bottom:16px">',
+      '<h3 style="margin-bottom:12px">Execute Move</h3>',
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">',
+      '<input id="move-barcode" class="input" placeholder="Tonbag barcode" style="width:200px">',
+      '<input id="move-dest" class="input" placeholder="Destination (e.g. A-3-2)" style="width:200px">',
+      '<button class="btn btn-primary" onclick="window.executeMove()">Execute Move</button>',
+      '</div></div>',
+      '<div id="move-loading" style="padding:20px;text-align:center">Loading history...</div>',
+      '<table class="data-table" id="move-table" style="display:none">',
+      '<thead><tr><th>Time</th><th>Tonbag ID</th><th>From</th><th>To</th><th>By</th></tr></thead>',
+      '<tbody id="move-tbody"></tbody></table>',
+      '<div class="empty" id="move-empty" style="display:none">No movement history</div>',
+      '</section>'
+    ].join('');
+    apiGet('/api/q/movement-history').then(function(res){
+      if (_currentRoute !== route) return;
+      var rows = res.data || res.rows || (Array.isArray(res)?res:[]);
+      document.getElementById('move-loading').style.display = 'none';
+      if (!rows.length) { document.getElementById('move-empty').style.display='block'; return; }
+      var tbody = document.getElementById('move-tbody');
+      if (tbody) tbody.innerHTML = rows.map(function(r){
+        return '<tr>' +
+          '<td class="mono-cell">'+escapeHtml(r.moved_at||r.date||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.sub_lt||r.barcode||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.from_location||'')+'</td>' +
+          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.to_location||'')+'</td>' +
+          '<td>'+escapeHtml(r.moved_by||'system')+'</td></tr>';
+      }).join('');
+      document.getElementById('move-table').style.display = '';
+    }).catch(function(){
+      if (_currentRoute !== route) return;
+      document.getElementById('move-loading').style.display = 'none';
+      document.getElementById('move-empty').style.display = 'block';
+    });
+  }
+
+  window.executeMove = function() {
+    var barcode = (document.getElementById('move-barcode')||{}).value||'';
+    var dest = (document.getElementById('move-dest')||{}).value||'';
+    if (!barcode||!dest) { showToast('warning','Enter barcode and destination'); return; }
+    apiPost('/api/action/inventory-move',{barcode:barcode,destination:dest})
+      .then(function(){ showToast('success',barcode+' moved to '+dest); renderPage('move'); })
+      .catch(function(e){
+        if (e.status===501) showToast('info','Move (coming soon)');
+        else showToast('error','Move failed: '+(e.message||String(e)));
+      });
+  };
+
+  /* ===================================================
+     7g. PAGE: Log
+     =================================================== */
+  function loadLogPage() {
+    var route = _currentRoute;
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    c.innerHTML = [
+      '<section class="page" data-page="log">',
+      '<h2>Log - Activity Log</h2>',
+      '<div class="toolbar-mini">',
+      '<button class="btn btn-secondary" onclick="renderPage(\'log\')">Refresh</button>',
+      '<select id="log-limit" class="select" style="margin-left:8px" onchange="renderPage(\'log\')">',
+      '<option value="100">Last 100</option>',
+      '<option value="500">Last 500</option>',
+      '<option value="1000">Last 1000</option>',
+      '</select></div>',
+      '<div id="log-loading" style="padding:40px;text-align:center">Loading...</div>',
+      '<table class="data-table" id="log-table" style="display:none">',
+      '<thead><tr><th>Time</th><th>Type</th><th>LOT</th><th>Detail</th></tr></thead>',
+      '<tbody id="log-tbody"></tbody></table>',
+      '<div class="empty" id="log-empty" style="display:none">No logs</div>',
+      '</section>'
+    ].join('');
+    var limit = 100;
+    try { var el=document.getElementById('log-limit'); if(el) limit=parseInt(el.value)||100; } catch {}
+    apiGet('/api/q/audit-log?limit='+limit).then(function(res){
+      if (_currentRoute !== route) return;
+      var rows = Array.isArray(res)?res:(res.data||res.rows||[]);
+      document.getElementById('log-loading').style.display = 'none';
+      if (!rows.length) { document.getElementById('log-empty').style.display='block'; return; }
+      var tbody = document.getElementById('log-tbody');
+      if (tbody) tbody.innerHTML = rows.map(function(r){
+        return '<tr>' +
+          '<td class="mono-cell">'+escapeHtml(r.time||r.timestamp||'')+'</td>' +
+          '<td>'+escapeHtml(r.type||r.action||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.lot||'')+'</td>' +
+          '<td>'+escapeHtml(r.note||r.memo||r.detail||'')+'</td></tr>';
+      }).join('');
+      document.getElementById('log-table').style.display = '';
+    }).catch(function(e){
+      if (_currentRoute !== route) return;
+      document.getElementById('log-loading').style.display = 'none';
+      var el=document.getElementById('log-empty');
+      if (el) { el.textContent='Load failed: '+(e.message||String(e)); el.style.display='block'; }
+    });
+  }
+
+  /* ===================================================
+     7h. PAGE: Scan + PDF Upload
+     =================================================== */
+  function loadScanPage() {
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    c.innerHTML = [
+      '<section class="page" data-page="scan">',
+      '<h2>Scan - Barcode / PDF Inbound</h2>',
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">',
+
+      '<!-- Barcode Panel -->',
+      '<div class="card" style="padding:20px">',
+      '<h3 style="margin-bottom:12px">Barcode Scan</h3>',
+      '<input id="scan-input" class="input" placeholder="Scan or type barcode + Enter" style="width:100%;margin-bottom:12px">',
+      '<div style="display:flex;gap:8px;margin-bottom:16px">',
+      '<button class="btn btn-primary btn-sm" onclick="window.ScanActions.quickAction(\'inbound\')">Inbound</button>',
+      '<button class="btn btn-warning btn-sm" onclick="window.ScanActions.quickAction(\'outbound\')">Outbound</button>',
+      '<button class="btn btn-secondary btn-sm" onclick="window.ScanActions.quickAction(\'move\')">Move</button>',
+      '</div>',
+      '<table class="data-table"><thead><tr><th>Time</th><th>Barcode</th><th>Action</th><th>Result</th></tr></thead>',
+      '<tbody id="scan-history-tbody"><tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted)">No scan history</td></tr></tbody></table>',
+      '</div>',
+
+      '<!-- PDF Panel -->',
+      '<div class="card" style="padding:20px">',
+      '<h3 style="margin-bottom:12px">PDF Inbound</h3>',
+      '<div id="pdf-drop-zone" style="border:2px dashed var(--border);border-radius:8px;padding:40px;text-align:center;cursor:pointer;color:var(--text-muted)" onclick="document.getElementById(\'pdf-file-input\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--accent)\'" ondragleave="this.style.borderColor=\'var(--border)\'" ondrop="window.PdfInbound.handleDrop(event)">',
+      '<div style="font-size:2rem">&#x1F4C4;</div>',
+      '<div style="margin-top:8px">Drag PDF here or click to select</div>',
+      '<div style="font-size:0.8rem;margin-top:4px;color:var(--text-muted)">Picking List / BL / Inbound PDF</div>',
+      '</div>',
+      '<input type="file" id="pdf-file-input" accept=".pdf" style="display:none" onchange="window.PdfInbound.handleFile(this.files[0])">',
+      '<div id="pdf-status" style="margin-top:12px;color:var(--text-muted);font-size:0.9rem"></div>',
+      '<button class="btn btn-primary" id="pdf-upload-btn" style="display:none;margin-top:8px" onclick="window.PdfInbound.upload()">Upload &amp; Process</button>',
+      '</div>',
+
+      '</div></section>'
+    ].join('');
+
+    var inp = document.getElementById('scan-input');
+    if (inp) {
+      inp.addEventListener('keydown', function(e){
+        if (e.key==='Enter') {
+          e.preventDefault();
+          window.ScanActions.processBarcode(inp.value.trim());
+          inp.value='';
+        }
+      });
+      inp.focus();
+    }
+  }
+
+  var _scanHistory = [];
+  window.ScanActions = {
+    _lastBarcode: '',
+    processBarcode: function(barcode, action) {
+      if (!barcode) return;
+      window.ScanActions._lastBarcode = barcode;
+      if (!action) { showToast('info','Scanned: '+barcode+' - select action button'); return; }
+      apiPost('/api/scan/process',{barcode:barcode,action:action})
+        .then(function(res){
+          var ok = res.success !== false;
+          showToast(ok?'success':'error', res.message||(ok?'Done':'Failed'));
+          window.ScanActions._addHist(barcode, action, ok);
+        })
+        .catch(function(e){
+          if (e.status===501) showToast('info','Scan (coming soon)');
+          else showToast('error','Scan error: '+(e.message||String(e)));
+          window.ScanActions._addHist(barcode, action, false);
+        });
+    },
+    quickAction: function(action) {
+      var inp = document.getElementById('scan-input');
+      var bc = (inp?inp.value.trim():'')||window.ScanActions._lastBarcode;
+      if (!bc) { showToast('warning','Scan barcode first'); return; }
+      window.ScanActions.processBarcode(bc, action);
+      if (inp) inp.value='';
+    },
+    _addHist: function(barcode, action, ok) {
+      var now = new Date();
+      var t = [now.getHours(),now.getMinutes(),now.getSeconds()].map(function(n){return String(n).padStart(2,'0');}).join(':');
+      _scanHistory.unshift({time:t,barcode:barcode,action:action,ok:ok});
+      if (_scanHistory.length>100) _scanHistory.pop();
+      var tbody = document.getElementById('scan-history-tbody');
+      if (tbody) tbody.innerHTML = _scanHistory.slice(0,20).map(function(h){
+        return '<tr><td class="mono-cell">'+h.time+'</td><td class="mono-cell">'+escapeHtml(h.barcode)+'</td><td>'+escapeHtml(h.action)+'</td><td>'+(h.ok?'<span style="color:var(--status-available)">OK</span>':'<span style="color:var(--status-return)">FAIL</span>')+'</td></tr>';
+      }).join('');
+    }
+  };
+
+  var _pdfFile=null, _pdfB64=null;
+  window.PdfInbound = {
+    handleDrop: function(e) {
+      e.preventDefault();
+      var dz = document.getElementById('pdf-drop-zone');
+      if (dz) dz.style.borderColor='var(--border)';
+      var f = e.dataTransfer.files[0];
+      if (f) window.PdfInbound.handleFile(f);
+    },
+    handleFile: function(f) {
+      if (!f||!f.name.toLowerCase().endsWith('.pdf')) { showToast('error','PDF files only'); return; }
+      _pdfFile = f;
+      var status=document.getElementById('pdf-status');
+      var btn=document.getElementById('pdf-upload-btn');
+      if (status) status.textContent='Selected: '+f.name+' ('+(f.size/1024).toFixed(1)+' KB)';
+      var reader=new FileReader();
+      reader.onload=function(ev){ _pdfB64=ev.target.result.split(',')[1]; if(btn) btn.style.display=''; };
+      reader.readAsDataURL(f);
+    },
+    upload: function() {
+      if (!_pdfB64) { showToast('warning','Select a PDF first'); return; }
+      var status=document.getElementById('pdf-status');
+      var btn=document.getElementById('pdf-upload-btn');
+      if (status) status.textContent='Uploading...';
+      if (btn) btn.disabled=true;
+      apiPost('/api/inbound/pdf',{pdf_base64:_pdfB64,filename:(_pdfFile?_pdfFile.name:'upload.pdf')})
+        .then(function(res){
+          showToast('success','PDF inbound done: '+(res.message||'OK'));
+          if (status) status.textContent='Done: '+(res.message||'Success');
+          if (btn) { btn.style.display='none'; btn.disabled=false; }
+          _pdfB64=null; _pdfFile=null;
+        })
+        .catch(function(e){
+          if (e.status===501) showToast('info','PDF inbound (coming soon)');
+          else showToast('error','Upload failed: '+(e.message||String(e)));
+          if (status) status.textContent='Failed: '+(e.message||String(e));
+          if (btn) btn.disabled=false;
+        });
+    }
+  };
+
+  /* ===================================================
+     7i. PAGE: Tonbag
+     =================================================== */
+  function loadTonbagPage() {
+    var route = _currentRoute;
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    c.innerHTML = [
+      '<section class="page" data-page="tonbag">',
+      '<h2>Tonbag List</h2>',
+      '<div class="toolbar-mini"><button class="btn btn-secondary" onclick="renderPage(\'tonbag\')">Refresh</button></div>',
+      '<div id="tonbag-loading" style="padding:40px;text-align:center">Loading...</div>',
+      '<table class="data-table" id="tonbag-table" style="display:none">',
+      '<thead><tr><th>Tonbag ID</th><th>LOT</th><th>Product</th><th>Status</th><th>Weight(MT)</th><th>Location</th><th>Container</th><th></th></tr></thead>',
+      '<tbody id="tonbag-tbody"></tbody></table>',
+      '<div class="empty" id="tonbag-empty" style="display:none">No tonbag data</div>',
+      '</section>'
+    ].join('');
+    apiGet('/api/tonbags').then(function(res){
+      if (_currentRoute !== route) return;
+      var rows = Array.isArray(res)?res:(res.data||res.rows||[]);
+      document.getElementById('tonbag-loading').style.display='none';
+      if (!rows.length) { document.getElementById('tonbag-empty').style.display='block'; return; }
+      var tbody=document.getElementById('tonbag-tbody');
+      if (tbody) tbody.innerHTML=rows.map(function(r){
+        return '<tr>' +
+          '<td class="mono-cell">'+escapeHtml(r.sub_lt||r.tonbag_id||'-')+'</td>' +
+          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot_no||'-')+'</td>' +
+          '<td><span class="tag">'+escapeHtml(r.product||'-')+'</span></td>' +
+          '<td>'+escapeHtml(r.status||'-')+'</td>' +
+          '<td class="mono-cell">'+(r.weight!=null?Number(r.weight).toLocaleString():'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.location||'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.container||'-')+'</td>' +
+          '<td><button class="btn btn-ghost btn-xs">Detail</button></td></tr>';
+      }).join('');
+      document.getElementById('tonbag-table').style.display='';
+    }).catch(function(){
+      if (_currentRoute !== route) return;
+      document.getElementById('tonbag-loading').style.display='none';
+      document.getElementById('tonbag-empty').style.display='block';
+    });
+  }
+
+  /* ===================================================
+     8. MODAL
+     =================================================== */
+  function ensureModal() {
+    var m=document.getElementById('sqm-modal');
+    if (m) return m;
+    m=document.createElement('div');
+    m.id='sqm-modal';
+    m.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;overflow:auto;padding:40px';
+    m.innerHTML='<div id="sqm-modal-inner" style="background:var(--bg-card);border-radius:8px;max-width:900px;margin:0 auto;padding:24px;position:relative"><button onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'" style="position:absolute;top:12px;right:16px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-muted)">&#x2715;</button><div id="sqm-modal-content"></div></div>';
+    document.body.appendChild(m);
+    m.addEventListener('click',function(e){ if(e.target===m) m.style.display='none'; });
+    return m;
+  }
+
+  function showDataModal(title, html) {
+    ensureModal().style.display='block';
+    document.getElementById('sqm-modal-content').innerHTML='<h2 style="margin-bottom:16px">'+escapeHtml(title)+'</h2>'+html;
+  }
+
+  function renderInfoModal(title, endpoint) {
+    showDataModal(title,'<div style="padding:20px;text-align:center">Loading...</div>');
+    apiGet(endpoint).then(function(res){
+      var d=res.data||res||{};
+      var html;
+      if (typeof d==='string') {
+        html='<pre style="white-space:pre-wrap;font-size:.9rem">'+escapeHtml(d)+'</pre>';
+      } else if (Array.isArray(d)) {
+        html='<table class="data-table"><tbody>'+d.map(function(row){
+          if (typeof row==='object'&&row!==null)
+            return '<tr>'+Object.values(row).map(function(v){ return '<td>'+escapeHtml(String(v))+'</td>'; }).join('')+'</tr>';
+          return '<tr><td>'+escapeHtml(String(row))+'</td></tr>';
+        }).join('')+'</tbody></table>';
+      } else {
+        html='<table class="data-table"><tbody>'+Object.entries(d).map(function(kv){
+          return '<tr><td style="font-weight:600;width:40%">'+escapeHtml(kv[0])+'</td><td>'+escapeHtml(String(kv[1]))+'</td></tr>';
+        }).join('')+'</tbody></table>';
+      }
+      document.getElementById('sqm-modal-content').innerHTML='<h2 style="margin-bottom:16px">'+escapeHtml(title)+'</h2>'+html;
+    }).catch(function(e){
+      document.getElementById('sqm-modal-content').innerHTML='<h2>'+escapeHtml(title)+'</h2><div class="empty">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
+    });
+  }
+
+  window.showLotDetail = function(lotNo) {
+    if (!lotNo) return;
+    showDataModal('LOT Detail: '+lotNo,'<div style="padding:20px;text-align:center">Loading...</div>');
+    apiGet('/api/action/lot-detail/'+encodeURIComponent(lotNo)).then(function(res){
+      var d=res.data||res||{};
+      var html='<table class="data-table"><tbody>'+Object.entries(d).map(function(kv){
+        return '<tr><td style="font-weight:600;width:40%">'+escapeHtml(kv[0])+'</td><td>'+escapeHtml(String(kv[1]))+'</td></tr>';
+      }).join('')+'</tbody></table>';
+      document.getElementById('sqm-modal-content').innerHTML='<h2 style="margin-bottom:16px">LOT Detail: '+escapeHtml(lotNo)+'</h2>'+html;
+    }).catch(function(e){
+      document.getElementById('sqm-modal-content').innerHTML='<h2>LOT Detail: '+escapeHtml(lotNo)+'</h2><div class="empty">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
+    });
+  };
+
+  /* ===================================================
+     9. ALERTS + STATUSBAR
+     =================================================== */
+  var FALLBACK_ALERTS = [
+    {severity:'warning',icon:'&#x1F3F7;&#xFE0F;',text:'Tonbag integrity issues 40 — run integrity check',link:'#integrity'},
+    {severity:'error',  icon:'&#x1F4CD;',         text:'400 unallocated tonbags (5 LOTs) — location assignment needed',link:'#allocation'}
+  ];
+
+  function loadAlerts() {
+    var c=document.getElementById('alerts-container');
+    if (!c) return;
+    apiGet('/api/dashboard/alerts')
+      .then(function(res){ renderAlerts(c, res.data||res.alerts||FALLBACK_ALERTS); })
+      .catch(function(){ renderAlerts(c, FALLBACK_ALERTS); });
+  }
+
+  function renderAlerts(c, alerts) {
+    c.innerHTML='<div class="alerts-header"><span class="alerts-title">&#x26A0;&#xFE0F; ALERTS</span><span class="alerts-counter">'+(alerts.length?'&#x1F534; '+alerts.length:'')+'</span></div>' +
+      '<ul class="alerts-list">'+alerts.map(function(a){
+        return '<li class="alert alert-'+escapeHtml(a.severity)+'"><span class="alert-icon">'+(a.icon||'')+'</span><span class="alert-text">'+escapeHtml(a.text)+'</span>'+(a.link?'<a class="alert-link" href="'+escapeHtml(a.link)+'">Go</a>':'')+'</li>';
+      }).join('')+'</ul>';
+  }
+
+  function loadStatusbar() {
+    var c=document.getElementById('statusbar-container');
+    if (!c) return;
+    if (!c.querySelector('.statusbar')) {
+      c.innerHTML='<div class="statusbar"><span id="sb-modules">Modules: -/-</span><span class="sb-sep">|</span><span id="sb-unallocated">Unallocated -</span><span class="sb-sep">|</span><span id="sb-scan-fail">Scan fail -</span><span class="sb-sep">|</span><span id="sb-lot-age">LOT avg age -</span><span style="flex:1"></span><span id="sb-last-refresh">Last refresh: -</span><label style="margin-left:12px"><input type="checkbox" id="sb-auto-refresh" checked> Auto-refresh</label></div>';
+    }
+    refreshStatusbar();
+  }
+
+  function refreshStatusbar() {
+    function st(id,txt){ var el=document.getElementById(id); if(el) el.textContent=txt; }
+    apiGet('/api/dashboard/stats').then(function(res){
+      var d=res.data||res||{};
+      st('sb-unallocated','Unallocated '+(d.unallocated_bags||d.position_missing||400));
+      st('sb-scan-fail','Scan fail '+(d.scan_failure_rate||'-'));
+      st('sb-lot-age','LOT avg age '+(d.lot_avg_age_days||6.2)+'d');
+    }).catch(function(){});
+    apiGet('/api/health').then(function(res){
+      var h=res.data||res||{};
+      st('sb-modules','Modules: '+(h.modules_loaded!==undefined?h.modules_loaded:(h.engine_available?7:0))+'/'+(h.modules_total||8));
+    }).catch(function(){ st('sb-modules','Modules: ?/?'); });
+    st('sb-last-refresh','Last refresh: '+new Date().toLocaleTimeString());
+  }
+
+  /* =====================================================
+     10. ENDPOINTS  (key = HTML data-action name exactly)
+     ===================================================== */
+  var ENDPOINTS = {
+    /* ── 파일 메뉴 ── */
+    'onOpen':            {m:'GET',  u:'/api/q2/recent-files',                   lbl:'최근 파일'},
+    'onSave':            {m:'GET',  u:'/api/action/export-lot-excel',            lbl:'내보내기'},
+    'onExport':          {m:'GET',  u:'/api/action/export-lot-excel',            lbl:'Excel 내보내기'},
+    'onDoUpdate':        {m:'POST', u:'/api/action3/do-update',                   lbl:'D/O 후속 연결'},
+    'onReturnDialog':    {m:'POST', u:'/api/menu/-show-return-dialog',           lbl:'반품 (재입고)'},
+    'onReturnInboundUpload': {m:'POST', u:'/api/menu/-on-return-inbound-upload', lbl:'반품 입고 Excel'},
+    'onReturnStatistics': {m:'GET', u:'/api/q2/return-stats',                   lbl:'반품 사유 통계'},
+    'onRecentFiles':     {m:'GET',  u:'/api/q2/recent-files',                   lbl:'최근 파일'},
+    'onExit':            {m:'JS',   u:'exit',                                    lbl:'종료'},
+
+    /* ── 입고 메뉴 ── */
+    'onOnPdfInbound':    {m:'JS',   u:'scan',                                    lbl:'PDF 스캔 입고'},
+    'onInboundManual':   {m:'POST', u:'/api/menu/-bulk-import-inventory-simple',  lbl:'수동 입고'},
+    'onInboundList':     {m:'JS',   u:'inbound',                                  lbl:'입고 목록'},
+    'onInboundCancel':   {m:'JS',   u:'wip',                                     lbl:'입고 취소'},
+
+    /* ── 출고 메뉴 ── */
+    'onOnQuickOutbound': {m:'POST', u:'/api/menu/-on-s1-onestop-outbound',       lbl:'즉시 출고'},
+    'onOutboundScheduled': {m:'JS', u:'wip',                                     lbl:'출고 예정'},
+    'onOutboundConfirm': {m:'JS',   u:'wip',                                     lbl:'출고 확정'},
+    'onOutboundHistory': {m:'GET',  u:'/api/q/outbound-status',                  lbl:'출고 이력'},
+    'onOutboundStatus':  {m:'JS',   u:'outbound',                                 lbl:'출고 현황'},
+    'onApprovalHistory': {m:'GET',  u:'/api/q/approval-history',                 lbl:'승인 이력 조회'},
+
+    /* ── 재고 메뉴 ── */
+    'onInventoryList':   {m:'JS',   u:'inventory',                               lbl:'재고 조회'},
+    'onInventoryMove':   {m:'POST', u:'/api/menu/-on-tonbag-location-upload',    lbl:'위치 이동'},
+    'onInventoryAllocation': {m:'POST', u:'/api/menu/-on-allocation-input-unified', lbl:'위치 배정'},
+    'onIntegrityCheck':  {m:'GET',  u:'/api/action/integrity-check',             lbl:'정합성 검사'},
+    'onInventoryReport': {m:'GET',  u:'/api/q/inventory-report',                 lbl:'재고 현황 보고서'},
+    'onInventoryTrend':  {m:'GET',  u:'/api/q/inventory-trend',                  lbl:'재고 추이 차트'},
+
+    /* ── 보고서 메뉴 ── */
+    'onReportDaily':     {m:'GET',  u:'/api/q2/report-daily',                    lbl:'일일 보고서'},
+    'onReportMonthly':   {m:'GET',  u:'/api/q2/report-monthly',                  lbl:'월간 보고서'},
+    'onReportCustom':    {m:'POST', u:'/api/menu/-generate-customer-report',      lbl:'맞춤 보고서'},
+    'onInvoiceGenerate': {m:'GET',  u:'/api/action3/export-invoice-excel',         lbl:'거래명세서 생성'},
+    'onDetailOfOutbound': {m:'GET', u:'/api/q2/detail-outbound',                 lbl:'Detail of Outbound'},
+    'onSalesOrderDN':    {m:'GET',  u:'/api/q3/sales-order-dn',                  lbl:'Sales Order DN'},
+    'onDnCrossCheck':    {m:'GET',  u:'/api/q3/dn-cross-check',                  lbl:'DN 교차검증'},
+    'onLotDetailPdf':    {m:'GET',  u:'/api/action/lot-detail',                  lbl:'LOT 상세'},
+    'onLotListExcel':    {m:'GET',  u:'/api/action/export-lot-excel',             lbl:'LOT 리스트 Excel'},
+    'onTonbagListExcel': {m:'GET',  u:'/api/action2/export-tonbag-excel',          lbl:'톤백리스트 Excel'},
+    'onReportExport':    {m:'GET',  u:'/api/action2/export-tonbag-excel',          lbl:'Excel 내보내기'},
+    'onMovementHistory': {m:'GET',  u:'/api/q/movement-history',                  lbl:'입출고 내역'},
+    'onAuditLog':        {m:'GET',  u:'/api/q/audit-log',                         lbl:'감사 로그'},
+
+    /* ── 설정/도구 메뉴 ── */
+    'onSettings':        {m:'POST', u:'/api/menu/-on-settings',                   lbl:'환경 설정'},
+    'onProductMaster':   {m:'GET',  u:'/api/info/system-info',                    lbl:'제품 마스터'},
+    'onProductInventoryReport': {m:'GET', u:'/api/q/product-inventory',           lbl:'제품별 재고 현황'},
+    'onIntegrityRepair': {m:'GET',  u:'/api/action/integrity-check',                     lbl:'정합성 검사/복구'},
+    'onOptimizeDb':      {m:'POST', u:'/api/action3/optimize-db',                 lbl:'DB 최적화'},
+    'onCleanupLogs':     {m:'POST', u:'/api/action3/cleanup-logs',                lbl:'로그 정리'},
+    'onDbInfo':          {m:'GET',  u:'/api/info/system-info',                    lbl:'DB 정보'},
+    'onOnBackup':        {m:'POST', u:'/api/action/backup-create',                lbl:'백업 생성'},
+    'onBackupList':      {m:'GET',  u:'/api/q/backup-list',                       lbl:'백업 목록'},
+    'onRestore':         {m:'POST', u:'/api/menu/-on-restore-click',              lbl:'복원'},
+    'onAiTools':         {m:'JS',   u:'wip',                                      lbl:'AI 도구'},
+    'onSaveWindowSize':  {m:'POST', u:'/api/menu/-on-save-window-size',           lbl:'창 크기 저장'},
+    'onResetWindowSize': {m:'POST', u:'/api/menu/-on-reset-window-size',          lbl:'창 크기 초기화'},
+
+    /* ── 도움말 메뉴 ── */
+    'onHelp':            {m:'GET',  u:'/api/info/usage',                          lbl:'사용자 매뉴얼'},
+    'onShortcuts':       {m:'GET',  u:'/api/info/shortcuts',                      lbl:'단축키'},
+    'onStatusGuide':     {m:'GET',  u:'/api/info/status-guide',                   lbl:'STATUS 안내'},
+    'onBackupGuide':     {m:'GET',  u:'/api/info/backup-guide',                   lbl:'백업/복구 가이드'},
+    'onAbout':           {m:'GET',  u:'/api/info/version',                        lbl:'정보'},
+
+    /* ── 탭 이동 ── */
+    'onGoScanTab':       {m:'JS',   u:'scan',                                     lbl:'스캔 탭'},
+    'onGoAllocationTab': {m:'JS',   u:'allocation',                               lbl:'배정 탭'},
+
+    /* ── 툴바 ── */
+    'tb-pdf-inbound':    {m:'JS',   u:'scan',                                     lbl:'PDF 입고'},
+    'tb-quick-outbound': {m:'POST', u:'/api/menu/-on-s1-onestop-outbound',        lbl:'즉시 출고'},
+    'tb-return':         {m:'JS',   u:'return',                                   lbl:'반품'},
+    'tb-inventory':      {m:'JS',   u:'inventory',                                lbl:'재고 조회'},
+    'tb-integrity':      {m:'GET',  u:'/api/action/integrity-check',              lbl:'정합성'},
+    'tb-backup':         {m:'POST', u:'/api/action/backup-create',                lbl:'백업'},
+    'tb-settings':       {m:'POST', u:'/api/menu/-on-settings',                   lbl:'설정'},
+
+    /* ── 기타 ── */
+    'refresh-all':       {m:'JS',   u:'refresh',                                  lbl:'새로고침'},
+    'onToggleTheme':     {m:'JS',   u:'theme',                                    lbl:'테마 전환'},
+  };
+
+  function dispatchAction(action) {
+    var conf = ENDPOINTS[action];
+    if (!conf) {
+      dbgLog('⚠️','[unregistered] '+action,'ENDPOINTS에 없는 액션','#ffa726');
+      showToast('info', '[unregistered] action=' + action);
+      return;
+    }
+    if (conf.m === 'JS') {
+      if (conf.u === 'theme')   { toggleTheme(); return; }
+      if (conf.u === 'refresh') { renderPage(_currentRoute || 'dashboard'); return; }
+      if (conf.u === 'exit') {
+        if (window.pywebview && window.pywebview.api) window.pywebview.api.exit_app();
+        else window.close();
+        return;
+      }
+      if (conf.u === 'wip') {
+        dbgLog('🟡','WIP: '+conf.lbl,'준비 중 (아직 미구현)','#ffa726');
+        showToast('info', conf.lbl + ': 준비 중');
+        return;
+      }
+      dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
+      renderPage(conf.u);
+      return;
+    }
+    if (conf.m === 'GET') {
+      renderInfoModal(conf.lbl, conf.u);
+      return;
+    }
+    apiCall(conf.m, conf.u, {})
+      .then(function (res) {
+        // v864.3 Debug: 응답 body 의 ok:false 체크 (가짜 성공 토스트 차단)
+        if (res && res.ok === false) {
+          var detailCode = res.detail && res.detail.code;
+          if (detailCode === 'NOT_READY') {
+            showToast('info', '⚠️ ' + conf.lbl + ' — 준비 중 (Phase 4-B)');
+            dbgLog('🟡','NOT_READY', conf.lbl + ' (' + conf.u + ')','#ffa726');
+          } else {
+            showToast('warning', conf.lbl + ' — ' + (res.error || res.message || '실패'));
+            dbgLog('🟡','ok:false', conf.lbl + ' — ' + (res.error || ''),'#ffa726');
+          }
           return;
         }
-        animateKpi('kpi-inbound',  d.today_inbound_mt   || 0);
-        animateKpi('kpi-outbound', d.today_outbound_mt  || 0);
-        animateKpi('kpi-stock',    d.current_stock_lots  || 0);
-        animateKpi('kpi-unloc',    d.unassigned_locations || 0);
-        // 갱신 시각 표시
-        var ts = document.getElementById('kpi-updated-at');
-        if (ts && d.updated_at) ts.textContent = '최종 갱신: ' + d.updated_at.replace('T',' ').slice(0,19);
+        // 진짜 성공: data 가 의미있는지 간단 체크
+        var d = res ? (res.data !== undefined ? res.data : res) : null;
+        var hasData = d && (typeof d !== 'object' || Object.keys(d).length > 0 || (Array.isArray(d) && d.length > 0));
+        if (!hasData && res && res.ok === true) {
+          // 200 OK + ok:true 지만 data 없음 → 의심
+          showToast('info', conf.lbl + ' 요청 전송됨 (UI 미구현)');
+          dbgLog('🟠','EMPTY OK', conf.lbl + ' — 응답은 성공인데 data 없음','#ff9800');
+          return;
+        }
+        showToast('success', conf.lbl + ' 완료');
       })
-      .catch(function(e){
-        console.warn('[SQM kpi poll 실패]', e);
+      .catch(function (e) {
+        if (e.status === 501) showToast('info', conf.lbl + ' (coming soon)');
+        else showToast('error', conf.lbl + ' 실패: ' + (e.message || String(e)));
       });
   }
 
-  function loadDashboard(){
-    var el = document.getElementById('page-container');
-    if (!el) return;
+  window.dispatchAction = dispatchAction;
 
-    // ── KPI 카드 4개 + 기존 테이블 레이아웃 ──────────────────────
-    el.innerHTML =
-      // KPI 카드 행
-      '<div style="padding:8px 8px 0">'+
-        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px">'+
-          kpiCard('kpi-inbound',  '오늘 입고',     '📥', 'MT') +
-          kpiCard('kpi-outbound', '오늘 출고',     '📤', 'MT') +
-          kpiCard('kpi-stock',    '현재 재고',     '📦', 'LOT') +
-          kpiCard('kpi-unloc',    '위치 미배정',   '📍', '개') +
-        '</div>'+
-        '<div id="kpi-updated-at" style="font-size:0.7em;color:var(--text-muted,#aaa);text-align:right;margin-bottom:4px"></div>'+
-      '</div>'+
-      // 기존 제품별/LOT 테이블 (로딩 placeholder)
-      '<div id="dash-tables" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:0 8px 8px;height:calc(100% - 130px)">'+
-        '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px;overflow:auto">'+
-          '<div class="loading">재고 테이블 로딩 중…</div></div>'+
-        '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px;overflow:auto">'+
-          '<div class="loading">LOT 테이블 로딩 중…</div></div>'+
-      '</div>';
-
-    // KPI 폴링 시작
-    startKpiPolling();
-
-    // 기존 테이블 데이터 로드
-    apiCall('GET', '/api/dashboard/stats', null, function(err, data){
-      var tables = document.getElementById('dash-tables');
-      if (!tables) return;
-
-      var products = [{name:'LITHIUM CARBONATE', sellable:200.0, reserved:0, committed:0, outbound_done:0, return_wait:0, total:200.0, sample:40}];
-      var lots = [{opening:200.0, inbound:0, outbound:0, ending:200.0, status:'OK'}];
-      if (!err && data) {
-        if (data.products) products = data.products;
-        if (data.lots)     lots     = data.lots;
-      }
-
-      var prodRows = products.map(function(r,i){
-        return '<tr><td>'+(i+1)+'</td><td style="text-align:left">'+r.name+'</td>'+
-          '<td>'+fmt(r.sellable)+'</td><td>'+fmt(r.reserved)+'</td><td>'+fmt(r.committed)+'</td>'+
-          '<td>'+fmt(r.outbound_done)+'</td><td>'+fmt(r.return_wait)+'</td>'+
-          '<td><b>'+fmt(r.total)+'</b></td><td>'+(r.sample||'-')+'</td></tr>';
-      }).join('');
-      var totalSum  = products.reduce(function(a,r){ return a+(r.total||0); }, 0);
-      var sampleSum = products.reduce(function(a,r){ return a+(r.sample||0); }, 0);
-      prodRows += '<tr class="total-row"><td></td><td style="text-align:left"><b>합계</b></td>'+
-                  '<td>'+fmt(totalSum)+'</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td>'+
-                  '<td><b>'+fmt(totalSum)+'</b></td><td>'+sampleSum+'</td></tr>';
-
-      var lotRows = lots.map(function(r,i){
-        return '<tr><td>'+(i+1)+'</td><td>'+fmt(r.opening)+'</td><td>'+fmt(r.inbound)+'</td>'+
-          '<td>'+fmt(r.outbound)+'</td><td>'+fmt(r.ending)+'</td>'+
-          '<td><span style="color:#2e7d32;font-weight:700">'+(r.status||'OK')+'</span></td></tr>';
-      }).join('');
-
-      tables.innerHTML =
-        '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px;overflow:auto">'+
-          '<table class="data-table"><thead><tr>'+
-            '<th style="width:40px">순번</th><th style="text-align:left">Product</th>'+
-            '<th>판매가능</th><th>판매배정</th><th>판매화물</th>'+
-            '<th>출고완료</th><th>반품대기</th><th>합계</th><th>샘플</th>'+
-          '</tr></thead><tbody>'+prodRows+'</tbody></table></div>'+
-        '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:8px;overflow:auto">'+
-          '<table class="data-table"><thead><tr>'+
-            '<th style="width:40px">순번</th><th>기초재고</th><th>입고</th><th>출고</th><th>기말재고</th><th>검증</th>'+
-          '</tr></thead><tbody>'+lotRows+'</tbody></table></div>';
+  /* ===================================================
+     11. BIND ALL + BOOT
+     =================================================== */
+  function bindAll() {
+    // data-action elements
+    document.querySelectorAll('[data-action]').forEach(function(el){
+      if (el.dataset._sqmBound) return;
+      el.dataset._sqmBound='1';
+      el.addEventListener('click', function(ev){
+        ev.preventDefault();
+        ev.stopPropagation();
+        var action = el.dataset.action;
+        if (action==='toggle-theme'||action==='theme-toggle') { toggleTheme(); return; }
+        if (action==='refresh-all') { renderPage(_currentRoute||'dashboard'); return; }
+        dispatchAction(action);
+      });
     });
+
+    // data-route elements
+    document.querySelectorAll('[data-route]').forEach(function(el){
+      if (el.dataset._sqmBound) return;
+      el.dataset._sqmBound='1';
+      el.addEventListener('click', function(ev){
+        ev.preventDefault();
+        renderPage(el.dataset.route);
+      });
+    });
+
+    // top-level menu toggle
+    document.querySelectorAll('.menu-btn[data-menu]').forEach(function(el){
+      if (el.dataset._sqmBound) return;
+      el.dataset._sqmBound='1';
+      el.addEventListener('click', function(ev){
+        var menuName = el.dataset.menu || '?';
+        console.log('[SQM MENU CLICK]', menuName, '| target:', ev.target.tagName, '| hasAction:', !!ev.target.closest('[data-action]'));
+        dbgLog('🖱️','MENU CLICK', menuName + ' | target=' + ev.target.tagName + ' | hasAction=' + (!!ev.target.closest('[data-action]')), '#00e5ff');
+        if (ev.target.closest('[data-action]')) {
+          dbgLog('⚡','MENU → action', ev.target.dataset.action, '#ffeb3b');
+          return;
+        }
+        ev.preventDefault();
+        ev.stopPropagation();
+        var open = el.classList.contains('open');
+        closeAllMenus();
+        if (!open) {
+          el.classList.add('open');
+          _menuJustOpened = true;
+          setTimeout(function(){ _menuJustOpened = false; }, 200);
+          console.log('[SQM MENU OPEN]', menuName, '| .open class added:', el.classList.contains('open'));
+          dbgLog('📂','MENU OPEN', menuName + ' | .open 추가됨', '#4caf50');
+        } else {
+          console.log('[SQM MENU CLOSE]', menuName);
+          dbgLog('📁','MENU CLOSE', menuName, '#ff9800');
+        }
+      });
+    });
+
+    // close on outside click
+    document.addEventListener('click', function(ev){
+      if (_menuJustOpened) {
+        console.log('[SQM] document click 차단됨 (_menuJustOpened=true)');
+        return;
+      }
+      if (!ev.target.closest('.menu-btn,.menu-dropdown')) {
+        console.log('[SQM] outside click → closeAllMenus');
+        closeAllMenus();
+      }
+    });
+
+    // theme buttons
+    document.querySelectorAll('[data-action="theme-dark"]').forEach(function(el){
+      el.addEventListener('click',function(){
+        document.documentElement.setAttribute('data-theme','dark');
+        try{getStore().setItem('sqm_theme','dark');}catch{}
+      });
+    });
+    document.querySelectorAll('[data-action="theme-light"]').forEach(function(el){
+      el.addEventListener('click',function(){
+        document.documentElement.setAttribute('data-theme','light');
+        try{getStore().setItem('sqm_theme','light');}catch{}
+      });
+    });
+
+    // F5 shortcut — F8: debug panel toggle (handled in _dbgBuild)
+    document.addEventListener('keydown', function(ev){
+      if (ev.key==='F5'&&!ev.ctrlKey&&!ev.metaKey){
+        ev.preventDefault();
+        renderPage(_currentRoute||'dashboard');
+      }
+    });
+
+    console.info('[SQM v864.3] bindAll complete');
   }
 
-  function loadAlerts(){
-    var el = document.getElementById('alerts-container');
-    if (!el) return;
-    var fb = [
-      {sev:'warning', icon:'태그', text:'톤백 무결성 이슈 40건 — inventory.current_weight 불일치 LOT 감지. [재고관리 → 정합성 검사]에서 수동 보정 필요'},
-      {sev:'error',   icon:'위치', text:'위치 미배정 톤백 400개 (5 LOT) — 입고 후 창고 위치 미지정. [재고관리 → 위치배정] 즉시 처리 필요'}
-    ];
-    var html = '<div class="alerts-header"><span>ALERTS 알림 및 경고</span><span class="alerts-counter">'+fb.length+'</span></div>'+
-               '<ul class="alerts-list">'+fb.map(function(a){
-                 return '<li class="alert alert-'+a.sev+'"><span class="alert-icon">'+a.icon+'</span><span class="alert-text">'+a.text+'</span></li>';
-               }).join('')+'</ul>';
-    el.innerHTML = html;
-  }
-
-  function loadStatusbar(){
-    var el = document.getElementById('statusbar-container');
-    if (!el) return;
-    // 1단계: 기본 구조 즉시 렌더 (Modules 값은 '?/?' placeholder)
-    el.innerHTML = '<div class="statusbar">'+
-      '<span id="sb-modules" class="sb-modules" title="엔진 모듈 가용성">Modules: ?/?</span><span class="sb-sep">|</span>'+
-      '<span>위치 미배정 400개</span><span class="sb-sep">|</span>'+
-      '<span>스캔 실패율 -</span><span class="sb-sep">|</span>'+
-      '<span>LOT 평균 재고기간 6.2일</span>'+
-      '<span class="sb-flex"></span>'+
-      '<span>마지막 경신: '+new Date().toLocaleString('ko-KR')+'</span>'+
-      '<label class="sb-auto"><input type="checkbox" checked> 자동 새로고침 (30초)</label>'+
-    '</div>';
-    // 2단계: /api/health 비동기 조회 → Modules X/Y 갱신 (Phase 1c-B Q3-A)
-    try {
-      fetch(API_BASE + '/api/health').then(function(r){
-        return r.ok ? r.json() : null;
-      }).then(function(j){
-        if (!j) return;
-        var h = (j && j.data) ? j.data : (j || {});
-        // engine_available(신) | engine(legacy) 양방향 지원 (Phase 1c-B hot-fix)
-        var engineOk = (h.engine_available != null) ? h.engine_available : h.engine;
-        var loaded = (h.modules_loaded != null) ? h.modules_loaded : (engineOk ? 8 : 0);
-        var total = (h.modules_total != null) ? h.modules_total : 8;
-        // Phase 3 Q2: 🟢/🔴 이모지 + "Engine X/Y" 형식
-        var color = (loaded === total && total > 0) ? '🟢' : '🔴';
-        var sb = document.getElementById('sb-modules');
-        if (sb) sb.textContent = color + ' Engine ' + loaded + '/' + total;
-      }).catch(function(){ /* 무시 — placeholder 유지 */ });
-    } catch(e){ /* 무시 */ }
-  }
-
-  // ══════════════════════════════════════════════════════════════════
-  // 5) 초기화 + 전역 디버그 헬퍼
-  // ══════════════════════════════════════════════════════════════════
-  function init(){
-    try {
-      var t = localStorage.getItem('sqm_theme') || 'light';
-      document.documentElement.setAttribute('data-theme', t);
-      document.body.setAttribute('data-theme', t);
-    } catch(e){}
-    loadDashboard();
+  function boot() {
+    _dbgBuild();
+    applyTheme();
+    bindAll();
     loadAlerts();
     loadStatusbar();
+    startKpiPolling();
+    dbgLog('🚀','SQM v864.3 부팅 완료', 'F8 = 디버그 패널 토글','#4caf50');
+
+    var hash = location.hash.slice(1);
+    var lastTab = null;
+    try { lastTab = getStore().getItem('sqm_last_tab'); } catch {}
+    var initial = hash || lastTab || 'dashboard';
+    renderPage(initial);
+
+    window.addEventListener('hashchange', function(){
+      var id = location.hash.slice(1);
+      if (id && id !== _currentRoute) renderPage(id);
+    });
+
     setInterval(function(){
-      if (document.visibilityState === 'visible') loadStatusbar();
+      var auto = document.getElementById('sb-auto-refresh');
+      if (auto && auto.checked && document.visibilityState !== 'hidden') {
+        loadAlerts();
+        refreshStatusbar();
+        if (_currentRoute==='dashboard') loadKpi();
+      }
     }, 30000);
-    console.info('[SQM inline] 초기화 완료', VERSION);
-    toast('success', 'v864.3 준비 완료 (' + VERSION + ')');
+
+    window.SQM = window.SQM || {};
+    window.SQM.version = '864.3-phase5';
+    window.SQM.renderPage = renderPage;
+    window.SQM.dispatchAction = dispatchAction;
+    window.SQM.currentRoute = function(){ return _currentRoute; };
+    console.info('[SQM v864.3] boot complete. initial route:', initial);
   }
 
-  // 디버그 헬퍼 — 우클릭→검사→콘솔에서 SQM.test() 로 한 번에 점검
-  window.SQM = window.SQM || {};
-  window.SQM.version = VERSION;
-  window.SQM.test = function(){
-    var menus = document.querySelectorAll('.menu-btn[data-menu]').length;
-    var actions = document.querySelectorAll('[data-action]').length;
-    var routes = document.querySelectorAll('[data-route]').length;
-    console.log('[SQM.test] menus=', menus, 'actions=', actions, 'routes=', routes);
-    console.log('[SQM.test] API_BASE=', API_BASE);
-    return { version: VERSION, menus: menus, actions: actions, routes: routes };
-  };
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+  if (document.readyState==='loading') {
+    document.addEventListener('DOMContentLoaded', boot);
   } else {
-    init();
+    boot();
   }
+
 })();

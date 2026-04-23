@@ -14,36 +14,24 @@ router = APIRouter(prefix="/api/menu", tags=["menubar"])
 @router.post("/-on-pdf-inbound", summary="📄  PDF 스캔 입고")
 async def ononpdfinbound(payload: dict | None = None):
     """Feature F001: 📄  PDF 스캔 입고"""
-    try:
-        from gui_app_modular.handlers.inbound_processor import _on_pdf_inbound  # type: ignore
-    except ImportError:
-        raise NotReadyError("F001 📄  PDF 스캔 입고")
-    return wrap_engine_call(_on_pdf_inbound, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F001 📄  PDF 스캔 입고 — GUI 재구현 필요 (Phase 4-B)")
 # ── F002 | menubar | 파일 > 입고 | 📊  엑셀 파일 수동 입고 ──
 # tkinter_callback: _bulk_import_inventory_simple
 # source: gui_app_modular/handlers/import_handlers.py
 @router.post("/-bulk-import-inventory-simple", summary="📊  엑셀 파일 수동 입고")
 async def onbulkimportinventorysimple(payload: dict | None = None):
     """Feature F002: 📊  엑셀 파일 수동 입고"""
-    try:
-        from gui_app_modular.handlers.import_handlers import _bulk_import_inventory_simple  # type: ignore
-    except ImportError:
-        raise NotReadyError("F002 📊  엑셀 파일 수동 입고")
-    return wrap_engine_call(_bulk_import_inventory_simple, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F002 📊  엑셀 파일 수동 입고 — GUI 재구현 필요 (Phase 4-B)")
 # ── F003 | menubar | 파일 > 입고 | 📋  D/O 후속 연결 ──
 # tkinter_callback: _on_do_update
 # source: gui_app_modular/handlers/inbound_processor.py
 @router.post("/-on-do-update", summary="📋  D/O 후속 연결")
 async def onondoupdate(payload: dict | None = None):
     """Feature F003: 📋  D/O 후속 연결"""
-    try:
-        from gui_app_modular.handlers.inbound_processor import _on_do_update  # type: ignore
-    except ImportError:
-        raise NotReadyError("F003 📋  D/O 후속 연결")
-    return wrap_engine_call(_on_do_update, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F003 📋  D/O 후속 연결 — GUI 재구현 필요 (Phase 4-B)")
 # ── F004 | menubar | 파일 > 입고 | 📍  톤백 위치 매핑 ──
 # tkinter_callback: _on_tonbag_location_upload
 # source: unknown
@@ -58,12 +46,8 @@ async def onontonbaglocationupload(payload: dict | None = None):
 @router.post("/-on-move-approval-queue", summary="✅  대량 이동 승인")
 async def ononmoveapprovalqueue(payload: dict | None = None):
     """Feature F005: ✅  대량 이동 승인"""
-    try:
-        from gui_app_modular.mixins.advanced_dialogs_mixin import _on_move_approval_queue  # type: ignore
-    except ImportError:
-        raise NotReadyError("F005 ✅  대량 이동 승인")
-    return wrap_engine_call(_on_move_approval_queue, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F005 ✅  대량 이동 승인 — GUI 재구현 필요 (Phase 4-B)")
 # ── F006 | menubar | 파일 > 입고 | 🔄  반품 (재입고) ──
 # tkinter_callback: _show_return_dialog
 # source: gui_app_modular/mixins/advanced_dialogs_mixin.py
@@ -74,7 +58,8 @@ async def onshowreturndialog(payload: dict | None = None):
         from gui_app_modular.mixins.advanced_dialogs_mixin import _show_return_dialog  # type: ignore
     except ImportError:
         raise NotReadyError("F006 🔄  반품 (재입고)")
-    return wrap_engine_call(_show_return_dialog, payload or {})
+    # v864.3 방안 A: GUI 재구현 필요 → 명시적 NOT_READY
+    raise NotReadyError("F006 🔄  반품 (재입고) — GUI 재구현 필요 (Phase 4-B)")
 
 # ── F007 | menubar | 파일 > 입고 | 📂  반품 입고 (Excel) ──
 # tkinter_callback: _on_return_inbound_upload
@@ -86,7 +71,8 @@ async def ononreturninboundupload(payload: dict | None = None):
         from gui_app_modular.mixins.advanced_dialogs_mixin import _on_return_inbound_upload  # type: ignore
     except ImportError:
         raise NotReadyError("F007 📂  반품 입고 (Excel)")
-    return wrap_engine_call(_on_return_inbound_upload, payload or {})
+    # v864.3 방안 A: GUI 재구현 필요 → 명시적 NOT_READY
+    raise NotReadyError("F007 📂  반품 입고 (Excel) — GUI 재구현 필요 (Phase 4-B)")
 
 # ── F008 | menubar | 파일 > 입고 | 📊  반품 사유 통계 ──
 # tkinter_callback: _show_return_statistics
@@ -94,36 +80,24 @@ async def ononreturninboundupload(payload: dict | None = None):
 @router.post("/-show-return-statistics", summary="📊  반품 사유 통계")
 async def onshowreturnstatistics(payload: dict | None = None):
     """Feature F008: 📊  반품 사유 통계"""
-    try:
-        from gui_app_modular.mixins.advanced_dialogs_mixin import _show_return_statistics  # type: ignore
-    except ImportError:
-        raise NotReadyError("F008 📊  반품 사유 통계")
-    return wrap_engine_call(_show_return_statistics, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F008 📊  반품 사유 통계 — GUI 재구현 필요 (Phase 4-B)")
 # ── F009 | menubar | 파일 > 입고 | 📋  입고 현황 조회 ──
 # tkinter_callback: _bulk_import_inventory
 # source: gui_app_modular/mixins/bulk_import_mixin.py
 @router.post("/-bulk-import-inventory", summary="📋  입고 현황 조회")
 async def onbulkimportinventory(payload: dict | None = None):
     """Feature F009: 📋  입고 현황 조회"""
-    try:
-        from gui_app_modular.mixins.bulk_import_mixin import _bulk_import_inventory  # type: ignore
-    except ImportError:
-        raise NotReadyError("F009 📋  입고 현황 조회")
-    return wrap_engine_call(_bulk_import_inventory, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F009 📋  입고 현황 조회 — GUI 재구현 필요 (Phase 4-B)")
 # ── F010 | menubar | 파일 > 입고 | 📝  입고 파싱 템플릿 관리 ──
 # tkinter_callback: _on_inbound_template_manage
 # source: gui_app_modular/mixins/advanced_dialogs_mixin.py
 @router.post("/-on-inbound-template-manage", summary="📝  입고 파싱 템플릿 관리")
 async def ononinboundtemplatemanage(payload: dict | None = None):
     """Feature F010: 📝  입고 파싱 템플릿 관리"""
-    try:
-        from gui_app_modular.mixins.advanced_dialogs_mixin import _on_inbound_template_manage  # type: ignore
-    except ImportError:
-        raise NotReadyError("F010 📝  입고 파싱 템플릿 관리")
-    return wrap_engine_call(_on_inbound_template_manage, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F010 📝  입고 파싱 템플릿 관리 — GUI 재구현 필요 (Phase 4-B)")
 # ── F011 | menubar | 파일 > 입고 | 📦  제품 마스터 관리 ──
 # tkinter_callback: _show_product_master
 # source: unknown
@@ -138,12 +112,8 @@ async def onshowproductmaster(payload: dict | None = None):
 @router.post("/-show-email-config", summary="⚙️  이메일 설정")
 async def onshowemailconfig(payload: dict | None = None):
     """Feature F012: ⚙️  이메일 설정"""
-    try:
-        from gui_app_modular.mixins.advanced_dialogs_mixin import _show_email_config  # type: ignore
-    except ImportError:
-        raise NotReadyError("F012 ⚙️  이메일 설정")
-    return wrap_engine_call(_show_email_config, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F012 ⚙️  이메일 설정 — GUI 재구현 필요 (Phase 4-B)")
 # ── F013 | menubar | 파일 > 입고 | 🔍  정합성 검증 (시각화) ──
 # tkinter_callback: _on_integrity_report_v760
 # source: gui_app_modular/mixins/advanced_dialogs_mixin.py
@@ -154,7 +124,8 @@ async def ononintegrityreportv760(payload: dict | None = None):
         from gui_app_modular.mixins.advanced_dialogs_mixin import _on_integrity_report_v760  # type: ignore
     except ImportError:
         raise NotReadyError("F013 🔍  정합성 검증 (시각화)")
-    return wrap_engine_call(_on_integrity_report_v760, payload or {})
+    # v864.3 방안 A: GUI 재구현 필요 → 명시적 NOT_READY
+    raise NotReadyError("F013 🔍  정합성 검증 (시각화) — GUI 재구현 필요 (Phase 4-B)")
 
 # ── F014 | menubar | 파일 > 입고 | 🛠️  LOT 상태 정합성 복구 ──
 # tkinter_callback: _on_fix_lot_status_integrity
@@ -162,12 +133,8 @@ async def ononintegrityreportv760(payload: dict | None = None):
 @router.post("/-on-fix-lot-status-integrity", summary="🛠️  LOT 상태 정합성 복구")
 async def ononfixlotstatusintegrity(payload: dict | None = None):
     """Feature F014: 🛠️  LOT 상태 정합성 복구"""
-    try:
-        from gui_app_modular.mixins.toolbar_mixin import _on_fix_lot_status_integrity  # type: ignore
-    except ImportError:
-        raise NotReadyError("F014 🛠️  LOT 상태 정합성 복구")
-    return wrap_engine_call(_on_fix_lot_status_integrity, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F014 🛠️  LOT 상태 정합성 복구 — GUI 재구현 필요 (Phase 4-B)")
 # ── F015 | menubar | 파일 > 출고 | 🚀  즉시 출고 (원스톱) ──
 # tkinter_callback: _on_s1_onestop_outbound
 # source: gui_app_modular/handlers/outbound_handlers.py
@@ -178,7 +145,8 @@ async def onons1onestopoutbound(payload: dict | None = None):
         from gui_app_modular.handlers.outbound_handlers import _on_s1_onestop_outbound  # type: ignore
     except ImportError:
         raise NotReadyError("F015 🚀  즉시 출고 (원스톱)")
-    return wrap_engine_call(_on_s1_onestop_outbound, payload or {})
+    # v864.3 방안 A: GUI 재구현 필요 → 명시적 NOT_READY
+    raise NotReadyError("F015 🚀  즉시 출고 (원스톱) — GUI 재구현 필요 (Phase 4-B)")
 
 # ── F016 | menubar | 파일 > 출고 | 📤  빠른 출고 (붙여넣기) ──
 # tkinter_callback: _on_quick_outbound_paste
@@ -190,7 +158,8 @@ async def ononquickoutboundpaste(payload: dict | None = None):
         from gui_app_modular.handlers.outbound_handlers import _on_quick_outbound_paste  # type: ignore
     except ImportError:
         raise NotReadyError("F016 📤  빠른 출고 (붙여넣기)")
-    return wrap_engine_call(_on_quick_outbound_paste, payload or {})
+    # v864.3 방안 A: GUI 재구현 필요 → 명시적 NOT_READY
+    raise NotReadyError("F016 📤  빠른 출고 (붙여넣기) — GUI 재구현 필요 (Phase 4-B)")
 
 # ── F017 | menubar | 파일 > 출고 | 📋  Picking List 업로드 (PDF) ──
 # tkinter_callback: _on_picking_list_upload
@@ -202,7 +171,8 @@ async def ononpickinglistupload(payload: dict | None = None):
         from gui_app_modular.handlers.outbound_handlers import _on_picking_list_upload  # type: ignore
     except ImportError:
         raise NotReadyError("F017 📋  Picking List 업로드 (PDF)")
-    return wrap_engine_call(_on_picking_list_upload, payload or {})
+    # v864.3 방안 A: GUI 재구현 필요 → 명시적 NOT_READY
+    raise NotReadyError("F017 📋  Picking List 업로드 (PDF) — GUI 재구현 필요 (Phase 4-B)")
 
 # ── F018 | menubar | 파일 > 출고 | 📊  바코드 스캔 업로드 ──
 # tkinter_callback: _on_barcode_scan_upload
@@ -210,48 +180,32 @@ async def ononpickinglistupload(payload: dict | None = None):
 @router.post("/-on-barcode-scan-upload", summary="📊  바코드 스캔 업로드")
 async def ononbarcodescanupload(payload: dict | None = None):
     """Feature F018: 📊  바코드 스캔 업로드"""
-    try:
-        from gui_app_modular.handlers.outbound_handlers import _on_barcode_scan_upload  # type: ignore
-    except ImportError:
-        raise NotReadyError("F018 📊  바코드 스캔 업로드")
-    return wrap_engine_call(_on_barcode_scan_upload, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F018 📊  바코드 스캔 업로드 — GUI 재구현 필요 (Phase 4-B)")
 # ── F019 | menubar | 파일 > 출고 | 📷  스캔 탭으로 이동 ──
 # tkinter_callback: _on_go_scan_tab
 # source: gui_app_modular/handlers/outbound_handlers.py
 @router.post("/-on-go-scan-tab", summary="📷  스캔 탭으로 이동")
 async def onongoscantab(payload: dict | None = None):
     """Feature F019: 📷  스캔 탭으로 이동"""
-    try:
-        from gui_app_modular.handlers.outbound_handlers import _on_go_scan_tab  # type: ignore
-    except ImportError:
-        raise NotReadyError("F019 📷  스캔 탭으로 이동")
-    return wrap_engine_call(_on_go_scan_tab, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F019 📷  스캔 탭으로 이동 — GUI 재구현 필요 (Phase 4-B)")
 # ── F020 | menubar | 파일 > 출고 | 📋  Allocation 입력 ──
 # tkinter_callback: _on_allocation_input_unified
 # source: gui_app_modular/handlers/outbound_handlers.py
 @router.post("/-on-allocation-input-unified", summary="📋  Allocation 입력")
 async def ononallocationinputunified(payload: dict | None = None):
     """Feature F020: 📋  Allocation 입력"""
-    try:
-        from gui_app_modular.handlers.outbound_handlers import _on_allocation_input_unified  # type: ignore
-    except ImportError:
-        raise NotReadyError("F020 📋  Allocation 입력")
-    return wrap_engine_call(_on_allocation_input_unified, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F020 📋  Allocation 입력 — GUI 재구현 필요 (Phase 4-B)")
 # ── F021 | menubar | 파일 > 출고 | ✅  승인 대기 ──
 # tkinter_callback: _show_allocation_approval_queue
 # source: gui_app_modular/handlers/outbound_handlers.py
 @router.post("/-show-allocation-approval-queue", summary="✅  승인 대기")
 async def onshowallocationapprovalqueue(payload: dict | None = None):
     """Feature F021: ✅  승인 대기"""
-    try:
-        from gui_app_modular.handlers.outbound_handlers import _show_allocation_approval_queue  # type: ignore
-    except ImportError:
-        raise NotReadyError("F021 ✅  승인 대기")
-    return wrap_engine_call(_show_allocation_approval_queue, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F021 ✅  승인 대기 — GUI 재구현 필요 (Phase 4-B)")
 # ── F022 | menubar | 파일 > 출고 | 📌  예약 반영 (승인분) ──
 # tkinter_callback: _apply_approved_allocation
 # source: gui_app_modular/handlers/outbound_handlers.py
@@ -262,7 +216,8 @@ async def onapplyapprovedallocation(payload: dict | None = None):
         from gui_app_modular.handlers.outbound_handlers import _apply_approved_allocation  # type: ignore
     except ImportError:
         raise NotReadyError("F022 📌  예약 반영 (승인분)")
-    return wrap_engine_call(_apply_approved_allocation, payload or {})
+    # v864.3 방안 A: GUI 재구현 필요 → 명시적 NOT_READY
+    raise NotReadyError("F022 📌  예약 반영 (승인분) — GUI 재구현 필요 (Phase 4-B)")
 
 # ── F023 | menubar | 파일 > 출고 | 📜  승인 이력 조회 ──
 # tkinter_callback: _show_allocation_approval_history
@@ -270,108 +225,72 @@ async def onapplyapprovedallocation(payload: dict | None = None):
 @router.post("/-show-allocation-approval-history", summary="📜  승인 이력 조회")
 async def onshowallocationapprovalhistory(payload: dict | None = None):
     """Feature F023: 📜  승인 이력 조회"""
-    try:
-        from gui_app_modular.handlers.outbound_handlers import _show_allocation_approval_history  # type: ignore
-    except ImportError:
-        raise NotReadyError("F023 📜  승인 이력 조회")
-    return wrap_engine_call(_show_allocation_approval_history, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F023 📜  승인 이력 조회 — GUI 재구현 필요 (Phase 4-B)")
 # ── F024 | menubar | 파일 > 출고 | 📋  판매 배정 탭으로 이동 ──
 # tkinter_callback: _on_go_allocation_tab
 # source: gui_app_modular/handlers/outbound_handlers.py
 @router.post("/-on-go-allocation-tab", summary="📋  판매 배정 탭으로 이동")
 async def onongoallocationtab(payload: dict | None = None):
     """Feature F024: 📋  판매 배정 탭으로 이동"""
-    try:
-        from gui_app_modular.handlers.outbound_handlers import _on_go_allocation_tab  # type: ignore
-    except ImportError:
-        raise NotReadyError("F024 📋  판매 배정 탭으로 이동")
-    return wrap_engine_call(_on_go_allocation_tab, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F024 📋  판매 배정 탭으로 이동 — GUI 재구현 필요 (Phase 4-B)")
 # ── F025 | menubar | 파일 > 출고 | 📋  출고 현황 조회 ──
 # tkinter_callback: _show_outbound_history
 # source: gui_app_modular/mixins/advanced_dialogs_mixin.py
 @router.post("/-show-outbound-history", summary="📋  출고 현황 조회")
 async def onshowoutboundhistory(payload: dict | None = None):
     """Feature F025: 📋  출고 현황 조회"""
-    try:
-        from gui_app_modular.mixins.advanced_dialogs_mixin import _show_outbound_history  # type: ignore
-    except ImportError:
-        raise NotReadyError("F025 📋  출고 현황 조회")
-    return wrap_engine_call(_show_outbound_history, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F025 📋  출고 현황 조회 — GUI 재구현 필요 (Phase 4-B)")
 # ── F026 | menubar | 파일 > 출고 | 📊  Sales Order 업로드 ──
 # tkinter_callback: _on_sales_order_upload
 # source: gui_app_modular/mixins/toolbar_mixin.py
 @router.post("/-on-sales-order-upload", summary="📊  Sales Order 업로드")
 async def ononsalesorderupload(payload: dict | None = None):
     """Feature F026: 📊  Sales Order 업로드"""
-    try:
-        from gui_app_modular.mixins.toolbar_mixin import _on_sales_order_upload  # type: ignore
-    except ImportError:
-        raise NotReadyError("F026 📊  Sales Order 업로드")
-    return wrap_engine_call(_on_sales_order_upload, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F026 📊  Sales Order 업로드 — GUI 재구현 필요 (Phase 4-B)")
 # ── F027 | menubar | 파일 > 출고 | 🔁  Swap 리포트 ──
 # tkinter_callback: _show_swap_report_dialog
 # source: gui_app_modular/handlers/outbound_handlers.py
 @router.post("/-show-swap-report-dialog", summary="🔁  Swap 리포트")
 async def onshowswapreportdialog(payload: dict | None = None):
     """Feature F027: 🔁  Swap 리포트"""
-    try:
-        from gui_app_modular.handlers.outbound_handlers import _show_swap_report_dialog  # type: ignore
-    except ImportError:
-        raise NotReadyError("F027 🔁  Swap 리포트")
-    return wrap_engine_call(_show_swap_report_dialog, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F027 🔁  Swap 리포트 — GUI 재구현 필요 (Phase 4-B)")
 # ── F028 | menubar | 파일 > 출고 | 📦  출고 피킹 템플릿 관리 ──
 # tkinter_callback: _on_picking_template_manage
 # source: gui_app_modular/mixins/advanced_dialogs_mixin.py
 @router.post("/-on-picking-template-manage", summary="📦  출고 피킹 템플릿 관리")
 async def ononpickingtemplatemanage(payload: dict | None = None):
     """Feature F028: 📦  출고 피킹 템플릿 관리"""
-    try:
-        from gui_app_modular.mixins.advanced_dialogs_mixin import _on_picking_template_manage  # type: ignore
-    except ImportError:
-        raise NotReadyError("F028 📦  출고 피킹 템플릿 관리")
-    return wrap_engine_call(_on_picking_template_manage, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F028 📦  출고 피킹 템플릿 관리 — GUI 재구현 필요 (Phase 4-B)")
 # ── F029 | menubar | 파일 > 백업 | 💾 백업 생성 ──
 # tkinter_callback: _on_backup_click
 # source: gui_app_modular/handlers/backup_handlers.py
 @router.post("/-on-backup-click", summary="💾 백업 생성")
 async def ononbackupclick(payload: dict | None = None):
     """Feature F029: 💾 백업 생성"""
-    try:
-        from gui_app_modular.handlers.backup_handlers import _on_backup_click  # type: ignore
-    except ImportError:
-        raise NotReadyError("F029 💾 백업 생성")
-    return wrap_engine_call(_on_backup_click, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F029 💾 백업 생성 — GUI 재구현 필요 (Phase 4-B)")
 # ── F030 | menubar | 파일 > 백업 | 🔄 복원 ──
 # tkinter_callback: _on_restore_click
 # source: gui_app_modular/handlers/backup_handlers.py
 @router.post("/-on-restore-click", summary="🔄 복원")
 async def ononrestoreclick(payload: dict | None = None):
     """Feature F030: 🔄 복원"""
-    try:
-        from gui_app_modular.handlers.backup_handlers import _on_restore_click  # type: ignore
-    except ImportError:
-        raise NotReadyError("F030 🔄 복원")
-    return wrap_engine_call(_on_restore_click, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F030 🔄 복원 — GUI 재구현 필요 (Phase 4-B)")
 # ── F031 | menubar | 파일 > 백업 | 📋 백업 목록 ──
 # tkinter_callback: _show_backup_list
 # source: gui_app_modular/handlers/backup_handlers.py
 @router.post("/-show-backup-list", summary="📋 백업 목록")
 async def onshowbackuplist(payload: dict | None = None):
     """Feature F031: 📋 백업 목록"""
-    try:
-        from gui_app_modular.handlers.backup_handlers import _show_backup_list  # type: ignore
-    except ImportError:
-        raise NotReadyError("F031 📋 백업 목록")
-    return wrap_engine_call(_show_backup_list, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F031 📋 백업 목록 — GUI 재구현 필요 (Phase 4-B)")
 # ── F032 | menubar | 파일 > AI 도구 | 🚢 선사 BL 등록 도구 ──
 # tkinter_callback: _on_bl_carrier_register
 # source: unknown
@@ -394,60 +313,40 @@ async def ononblcarrieranalyze(payload: dict | None = None):
 @router.post("/-s1-open-audit-viewer", summary="📋 감사 로그 조회 / Export")
 async def ons1openauditviewer(payload: dict | None = None):
     """Feature F034: 📋 감사 로그 조회 / Export"""
-    try:
-        from gui_app_modular.handlers.outbound_handlers import _s1_open_audit_viewer  # type: ignore
-    except ImportError:
-        raise NotReadyError("F034 📋 감사 로그 조회 / Export")
-    return wrap_engine_call(_s1_open_audit_viewer, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F034 📋 감사 로그 조회 / Export — GUI 재구현 필요 (Phase 4-B)")
 # ── F035 | menubar | 재고 | 📊 LOT 리스트 Excel ──
 # tkinter_callback: _on_export_click
 # source: gui_app_modular/handlers/export_handlers.py
 @router.post("/-on-export-click", summary="📊 LOT 리스트 Excel")
 async def ononexportclick(payload: dict | None = None):
     """Feature F035: 📊 LOT 리스트 Excel"""
-    try:
-        from gui_app_modular.handlers.export_handlers import _on_export_click  # type: ignore
-    except ImportError:
-        raise NotReadyError("F035 📊 LOT 리스트 Excel")
-    return wrap_engine_call(_on_export_click, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F035 📊 LOT 리스트 Excel — GUI 재구현 필요 (Phase 4-B)")
 # ── F036 | menubar | 재고 | 🎒 톤백리스트 Excel ──
 # tkinter_callback: _on_export_click
 # source: gui_app_modular/handlers/export_handlers.py
 @router.post("/-on-export-click", summary="🎒 톤백리스트 Excel")
 async def ononexportclick_f036(payload: dict | None = None):
     """Feature F036: 🎒 톤백리스트 Excel"""
-    try:
-        from gui_app_modular.handlers.export_handlers import _on_export_click  # type: ignore
-    except ImportError:
-        raise NotReadyError("F036 🎒 톤백리스트 Excel")
-    return wrap_engine_call(_on_export_click, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F036 🎒 톤백리스트 Excel — GUI 재구현 필요 (Phase 4-B)")
 # ── F037 | menubar | 재고 | 📋 출고 현황 조회 ──
 # tkinter_callback: _show_outbound_history
 # source: gui_app_modular/mixins/advanced_dialogs_mixin.py
 @router.post("/-show-outbound-history", summary="📋 출고 현황 조회")
 async def onshowoutboundhistory_f037(payload: dict | None = None):
     """Feature F037: 📋 출고 현황 조회"""
-    try:
-        from gui_app_modular.mixins.advanced_dialogs_mixin import _show_outbound_history  # type: ignore
-    except ImportError:
-        raise NotReadyError("F037 📋 출고 현황 조회")
-    return wrap_engine_call(_show_outbound_history, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F037 📋 출고 현황 조회 — GUI 재구현 필요 (Phase 4-B)")
 # ── F038 | menubar | 재고 | 📊 재고 추이 차트 ──
 # tkinter_callback: _show_snapshot_chart
 # source: gui_app_modular/mixins/advanced_dialogs_mixin.py
 @router.post("/-show-snapshot-chart", summary="📊 재고 추이 차트")
 async def onshowsnapshotchart(payload: dict | None = None):
     """Feature F038: 📊 재고 추이 차트"""
-    try:
-        from gui_app_modular.mixins.advanced_dialogs_mixin import _show_snapshot_chart  # type: ignore
-    except ImportError:
-        raise NotReadyError("F038 📊 재고 추이 차트")
-    return wrap_engine_call(_show_snapshot_chart, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F038 📊 재고 추이 차트 — GUI 재구현 필요 (Phase 4-B)")
 # ── F039 | menubar | 보고서 | 📄 거래명세서 생성 (headless) ──
 # Phase 2 Step 3 (2026-04-21): Tkinter dialog -> headless payload 방식으로 재구현
 # source: gui_app_modular/mixins/advanced_dialogs_mixin.py:1329 (참조만)
@@ -555,36 +454,24 @@ async def ongenerateoutboundinvoice(payload: dict | None = None):
 @router.post("/-on-detail-of-outbound-report", summary="📦 Detail of Outbound")
 async def onondetailofoutboundreport(payload: dict | None = None):
     """Feature F040: 📦 Detail of Outbound"""
-    try:
-        from gui_app_modular.mixins.advanced_dialogs_mixin import _on_detail_of_outbound_report  # type: ignore
-    except ImportError:
-        raise NotReadyError("F040 📦 Detail of Outbound")
-    return wrap_engine_call(_on_detail_of_outbound_report, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F040 📦 Detail of Outbound — GUI 재구현 필요 (Phase 4-B)")
 # ── F041 | menubar | 보고서 | 📋 Sales Order DN ──
 # tkinter_callback: _on_sales_order_dn_report
 # source: gui_app_modular/mixins/advanced_dialogs_mixin.py
 @router.post("/-on-sales-order-dn-report", summary="📋 Sales Order DN")
 async def ononsalesorderdnreport(payload: dict | None = None):
     """Feature F041: 📋 Sales Order DN"""
-    try:
-        from gui_app_modular.mixins.advanced_dialogs_mixin import _on_sales_order_dn_report  # type: ignore
-    except ImportError:
-        raise NotReadyError("F041 📋 Sales Order DN")
-    return wrap_engine_call(_on_sales_order_dn_report, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F041 📋 Sales Order DN — GUI 재구현 필요 (Phase 4-B)")
 # ── F042 | menubar | 보고서 | 🔍 DN 교차검증 ──
 # tkinter_callback: _on_dn_cross_check
 # source: gui_app_modular/mixins/toolbar_mixin.py
 @router.post("/-on-dn-cross-check", summary="🔍 DN 교차검증")
 async def onondncrosscheck(payload: dict | None = None):
     """Feature F042: 🔍 DN 교차검증"""
-    try:
-        from gui_app_modular.mixins.toolbar_mixin import _on_dn_cross_check  # type: ignore
-    except ImportError:
-        raise NotReadyError("F042 🔍 DN 교차검증")
-    return wrap_engine_call(_on_dn_cross_check, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F042 🔍 DN 교차검증 — GUI 재구현 필요 (Phase 4-B)")
 # ── F043 | menubar | 보고서 | 📝 고객 보고서 생성 ──
 # tkinter_callback: _generate_customer_report
 # source: unknown
@@ -615,48 +502,32 @@ async def onshowreporthistory(payload: dict | None = None):
 @router.post("/-generate-inventory-pdf-report", summary="📦 재고 현황 보고서")
 async def ongenerateinventorypdfreport(payload: dict | None = None):
     """Feature F046: 📦 재고 현황 보고서"""
-    try:
-        from gui_app_modular.handlers.pdf_report_handler import _generate_inventory_pdf_report  # type: ignore
-    except ImportError:
-        raise NotReadyError("F046 📦 재고 현황 보고서")
-    return wrap_engine_call(_generate_inventory_pdf_report, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F046 📦 재고 현황 보고서 — GUI 재구현 필요 (Phase 4-B)")
 # ── F047 | menubar | 보고서 | 📈 입출고 내역 ──
 # tkinter_callback: _generate_transaction_pdf
 # source: gui_app_modular/handlers/pdf_handlers.py
 @router.post("/-generate-transaction-pdf", summary="📈 입출고 내역")
 async def ongeneratetransactionpdf(payload: dict | None = None):
     """Feature F047: 📈 입출고 내역"""
-    try:
-        from gui_app_modular.handlers.pdf_handlers import _generate_transaction_pdf  # type: ignore
-    except ImportError:
-        raise NotReadyError("F047 📈 입출고 내역")
-    return wrap_engine_call(_generate_transaction_pdf, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F047 📈 입출고 내역 — GUI 재구현 필요 (Phase 4-B)")
 # ── F048 | menubar | 보고서 | 📅 월간 실적 PDF ──
 # tkinter_callback: _generate_monthly_pdf_v398
 # source: gui_app_modular/handlers/pdf_handlers.py
 @router.post("/-generate-monthly-pdf-v398", summary="📅 월간 실적 PDF")
 async def ongeneratemonthlypdfv398(payload: dict | None = None):
     """Feature F048: 📅 월간 실적 PDF"""
-    try:
-        from gui_app_modular.handlers.pdf_handlers import _generate_monthly_pdf_v398  # type: ignore
-    except ImportError:
-        raise NotReadyError("F048 📅 월간 실적 PDF")
-    return wrap_engine_call(_generate_monthly_pdf_v398, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F048 📅 월간 실적 PDF — GUI 재구현 필요 (Phase 4-B)")
 # ── F049 | menubar | 보고서 | 📊 일일 현황 PDF ──
 # tkinter_callback: _generate_daily_pdf_v398
 # source: gui_app_modular/handlers/pdf_handlers.py
 @router.post("/-generate-daily-pdf-v398", summary="📊 일일 현황 PDF")
 async def ongeneratedailypdfv398(payload: dict | None = None):
     """Feature F049: 📊 일일 현황 PDF"""
-    try:
-        from gui_app_modular.handlers.pdf_handlers import _generate_daily_pdf_v398  # type: ignore
-    except ImportError:
-        raise NotReadyError("F049 📊 일일 현황 PDF")
-    return wrap_engine_call(_generate_daily_pdf_v398, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F049 📊 일일 현황 PDF — GUI 재구현 필요 (Phase 4-B)")
 # ── F050 | menubar | 보고서 | 🔖 LOT 상세 (headless) ──
 # Phase 2 Step 3 (2026-04-21): Tkinter selection -> payload.lot_no 방식으로 재구현
 # source: gui_app_modular/handlers/pdf_handlers.py:455 (참조만)
@@ -706,7 +577,8 @@ async def onrefreshalldata(payload: dict | None = None):
         from gui_app_modular.mixins.toolbar_mixin import _refresh_all_data  # type: ignore
     except ImportError:
         raise NotReadyError("F051 🔄 새로고침 (F5)")
-    return wrap_engine_call(_refresh_all_data, payload or {})
+    # v864.3 방안 A: GUI 재구현 필요 → 명시적 NOT_READY
+    raise NotReadyError("F051 🔄 새로고침 (F5) — GUI 재구현 필요 (Phase 4-B)")
 
 # ── F052 | menubar | 설정/도구 | 💾 현재 창 크기 저장 ──
 # tkinter_callback: _on_save_window_size
@@ -714,24 +586,16 @@ async def onrefreshalldata(payload: dict | None = None):
 @router.post("/-on-save-window-size", summary="💾 현재 창 크기 저장")
 async def ononsavewindowsize(payload: dict | None = None):
     """Feature F052: 💾 현재 창 크기 저장"""
-    try:
-        from gui_app_modular.mixins.toolbar_mixin import _on_save_window_size  # type: ignore
-    except ImportError:
-        raise NotReadyError("F052 💾 현재 창 크기 저장")
-    return wrap_engine_call(_on_save_window_size, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F052 💾 현재 창 크기 저장 — GUI 재구현 필요 (Phase 4-B)")
 # ── F053 | menubar | 설정/도구 | ↩️ 기본 창 크기 초기화 ──
 # tkinter_callback: _on_reset_window_size
 # source: gui_app_modular/mixins/toolbar_mixin.py
 @router.post("/-on-reset-window-size", summary="↩️ 기본 창 크기 초기화")
 async def ononresetwindowsize(payload: dict | None = None):
     """Feature F053: ↩️ 기본 창 크기 초기화"""
-    try:
-        from gui_app_modular.mixins.toolbar_mixin import _on_reset_window_size  # type: ignore
-    except ImportError:
-        raise NotReadyError("F053 ↩️ 기본 창 크기 초기화")
-    return wrap_engine_call(_on_reset_window_size, payload or {})
-
+    # v864.3 방안 A: GUI(tkinter filedialog/messagebox) 필요 → 명시적 NOT_READY
+    raise NotReadyError("F053 ↩️ 기본 창 크기 초기화 — GUI 재구현 필요 (Phase 4-B)")
 # ── F054 | menubar | 설정/도구 | 📦 제품 마스터 관리 ──
 # tkinter_callback: _show_product_master
 # source: unknown
@@ -750,107 +614,21 @@ async def onshowproductinventoryreport(payload: dict | None = None):
 
 # ── F056 | menubar | 설정/도구 | 📋 D/O 후속 연결 ──
 # tkinter_callback: _on_do_update
-# source: gui_app_modular/handlers/inbound_processor.py
-@router.post("/-on-do-update", summary="📋 D/O 후속 연결")
-async def onondoupdate_f056(payload: dict | None = None):
-    """Feature F056: 📋 D/O 후속 연결"""
-    try:
-        from gui_app_modular.handlers.inbound_processor import _on_do_update  # type: ignore
-    except ImportError:
-        raise NotReadyError("F056 📋 D/O 후속 연결")
-    return wrap_engine_call(_on_do_update, payload or {})
+# source: gui_app_modu
 
-# ── F057 | menubar | 도움말 | 📖 사용법 ──
-# tkinter_callback: _show_help
-# source: gui_app_modular/mixins/keybindings_mixin.py
-@router.post("/-show-help", summary="📖 사용법")
-async def onshowhelp(payload: dict | None = None):
-    """Feature F057: 📖 사용법"""
-    try:
-        from gui_app_modular.mixins.keybindings_mixin import _show_help  # type: ignore
-    except ImportError:
-        raise NotReadyError("F057 📖 사용법")
-    return wrap_engine_call(_show_help, payload or {})
-
-# ── F058 | menubar | 도움말 | ⌨️ 단축키 안내 ──
-# tkinter_callback: _show_shortcuts
-# source: gui_app_modular/mixins/menu_mixin.py
-@router.post("/-show-shortcuts", summary="⌨️ 단축키 안내")
-async def onshowshortcuts(payload: dict | None = None):
-    """Feature F058: ⌨️ 단축키 안내"""
-    try:
-        from gui_app_modular.mixins.menu_mixin import _show_shortcuts  # type: ignore
-    except ImportError:
-        raise NotReadyError("F058 ⌨️ 단축키 안내")
-    return wrap_engine_call(_show_shortcuts, payload or {})
-
-# ── F059 | menubar | 도움말 | 📊 STATUS 상태값 안내 ──
-# tkinter_callback: _show_status_guide
-# source: gui_app_modular/mixins/custom_menubar.py
-@router.post("/-show-status-guide", summary="📊 STATUS 상태값 안내")
-async def onshowstatusguide(payload: dict | None = None):
-    """Feature F059: 📊 STATUS 상태값 안내"""
-    try:
-        from gui_app_modular.mixins.custom_menubar import _show_status_guide  # type: ignore
-    except ImportError:
-        raise NotReadyError("F059 📊 STATUS 상태값 안내")
-    return wrap_engine_call(_show_status_guide, payload or {})
-
-# ── F060 | menubar | 도움말 | 💾 DB 백업/복구 가이드 ──
-# tkinter_callback: _show_backup_guide
-# source: gui_app_modular/mixins/custom_menubar.py
-@router.post("/-show-backup-guide", summary="💾 DB 백업/복구 가이드")
-async def onshowbackupguide(payload: dict | None = None):
-    """Feature F060: 💾 DB 백업/복구 가이드"""
-    try:
-        from gui_app_modular.mixins.custom_menubar import _show_backup_guide  # type: ignore
-    except ImportError:
-        raise NotReadyError("F060 💾 DB 백업/복구 가이드")
-    return wrap_engine_call(_show_backup_guide, payload or {})
-
-# ── F061 | menubar | 도움말 | ℹ️ 시스템 정보 ──
-# tkinter_callback: _show_system_info
-# source: unknown
-@router.post("/-show-system-info", summary="ℹ️ 시스템 정보")
-async def onshowsysteminfo(payload: dict | None = None):
-    """Feature F061: ℹ️ 시스템 정보"""
-    raise NotReadyError("F061 ℹ️ 시스템 정보")
-
-# ── F062 | menubar | 도움말 | 📝 버전 정보 ──
-# tkinter_callback: _show_about
-# source: gui_app_modular/mixins/menu_mixin.py
-@router.post("/-show-about", summary="📝 버전 정보")
-async def onshowabout(payload: dict | None = None):
-    """Feature F062: 📝 버전 정보"""
-    try:
-        from gui_app_modular.mixins.menu_mixin import _show_about  # type: ignore
-    except ImportError:
-        raise NotReadyError("F062 📝 버전 정보")
-    return wrap_engine_call(_show_about, payload or {})
-
-# -- F063 | menubar | tools | DB Optimize --
-# tkinter_callback: _on_optimize_db (headless rewrite)
-# source: gui_app_modular/handlers/backup_handlers.py
-# Note: Original _on_optimize_db is a Tkinter class method (self + CustomMessageBox).
-#       This is a headless version: runs VACUUM+ANALYZE only when payload.confirm=True.
-#       Ruby / Phase 2 Step 2 / 2026-04-21
-@router.post("/-on-optimize-db", summary="DB Optimize")
-async def ononoptimizedb(payload: dict | None = None):
-    """Feature F063: DB Optimize (headless)."""
-    from backend.api import engine as _engine, ENGINE_AVAILABLE as _ok
-    if not _ok or _engine is None:
-        raise NotReadyError("F063 DB Optimize - engine not loaded")
-
-    confirm = bool((payload or {}).get("confirm", False))
-    if not confirm:
-        return ok_response(
-            data={"vacuum": "skipped", "analyze": "skipped"},
-            message="Confirm DB optimize? Call again with payload {confirm: true}.",
-        )
-
-    def _optimize():
-        _engine.db.execute("VACUUM")
-        _engine.db.execute("ANALYZE")
-        return {"vacuum": "ok", "analyze": "ok", "message": "DB optimize done (VACUUM + ANALYZE)"}
-
-    return wrap_engine_call(_optimize)
+@router.post("/-on-settings", summary="⚙️ 환경 설정")
+def on_settings(payload: dict = None):
+    """환경 설정 다이얼로그 (현재: 설정 정보 반환)"""
+    import sqlite3, os
+    base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    db_path = os.path.join(base, "data", "db", "sqm_inventory.db")
+    return {
+        "success": True,
+        "title": "SQM v864.3 환경 설정",
+        "settings": {
+            "db_path": db_path,
+            "db_exists": os.path.exists(db_path),
+            "version": "864.3",
+            "note": "고급 설정은 다음 버전에서 지원 예정"
+        }
+    }
