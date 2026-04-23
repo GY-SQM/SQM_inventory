@@ -1394,6 +1394,159 @@
   }
   window.showQuickOutboundModal = showQuickOutboundModal;
 
+  /* ===================================================
+     8d. 톤백 위치 매핑 (F004) — Excel 업로드 공통 유틸 재사용
+     =================================================== */
+  function showTonbagLocationUploadModal() {
+    _showExcelUploadModal({
+      title: '📍 톤백 위치 매핑 — Excel 업로드',
+      subtitle: 'Excel 컬럼: <code>lot_no, sub_lt, location, reason(선택), note(선택)</code>',
+      endpoint: '/api/tonbag/location-upload',
+      onSuccess: function(d) {
+        var errHtml = '';
+        if (d.errors && d.errors.length) {
+          errHtml = '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--warning)">⚠️ ' + d.errors.length + '건 실패 상세</summary><table class="data-table" style="margin-top:8px;font-size:.85rem"><thead><tr><th>행</th><th>LOT</th><th>sub_lt</th><th>사유</th></tr></thead><tbody>' +
+            d.errors.map(function(er){
+              return '<tr><td>'+er.row+'</td><td>'+escapeHtml(er.lot_no||'-')+'</td><td>'+(er.sub_lt||'-')+'</td><td>'+escapeHtml(er.reason||'')+'</td></tr>';
+            }).join('') + '</tbody></table></details>';
+        }
+        return '<div style="color:var(--text-muted);font-size:.85rem">파일: ' + escapeHtml(d.filename||'-') +
+               ' · 성공 <strong style="color:var(--accent)">' + (d.success_count||0) + '건</strong> / 실패 ' + (d.fail_count||0) +
+               ' / 총 ' + (d.total||0) + '</div>' + errHtml;
+      }
+    });
+  }
+  window.showTonbagLocationUploadModal = showTonbagLocationUploadModal;
+
+  /* ===================================================
+     8e. D/O 후속 연결 (F003) — 단건 필드 업데이트 폼
+     =================================================== */
+  function showDoUpdateModal() {
+    var ALLOWED_FIELDS = [
+      ['free_time',         'Free Time'],
+      ['con_return',        'Container Return 일자'],
+      ['warehouse_name',    '창고명'],
+      ['warehouse_code',    '창고 코드'],
+      ['arrival_date',      '도착일'],
+      ['stock_date',        '입고일'],
+      ['place_of_delivery', 'Place of Delivery'],
+      ['final_destination', 'Final Destination'],
+    ];
+    var fieldOpts = ALLOWED_FIELDS.map(function(f){
+      return '<option value="' + f[0] + '">' + f[1] + ' (' + f[0] + ')</option>';
+    }).join('');
+
+    var html = [
+      '<div style="max-width:520px">',
+      '  <h2 style="margin:0 0 12px 0">📋 D/O 후속 연결</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 16px 0;font-size:.9rem">',
+      '    특정 LOT 의 D/O 필드 값을 수정합니다.',
+      '  </p>',
+      '  <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:14px">',
+      '    <label style="font-weight:600">LOT 번호</label>',
+      '    <input type="text" id="do-lot" placeholder="예: 1126013063" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '    <label style="font-weight:600">필드</label>',
+      '    <select id="do-field" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">' + fieldOpts + '</select>',
+      '    <label style="font-weight:600">값</label>',
+      '    <input type="text" id="do-value" placeholder="" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '  </div>',
+      '  <div id="do-result" style="margin-bottom:12px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="do-cancel-btn" class="btn btn-ghost">닫기</button>',
+      '    <button id="do-submit-btn" class="btn btn-primary" disabled>업데이트</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+
+    var lot = document.getElementById('do-lot');
+    var fld = document.getElementById('do-field');
+    var val = document.getElementById('do-value');
+    var result = document.getElementById('do-result');
+    var submit = document.getElementById('do-submit-btn');
+    var cancel = document.getElementById('do-cancel-btn');
+
+    function validate() { submit.disabled = !(lot.value.trim() && fld.value && val.value !== ''); }
+    lot.addEventListener('input', validate); val.addEventListener('input', validate); fld.addEventListener('change', validate);
+
+    cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+    submit.addEventListener('click', function(){
+      var payload = { lot_no: lot.value.trim(), field: fld.value, value: val.value };
+      submit.disabled = true; cancel.disabled = true;
+      result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 업데이트 중...</div>';
+      apiPost('/api/action3/do-update', payload)
+        .then(function(res){
+          if (res && res.ok !== false) {
+            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ ' + escapeHtml((res.data && res.data.message) || '업데이트 완료') + '</div></div>';
+            showToast('success', 'D/O 업데이트 완료');
+            dbgLog('🟢','DO-UPDATE OK', payload.lot_no + ' · ' + payload.field, '#66bb6a');
+            if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+          } else {
+            var msg = (res && (res.error || res.message)) || '실패';
+            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)"><div style="font-weight:600">❌ ' + escapeHtml(msg) + '</div></div>';
+            showToast('error', msg);
+            submit.disabled = false; cancel.disabled = false;
+          }
+        })
+        .catch(function(e){
+          result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+          showToast('error', '실패: ' + (e.message||String(e)));
+          submit.disabled = false; cancel.disabled = false;
+        });
+    });
+  }
+  window.showDoUpdateModal = showDoUpdateModal;
+
+  /* ===================================================
+     8f. 예약 반영 (승인분) — F022 (단순 확정 모달)
+     =================================================== */
+  function showApplyApprovedAllocationModal() {
+    var html = [
+      '<div style="max-width:480px">',
+      '  <h2 style="margin:0 0 12px 0">📌 예약 반영 — 승인분 실행</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 16px 0;font-size:.9rem">',
+      '    workflow_status = APPROVED 인 Allocation 계획을 톤백 RESERVED 로 실제 반영합니다.',
+      '  </p>',
+      '  <div id="aa-result" style="margin-bottom:12px;min-height:24px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="aa-cancel-btn" class="btn btn-ghost">닫기</button>',
+      '    <button id="aa-submit-btn" class="btn btn-primary">지금 반영</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+
+    var cancel = document.getElementById('aa-cancel-btn');
+    var submit = document.getElementById('aa-submit-btn');
+    var result = document.getElementById('aa-result');
+    cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+    submit.addEventListener('click', function(){
+      if (!confirm('승인 완료된 Allocation 을 모두 RESERVED 로 반영합니다. 계속할까요?')) return;
+      submit.disabled = true; cancel.disabled = true;
+      result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
+      apiPost('/api/allocation/apply-approved', {})
+        .then(function(res){
+          if (res && res.ok) {
+            var d = res.data || {};
+            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ ' + escapeHtml(res.message||'완료') + '</div><div style="color:var(--text-muted);font-size:.85rem;margin-top:4px">반영 건수: <strong>' + (d.applied||0) + '</strong></div></div>';
+            showToast('success', res.message || '반영 완료');
+          } else {
+            var errs = (res && res.data && res.data.errors) || [];
+            var msg = (res && (res.message || res.error)) || '실패';
+            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)"><div style="font-weight:600">❌ ' + escapeHtml(msg) + '</div>' + (errs.length ? '<ul style="margin:8px 0 0 18px;color:var(--text-muted);font-size:.85rem">' + errs.map(function(e){return '<li>'+escapeHtml(e)+'</li>';}).join('') + '</ul>' : '') + '</div>';
+            showToast('error', msg);
+            submit.disabled = false; cancel.disabled = false;
+          }
+        })
+        .catch(function(e){
+          result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+          showToast('error', e.message || String(e));
+          submit.disabled = false; cancel.disabled = false;
+        });
+    });
+  }
+  window.showApplyApprovedAllocationModal = showApplyApprovedAllocationModal;
+
   function renderInfoModal(title, endpoint) {
     showDataModal(title,'<div style="padding:20px;text-align:center">Loading...</div>');
     apiGet(endpoint).then(function(res){
@@ -1487,7 +1640,8 @@
     'onOpen':            {m:'GET',  u:'/api/q2/recent-files',                   lbl:'최근 파일'},
     'onSave':            {m:'GET',  u:'/api/action/export-lot-excel',            lbl:'내보내기'},
     'onExport':          {m:'GET',  u:'/api/action/export-lot-excel',            lbl:'Excel 내보내기'},
-    'onDoUpdate':        {m:'POST', u:'/api/action3/do-update',                   lbl:'D/O 후속 연결'},
+    /* v864.3 Phase 4-B: D/O 후속 연결 네이티브 폼 */
+    'onDoUpdate':        {m:'JS', u:'do-update', lbl:'D/O 후속 연결'},
     'onReturnDialog':    {m:'POST', u:'/api/menu/-show-return-dialog',           lbl:'반품 (재입고)'},
     /* v864.3 Phase 4-B: 반품 입고 — 네이티브 Excel 업로드 모달 */
     'onReturnInboundUpload': {m:'JS', u:'return-upload', lbl:'반품 입고 Excel'},
@@ -1513,7 +1667,8 @@
 
     /* ── 재고 메뉴 ── */
     'onInventoryList':   {m:'JS',   u:'inventory',                               lbl:'재고 조회'},
-    'onInventoryMove':   {m:'POST', u:'/api/menu/-on-tonbag-location-upload',    lbl:'위치 이동'},
+    /* v864.3 Phase 4-B: 톤백 위치 매핑 네이티브 Excel 업로드 */
+    'onInventoryMove':   {m:'JS', u:'tonbag-location-upload', lbl:'위치 이동'},
     /* v864.3 Phase 4-B: Allocation 입력(출고 예약) 네이티브 Excel 업로드 */
     'onInventoryAllocation': {m:'JS', u:'allocation-upload', lbl:'Allocation 입력'},
     'onIntegrityCheck':  {m:'GET',  u:'/api/action/integrity-check',             lbl:'정합성 검사'},
@@ -1606,6 +1761,18 @@
       }
       if (conf.u === 'quick-outbound') {
         showQuickOutboundModal();
+        return;
+      }
+      if (conf.u === 'do-update') {
+        showDoUpdateModal();
+        return;
+      }
+      if (conf.u === 'tonbag-location-upload') {
+        showTonbagLocationUploadModal();
+        return;
+      }
+      if (conf.u === 'apply-approved-allocation') {
+        showApplyApprovedAllocationModal();
         return;
       }
       if (conf.u === 'wip') {

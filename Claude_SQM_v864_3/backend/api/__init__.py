@@ -63,6 +63,14 @@ try:
 except Exception as e:
     logging.warning(f"outbound_api router load failed: {e}")
 
+# ── v864.3 Phase 4-B: 톤백 위치 매핑 (F004) 네이티브 ─────
+try:
+    from backend.api.tonbag_api import router as tonbag_api_router
+    app.include_router(tonbag_api_router)
+    logging.info("tonbag_api router loaded OK (POST /api/tonbag/location-upload)")
+except Exception as e:
+    logging.warning(f"tonbag_api router load failed: {e}")
+
 # ── Tier 2 Stage 2: 자동 생성 라우터 include ─────────────────
 try:
     from backend.api.menubar import router as menubar_router

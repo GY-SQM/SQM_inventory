@@ -187,3 +187,43 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                 os.unlink(tmp_path)
             except Exception:
                 pass
+
+
+# ────────────────────────────────────────────────────────────
+# F022 예약 반영 (승인분) — engine.apply_approved_allocation_reservations()
+# ────────────────────────────────────────────────────────────
+@router.post("/apply-approved", summary="📌 예약 반영 — 승인분 실행 (F022)")
+def apply_approved_allocation():
+    """
+    workflow_status=APPROVED 상태의 allocation_plan 을 RESERVED 로 실제 반영.
+    """
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진 사용 불가")
+    if not hasattr(engine, "apply_approved_allocation_reservations"):
+        raise HTTPException(500, "엔진에 apply_approved_allocation_reservations 메서드 없음")
+
+    try:
+        result = engine.apply_approved_allocation_reservations()
+    except Exception as e:
+        logger.exception(f"[apply-approved] 에러: {e}")
+        raise HTTPException(500, f"Engine error: {e}")
+
+    if result.get("success"):
+        applied = int(result.get("applied", 0))
+        return {
+            "ok": True,
+            "data": {"applied": applied, "errors": result.get("errors", [])[:20]},
+            "message": f"{applied}건 승인 예약 반영 완료",
+        }
+    else:
+        return {
+            "ok": False,
+            "data": {"applied": int(result.get("applied", 0)), "errors": result.get("errors", [])},
+            "error": "예약 반영 실패",
+            "detail": {"code": "APPLY_APPROVED_FAILED", "errors": result.get("errors", [])[:10]},
+            "message": "; ".join(result.get("errors", []))[:200] or "예약 반영 실패",
+        }
