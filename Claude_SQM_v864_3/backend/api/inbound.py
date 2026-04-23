@@ -202,6 +202,108 @@ async def bulk_import_excel(file: UploadFile = File(...)):
                 pass
 
 
+# ────────────────────────────────────────────────────────────
+# v864.3 Phase 4-B: 반품 입고 (Excel 업로드) — F007
+# 기존 features.parsers.return_inbound_parser + return_inbound_engine 재사용
+# ────────────────────────────────────────────────────────────
+@router.post("/return-excel", summary="🔄 반품 입고 — Excel 업로드 (F007)")
+async def return_inbound_excel(file: UploadFile = File(...)):
+    """
+    반품 Excel → picking_table 매칭 → inventory 복구 (트랜잭션).
+    - parse_return_inbound_excel 로 파싱
+    - process_return_inbound(engine, parsed) 로 DB 반영 (전체 or 롤백)
+    """
+    if not file.filename:
+        raise HTTPException(400, "파일명이 없습니다.")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in (".xlsx", ".xls"):
+        raise HTTPException(400, f"Excel 파일만 지원 (.xlsx/.xls). 받은 파일: {file.filename}")
+
+    # 엔진 확인
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진이 사용 불가 상태입니다.")
+
+    # 파서/엔진 함수 import
+    try:
+        from features.parsers.return_inbound_parser import parse_return_inbound_excel
+        from features.parsers.return_inbound_engine import process_return_inbound
+    except ImportError as e:
+        raise HTTPException(500, f"반품 엔진 import 실패: {e}")
+
+    tmp_path = None
+    try:
+        content = await file.read()
+        if not content:
+            raise HTTPException(400, "빈 파일")
+
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        logger.info(f"[return-excel] 수신: {file.filename} ({len(content)} bytes)")
+
+        # 1. 파싱
+        parsed = parse_return_inbound_excel(tmp_path)
+        if not parsed.get("parse_ok"):
+            return {
+                "ok": False,
+                "data": {
+                    "filename": file.filename,
+                    "parse_ok": False,
+                    "errors": parsed.get("errors", []),
+                    "items": parsed.get("items", []),
+                },
+                "error": "파싱 실패",
+                "detail": {"code": "PARSE_FAILED", "errors": parsed.get("errors", [])},
+                "message": "Excel 파싱 실패",
+            }
+
+        # 2. DB 반영 (트랜잭션)
+        result = process_return_inbound(engine, parsed, source_file=file.filename)
+
+        if not result.get("success"):
+            return {
+                "ok": False,
+                "data": {
+                    "filename": file.filename,
+                    "returned": result.get("returned", 0),
+                    "errors": result.get("errors", []),
+                    "details": result.get("details", []),
+                },
+                "error": "반품 처리 실패",
+                "detail": {"code": "RETURN_FAILED", "errors": result.get("errors", [])},
+                "message": "반품 처리 중 실패 — 전체 롤백",
+            }
+
+        logger.info(
+            f"[return-excel] 완료: {result.get('returned', 0)}건 반품 복구 ({file.filename})"
+        )
+        return {
+            "ok": True,
+            "data": {
+                "filename": file.filename,
+                "returned": result.get("returned", 0),
+                "details": result.get("details", [])[:50],
+            },
+            "message": f"{result.get('returned', 0)}건 반품 입고 완료",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"[return-excel] 예기치 않은 에러: {e}")
+        raise HTTPException(500, f"Internal error: {e}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+
 
 class PdfInboundRequest(BaseModel):
     pdf_base64: str
