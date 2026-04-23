@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SQM 재고관리 시스템 v8.6.4.3</title>
   <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <link rel="stylesheet" href="css/design-system.css?v=20260421c">
-  <link rel="stylesheet" href="css/v864-layout.css?v=20260421c">
+  <link rel="stylesheet" href="css/design-system.css?v=20260422c">
+  <link rel="stylesheet" href="css/v864-layout.css?v=20260422c">
 </head>
 <body data-theme="light">
 
@@ -46,6 +46,7 @@
       <button data-action="onOutboundConfirm">✅ 출고 확정</button>
       <button data-action="onOutboundHistory">📜 출고 이력</button>
       <button data-action="onOutboundStatus">📋 출고 현황 조회</button>
+      <button data-action="onApprovalHistory">📜 승인 이력 조회</button>
     </div>
   </div>
   <div class="menu-btn" data-menu="재고" tabindex="0" role="menuitem">📦 <span>재고</span> <span class="caret">▼</span>
@@ -54,6 +55,8 @@
       <button data-action="onInventoryMove">🔀 위치 이동</button>
       <button data-action="onInventoryAllocation">📍 위치 배정</button>
       <button data-action="onIntegrityCheck">✅ 정합성 검사</button>
+      <button data-action="onInventoryReport">📦 재고 현황 보고서</button>
+      <button data-action="onInventoryTrend">📊 재고 추이 차트</button>
     </div>
   </div>
   <div class="menu-btn" data-menu="보고서" tabindex="0" role="menuitem">📊 <span>보고서</span> <span class="caret">▼</span>
@@ -69,6 +72,8 @@
       <button data-action="onLotListExcel">📊 LOT 리스트 Excel</button>
       <button data-action="onTonbagListExcel">🎒 톤백리스트 Excel</button>
       <button data-action="onReportExport">📤 Excel 내보내기</button>
+      <button data-action="onMovementHistory">📈 입출고 내역</button>
+      <button data-action="onAuditLog">📋 감사 로그</button>
     </div>
   </div>
   <div class="menu-btn" data-menu="설정/도구" tabindex="0" role="menuitem">⚙️ <span>설정/도구</span> <span class="caret">▼</span>
@@ -80,16 +85,23 @@
       <button data-action="onOptimizeDb">⚡ DB 최적화</button>
       <button data-action="onCleanupLogs">📋 로그 정리</button>
       <button data-action="onDbInfo">ℹ️ DB 정보</button>
-      <button data-action="onOnBackup">💾 백업</button>
+      <button data-action="onOnBackup">💾 백업 생성</button>
+      <button data-action="onBackupList">📋 백업 목록</button>
       <button data-action="onRestore">↩️ 복원</button>
       <button data-action="onAiTools">🤖 AI 도구</button>
+      <button data-action="onSaveWindowSize">💾 창 크기 저장</button>
+      <button data-action="onResetWindowSize">↩️ 창 크기 초기화</button>
     </div>
   </div>
   <div class="menu-btn" data-menu="도움말" tabindex="0" role="menuitem">❓ <span>도움말</span> <span class="caret">▼</span>
     <div class="menu-dropdown">
       <button data-action="onHelp">📖 사용자 매뉴얼</button>
       <button data-action="onShortcuts">⌨️ 단축키</button>
+      <button data-action="onStatusGuide">📊 STATUS 상태값 안내</button>
+      <button data-action="onBackupGuide">💾 백업/복구 가이드</button>
       <button data-action="onAbout">ℹ️ 정보</button>
+      <button data-action="onGoScanTab">📷 스캔 탭으로 이동</button>
+      <button data-action="onGoAllocationTab">📋 배정 탭으로 이동</button>
     </div>
   </div>
 
@@ -132,53 +144,80 @@
     <button class="side-btn" data-route="scan"><span class="side-icon">📷</span><span class="side-label">Scan</span></button>
   </aside>
 
-  <!-- 메인 페이지 컨테이너 (라우터가 여기 렌더) -->
-  <main class="main-area">
+  <!-- 메인 컨텐츠 영역 -->
+  <div class="main-wrapper">
 
-    <!-- 상단 제목 + 우측 돈백/LOT/MT 라디오 -->
-    <div class="main-header">
-      <h2 class="main-title">재고 및 확인</h2>
-      <div class="view-mode-group" role="radiogroup" aria-label="뷰 모드">
-        <label class="view-mode-item">
-          <input type="radio" name="view-mode" data-view-mode="tonbag"> 🏷️ 돈백
-        </label>
-        <label class="view-mode-item">
-          <input type="radio" name="view-mode" data-view-mode="lot"> 📦 LOT
-        </label>
-        <label class="view-mode-item">
-          <input type="radio" name="view-mode" data-view-mode="mt" checked> 📊 MT
-        </label>
-      </div>
+    <!-- 우측 단위 라디오 (돈백/LOT/MT) -->
+    <div class="view-toggle">
+      <label><input type="radio" name="view-unit" value="tonbag"> 🎒 돈백</label>
+      <label><input type="radio" name="view-unit" value="lot"> 📦 LOT</label>
+      <label><input type="radio" name="view-unit" value="mt" checked> 📊 MT</label>
     </div>
 
-    <!-- 라우터가 교체하는 페이지 컨테이너 -->
-    <section id="page-container" class="page-container">
-      <!-- 초기 로드 시 Dashboard 가 자동 마운트됨 -->
-      <div class="loading">페이지 로드 중…</div>
-    </section>
+    <!-- 대시보드 전용 컨테이너 (renderPage가 건드리지 않음) -->
+    <div id="dashboard-container" class="page-content">
+      <div id="kpi-row" class="kpi-row">
+        <div class="kpi-card" id="kpi-inbound">
+          <div class="kpi-icon">📥</div>
+          <div class="kpi-label">오늘 입고 (MT)</div>
+          <div class="kpi-value" id="kpi-inbound-val">--</div>
+        </div>
+        <div class="kpi-card" id="kpi-outbound-today">
+          <div class="kpi-icon">📤</div>
+          <div class="kpi-label">오늘 출고 (MT)</div>
+          <div class="kpi-value" id="kpi-outbound-today-val">--</div>
+        </div>
+        <div class="kpi-card" id="kpi-stock-lots">
+          <div class="kpi-icon">📦</div>
+          <div class="kpi-label">현재 재고 LOT</div>
+          <div class="kpi-value" id="kpi-stock-lots-val">--</div>
+        </div>
+        <div class="kpi-card" id="kpi-unassigned">
+          <div class="kpi-icon">📍</div>
+          <div class="kpi-label">위치 미배정</div>
+          <div class="kpi-value" id="kpi-unassigned-val">--</div>
+        </div>
+      </div>
+      <div id="dashboard-detail" style="padding:8px 16px;"></div>
+    </div>
+    <!-- 페이지 컨텐츠 (사이드바 탭 전환용 — dashboard 전환 시 숨김) -->
+    <div id="page-container" class="page-content" style="display:none;"></div>
 
-    <!-- ALERTS 패널 (Golden Reference 하단) -->
-    <section class="alerts-panel" id="alerts-container">
-      <!-- components/alerts.js 가 여기 렌더 -->
-    </section>
+  </div><!-- /.main-wrapper -->
 
-  </main>
+</div><!-- /.app-body -->
+
+<!-- ALERTS 패널 -->
+<div id="alerts-container" class="alerts-panel">
+  <div id="alerts-content" class="alerts-content">🔔 알림 로딩 중...</div>
 </div>
 
-<!-- ════════════════════════════════════════════════════════════════════ -->
-<!-- 상태바 (Golden Reference: 위치 미배정 | 스캔 실패율 | LOT 평균 재고기간 | 자동 새로고침) -->
-<!-- ════════════════════════════════════════════════════════════════════ -->
-<footer class="statusbar-wrap" id="statusbar-container">
-  <!-- components/statusbar.js 가 여기 렌더 -->
+<!-- 상태바 -->
+<footer class="statusbar" id="statusbar-container">
+  <span id="status-engine">⏳ 엔진 연결 중...</span>
+  <span class="status-sep">|</span>
+  <span id="status-db">DB --</span>
+  <span class="status-sep">|</span>
+  <span id="status-version">v8.6.4.3</span>
+  <span class="status-sep">|</span>
+  <span id="status-time">--:--</span>
 </footer>
 
-<!-- Toast Container -->
+<!-- Toast 컨테이너 -->
 <div id="toast-container"></div>
 
-<!-- ════════════════════════════════════════════════════════════════════ -->
-<script src="js/sqm-inline.js?v=20260421c"></script>
-<!-- ESM main.js 비활성화 — sqm-inline.js 만으로 충분 -->
-<!-- <script type="module" src="js/main.js"></script> -->
+<!-- 데이터 모달 -->
+<div id="data-modal" class="data-modal" style="display:none;">
+  <div class="data-modal-inner">
+    <div class="data-modal-header">
+      <span id="data-modal-title">데이터</span>
+      <button onclick="document.getElementById('data-modal').style.display='none'">✕</button>
+    </div>
+    <div id="data-modal-body" class="data-modal-body"></div>
+  </div>
+</div>
 
+<!-- JS: sqm-inline (메인 핸들러) -->
+<script src="js/sqm-inline.js?v=864.3.13"></script>
 </body>
 </html>
