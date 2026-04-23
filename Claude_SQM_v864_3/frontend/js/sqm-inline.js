@@ -1034,6 +1034,151 @@
     document.getElementById('sqm-modal-content').innerHTML='<h2 style="margin-bottom:16px">'+escapeHtml(title)+'</h2>'+html;
   }
 
+  /* ===================================================
+     8b. 수동 입고 (Excel 업로드) — Phase 4-B 네이티브 구현
+     =================================================== */
+  function showInboundManualUploadModal() {
+    var html = [
+      '<div style="max-width:640px">',
+      '  <h2 style="margin:0 0 12px 0">📊 수동 입고 — Excel 업로드</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 16px 0;font-size:.9rem">',
+      '    엑셀 파일(.xlsx/.xls)을 선택하세요. 컬럼: <code>lot_no, sap_no, bl_no, container_no, product, net_weight, stock_date</code> 등',
+      '  </p>',
+      '  <div id="inb-drop-zone" style="border:2px dashed var(--border);border-radius:8px;padding:32px 16px;text-align:center;background:var(--bg-hover);cursor:pointer;margin-bottom:16px">',
+      '    <div style="font-size:2.5rem;margin-bottom:8px">📁</div>',
+      '    <div id="inb-file-name" style="color:var(--text-muted)">클릭 또는 파일을 여기에 드롭하세요</div>',
+      '  </div>',
+      '  <input type="file" id="inb-file-input" accept=".xlsx,.xls" style="display:none">',
+      '  <div id="inb-progress" style="display:none;margin-bottom:16px">',
+      '    <div style="background:var(--bg-hover);border-radius:4px;height:8px;overflow:hidden">',
+      '      <div id="inb-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width .3s"></div>',
+      '    </div>',
+      '    <div id="inb-progress-text" style="font-size:.85rem;color:var(--text-muted);margin-top:4px">준비 중...</div>',
+      '  </div>',
+      '  <div id="inb-result" style="margin-bottom:16px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="inb-cancel-btn" class="btn btn-ghost">닫기</button>',
+      '    <button id="inb-upload-btn" class="btn btn-primary" disabled>업로드</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+
+    showDataModal('', html);
+
+    var fileInput = document.getElementById('inb-file-input');
+    var dropZone  = document.getElementById('inb-drop-zone');
+    var fileName  = document.getElementById('inb-file-name');
+    var uploadBtn = document.getElementById('inb-upload-btn');
+    var cancelBtn = document.getElementById('inb-cancel-btn');
+    var progress  = document.getElementById('inb-progress');
+    var progressBar = document.getElementById('inb-progress-bar');
+    var progressText = document.getElementById('inb-progress-text');
+    var resultBox = document.getElementById('inb-result');
+
+    var selectedFile = null;
+
+    function setFile(f) {
+      if (!f) return;
+      var okExt = /\.(xlsx|xls)$/i.test(f.name);
+      if (!okExt) {
+        showToast('error', 'Excel 파일(.xlsx/.xls)만 가능합니다. 받은 파일: ' + f.name);
+        return;
+      }
+      selectedFile = f;
+      fileName.innerHTML = '✅ <strong>' + escapeHtml(f.name) + '</strong> (' + Math.round(f.size/1024) + ' KB)';
+      uploadBtn.disabled = false;
+    }
+
+    dropZone.addEventListener('click', function(){ fileInput.click(); });
+    fileInput.addEventListener('change', function(e){
+      if (e.target.files && e.target.files[0]) setFile(e.target.files[0]);
+    });
+    dropZone.addEventListener('dragover', function(e){ e.preventDefault(); dropZone.style.background='var(--bg-active)'; });
+    dropZone.addEventListener('dragleave', function(e){ dropZone.style.background='var(--bg-hover)'; });
+    dropZone.addEventListener('drop', function(e){
+      e.preventDefault();
+      dropZone.style.background='var(--bg-hover)';
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+    });
+
+    cancelBtn.addEventListener('click', function(){
+      document.getElementById('sqm-modal').style.display = 'none';
+    });
+
+    uploadBtn.addEventListener('click', function(){
+      if (!selectedFile) return;
+      uploadBtn.disabled = true;
+      cancelBtn.disabled = true;
+      progress.style.display = 'block';
+      progressBar.style.width = '10%';
+      progressText.textContent = '업로드 중...';
+      resultBox.innerHTML = '';
+
+      var form = new FormData();
+      form.append('file', selectedFile, selectedFile.name);
+
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', API + '/api/inbound/bulk-import-excel');
+      xhr.upload.onprogress = function(e){
+        if (e.lengthComputable) {
+          var pct = Math.round((e.loaded / e.total) * 70) + 10;  // 10~80%
+          progressBar.style.width = pct + '%';
+          progressText.textContent = '업로드 중... ' + pct + '%';
+        }
+      };
+      xhr.onload = function(){
+        progressBar.style.width = '100%';
+        cancelBtn.disabled = false;
+        var body;
+        try { body = JSON.parse(xhr.responseText); } catch(e){ body = null; }
+        if (xhr.status >= 200 && xhr.status < 300 && body && body.ok) {
+          var d = body.data || {};
+          progressText.textContent = '완료: 성공 ' + (d.success_count||0) + ' / 실패 ' + (d.fail_count||0) + ' / 총 ' + (d.total||0);
+          var errHtml = '';
+          if (d.errors && d.errors.length) {
+            errHtml = '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--warning)">⚠️ ' + d.errors.length + '건 실패 상세</summary><table class="data-table" style="margin-top:8px;font-size:.85rem"><thead><tr><th>행</th><th>LOT</th><th>사유</th></tr></thead><tbody>' +
+              d.errors.map(function(er){
+                return '<tr><td>'+er.row+'</td><td>'+escapeHtml(er.lot_no||'-')+'</td><td>'+escapeHtml(er.reason||'')+'</td></tr>';
+              }).join('') + '</tbody></table></details>';
+          }
+          resultBox.innerHTML =
+            '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)">' +
+            '<div style="font-weight:600;margin-bottom:4px">✅ ' + escapeHtml(body.message||'완료') + '</div>' +
+            '<div style="color:var(--text-muted);font-size:.85rem">파일: ' + escapeHtml(d.filename||'-') + ' · 헤더 행: ' + (d.header_row!=null?d.header_row+1:'?') + ' · 매핑 컬럼: ' + ((d.matched_columns||[]).join(', ')) + '</div>' +
+            errHtml +
+            '</div>';
+          showToast('success', body.message || '입고 완료');
+          dbgLog('🟢','BULK-IMPORT OK', body.message, '#66bb6a');
+          // inventory 페이지 새로고침
+          if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+          if (typeof loadKpi === 'function') loadKpi();
+        } else {
+          var errMsg = (body && (body.detail || body.error || body.message)) || ('HTTP ' + xhr.status);
+          progressText.textContent = '실패';
+          progressBar.style.background = 'var(--danger)';
+          resultBox.innerHTML =
+            '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)">' +
+            '<div style="font-weight:600">❌ 업로드 실패</div>' +
+            '<div style="color:var(--text-muted);font-size:.85rem;margin-top:4px">' + escapeHtml(String(errMsg)) + '</div>' +
+            '</div>';
+          showToast('error', '업로드 실패: ' + errMsg);
+          dbgLog('🔴','BULK-IMPORT FAIL', String(errMsg), '#ef5350');
+          uploadBtn.disabled = false;
+        }
+      };
+      xhr.onerror = function(){
+        progressText.textContent = '네트워크 에러';
+        progressBar.style.background = 'var(--danger)';
+        resultBox.innerHTML = '<div style="padding:12px;color:var(--danger)">네트워크 에러 — API 서버를 확인하세요</div>';
+        showToast('error', '네트워크 에러');
+        uploadBtn.disabled = false;
+        cancelBtn.disabled = false;
+      };
+      xhr.send(form);
+    });
+  }
+  window.showInboundManualUploadModal = showInboundManualUploadModal;
+
   function renderInfoModal(title, endpoint) {
     showDataModal(title,'<div style="padding:20px;text-align:center">Loading...</div>');
     apiGet(endpoint).then(function(res){
@@ -1136,7 +1281,8 @@
 
     /* ── 입고 메뉴 ── */
     'onOnPdfInbound':    {m:'JS',   u:'scan',                                    lbl:'PDF 스캔 입고'},
-    'onInboundManual':   {m:'POST', u:'/api/menu/-bulk-import-inventory-simple',  lbl:'수동 입고'},
+    /* v864.3 Phase 4-B: 수동 입고는 네이티브 모달로 처리 (tkinter filedialog 대체) */
+    'onInboundManual':   {m:'JS', u:'inbound-upload', lbl:'수동 입고'},
     'onInboundList':     {m:'JS',   u:'inbound',                                  lbl:'입고 목록'},
     'onInboundCancel':   {m:'JS',   u:'wip',                                     lbl:'입고 취소'},
 
@@ -1224,6 +1370,11 @@
       if (conf.u === 'exit') {
         if (window.pywebview && window.pywebview.api) window.pywebview.api.exit_app();
         else window.close();
+        return;
+      }
+      /* v864.3 Phase 4-B: 네이티브 모달 액션 */
+      if (conf.u === 'inbound-upload') {
+        showInboundManualUploadModal();
         return;
       }
       if (conf.u === 'wip') {

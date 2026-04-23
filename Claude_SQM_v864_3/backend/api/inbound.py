@@ -1,0 +1,293 @@
+# -*- coding: utf-8 -*-
+"""
+SQM v864.3 — Inbound API
+POST /api/inbound/pdf  : base64 PDF decode -> pdf_parser -> DB save
+Phase 4-D
+"""
+import base64
+import logging
+import tempfile
+import os
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, UploadFile, File
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/inbound", tags=["inbound"])
+
+
+# ────────────────────────────────────────────────────────────
+# v864.3 Phase 4-B: 수동 입고 (Excel 업로드) — PyWebView 네이티브
+# F002: 엑셀 파일 수동 입고
+# tkinter filedialog → HTML <input type="file"> + multipart/form-data
+# ────────────────────────────────────────────────────────────
+_INBOUND_COLUMN_MAP = {
+    # 표준 키 → 허용 Excel 컬럼명 (소문자 비교)
+    "lot_no":         ["lot_no", "lot", "lot no", "lot번호", "로트", "로트번호"],
+    "sap_no":         ["sap_no", "sap", "sap no", "sap번호"],
+    "bl_no":          ["bl_no", "bl", "bl no", "b/l", "선하증권"],
+    "container_no":   ["container_no", "container", "컨테이너", "컨테이너번호"],
+    "product":        ["product", "product_name", "품목", "제품", "상품"],
+    "product_code":   ["product_code", "제품코드", "품목코드"],
+    "mxbg_pallet":    ["mxbg_pallet", "pallet", "팔레트", "mx_bag_pallet"],
+    "net_weight":     ["net_weight", "net", "net(mt)", "net_kg", "순중량", "중량"],
+    "gross_weight":   ["gross_weight", "gross", "gross(mt)", "gross_kg", "총중량"],
+    "warehouse":      ["warehouse", "창고", "warehouse_name"],
+    "arrival_date":   ["arrival_date", "arrival", "도착일"],
+    "stock_date":     ["stock_date", "inbound_date", "입고일", "재고일"],
+    "lot_sqm":        ["lot_sqm"],
+    "salar_invoice_no": ["salar_invoice_no", "invoice", "인보이스"],
+    "ship_date":      ["ship_date", "출항일", "선적일"],
+    "con_return":     ["con_return", "반납일"],
+    "free_time":      ["free_time", "프리타임"],
+}
+
+
+def _match_columns(df_columns) -> dict:
+    """Excel 컬럼명을 표준 키로 매핑. {표준키: 원본컬럼} 반환."""
+    result = {}
+    lowered = {str(c).strip().lower(): c for c in df_columns}
+    for std_key, aliases in _INBOUND_COLUMN_MAP.items():
+        for alias in aliases:
+            a = alias.strip().lower()
+            if a in lowered:
+                result[std_key] = lowered[a]
+                break
+    return result
+
+
+def _clean_value(v: Any) -> Any:
+    """pandas NaN / 빈 문자열 정리."""
+    try:
+        import math
+        if v is None:
+            return None
+        if isinstance(v, float) and math.isnan(v):
+            return None
+    except Exception:
+        pass
+    if isinstance(v, str):
+        s = v.strip()
+        return s if s else None
+    return v
+
+
+@router.post("/bulk-import-excel", summary="📊 수동 입고 — Excel 업로드 (F002)")
+async def bulk_import_excel(file: UploadFile = File(...)):
+    """
+    PyWebView 네이티브 수동 입고.
+    - multipart/form-data 로 Excel 파일 업로드
+    - pandas 로 header=1 (수동 입고 템플릿) 우선, 실패 시 header=0 fallback
+    - 각 행을 engine.add_inventory_from_dict(row_dict) 호출
+    - 결과: {success_count, fail_count, total, errors: [...]}
+    """
+    # 1. 입력 검증
+    if not file.filename:
+        raise HTTPException(400, "파일명이 없습니다.")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in (".xlsx", ".xls"):
+        raise HTTPException(400, f"Excel 파일만 지원 (.xlsx/.xls). 받은 파일: {file.filename}")
+
+    # 2. pandas 확인
+    try:
+        import pandas as pd
+    except ImportError:
+        raise HTTPException(500, "pandas 미설치 — pip install pandas openpyxl")
+
+    # 3. 엔진 확인
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진이 사용 불가 상태입니다.")
+
+    # 4. 파일을 임시 저장
+    tmp_path = None
+    try:
+        content = await file.read()
+        if not content:
+            raise HTTPException(400, "빈 파일")
+
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        logger.info(f"[bulk-import] 수신: {file.filename} ({len(content)} bytes) -> {tmp_path}")
+
+        # 5. Excel 읽기 — 수동 입고 템플릿(header=1) 우선, 실패 시 header=0
+        df = None
+        header_used = None
+        for header_row in (1, 0, 2):
+            try:
+                candidate = pd.read_excel(tmp_path, header=header_row)
+                if candidate.empty:
+                    continue
+                # 컬럼 매핑이 최소 2개 이상 되면 성공으로 간주
+                matched = _match_columns(candidate.columns)
+                if len(matched) >= 2:
+                    df = candidate
+                    header_used = header_row
+                    break
+            except Exception as e:
+                logger.debug(f"[bulk-import] header={header_row} 실패: {e}")
+                continue
+        if df is None or df.empty:
+            raise HTTPException(400, "Excel 헤더를 인식할 수 없습니다. (header=0/1/2 시도 실패) 템플릿을 확인해주세요.")
+
+        col_map = _match_columns(df.columns)
+        logger.info(f"[bulk-import] header={header_used}, {len(df)}행, 매핑: {list(col_map.keys())}")
+        if "lot_no" not in col_map:
+            raise HTTPException(400, f"필수 컬럼 'lot_no' 없음. 감지된 컬럼: {list(df.columns)}")
+
+        # 6. 행별 엔진 호출
+        success_count = 0
+        fail_count = 0
+        errors = []
+        for idx, row in df.iterrows():
+            data = {}
+            for std_key, orig_col in col_map.items():
+                data[std_key] = _clean_value(row[orig_col])
+            # lot_no 필수
+            if not data.get("lot_no"):
+                fail_count += 1
+                errors.append({"row": int(idx) + 2, "reason": "lot_no 빈 값"})
+                continue
+            try:
+                result = engine.add_inventory_from_dict(data)
+                if result.get("success"):
+                    success_count += 1
+                else:
+                    fail_count += 1
+                    errors.append({
+                        "row": int(idx) + 2,
+                        "lot_no": str(data.get("lot_no", "")),
+                        "reason": result.get("message") or result.get("error") or "unknown",
+                    })
+            except Exception as e:
+                fail_count += 1
+                errors.append({
+                    "row": int(idx) + 2,
+                    "lot_no": str(data.get("lot_no", "")),
+                    "reason": f"exception: {e}",
+                })
+                logger.warning(f"[bulk-import] row {idx} 실패: {e}")
+
+        logger.info(f"[bulk-import] 완료: 성공 {success_count} / 실패 {fail_count} / 총 {len(df)}")
+
+        return {
+            "ok": True,
+            "data": {
+                "filename": file.filename,
+                "total": int(len(df)),
+                "success_count": success_count,
+                "fail_count": fail_count,
+                "header_row": header_used,
+                "matched_columns": list(col_map.keys()),
+                "errors": errors[:50],  # 최대 50건만
+            },
+            "message": f"{success_count}건 입고 완료 / {fail_count}건 실패",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"[bulk-import] 예기치 않은 에러: {e}")
+        raise HTTPException(500, f"Internal error: {e}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+
+
+class PdfInboundRequest(BaseModel):
+    pdf_base64: str
+    filename: str = "upload.pdf"
+
+
+@router.post("/pdf")
+def pdf_inbound(req: PdfInboundRequest):
+    """
+    PDF 스캔 입고 처리.
+    1. base64 디코드 -> 임시 파일
+    2. parsers.pdf_parser 로 문서 파싱
+    3. 파싱 결과 DB 저장 (engine_modules 재활용)
+    4. 결과 반환
+    """
+    # 1. base64 decode
+    try:
+        pdf_bytes = base64.b64decode(req.pdf_base64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64: {e}")
+
+    if len(pdf_bytes) < 4 or pdf_bytes[:4] != b"%PDF":
+        raise HTTPException(status_code=400, detail="Not a valid PDF file")
+
+    # 2. 임시 파일로 저장
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(pdf_bytes)
+            tmp_path = tmp.name
+
+        # 3. pdf_parser 시도
+        parsed = None
+        parse_error = None
+        try:
+            from parsers.pdf_parser import SQMPdfParser
+            parser = SQMPdfParser()
+            parsed = parser.parse(tmp_path)
+            logger.info(f"PDF parsed OK: {req.filename}, result type: {type(parsed).__name__}")
+        except ImportError:
+            logger.warning("pdf_parser not available (PyMuPDF missing?)")
+            parse_error = "pdf_parser unavailable"
+        except Exception as e:
+            logger.warning(f"pdf_parser error: {e}")
+            parse_error = str(e)
+
+        # 4. DB 저장 시도
+        saved_count = 0
+        if parsed is not None:
+            try:
+                from features.inbound import save_inbound_from_pdf
+                saved_count = save_inbound_from_pdf(parsed)
+            except ImportError:
+                logger.warning("features.inbound.save_inbound_from_pdf not found — skip DB save")
+            except Exception as e:
+                logger.warning(f"DB save error: {e}")
+
+        # 5. 응답
+        if parsed is not None:
+            return {
+                "success": True,
+                "message": f"PDF parsed OK ({req.filename}). DB rows saved: {saved_count}",
+                "filename": req.filename,
+                "size_bytes": len(pdf_bytes),
+                "parse_type": type(parsed).__name__,
+                "saved_count": saved_count,
+            }
+        else:
+            # parse failed — still accept the file, return info
+            return {
+                "success": True,
+                "message": f"PDF received ({req.filename}, {len(pdf_bytes)} bytes). Parser: {parse_error or 'ok'}. Manual review may be needed.",
+                "filename": req.filename,
+                "size_bytes": len(pdf_bytes),
+                "parse_error": parse_error,
+                "saved_count": 0,
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"pdf_inbound unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal error: {e}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
