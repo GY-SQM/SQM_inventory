@@ -328,3 +328,139 @@ def quick_outbound_paste(req: QuickOutboundPasteRequest):
         },
         "message": f"{success_count}건 출고 / {fail_count}건 실패 (총 {round(total_weight_kg/1000.0, 2)} MT)",
     }
+
+
+# ────────────────────────────────────────────────────────────
+# F028 출고 확정 — PICKED → OUTBOUND (SOLD)
+# engine.confirm_outbound(lot_no, force_all) 호출
+# ────────────────────────────────────────────────────────────
+class ConfirmOutboundRequest(BaseModel):
+    lot_no: str = Field("", description="LOT 번호 (빈 값이면 전체 확정 — force_all 필수)")
+    force_all: bool = Field(False, description="lot_no 빈 값일 때 전체 확정 명시")
+
+
+@router.get("/picked-summary", summary="출고 확정 전 PICKED 톤백 요약 (F028 보조)")
+def picked_summary(lot_no: str = ""):
+    """
+    PICKED 상태 톤백의 요약 반환 — 확정 전 미리보기용.
+    lot_no 빈 값이면 전체 LOT 그룹.
+    """
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진 사용 불가")
+
+    lot_no = (lot_no or "").strip()
+    try:
+        if lot_no:
+            rows = engine.db.fetchall(
+                """SELECT lot_no, COUNT(*) AS cnt, COALESCE(SUM(weight), 0) AS total_kg,
+                          picked_to, sale_ref
+                   FROM inventory_tonbag
+                   WHERE status = 'PICKED' AND lot_no = ?
+                   GROUP BY lot_no, picked_to, sale_ref""",
+                (lot_no,),
+            )
+        else:
+            rows = engine.db.fetchall(
+                """SELECT lot_no, COUNT(*) AS cnt, COALESCE(SUM(weight), 0) AS total_kg,
+                          picked_to, sale_ref
+                   FROM inventory_tonbag
+                   WHERE status = 'PICKED'
+                   GROUP BY lot_no, picked_to, sale_ref
+                   ORDER BY lot_no"""
+            )
+    except Exception as e:
+        logger.warning(f"[picked-summary] 조회 실패: {e}")
+        raise HTTPException(500, f"조회 실패: {e}")
+
+    items = []
+    total_count = 0
+    total_kg = 0.0
+    for r in rows or []:
+        c = int(r["cnt"] if hasattr(r, "__getitem__") else r[0])
+        kg = float(r["total_kg"] if hasattr(r, "__getitem__") else r[1])
+        items.append({
+            "lot_no": r["lot_no"],
+            "count": c,
+            "total_weight_kg": kg,
+            "total_weight_mt": round(kg / 1000.0, 3),
+            "picked_to": r["picked_to"] or "",
+            "sale_ref": r["sale_ref"] or "",
+        })
+        total_count += c
+        total_kg += kg
+
+    return {
+        "ok": True,
+        "data": {
+            "items": items,
+            "total_lots": len(items),
+            "total_count": total_count,
+            "total_weight_kg": total_kg,
+            "total_weight_mt": round(total_kg / 1000.0, 3),
+        },
+    }
+
+
+@router.post("/confirm", summary="✅ 출고 확정 — PICKED → OUTBOUND (F028)")
+def confirm_outbound_endpoint(req: ConfirmOutboundRequest):
+    """
+    engine.confirm_outbound(lot_no, force_all) 호출.
+    - lot_no 지정: 해당 LOT의 PICKED 톤백 OUTBOUND 확정
+    - lot_no 없고 force_all=True: 전체 PICKED 일괄 확정 (위험)
+    """
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None or not hasattr(engine, "confirm_outbound"):
+        raise HTTPException(500, "엔진 confirm_outbound 없음")
+
+    lot_no = (req.lot_no or "").strip() or None
+    force_all = bool(req.force_all)
+
+    if not lot_no and not force_all:
+        return {
+            "ok": False,
+            "data": {"confirmed": 0, "errors": ["lot_no 미지정 + force_all=False → 차단"]},
+            "error": "전체 확정은 force_all=True 명시 필수",
+            "detail": {"code": "CONFIRM_ALL_BLOCKED"},
+            "message": "lot_no 지정 또는 force_all=true 필요",
+        }
+
+    try:
+        result = engine.confirm_outbound(lot_no=lot_no, force_all=force_all)
+    except Exception as e:
+        logger.exception(f"[confirm-outbound] 에러: {e}")
+        raise HTTPException(500, f"Engine error: {e}")
+
+    if result.get("success"):
+        confirmed = int(result.get("confirmed", 0))
+        logger.info(
+            f"[confirm-outbound] OK: lot_no={lot_no or '(ALL)'}, confirmed={confirmed}"
+        )
+        return {
+            "ok": True,
+            "data": {
+                "lot_no": lot_no or "(ALL)",
+                "confirmed": confirmed,
+                "warnings": result.get("warnings", []),
+            },
+            "message": f"{confirmed}개 톤백 출고 확정 완료",
+        }
+    else:
+        errors = result.get("errors", [])
+        return {
+            "ok": False,
+            "data": {
+                "lot_no": lot_no or "(ALL)",
+                "confirmed": int(result.get("confirmed", 0)),
+                "errors": errors,
+            },
+            "error": "출고 확정 실패",
+            "detail": {"code": "CONFIRM_FAILED", "errors": errors},
+            "message": result.get("message") or ("; ".join(errors) if errors else "확정 실패"),
+        }

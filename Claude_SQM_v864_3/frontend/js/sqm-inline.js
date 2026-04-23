@@ -1807,6 +1807,122 @@
   }
   window.showQuickOutboundPasteModal = showQuickOutboundPasteModal;
 
+  /* ===================================================
+     8i. F028 출고 확정 — PICKED → OUTBOUND
+     =================================================== */
+  function showOutboundConfirmModal() {
+    var html = [
+      '<div style="max-width:640px">',
+      '  <h2 style="margin:0 0 12px 0">✅ 출고 확정 — PICKED → OUTBOUND</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 12px 0;font-size:.9rem">',
+      '    PICKED 상태인 톤백을 실제 출고(OUTBOUND)로 확정합니다.',
+      '  </p>',
+      '  <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:10px">',
+      '    <label style="font-weight:600">LOT 번호</label>',
+      '    <input type="text" id="oc-lot" placeholder="비워두면 전체 — force_all 필수" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '  </div>',
+      '  <label style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:10px;color:var(--warning)">',
+      '    <input type="checkbox" id="oc-force-all"> ⚠️ <strong>force_all</strong> — LOT 번호 없이 <u>전체 PICKED 일괄 확정</u> (위험)',
+      '  </label>',
+      '  <div id="oc-preview" style="padding:8px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;color:var(--text-muted);margin-bottom:12px;min-height:40px">',
+      '    LOT 번호 입력 또는 force_all 체크 시 PICKED 톤백 요약이 표시됩니다',
+      '  </div>',
+      '  <div id="oc-result" style="margin-bottom:12px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="oc-cancel" class="btn btn-ghost">닫기</button>',
+      '    <button id="oc-submit" class="btn btn-primary" disabled>출고 확정</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+
+    var lot = document.getElementById('oc-lot');
+    var force = document.getElementById('oc-force-all');
+    var preview = document.getElementById('oc-preview');
+    var result = document.getElementById('oc-result');
+    var submit = document.getElementById('oc-submit');
+    var cancel = document.getElementById('oc-cancel');
+
+    var _deb = null;
+    function loadSummary() {
+      var q = lot.value.trim();
+      preview.innerHTML = '⏳ 조회 중...';
+      var url = '/api/outbound/picked-summary' + (q ? ('?lot_no=' + encodeURIComponent(q)) : '');
+      apiGet(url).then(function(res){
+        if (!res || !res.ok) { preview.innerHTML = '❌ 조회 실패'; submit.disabled = true; return; }
+        var d = res.data || {};
+        if ((d.total_count||0) === 0) {
+          preview.innerHTML = '<span style="color:var(--warning)">⚠️ PICKED 상태 톤백이 없습니다 — 확정할 대상 없음</span>';
+          submit.disabled = true;
+          return;
+        }
+        var items = (d.items||[]).slice(0, 5).map(function(it){
+          return '<tr><td class="mono-cell" style="color:var(--accent)">'+escapeHtml(it.lot_no)+'</td><td>'+it.count+'</td><td>'+(it.total_weight_mt||0).toFixed(3)+'</td><td>'+escapeHtml(it.picked_to||'-')+'</td><td class="mono-cell">'+escapeHtml(it.sale_ref||'-')+'</td></tr>';
+        }).join('');
+        var more = (d.items||[]).length > 5 ? '<tr><td colspan="5" style="text-align:center;color:var(--text-muted)">...외 '+((d.items||[]).length-5)+'개 LOT</td></tr>' : '';
+        preview.innerHTML =
+          '<div style="font-weight:600;margin-bottom:6px;color:var(--accent)">대상: ' + (d.total_lots||0) + ' LOT · ' + (d.total_count||0) + '개 톤백 · ' + (d.total_weight_mt||0).toFixed(3) + ' MT</div>' +
+          '<table class="data-table" style="font-size:.85rem"><thead><tr><th>LOT</th><th>개수</th><th>MT</th><th>고객</th><th>sale_ref</th></tr></thead><tbody>' + items + more + '</tbody></table>';
+        // submit enable 조건: lot_no 있거나 force_all true
+        submit.disabled = !(q || force.checked);
+      }).catch(function(e){
+        preview.innerHTML = '❌ 조회 실패: ' + escapeHtml(e.message||String(e));
+        submit.disabled = true;
+      });
+    }
+    function scheduleSummary() {
+      if (_deb) clearTimeout(_deb);
+      _deb = setTimeout(loadSummary, 300);
+    }
+    lot.addEventListener('input', scheduleSummary);
+    force.addEventListener('change', loadSummary);
+    // 초기 로드 — 전체 PICKED
+    loadSummary();
+
+    cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+    submit.addEventListener('click', function(){
+      var payload = { lot_no: lot.value.trim(), force_all: force.checked };
+      var msg = payload.lot_no ? ('LOT ' + payload.lot_no + ' 의 PICKED 톤백을 OUTBOUND 로 확정합니다.') :
+                                  '⚠️ LOT 미지정 — 전체 PICKED 일괄 확정입니다! 매우 위험.';
+      if (!confirm(msg + '\n계속하시겠습니까?')) return;
+
+      submit.disabled = true; cancel.disabled = true;
+      result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 확정 중...</div>';
+
+      apiPost('/api/outbound/confirm', payload).then(function(res){
+        if (res && res.ok) {
+          var d = res.data || {};
+          result.innerHTML =
+            '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)">' +
+            '<div style="font-weight:600">✅ ' + escapeHtml(res.message||'확정 완료') + '</div>' +
+            '<div style="color:var(--text-muted);font-size:.85rem;margin-top:4px">LOT: ' + escapeHtml(d.lot_no||'-') + ' · 확정 <strong>' + (d.confirmed||0) + '</strong>개</div>' +
+            '</div>';
+          showToast('success', res.message || '확정 완료');
+          dbgLog('🟢','CONFIRM-OUTBOUND OK', res.message, '#66bb6a');
+          if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+          if (typeof loadKpi === 'function') loadKpi();
+          loadSummary();
+          cancel.disabled = false;
+        } else {
+          var errs = (res && res.data && res.data.errors) || [];
+          var msg2 = (res && (res.message || res.error)) || '실패';
+          result.innerHTML =
+            '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)">' +
+            '<div style="font-weight:600">❌ ' + escapeHtml(msg2) + '</div>' +
+            (errs.length ? '<ul style="margin:8px 0 0 18px;color:var(--text-muted);font-size:.85rem">' + errs.map(function(e){return '<li>'+escapeHtml(e)+'</li>';}).join('') + '</ul>' : '') +
+            '</div>';
+          showToast('error', msg2);
+          submit.disabled = false; cancel.disabled = false;
+        }
+      }).catch(function(e){
+        result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+        showToast('error', '실패: ' + (e.message||String(e)));
+        submit.disabled = false; cancel.disabled = false;
+      });
+    });
+  }
+  window.showOutboundConfirmModal = showOutboundConfirmModal;
+
   function renderInfoModal(title, endpoint) {
     showDataModal(title,'<div style="padding:20px;text-align:center">Loading...</div>');
     apiGet(endpoint).then(function(res){
@@ -1925,7 +2041,8 @@
     /* v864.3 Phase 4-B: Picking List PDF 업로드 */
     'onPickingListUpload':  {m:'JS', u:'picking-list-pdf', lbl:'Picking List 업로드 (PDF)'},
     'onOutboundScheduled': {m:'JS', u:'wip',                                     lbl:'출고 예정'},
-    'onOutboundConfirm': {m:'JS',   u:'wip',                                     lbl:'출고 확정'},
+    /* v864.3 Phase 4-B: 출고 확정 네이티브 폼 */
+    'onOutboundConfirm': {m:'JS', u:'outbound-confirm', lbl:'출고 확정'},
     'onOutboundHistory': {m:'GET',  u:'/api/q/outbound-status',                  lbl:'출고 이력'},
     'onOutboundStatus':  {m:'JS',   u:'outbound',                                 lbl:'출고 현황'},
     'onApprovalHistory': {m:'GET',  u:'/api/q/approval-history',                 lbl:'승인 이력 조회'},
@@ -2051,6 +2168,10 @@
       }
       if (conf.u === 'quick-outbound-paste') {
         showQuickOutboundPasteModal();
+        return;
+      }
+      if (conf.u === 'outbound-confirm') {
+        showOutboundConfirmModal();
         return;
       }
       if (conf.u === 'wip') {
