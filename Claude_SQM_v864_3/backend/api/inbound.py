@@ -310,6 +310,36 @@ class PdfInboundRequest(BaseModel):
     filename: str = "upload.pdf"
 
 
+# ────────────────────────────────────────────────────────────
+# F001 PDF 스캔 입고 — multipart 업로드 (base64 대안)
+# 프론트에서 FormData 로 바로 PDF 전송 가능 (base64 인코딩 불필요)
+# 내부적으로 /pdf base64 엔드포인트와 동일 로직 재사용
+# ────────────────────────────────────────────────────────────
+@router.post("/pdf-upload", summary="📄 PDF 스캔 입고 — multipart 업로드 (F001)")
+async def pdf_inbound_upload(file: UploadFile = File(...)):
+    """
+    multipart/form-data 로 PDF 업로드 후 /api/inbound/pdf 와 동일하게 처리.
+    """
+    if not file.filename:
+        raise HTTPException(400, "파일명 없음")
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(400, f"PDF 파일만 지원. 받은 파일: {file.filename}")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "빈 파일")
+    if content[:4] != b"%PDF":
+        raise HTTPException(400, "유효한 PDF 파일이 아닙니다")
+
+    # base64 인코딩 후 내부 함수 호출 — 로직 재사용
+    import base64 as _b64
+    req = PdfInboundRequest(
+        pdf_base64=_b64.b64encode(content).decode("ascii"),
+        filename=file.filename,
+    )
+    return pdf_inbound(req)
+
+
 @router.post("/pdf")
 def pdf_inbound(req: PdfInboundRequest):
     """
@@ -350,36 +380,79 @@ def pdf_inbound(req: PdfInboundRequest):
             logger.warning(f"pdf_parser error: {e}")
             parse_error = str(e)
 
-        # 4. DB 저장 시도
+        # 4. DB 저장 — v864.3: PackingListData.lots 순회하여 engine.add_inventory_from_dict()
         saved_count = 0
-        if parsed is not None:
+        save_errors = []
+        saved_lots = []
+        parse_type = type(parsed).__name__ if parsed is not None else None
+        if parsed is not None and parse_type == "PackingListData":
             try:
-                from features.inbound import save_inbound_from_pdf
-                saved_count = save_inbound_from_pdf(parsed)
-            except ImportError:
-                logger.warning("features.inbound.save_inbound_from_pdf not found — skip DB save")
+                from backend.api import engine, ENGINE_AVAILABLE
+                if ENGINE_AVAILABLE and engine is not None and hasattr(engine, "add_inventory_from_dict"):
+                    # 공통 필드 (product, vessel 등) 전파
+                    common = {
+                        "product":      getattr(parsed, "product", "") or "",
+                        "product_code": getattr(parsed, "product_code", "") or "",
+                    }
+                    for idx, lot in enumerate(getattr(parsed, "lots", []) or []):
+                        lot_data = dict(common)
+                        lot_data.update(lot or {})
+                        if not lot_data.get("lot_no"):
+                            save_errors.append({"index": idx, "reason": "lot_no 없음"})
+                            continue
+                        try:
+                            result = engine.add_inventory_from_dict(lot_data)
+                            if result.get("success"):
+                                saved_count += 1
+                                saved_lots.append(str(lot_data.get("lot_no")))
+                            else:
+                                save_errors.append({
+                                    "index": idx,
+                                    "lot_no": str(lot_data.get("lot_no", "")),
+                                    "reason": result.get("message") or result.get("error") or "unknown",
+                                })
+                        except Exception as e:
+                            save_errors.append({
+                                "index": idx,
+                                "lot_no": str(lot_data.get("lot_no", "")),
+                                "reason": f"exception: {e}",
+                            })
+                else:
+                    save_errors.append({"reason": "엔진 사용 불가"})
             except Exception as e:
-                logger.warning(f"DB save error: {e}")
+                logger.warning(f"[pdf-inbound] DB save error: {e}")
+                save_errors.append({"reason": f"exception: {e}"})
 
         # 5. 응답
         if parsed is not None:
             return {
-                "success": True,
-                "message": f"PDF parsed OK ({req.filename}). DB rows saved: {saved_count}",
-                "filename": req.filename,
-                "size_bytes": len(pdf_bytes),
-                "parse_type": type(parsed).__name__,
-                "saved_count": saved_count,
+                "ok": True,
+                "success": True,  # backward-compat
+                "message": f"PDF 파싱 완료 ({req.filename}) · 저장 {saved_count}건 · 실패 {len(save_errors)}건",
+                "data": {
+                    "filename": req.filename,
+                    "size_bytes": len(pdf_bytes),
+                    "parse_type": parse_type,
+                    "saved_count": saved_count,
+                    "saved_lots": saved_lots[:50],
+                    "errors": save_errors[:50],
+                    "folio": getattr(parsed, "folio", "") if parse_type == "PackingListData" else None,
+                    "product": getattr(parsed, "product", "") if parse_type == "PackingListData" else None,
+                    "lots_total": len(getattr(parsed, "lots", []) or []) if parse_type == "PackingListData" else None,
+                },
             }
         else:
-            # parse failed — still accept the file, return info
             return {
-                "success": True,
-                "message": f"PDF received ({req.filename}, {len(pdf_bytes)} bytes). Parser: {parse_error or 'ok'}. Manual review may be needed.",
-                "filename": req.filename,
-                "size_bytes": len(pdf_bytes),
-                "parse_error": parse_error,
-                "saved_count": 0,
+                "ok": False,
+                "success": False,
+                "message": f"PDF 파싱 실패: {parse_error or '알 수 없는 에러'}",
+                "error": parse_error or "parse failed",
+                "detail": {"code": "PDF_PARSE_FAILED", "parse_error": parse_error},
+                "data": {
+                    "filename": req.filename,
+                    "size_bytes": len(pdf_bytes),
+                    "parse_error": parse_error,
+                },
             }
 
     except HTTPException:

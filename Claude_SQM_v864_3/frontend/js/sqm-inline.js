@@ -1547,6 +1547,266 @@
   }
   window.showApplyApprovedAllocationModal = showApplyApprovedAllocationModal;
 
+  /* ===================================================
+     8g. 공통 PDF 업로드 모달 (F001, F017 공용)
+     =================================================== */
+  function _showPdfUploadModal(opts) {
+    // opts: {title, subtitle, endpoint, onSuccess(data) → HTML}
+    var html = [
+      '<div style="max-width:640px">',
+      '  <h2 style="margin:0 0 12px 0">' + escapeHtml(opts.title) + '</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 16px 0;font-size:.9rem">',
+      '    ' + opts.subtitle,
+      '  </p>',
+      '  <div id="pdf-drop2-zone" style="border:2px dashed var(--border);border-radius:8px;padding:32px 16px;text-align:center;background:var(--bg-hover);cursor:pointer;margin-bottom:16px">',
+      '    <div style="font-size:2.5rem;margin-bottom:8px">📄</div>',
+      '    <div id="pdf-drop2-name" style="color:var(--text-muted)">클릭 또는 PDF 파일을 여기에 드롭하세요</div>',
+      '  </div>',
+      '  <input type="file" id="pdf-drop2-input" accept=".pdf" style="display:none">',
+      '  <div id="pdf-drop2-progress" style="display:none;margin-bottom:16px">',
+      '    <div style="background:var(--bg-hover);border-radius:4px;height:8px;overflow:hidden">',
+      '      <div id="pdf-drop2-bar" style="background:var(--accent);height:100%;width:0%;transition:width .3s"></div>',
+      '    </div>',
+      '    <div id="pdf-drop2-text" style="font-size:.85rem;color:var(--text-muted);margin-top:4px">준비 중...</div>',
+      '  </div>',
+      '  <div id="pdf-drop2-result" style="margin-bottom:16px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="pdf-drop2-cancel" class="btn btn-ghost">닫기</button>',
+      '    <button id="pdf-drop2-upload" class="btn btn-primary" disabled>업로드</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+
+    var dz = document.getElementById('pdf-drop2-zone');
+    var fi = document.getElementById('pdf-drop2-input');
+    var nm = document.getElementById('pdf-drop2-name');
+    var ub = document.getElementById('pdf-drop2-upload');
+    var cb = document.getElementById('pdf-drop2-cancel');
+    var pg = document.getElementById('pdf-drop2-progress');
+    var bar = document.getElementById('pdf-drop2-bar');
+    var tx = document.getElementById('pdf-drop2-text');
+    var rb = document.getElementById('pdf-drop2-result');
+    var f = null;
+
+    function setFile(x) {
+      if (!x) return;
+      if (!/\.pdf$/i.test(x.name)) { showToast('error', 'PDF 파일만 가능: ' + x.name); return; }
+      f = x;
+      nm.innerHTML = '✅ <strong>' + escapeHtml(x.name) + '</strong> (' + Math.round(x.size/1024) + ' KB)';
+      ub.disabled = false;
+    }
+    dz.addEventListener('click', function(){ fi.click(); });
+    fi.addEventListener('change', function(e){ if (e.target.files && e.target.files[0]) setFile(e.target.files[0]); });
+    dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.style.background='var(--bg-active)'; });
+    dz.addEventListener('dragleave', function(){ dz.style.background='var(--bg-hover)'; });
+    dz.addEventListener('drop', function(e){ e.preventDefault(); dz.style.background='var(--bg-hover)'; if (e.dataTransfer.files && e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
+    cb.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+
+    ub.addEventListener('click', function(){
+      if (!f) return;
+      ub.disabled = true; cb.disabled = true;
+      pg.style.display = 'block'; bar.style.width = '10%'; tx.textContent = '업로드 중...';
+      rb.innerHTML = '';
+
+      var form = new FormData();
+      form.append('file', f, f.name);
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', API + opts.endpoint);
+      xhr.upload.onprogress = function(e){
+        if (e.lengthComputable) {
+          var pct = Math.round((e.loaded/e.total)*70)+10;
+          bar.style.width = pct+'%'; tx.textContent = '업로드 중... '+pct+'%';
+        }
+      };
+      xhr.onload = function(){
+        bar.style.width='100%'; cb.disabled = false;
+        var body; try { body = JSON.parse(xhr.responseText); } catch(e){ body = null; }
+        if (xhr.status >= 200 && xhr.status < 300 && body && body.ok) {
+          tx.textContent = body.message || '완료';
+          var extra = opts.onSuccess ? opts.onSuccess(body.data||{}) : '';
+          rb.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600;margin-bottom:4px">✅ '+escapeHtml(body.message||'완료')+'</div>'+(extra||'')+'</div>';
+          showToast('success', body.message || '완료');
+          dbgLog('🟢','PDF-UPLOAD OK', opts.endpoint, '#66bb6a');
+          if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+          if (typeof loadKpi === 'function') loadKpi();
+        } else {
+          var errMsg = (body && (body.detail || body.error || body.message)) || ('HTTP '+xhr.status);
+          if (typeof errMsg === 'object') errMsg = JSON.stringify(errMsg);
+          tx.textContent = '실패'; bar.style.background = 'var(--danger)';
+          var errExtra = '';
+          if (body && body.data && body.data.errors) {
+            errExtra = '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--warning)">⚠️ 상세</summary><pre style="white-space:pre-wrap;font-size:.8rem;margin-top:8px;max-height:240px;overflow:auto">'+escapeHtml(JSON.stringify(body.data.errors, null, 2))+'</pre></details>';
+          }
+          rb.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)"><div style="font-weight:600">❌ 실패</div><div style="color:var(--text-muted);font-size:.85rem;margin-top:4px">'+escapeHtml(String(errMsg))+'</div>'+errExtra+'</div>';
+          showToast('error', '실패: '+errMsg);
+          ub.disabled = false;
+        }
+      };
+      xhr.onerror = function(){
+        tx.textContent = '네트워크 에러'; bar.style.background = 'var(--danger)';
+        rb.innerHTML = '<div style="padding:12px;color:var(--danger)">네트워크 에러</div>';
+        showToast('error', '네트워크 에러');
+        ub.disabled = false; cb.disabled = false;
+      };
+      xhr.send(form);
+    });
+  }
+
+  /* F001 PDF 스캔 입고 (Packing List) */
+  function showPdfInboundUploadModal() {
+    _showPdfUploadModal({
+      title: '📄 PDF 스캔 입고 (Packing List)',
+      subtitle: 'Packing List PDF 파일을 선택하세요. 자동 파싱 후 재고에 등록합니다.',
+      endpoint: '/api/inbound/pdf-upload',
+      onSuccess: function(d) {
+        var errHtml = '';
+        if (d.errors && d.errors.length) {
+          errHtml = '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--warning)">⚠️ 실패 ' + d.errors.length + '건</summary><pre style="white-space:pre-wrap;font-size:.8rem;margin-top:8px;max-height:200px;overflow:auto">' + escapeHtml(JSON.stringify(d.errors, null, 2)) + '</pre></details>';
+        }
+        return '<div style="color:var(--text-muted);font-size:.85rem">파일: ' + escapeHtml(d.filename||'-') +
+               ' · Folio: ' + escapeHtml(d.folio||'-') +
+               ' · 제품: ' + escapeHtml(d.product||'-') +
+               ' · LOT 총 ' + (d.lots_total||0) + '개' +
+               ' · <strong style="color:var(--accent)">저장 ' + (d.saved_count||0) + '건</strong>' +
+               '</div>' + errHtml;
+      }
+    });
+  }
+  window.showPdfInboundUploadModal = showPdfInboundUploadModal;
+
+  /* F017 Picking List PDF 업로드 */
+  function showPickingListPdfModal() {
+    _showPdfUploadModal({
+      title: '📋 Picking List PDF 업로드',
+      subtitle: 'Picking List PDF 를 업로드하면 자동 파싱하여 picking_table 에 반영합니다.',
+      endpoint: '/api/outbound/picking-list-pdf',
+      onSuccess: function(d) {
+        var warnHtml = '';
+        if (d.warnings && d.warnings.length) {
+          warnHtml = '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--warning)">⚠️ 경고 ' + d.warnings.length + '건</summary><pre style="white-space:pre-wrap;font-size:.8rem;margin-top:8px">' + escapeHtml(d.warnings.join('\n')) + '</pre></details>';
+        }
+        return '<div style="color:var(--text-muted);font-size:.85rem">파일: ' + escapeHtml(d.filename||'-') +
+               ' · 방법: ' + escapeHtml(d.parse_method||'-') +
+               ' · LOT ' + (d.total_lots||0) + '개 · 일반 ' + (d.total_normal_mt||0) + ' MT · 샘플 ' + (d.total_sample_kg||0) + ' KG' +
+               ' · <strong style="color:var(--accent)">반영 ' + (d.applied||0) + '건</strong>' +
+               '</div>' + warnHtml;
+      }
+    });
+  }
+  window.showPickingListPdfModal = showPickingListPdfModal;
+
+  /* ===================================================
+     8h. F016 빠른 출고 (붙여넣기) — 여러 LOT 일괄
+     =================================================== */
+  function showQuickOutboundPasteModal() {
+    var html = [
+      '<div style="max-width:640px">',
+      '  <h2 style="margin:0 0 12px 0">📤 빠른 출고 (붙여넣기)</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 12px 0;font-size:.9rem">',
+      '    아래에 LOT별 수량을 붙여넣으세요. 형식: <code>LOT_NO [TAB/공백/쉼표] 개수</code> (한 줄에 1 LOT)',
+      '  </p>',
+      '  <textarea id="qop-text" placeholder="1126013063\\t3&#10;1126013107,2&#10;1126013108 1" style="width:100%;height:140px;padding:10px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace;font-size:.9rem;margin-bottom:10px"></textarea>',
+      '  <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:10px">',
+      '    <label style="font-weight:600">고객명</label>',
+      '    <input type="text" id="qop-customer" placeholder="예: ACME Corp" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    <label style="font-weight:600">사유 <span style="color:var(--text-muted);font-weight:400;font-size:.8rem">(선택)</span></label>',
+      '    <input type="text" id="qop-reason" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    <label style="font-weight:600">작업자 <span style="color:var(--text-muted);font-weight:400;font-size:.8rem">(선택)</span></label>',
+      '    <input type="text" id="qop-operator" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '  </div>',
+      '  <div id="qop-preview" style="padding:8px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;color:var(--text-muted);margin-bottom:12px;min-height:32px">텍스트를 입력하면 파싱 결과가 여기에 표시됩니다</div>',
+      '  <div id="qop-result" style="margin-bottom:12px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="qop-cancel" class="btn btn-ghost">닫기</button>',
+      '    <button id="qop-submit" class="btn btn-primary" disabled>일괄 출고</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+
+    var txt = document.getElementById('qop-text');
+    var cust = document.getElementById('qop-customer');
+    var reason = document.getElementById('qop-reason');
+    var op = document.getElementById('qop-operator');
+    var preview = document.getElementById('qop-preview');
+    var result = document.getElementById('qop-result');
+    var submit = document.getElementById('qop-submit');
+    var cancel = document.getElementById('qop-cancel');
+
+    function parseRows() {
+      var rows = [];
+      var lines = (txt.value || '').split(/\r?\n/);
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim();
+        if (!line) continue;
+        var parts = line.split(/[\s,\t]+/).filter(Boolean);
+        if (parts.length < 2) continue;
+        var lot = parts[0];
+        var n = parseInt(parts[1], 10);
+        if (!lot || isNaN(n) || n <= 0) continue;
+        rows.push({ lot_no: lot, count: n });
+      }
+      return rows;
+    }
+
+    function updatePreview() {
+      var rows = parseRows();
+      if (rows.length === 0) {
+        preview.innerHTML = '텍스트를 입력하면 파싱 결과가 여기에 표시됩니다';
+        submit.disabled = true;
+        return;
+      }
+      var total = rows.reduce(function(s, r){ return s + r.count; }, 0);
+      preview.innerHTML = '✅ <strong>' + rows.length + '개 LOT</strong> · 총 ' + total + ' 톤백 예정';
+      submit.disabled = !cust.value.trim();
+    }
+    txt.addEventListener('input', updatePreview);
+    cust.addEventListener('input', updatePreview);
+
+    cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+    submit.addEventListener('click', function(){
+      var rows = parseRows();
+      if (!rows.length) return;
+      var customer = cust.value.trim();
+      var totalN = rows.reduce(function(s,r){return s+r.count;},0);
+      if (!confirm('총 ' + rows.length + '개 LOT · ' + totalN + '개 톤백을 ' + customer + ' 로 출고합니다. 계속?')) return;
+
+      submit.disabled = true; cancel.disabled = true;
+      result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 일괄 출고 중...</div>';
+
+      apiPost('/api/outbound/quick-paste', {
+        rows: rows, customer: customer,
+        reason: reason.value.trim(), operator: op.value.trim()
+      }).then(function(res) {
+        var d = res && res.data || {};
+        var color = (d.fail_count||0) === 0 ? 'var(--success)' : 'var(--warning)';
+        var resultsHtml = (d.results||[]).map(function(r){
+          var icon = r.ok ? '✅' : '❌';
+          var info = r.ok ? (r.picked_count + '개 · ' + (r.total_weight_kg||0).toFixed(1) + ' kg') : escapeHtml(r.reason||'');
+          return '<tr><td>' + r.row + '</td><td>' + icon + '</td><td class="mono-cell">' + escapeHtml(r.lot_no) + '</td><td>' + info + '</td></tr>';
+        }).join('');
+        result.innerHTML =
+          '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid '+color+'">' +
+          '<div style="font-weight:600;margin-bottom:4px">' + ((d.fail_count||0)===0 ? '✅' : '⚠️') + ' ' + escapeHtml(res.message||'완료') + '</div>' +
+          '<div style="color:var(--text-muted);font-size:.85rem">총 ' + (d.total||0) + '건 · 성공 ' + (d.success_count||0) + ' · 실패 ' + (d.fail_count||0) + ' · ' + (d.total_weight_mt||0).toFixed(3) + ' MT</div>' +
+          '<table class="data-table" style="margin-top:8px;font-size:.85rem"><thead><tr><th>행</th><th></th><th>LOT</th><th>상세</th></tr></thead><tbody>' + resultsHtml + '</tbody></table>' +
+          '</div>';
+        showToast(res.ok ? 'success' : 'warning', res.message || '완료');
+        dbgLog('🟢','QUICK-PASTE', res.message, '#66bb6a');
+        if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+        if (typeof loadKpi === 'function') loadKpi();
+        cancel.disabled = false;
+        submit.disabled = false;
+      }).catch(function(e) {
+        result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+        showToast('error', '실패: ' + (e.message||String(e)));
+        submit.disabled = false; cancel.disabled = false;
+      });
+    });
+  }
+  window.showQuickOutboundPasteModal = showQuickOutboundPasteModal;
+
   function renderInfoModal(title, endpoint) {
     showDataModal(title,'<div style="padding:20px;text-align:center">Loading...</div>');
     apiGet(endpoint).then(function(res){
@@ -1650,7 +1910,8 @@
     'onExit':            {m:'JS',   u:'exit',                                    lbl:'종료'},
 
     /* ── 입고 메뉴 ── */
-    'onOnPdfInbound':    {m:'JS',   u:'scan',                                    lbl:'PDF 스캔 입고'},
+    /* v864.3 Phase 4-B: PDF 스캔 입고 네이티브 모달 (기존 scan 탭 대신) */
+    'onOnPdfInbound':    {m:'JS', u:'pdf-inbound-upload', lbl:'PDF 스캔 입고'},
     /* v864.3 Phase 4-B: 수동 입고는 네이티브 모달로 처리 (tkinter filedialog 대체) */
     'onInboundManual':   {m:'JS', u:'inbound-upload', lbl:'수동 입고'},
     'onInboundList':     {m:'JS',   u:'inbound',                                  lbl:'입고 목록'},
@@ -1659,6 +1920,10 @@
     /* ── 출고 메뉴 ── */
     /* v864.3 Phase 4-B: 즉시 출고 네이티브 폼 */
     'onOnQuickOutbound': {m:'JS', u:'quick-outbound', lbl:'즉시 출고'},
+    /* v864.3 Phase 4-B: 빠른 출고 (붙여넣기) — 여러 LOT 일괄 */
+    'onQuickOutboundPaste': {m:'JS', u:'quick-outbound-paste', lbl:'빠른 출고 (붙여넣기)'},
+    /* v864.3 Phase 4-B: Picking List PDF 업로드 */
+    'onPickingListUpload':  {m:'JS', u:'picking-list-pdf', lbl:'Picking List 업로드 (PDF)'},
     'onOutboundScheduled': {m:'JS', u:'wip',                                     lbl:'출고 예정'},
     'onOutboundConfirm': {m:'JS',   u:'wip',                                     lbl:'출고 확정'},
     'onOutboundHistory': {m:'GET',  u:'/api/q/outbound-status',                  lbl:'출고 이력'},
@@ -1717,7 +1982,8 @@
     'onGoAllocationTab': {m:'JS',   u:'allocation',                               lbl:'배정 탭'},
 
     /* ── 툴바 ── */
-    'tb-pdf-inbound':    {m:'JS',   u:'scan',                                     lbl:'PDF 입고'},
+    /* v864.3 Phase 4-B: 툴바 PDF 입고 — 네이티브 모달 */
+    'tb-pdf-inbound':    {m:'JS', u:'pdf-inbound-upload', lbl:'PDF 입고'},
     /* 툴바 '즉시 출고' 도 네이티브 폼으로 */
     'tb-quick-outbound': {m:'JS', u:'quick-outbound', lbl:'즉시 출고'},
     'tb-return':         {m:'JS',   u:'return',                                   lbl:'반품'},
@@ -1773,6 +2039,18 @@
       }
       if (conf.u === 'apply-approved-allocation') {
         showApplyApprovedAllocationModal();
+        return;
+      }
+      if (conf.u === 'pdf-inbound-upload') {
+        showPdfInboundUploadModal();
+        return;
+      }
+      if (conf.u === 'picking-list-pdf') {
+        showPickingListPdfModal();
+        return;
+      }
+      if (conf.u === 'quick-outbound-paste') {
+        showQuickOutboundPasteModal();
         return;
       }
       if (conf.u === 'wip') {

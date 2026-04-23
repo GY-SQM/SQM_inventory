@@ -5,8 +5,10 @@ POST /api/outbound/quick : 즉시 출고 (원스톱) — F015
 engine.quick_outbound(lot_no, count, customer, reason, operator) 직접 호출
 """
 import logging
+import os
+import tempfile
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -131,4 +133,198 @@ def quick_outbound_info(lot_no: str):
             "total_weight_mt": round(total_kg / 1000.0, 3),
             "max_count": max_count,
         },
+    }
+
+
+# ────────────────────────────────────────────────────────────
+# F017 Picking List PDF 업로드 — 출고 예정 항목 DB 반영
+# features.parsers.picking_list_parser + picking_engine 재사용
+# ────────────────────────────────────────────────────────────
+@router.post("/picking-list-pdf", summary="📋 Picking List PDF 업로드 (F017)")
+async def picking_list_pdf(file: UploadFile = File(...)):
+    """
+    Picking List PDF 파싱 → picking_engine.apply_picking_list_to_db() 호출.
+    """
+    if not file.filename:
+        raise HTTPException(400, "파일명 없음")
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(400, f"PDF 파일만 지원. 받은 파일: {file.filename}")
+
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진 사용 불가")
+
+    try:
+        from features.parsers.picking_list_parser import parse_picking_list_pdf
+        from features.parsers.picking_engine import apply_picking_list_to_db
+    except ImportError as e:
+        raise HTTPException(500, f"Picking 엔진 import 실패: {e}")
+
+    tmp_path = None
+    try:
+        content = await file.read()
+        if not content:
+            raise HTTPException(400, "빈 파일")
+        if content[:4] != b"%PDF":
+            raise HTTPException(400, "유효한 PDF 파일이 아닙니다")
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        logger.info(f"[picking-list-pdf] 수신: {file.filename} ({len(content)} bytes)")
+
+        # 1. 파싱
+        doc = parse_picking_list_pdf(tmp_path)
+        if not doc.get("parse_ok"):
+            return {
+                "ok": False,
+                "data": {
+                    "filename": file.filename,
+                    "parse_ok": False,
+                    "warnings": doc.get("warnings", []),
+                    "total_lots": doc.get("total_lots", 0),
+                    "items": doc.get("items", [])[:10],
+                },
+                "error": "Picking List 파싱 실패",
+                "detail": {"code": "PARSE_FAILED", "warnings": doc.get("warnings", [])},
+                "message": "Picking List 파싱 실패 — PDF 내용을 확인해주세요",
+            }
+
+        # 2. DB 반영
+        result = apply_picking_list_to_db(engine, doc, tmp_path)
+
+        if result.get("success"):
+            applied = int(result.get("applied", 0) or result.get("picked", 0) or 0)
+            logger.info(f"[picking-list-pdf] 반영 완료: {applied}건 ({file.filename})")
+            return {
+                "ok": True,
+                "data": {
+                    "filename": file.filename,
+                    "parse_method": doc.get("parse_method"),
+                    "total_lots": doc.get("total_lots", 0),
+                    "total_normal_mt": doc.get("total_normal_mt", 0),
+                    "total_sample_kg": doc.get("total_sample_kg", 0),
+                    "applied": applied,
+                    "warnings": doc.get("warnings", []),
+                    "details": result.get("details", [])[:30],
+                },
+                "message": f"Picking List 반영 완료 ({applied}건)",
+            }
+        else:
+            return {
+                "ok": False,
+                "data": {
+                    "filename": file.filename,
+                    "total_lots": doc.get("total_lots", 0),
+                    "errors": result.get("errors", []),
+                    "warnings": doc.get("warnings", []),
+                },
+                "error": "Picking List 반영 실패",
+                "detail": {"code": "APPLY_FAILED", "errors": result.get("errors", [])},
+                "message": "DB 반영 실패 — 상세 errors 확인",
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"[picking-list-pdf] 에러: {e}")
+        raise HTTPException(500, f"Internal error: {e}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+
+# ────────────────────────────────────────────────────────────
+# F016 빠른 출고 (붙여넣기) — 여러 LOT 텍스트 → 일괄 즉시 출고
+# 각 행: "LOT_NO TAB COUNT" 또는 "LOT_NO,COUNT"
+# 고객명 공통 1개 (모든 LOT 동일)
+# engine.quick_outbound() 반복 호출
+# ────────────────────────────────────────────────────────────
+class QuickOutboundPasteRequest(BaseModel):
+    rows: list = Field(..., min_length=1, description="[{lot_no, count}, ...] 리스트")
+    customer: str = Field(..., min_length=1, description="공통 고객명")
+    reason: str = Field("", description="사유")
+    operator: str = Field("", description="작업자")
+
+
+@router.post("/quick-paste", summary="📤 빠른 출고 (붙여넣기) — 여러 LOT 일괄 (F016)")
+def quick_outbound_paste(req: QuickOutboundPasteRequest):
+    """
+    rows: [{lot_no, count}, ...] 를 순회하며 engine.quick_outbound() 반복.
+    행별 독립 (한 행 실패가 다른 행 롤백 안 됨).
+    """
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None or not hasattr(engine, "quick_outbound"):
+        raise HTTPException(500, "엔진 quick_outbound 없음")
+
+    success_count = 0
+    fail_count = 0
+    total_weight_kg = 0.0
+    results = []
+
+    for idx, row in enumerate(req.rows):
+        try:
+            lot_no = str((row or {}).get("lot_no", "")).strip()
+            count = int((row or {}).get("count", 0))
+        except Exception as e:
+            fail_count += 1
+            results.append({"row": idx + 1, "lot_no": "?", "ok": False, "reason": f"파싱 실패: {e}"})
+            continue
+
+        if not lot_no or count <= 0:
+            fail_count += 1
+            results.append({"row": idx + 1, "lot_no": lot_no or "?", "ok": False, "reason": "lot_no 또는 count 유효하지 않음"})
+            continue
+
+        try:
+            r = engine.quick_outbound(
+                lot_no=lot_no, count=count, customer=req.customer.strip(),
+                reason=req.reason or "", operator=req.operator or "",
+            )
+            if r.get("success"):
+                success_count += 1
+                picked = int(r.get("picked_count", 0))
+                tw = float(r.get("total_weight_kg", 0))
+                total_weight_kg += tw
+                results.append({
+                    "row": idx + 1, "lot_no": lot_no, "ok": True,
+                    "picked_count": picked, "total_weight_kg": tw,
+                })
+            else:
+                fail_count += 1
+                errs = r.get("errors", [])
+                results.append({
+                    "row": idx + 1, "lot_no": lot_no, "ok": False,
+                    "reason": "; ".join(errs) if errs else "unknown",
+                })
+        except Exception as e:
+            fail_count += 1
+            results.append({"row": idx + 1, "lot_no": lot_no, "ok": False, "reason": f"exception: {e}"})
+            logger.warning(f"[quick-paste] row {idx+1} 실패: {e}")
+
+    logger.info(
+        f"[quick-paste] 완료: 성공 {success_count} / 실패 {fail_count} / 총 {len(req.rows)} "
+        f"· 총중량 {total_weight_kg:.1f} kg · 고객 {req.customer}"
+    )
+    return {
+        "ok": True if fail_count == 0 else False,
+        "data": {
+            "total": len(req.rows),
+            "success_count": success_count,
+            "fail_count": fail_count,
+            "total_weight_kg": total_weight_kg,
+            "total_weight_mt": round(total_weight_kg / 1000.0, 3),
+            "customer": req.customer,
+            "results": results,
+        },
+        "message": f"{success_count}건 출고 / {fail_count}건 실패 (총 {round(total_weight_kg/1000.0, 2)} MT)",
     }
