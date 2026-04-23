@@ -76,8 +76,8 @@ GET_ENDPOINTS = [
     "/api/outbound/quick/info?lot_no=NO_EXIST",
     "/api/outbound/picked-summary",
     "/api/log/ping",
-    # Info
-    "/api/info/system-info",
+    # Info (system-info is in actions router)
+    "/api/action/system-info",
     "/api/info/version",
     "/api/info/shortcuts",
     "/api/info/status-guide",
