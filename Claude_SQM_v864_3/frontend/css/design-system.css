@@ -425,6 +425,8 @@ h4 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacin
   display: none;
 }
 .page.active { display: flex; flex-direction: column; gap: 16px; }
+/* page-container 내부 .page 는 항상 표시 — 라우터가 컨테이너 자체를 show/hide */
+#page-container .page { display: block; }
 
 .page-header {
   display: flex; align-items: center; justify-content: space-between;

@@ -77,6 +77,24 @@
   /* ===================================================
      1. UTILITIES
      =================================================== */
+
+  /** 범용 데이터 추출 — 모든 API 응답 패턴 대응
+   *  {data: {items:[]}}  → items
+   *  {data: {rows:[]}}   → rows
+   *  {data: []}           → data
+   *  []                   → 그대로
+   *  그 외                → []
+   */
+  function extractRows(res) {
+    if (Array.isArray(res)) return res;
+    if (!res) return [];
+    var d = res.data;
+    if (Array.isArray(d)) return d;
+    if (d && Array.isArray(d.items)) return d.items;
+    if (d && Array.isArray(d.rows)) return d.rows;
+    return [];
+  }
+
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) {
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
@@ -373,7 +391,7 @@
     c.innerHTML = '<div style="padding:40px;text-align:center">Loading inventory...</div>';
     apiGet('/api/inventory').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = Array.isArray(res) ? res : (res.data || res.rows || []);
+      var rows = extractRows(res);
       if (!rows.length) {
         c.innerHTML = '<div class="empty" style="padding:60px;text-align:center">No inventory data</div>';
         return;
@@ -417,7 +435,7 @@
     c.innerHTML = '<div style="padding:40px;text-align:center">Loading allocation...</div>';
     apiGet('/api/allocation').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = res.data || res.rows || (Array.isArray(res)?res:[]);
+      var rows = extractRows(res);
       if (!rows.length) {
         c.innerHTML = '<div class="empty" style="padding:60px;text-align:center">No allocation data</div>';
         return;
@@ -468,19 +486,28 @@
       '<div class="toolbar-mini"><button class="btn btn-secondary" onclick="renderPage(\'picked\')">Refresh</button></div>',
       '<div id="picked-loading" style="padding:40px;text-align:center">Loading...</div>',
       '<table class="data-table" id="picked-table" style="display:none">',
-      '<thead><tr><th>LOT</th><th>Product</th><th>Qty</th><th>Date</th><th>Location</th></tr></thead>',
+      '<thead><tr><th>LOT No</th><th>Product</th><th>Weight(MT)</th><th>Tonbags</th><th>Date</th><th>Warehouse</th><th>Status</th></tr></thead>',
       '<tbody id="picked-tbody"></tbody></table>',
       '<div class="empty" id="picked-empty" style="display:none">No data</div>',
       '</section>'
     ].join('');
     apiGet('/api/q2/outbound-confirm-list').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = res.data || res.rows || (Array.isArray(res)?res:[]);
+      var rows = extractRows(res);
       document.getElementById('picked-loading').style.display = 'none';
       if (!rows.length) { document.getElementById('picked-empty').style.display='block'; return; }
       var tbody = document.getElementById('picked-tbody');
       if (tbody) tbody.innerHTML = rows.map(function(r){
-        return '<tr><td>'+escapeHtml(r.lot||'')+'</td><td>'+escapeHtml(r.product||'')+'</td><td>'+(r.qty||r.bags||'')+'</td><td>'+escapeHtml(r.date||'')+'</td><td>'+escapeHtml(r.location||'')+'</td></tr>';
+        var wt = r.picked_mt != null ? fmtN(r.picked_mt) : (r.current_weight != null ? fmtN(r.current_weight/1000) : (r.tonbag_count||'-'));
+        return '<tr>' +
+          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot_no||r.lot||'')+'</td>' +
+          '<td>'+escapeHtml(r.product||'')+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+wt+'</td>' +
+          '<td class="mono-cell">'+(r.tonbag_count||r.picked_tonbags||'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.inbound_date||r.date||'')+'</td>' +
+          '<td>'+escapeHtml(r.warehouse||r.location||'-')+'</td>' +
+          '<td>'+escapeHtml(r.status||'')+'</td>' +
+          '</tr>';
       }).join('');
       document.getElementById('picked-table').style.display = '';
     }).catch(function(e){
@@ -650,7 +677,7 @@
 
     apiGet('/api/q/outbound-status').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = (res.data && res.data.items) || [];
+      var rows = extractRows(res);
       var total = (res.data && res.data.total) || rows.length;
       document.getElementById('outbound-loading').style.display = 'none';
       if (!rows.length) {
@@ -704,21 +731,15 @@
       '<div class="empty" id="return-empty" style="display:none">No return data</div>',
       '</section>'
     ].join('');
-    apiGet('/api/q2/return-stats').then(function(res){
+    /* return-stats는 통계 구조(by_reason/monthly_trend)라 items 없음 → inventory?status=RETURN 직접 조회 */
+    apiGet('/api/inventory?status=RETURN').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = res.data || res.rows || res.items || (Array.isArray(res)?res:[]);
+      var rows = extractRows(res);
       renderReturnRows(rows, route);
     }).catch(function(){
       if (_currentRoute !== route) return;
-      // fallback to inventory?status=RETURN
-      apiGet('/api/inventory?status=RETURN').then(function(res2){
-        if (_currentRoute !== route) return;
-        renderReturnRows(res2.data || (Array.isArray(res2)?res2:[]), route);
-      }).catch(function(){
-        if (_currentRoute !== route) return;
-        document.getElementById('return-loading').style.display = 'none';
-        document.getElementById('return-empty').style.display = 'block';
-      });
+      document.getElementById('return-loading').style.display = 'none';
+      document.getElementById('return-empty').style.display = 'block';
     });
   }
 
@@ -752,24 +773,27 @@
       '</div></div>',
       '<div id="move-loading" style="padding:20px;text-align:center">Loading history...</div>',
       '<table class="data-table" id="move-table" style="display:none">',
-      '<thead><tr><th>Time</th><th>Tonbag ID</th><th>From</th><th>To</th><th>By</th></tr></thead>',
+      '<thead><tr><th>Date</th><th>LOT No</th><th>Type</th><th>Qty(MT)</th><th>From</th><th>To</th><th>By</th></tr></thead>',
       '<tbody id="move-tbody"></tbody></table>',
       '<div class="empty" id="move-empty" style="display:none">No movement history</div>',
       '</section>'
     ].join('');
     apiGet('/api/q/movement-history').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = res.data || res.rows || (Array.isArray(res)?res:[]);
+      var rows = extractRows(res);
       document.getElementById('move-loading').style.display = 'none';
       if (!rows.length) { document.getElementById('move-empty').style.display='block'; return; }
       var tbody = document.getElementById('move-tbody');
       if (tbody) tbody.innerHTML = rows.map(function(r){
+        var qtyMT = r.qty_mt != null ? fmtN(r.qty_mt) : (r.qty_kg != null ? fmtN(r.qty_kg/1000) : '-');
         return '<tr>' +
-          '<td class="mono-cell">'+escapeHtml(r.moved_at||r.date||'')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.sub_lt||r.barcode||'')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.from_location||'')+'</td>' +
-          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.to_location||'')+'</td>' +
-          '<td>'+escapeHtml(r.moved_by||'system')+'</td></tr>';
+          '<td class="mono-cell">'+escapeHtml(r.movement_date||r.moved_at||r.date||'')+'</td>' +
+          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot_no||r.sub_lt||r.barcode||'')+'</td>' +
+          '<td>'+escapeHtml(r.movement_type||'')+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+qtyMT+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.from_location||'-')+'</td>' +
+          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.to_location||'-')+'</td>' +
+          '<td>'+escapeHtml(r.actor||r.moved_by||'system')+'</td></tr>';
       }).join('');
       document.getElementById('move-table').style.display = '';
     }).catch(function(){
@@ -819,16 +843,16 @@
     try { var el=document.getElementById('log-limit'); if(el) limit=parseInt(el.value)||100; } catch {}
     apiGet('/api/q/audit-log?limit='+limit).then(function(res){
       if (_currentRoute !== route) return;
-      var rows = Array.isArray(res)?res:(res.data||res.rows||[]);
+      var rows = extractRows(res);
       document.getElementById('log-loading').style.display = 'none';
       if (!rows.length) { document.getElementById('log-empty').style.display='block'; return; }
       var tbody = document.getElementById('log-tbody');
       if (tbody) tbody.innerHTML = rows.map(function(r){
         return '<tr>' +
-          '<td class="mono-cell">'+escapeHtml(r.time||r.timestamp||'')+'</td>' +
-          '<td>'+escapeHtml(r.type||r.action||'')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.lot||'')+'</td>' +
-          '<td>'+escapeHtml(r.note||r.memo||r.detail||'')+'</td></tr>';
+          '<td class="mono-cell">'+escapeHtml(r.created_at||r.time||r.timestamp||'')+'</td>' +
+          '<td>'+escapeHtml(r.event_type||r.type||r.action||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.lot_no||r.lot||r.tonbag_id||'')+'</td>' +
+          '<td>'+escapeHtml(r.event_data||r.user_note||r.note||r.memo||r.detail||'')+'</td></tr>';
       }).join('');
       document.getElementById('log-table').style.display = '';
     }).catch(function(e){
@@ -991,7 +1015,7 @@
     ].join('');
     apiGet('/api/tonbags').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = Array.isArray(res)?res:(res.data||res.rows||[]);
+      var rows = extractRows(res);
       document.getElementById('tonbag-loading').style.display='none';
       if (!rows.length) { document.getElementById('tonbag-empty').style.display='block'; return; }
       var tbody=document.getElementById('tonbag-tbody');
@@ -1997,14 +2021,15 @@
     function st(id,txt){ var el=document.getElementById(id); if(el) el.textContent=txt; }
     apiGet('/api/dashboard/stats').then(function(res){
       var d=res.data||res||{};
-      st('sb-unallocated','Unallocated '+(d.unallocated_bags||d.position_missing||400));
-      st('sb-scan-fail','Scan fail '+(d.scan_failure_rate||'-'));
-      st('sb-lot-age','LOT avg age '+(d.lot_avg_age_days||6.2)+'d');
+      st('sb-unallocated','LOT '+( d.total_lots||0)+' / Tonbag '+(d.total_tbags||0));
+      st('sb-scan-fail','Stock '+(d.total_weight_mt!=null?fmtN(d.total_weight_mt):'0')+' MT');
+      st('sb-lot-age','Available '+(d.available_mt!=null?fmtN(d.available_mt):'0')+' MT');
     }).catch(function(){});
     apiGet('/api/health').then(function(res){
       var h=res.data||res||{};
-      st('sb-modules','Modules: '+(h.modules_loaded!==undefined?h.modules_loaded:(h.engine_available?7:0))+'/'+(h.modules_total||8));
-    }).catch(function(){ st('sb-modules','Modules: ?/?'); });
+      var ok = h.status==='ok';
+      st('sb-modules','Engine: '+(ok?'OK':'ERR')+' ('+( h.lots||0)+' LOTs)');
+    }).catch(function(){ st('sb-modules','Engine: offline'); });
     st('sb-last-refresh','Last refresh: '+new Date().toLocaleTimeString());
   }
 

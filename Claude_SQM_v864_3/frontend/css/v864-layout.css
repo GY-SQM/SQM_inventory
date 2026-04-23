@@ -15,6 +15,10 @@ html, body {
   background: var(--bg, #f5f5f5);
   color: var(--fg, #222);
 }
+body {
+  display: flex;
+  flex-direction: column;
+}
 
 /* ── Theme Tokens (light/dark) ────────────────────────────────────── */
 :root,
@@ -86,6 +90,9 @@ html[data-theme="dark"] {
   padding: 4px 8px;
   gap: 2px;
   border-bottom: 2px solid var(--panel-border);
+  position: relative;   /* 드롭다운 z-index 기준점 생성 */
+  z-index: 500;         /* app-body(z-index 없음) 위에 표시 */
+  overflow: visible;    /* 드롭다운이 menubar 바깥으로 나올 수 있게 */
 }
 
 .menu-btn {
@@ -112,7 +119,7 @@ html[data-theme="dark"] {
   background: var(--panel);
   border: 1px solid var(--panel-border);
   box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  z-index: 1000;
+  z-index: 9000;  /* menubar z-index(500) 기준으로 상대 누적 → 최상위 */
   padding: 4px 0;
   border-radius: 6px;
   visibility: hidden;
@@ -177,7 +184,9 @@ html[data-theme="dark"] {
 /* ── App Body (사이드바 + 메인) ───────────────────────────────────── */
 .app-body {
   display: flex;
-  height: calc(100vh - 28px - 44px - 40px - 40px); /* title+menubar+toolbar+statusbar */
+  flex: 1;          /* body가 flex column이면 자동으로 남은 높이 차지 */
+  min-height: 0;    /* flex 자식이 overflow 없이 수축 가능하게 */
+  overflow: hidden;
 }
 
 /* ── Sidebar (9탭) ────────────────────────────────────────────────── */
@@ -186,15 +195,15 @@ html[data-theme="dark"] {
   background: var(--sidebar-bg);
   border-right: 1px solid var(--panel-border);
   display: flex; flex-direction: column;
-  padding: 12px 6px;
-  gap: 6px;
+  padding: 6px 6px;
+  gap: 2px;
   overflow-y: auto;
 }
 .side-btn {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 4px;
-  padding: 10px 4px;
+  gap: 2px;
+  padding: 6px 4px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -430,4 +439,108 @@ nav.menubar .menu-btn.open > .menu-dropdown,
   visibility: visible !important;
   opacity: 1 !important;
   pointer-events: auto !important;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   LAYOUT PATCH v20260422c — 절대좌표 레이아웃으로 교체
+   WebView2(Chromium) flex:1 체인 높이 0 버그 회피
+   Main Wrapper(relative) + View Toggle(fixed 36px) +
+   page/dashboard-container(absolute fill)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Main Wrapper: sidebar 우측 전체 영역, relative 기준점 ───────── */
+.main-wrapper {
+  flex: 1;               /* app-body flex row에서 남은 너비 전부 차지 */
+  min-width: 0;          /* flex-shrink 가능 */
+  min-height: 0;         /* flex-shrink 가능 */
+  position: relative;    /* absolute 자식들의 기준점 */
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* ── View Toggle (돈백/LOT/MT 라디오 토글 바) ───────────────────── */
+.view-toggle {
+  position: relative;    /* absolute children 위로 올라오게 */
+  z-index: 2;
+  height: 36px;          /* 명시적 고정 높이 — abs child top 값과 일치 */
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  background: var(--toolbar-bg);
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.view-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+/* ── Page Content: absolute fill (flex:1 체인 의존 완전 제거) ────── */
+/* dashboard-container와 page-container 둘 다 동일 방식 */
+.page-content,
+#dashboard-container,
+#page-container {
+  position: absolute !important;
+  top: 36px;             /* view-toggle 높이만큼 내려옴 */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 16px;
+  background: var(--bg);
+}
+
+/* ── KPI Row (대시보드 상단 4개 카드 레이아웃) ──────────────────── */
+.kpi-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.kpi-row .kpi-card {
+  flex: 1;
+  min-width: 140px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+.kpi-row .kpi-icon   { font-size: 22px; margin-bottom: 4px; }
+.kpi-row .kpi-label  { font-size: 11px; color: var(--status-fg); font-weight: 600; margin-bottom: 4px; }
+.kpi-row .kpi-value  { font-size: 24px; font-weight: 700; color: var(--fg); font-family: monospace; }
+
+/* ── Flex Column 레이아웃: 헤더·풋터 고정, 본문 신축 ─────────────── */
+/* body가 flex column이므로 고정 높이 요소는 shrink 방지 */
+.app-titlebar,
+.menubar,
+.action-toolbar,
+#alerts-container,
+footer.statusbar,
+#statusbar-container {
+  flex-shrink: 0;
+}
+
+/* statusbar: HTML 에서 class="statusbar" 사용 — .statusbar-wrap 미사용 보완 */
+footer.statusbar,
+#statusbar-container {
+  height: 32px;
+  background: var(--status-bg);
+  border-top: 1px solid var(--panel-border);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--status-fg);
+  gap: 10px;
+}
+footer.statusbar .status-sep,
+#statusbar-container .status-sep {
+  color: var(--panel-border);
+  opacity: 0.6;
 }
