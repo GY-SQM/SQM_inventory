@@ -95,6 +95,115 @@
     return [];
   }
 
+  /* ===================================================
+     1a. TABLE SORT — 컬럼 헤더 클릭으로 정렬 (v864.2 동일)
+     사용법: <th> 에 자동 바인딩, 숫자/문자/날짜 자동 감지
+     =================================================== */
+  function enableTableSort(tableEl) {
+    if (!tableEl || tableEl.dataset._sortBound) return;
+    tableEl.dataset._sortBound = '1';
+    var headers = tableEl.querySelectorAll('thead th');
+    headers.forEach(function(th, colIdx) {
+      th.style.cursor = 'pointer';
+      th.style.userSelect = 'none';
+      th.title = 'Click to sort';
+      th.addEventListener('click', function() {
+        var tbody = tableEl.querySelector('tbody');
+        if (!tbody) return;
+        var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+        var asc = th.dataset._sortDir !== 'asc';
+        // 모든 th 리셋
+        headers.forEach(function(h){ h.dataset._sortDir=''; h.textContent=h.textContent.replace(/ [▲▼]/g,''); });
+        th.dataset._sortDir = asc ? 'asc' : 'desc';
+        th.textContent = th.textContent + (asc ? ' ▲' : ' ▼');
+        rows.sort(function(a, b) {
+          var ca = (a.children[colIdx]||{}).textContent||'';
+          var cb = (b.children[colIdx]||{}).textContent||'';
+          // 숫자 감지
+          var na = parseFloat(ca.replace(/,/g,'')), nb = parseFloat(cb.replace(/,/g,''));
+          if (!isNaN(na) && !isNaN(nb)) return asc ? na-nb : nb-na;
+          return asc ? ca.localeCompare(cb) : cb.localeCompare(ca);
+        });
+        rows.forEach(function(r){ tbody.appendChild(r); });
+      });
+    });
+  }
+
+  /* 페이지 렌더링 후 자동으로 테이블 정렬 바인딩 */
+  var _sortObserver = new MutationObserver(function() {
+    document.querySelectorAll('.data-table').forEach(enableTableSort);
+  });
+  _sortObserver.observe(document.documentElement, {childList:true, subtree:true});
+
+  /* ===================================================
+     1b. KEYBOARD SHORTCUTS (v864.2 동일)
+     =================================================== */
+  document.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+    var key = (e.ctrlKey?'C-':'') + (e.shiftKey?'S-':'') + (e.altKey?'A-':'') + e.key;
+    switch(key) {
+      case 'C-r': case 'F5': e.preventDefault(); renderPage(_currentRoute||'dashboard'); break;
+      case 'C-1': e.preventDefault(); renderPage('inventory'); break;
+      case 'C-2': e.preventDefault(); renderPage('allocation'); break;
+      case 'C-3': e.preventDefault(); renderPage('picked'); break;
+      case 'C-4': e.preventDefault(); renderPage('outbound'); break;
+      case 'C-5': e.preventDefault(); renderPage('return'); break;
+      case 'C-6': e.preventDefault(); renderPage('move'); break;
+      case 'C-7': e.preventDefault(); renderPage('dashboard'); break;
+      case 'C-8': e.preventDefault(); renderPage('log'); break;
+      case 'C-9': e.preventDefault(); renderPage('scan'); break;
+      case 'C-b': e.preventDefault(); dispatchAction('onOnBackup'); break;
+      case 'C-e': e.preventDefault(); dispatchAction('onExport'); break;
+      case 'C-i': e.preventDefault(); dispatchAction('onIntegrityCheck'); break;
+    }
+  });
+
+  /* ===================================================
+     1c. CONTEXT MENU — 테이블 행 우클릭 (v864.2 동일)
+     =================================================== */
+  var _ctxMenu = null;
+  function showContextMenu(e, items) {
+    e.preventDefault();
+    hideContextMenu();
+    var m = document.createElement('div');
+    m.className = 'ctx-menu';
+    m.style.cssText = 'position:fixed;z-index:9999;background:var(--panel-bg);border:1px solid var(--panel-border);border-radius:6px;padding:4px 0;min-width:160px;box-shadow:0 4px 16px rgba(0,0,0,.4);font-size:13px;';
+    m.style.left = e.clientX+'px';
+    m.style.top = e.clientY+'px';
+    items.forEach(function(it){
+      if (it === '---') { var hr=document.createElement('hr'); hr.style.cssText='margin:4px 8px;border:0;border-top:1px solid var(--panel-border)'; m.appendChild(hr); return; }
+      var d = document.createElement('div');
+      d.style.cssText = 'padding:6px 16px;cursor:pointer;color:var(--fg);white-space:nowrap;';
+      d.textContent = it.label;
+      d.addEventListener('mouseenter', function(){ d.style.background='var(--btn-hover)'; });
+      d.addEventListener('mouseleave', function(){ d.style.background=''; });
+      d.addEventListener('click', function(){ hideContextMenu(); if(it.action) it.action(); });
+      m.appendChild(d);
+    });
+    document.body.appendChild(m);
+    _ctxMenu = m;
+    // 화면 밖으로 넘어가면 보정
+    var r=m.getBoundingClientRect();
+    if(r.right>window.innerWidth) m.style.left=(window.innerWidth-r.width-4)+'px';
+    if(r.bottom>window.innerHeight) m.style.top=(window.innerHeight-r.height-4)+'px';
+  }
+  function hideContextMenu(){ if(_ctxMenu){ _ctxMenu.remove(); _ctxMenu=null; } }
+  document.addEventListener('click', hideContextMenu);
+  document.addEventListener('contextmenu', function(e){
+    var tr = e.target.closest('.data-table tbody tr');
+    if (!tr) return;
+    var cells = tr.querySelectorAll('td');
+    var lotCell = tr.querySelector('td:nth-child(1)') || {};
+    var lot = (lotCell.textContent||'').trim();
+    showContextMenu(e, [
+      {label:'📋 LOT 상세 보기', action:function(){ if(window.showLotDetail) window.showLotDetail(lot); else showToast('info','LOT: '+lot); }},
+      {label:'📤 Excel 내보내기', action:function(){ dispatchAction('onExport'); }},
+      '---',
+      {label:'📊 재고 현황', action:function(){ renderPage('inventory'); }},
+      {label:'🔄 새로고침', action:function(){ renderPage(_currentRoute||'dashboard'); }},
+    ]);
+  });
+
   function escapeHtml(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) {
       return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];
