@@ -587,27 +587,46 @@
         c.innerHTML = '<div class="empty" style="padding:60px;text-align:center">No inventory data</div>';
         return;
       }
-      var html = '<div style="overflow-x:auto"><table class="data-table"><thead><tr>' +
-        '<th>LOT</th><th>SAP</th><th>BL</th><th>Container</th><th>Product</th>' +
-        '<th>Status</th><th>Net(MT)</th><th>Balance</th><th>Bags</th><th>Date</th><th>Location</th><th></th>' +
+      var html = '<section class="page" data-page="inventory">' +
+        '<div style="display:flex;align-items:center;gap:12px;padding:4px 0 10px">' +
+        '<h2 style="margin:0">📦 재고 목록 (Inventory)</h2>' +
+        '<span style="font-size:12px;color:var(--text-muted)">'+rows.length+' LOTs</span>' +
+        '<button class="btn btn-secondary" onclick="renderPage(\'inventory\')" style="margin-left:auto">🔁 새로고침</button>' +
+        '</div>' +
+        '<div style="overflow-x:auto"><table class="data-table"><thead><tr>' +
+        '<th>#</th><th>LOT</th><th>SAP</th><th>BL</th><th>Product</th>' +
+        '<th>Status</th><th>Balance(MT)</th><th>NET(MT)</th><th>Container</th>' +
+        '<th>MXBG</th><th>Avail</th><th>Invoice</th>' +
+        '<th>Ship</th><th>Arrival</th><th>Con Return</th><th>Free</th>' +
+        '<th>WH</th><th>Customs</th><th>Inbound(MT)</th><th>Outbound(MT)</th><th>Location</th><th></th>' +
         '</tr></thead><tbody>';
-      html += rows.map(function(r){
+      html += rows.map(function(r, i){
         return '<tr>' +
-          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot||'')+'</td>' +
+          '<td class="mono-cell" style="color:var(--text-muted)">'+(i+1)+'</td>' +
+          '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+escapeHtml(r.lot||'')+'</td>' +
           '<td class="mono-cell">'+escapeHtml(r.sap||'')+'</td>' +
           '<td class="mono-cell">'+escapeHtml(r.bl||'')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.container||'')+'</td>' +
           '<td><span class="tag">'+escapeHtml(r.product||'')+'</span></td>' +
           '<td>'+escapeHtml(r.status||'')+'</td>' +
-          '<td class="mono-cell">'+(r.net!=null?Number(r.net).toLocaleString():'-')+'</td>' +
-          '<td class="mono-cell">'+(r.balance!=null?Number(r.balance).toLocaleString():'-')+'</td>' +
-          '<td class="mono-cell">'+(r.bags||'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.date||'')+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+(r.balance!=null?fmtN(r.balance):'-')+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+(r.net!=null?fmtN(r.net):'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.container||'')+'</td>' +
+          '<td class="mono-cell" style="text-align:center">'+(r.mxbg_pallet||'-')+'</td>' +
+          '<td class="mono-cell" style="text-align:center">'+(r.avail_bags!=null?r.avail_bags:'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.invoice_no||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml((r.ship_date||'').slice(0,10))+'</td>' +
+          '<td class="mono-cell">'+escapeHtml((r.arrival_date||'').slice(0,10))+'</td>' +
+          '<td class="mono-cell">'+escapeHtml((r.con_return||'').slice(0,10))+'</td>' +
+          '<td class="mono-cell" style="text-align:center">'+(r.free_time||'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.wh||'')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.customs||'')+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+(r.initial_weight!=null?fmtN(r.initial_weight):'-')+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+(r.outbound_weight!=null?fmtN(r.outbound_weight):'-')+'</td>' +
           '<td><span class="tag">'+escapeHtml(r.location||'-')+'</span></td>' +
           '<td><button class="btn btn-ghost btn-xs" onclick="window.showLotDetail(\''+escapeHtml(r.lot||'')+'\')">Detail</button></td>' +
           '</tr>';
       }).join('');
-      html += '</tbody></table></div>';
+      html += '</tbody></table></div></section>';
       c.innerHTML = html;
     }).catch(function(e){
       if (_currentRoute !== route) return;

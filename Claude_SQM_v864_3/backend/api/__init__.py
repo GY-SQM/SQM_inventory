@@ -433,8 +433,14 @@ def _sample_dashboard():
 def _sample_inventory(page=1, page_size=50):
     rows = [
         {"lot": "SQM-2026-0421", "sap": "1000421001", "bl": "COAU2604210",
-         "container": "CRXU1234567", "product": "PP", "status": "AVAILABLE",
-         "net": 500000, "balance": 500000, "bags": 1000, "date": "2026-04-21", "location": "A-01"},
+         "product": "PP", "status": "AVAILABLE",
+         "balance": 500.0, "net": 500.0, "container": "CRXU1234567",
+         "mxbg_pallet": 20, "avail_bags": 1000,
+         "invoice_no": "", "ship_date": "", "arrival_date": "2026-04-21",
+         "con_return": "", "free_time": 0, "wh": "광양", "customs": "",
+         "initial_weight": 500.0, "outbound_weight": 0.0,
+         "date": "2026-04-21", "location": "A-01",
+         "sale_ref": "", "customer": "", "remarks": ""},
     ]
     start = (page - 1) * page_size
     return {"total": len(rows), "page": page, "page_size": page_size, "data":rows[start:start+page_size]}
