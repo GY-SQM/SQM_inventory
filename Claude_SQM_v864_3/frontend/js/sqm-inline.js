@@ -2136,6 +2136,367 @@
      8c. 즉시 출고 (F015) — 폼 기반 네이티브 구현
      엔진 quick_outbound(lot_no, count, customer, reason, operator) 직접 호출
      =================================================== */
+  /* =====================================================================
+     [Sprint 1-3] OneStop Outbound Dialog — 4탭 state machine
+     ─────────────────────────────────────────────────────────────────────
+     v864-2 source: gui_app_modular/dialogs/onestop_outbound.py (2304 lines)
+     State machine: DRAFT → WAIT_SCAN → (FINALIZED | REVIEW | ERROR)
+
+     Phase A (this commit): 4탭 UI 뼈대 + Tab 1 입력 + 상태바 + 파싱 DRAFT 전환
+     Phase B: Tab 2 톤백 선택 (nested per-LOT Treeview)
+     Phase C: Tab 3 스캔 검증 (OUT 스캔 upload + 검증 엔진)
+     Phase D: Tab 4 완료 + 감사 로그 sub-popup
+     Phase E: proof docs 저장소 + 90일 자동 정리
+     ===================================================================== */
+  var _ooState = {
+    state: 'DRAFT',         /* DRAFT | WAIT_SCAN | FINALIZED | REVIEW | ERROR */
+    currentTab: 1,          /* 1 ~ 4 */
+    proofDocs: [],          /* 근거문서 multi-file */
+    customer: '',
+    saleRef: '',
+    lotNo: '',
+    pasteText: '',
+    manualActuals: {},      /* {lot_no: {expected_kg, actual_kg}} */
+    parsedItems: [],        /* 파싱된 출고 아이템 */
+    outScanFile: null,      /* Tab 3 OUT 스캔 파일 */
+    validationResults: [],
+    completedItems: [],
+  };
+
+  function _ooReset() {
+    _ooState.state = 'DRAFT';
+    _ooState.currentTab = 1;
+    _ooState.proofDocs = [];
+    _ooState.customer = '';
+    _ooState.saleRef = '';
+    _ooState.lotNo = '';
+    _ooState.pasteText = '';
+    _ooState.manualActuals = {};
+    _ooState.parsedItems = [];
+    _ooState.outScanFile = null;
+    _ooState.validationResults = [];
+    _ooState.completedItems = [];
+  }
+
+  function showOneStopOutboundModal() {
+    _ooReset();
+
+    var html = [
+      '<div class="oo-modal">',
+      '  <h2>🚀 S1 원스톱 출고 <span style="font-size:12px;font-weight:400;color:var(--text-muted)">— v864.3 (Sprint 1-3)</span></h2>',
+      /* 상태바 */
+      '  <div class="oo-statusbar">',
+      '    <span style="font-weight:700;color:var(--text-muted);font-size:12px">상태:</span>',
+      '    <span id="oo-status-badge" class="oo-status-badge draft">● DRAFT</span>',
+      '    <div class="oo-status-progress">',
+      '      <span id="oo-dot-draft"  class="oo-status-dot active"></span><span>DRAFT</span>',
+      '      <span>→</span>',
+      '      <span id="oo-dot-scan"   class="oo-status-dot"></span><span>WAIT_SCAN</span>',
+      '      <span>→</span>',
+      '      <span id="oo-dot-final"  class="oo-status-dot"></span><span>FINALIZED</span>',
+      '    </div>',
+      '    <span id="oo-status-hint" style="font-size:11px;color:var(--text-muted)">Tab 1 에서 입력 후 ▶ 파싱</span>',
+      '  </div>',
+      /* 탭 헤더 */
+      '  <div class="oo-tab-headers">',
+      '    <button class="oo-tab-header active" data-tab="1" onclick="window.ooSwitchTab(1)">',
+      '      <span class="oo-tab-header-num">①</span><span>입력 (붙여넣기)</span>',
+      '    </button>',
+      '    <button class="oo-tab-header" data-tab="2" onclick="window.ooSwitchTab(2)" disabled title="DRAFT 상태에서 활성화">',
+      '      <span class="oo-tab-header-num">②</span><span>톤백 선택</span>',
+      '    </button>',
+      '    <button class="oo-tab-header" data-tab="3" onclick="window.ooSwitchTab(3)" disabled title="WAIT_SCAN 상태에서 활성화">',
+      '      <span class="oo-tab-header-num">③</span><span>스캔 검증</span>',
+      '    </button>',
+      '    <button class="oo-tab-header" data-tab="4" onclick="window.ooSwitchTab(4)" disabled title="완료 시 활성화">',
+      '      <span class="oo-tab-header-num">④</span><span>완료</span>',
+      '    </button>',
+      '  </div>',
+      /* 탭 본문 */
+      '  <div class="oo-tab-body">',
+      /* --- Tab 1: 입력 --- */
+      '    <div class="oo-tab-pane active" data-pane="1">',
+      /* 근거문서 섹션 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">📎 근거문서 (Proof Documents)</div>',
+      '        <input type="file" id="oo-proof-input" multiple style="display:none" onchange="window.ooAddProofFiles(this.files)">',
+      '        <button class="btn" onclick="document.getElementById(\'oo-proof-input\').click()">+ 파일 첨부</button>',
+      '        <div id="oo-proof-files" class="oo-files-list"></div>',
+      '        <div style="font-size:11px;color:var(--text-muted);margin-top:6px">💡 출고 근거 서류(PDF/이미지/Excel). 완료 후 data/proof_docs/YYYY-MM-DD/ 에 저장 예정 (Phase E)</div>',
+      '      </div>',
+      /* 고객사/Sale Ref/LOT */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">🏢 고객사 · Sale Ref · LOT</div>',
+      '        <div class="oo-input-grid">',
+      '          <label>고객사:</label><input type="text" id="oo-customer" placeholder="예: ACME Corp" onchange="_ooState.customer=this.value">',
+      '          <label>Sale Ref:</label><input type="text" id="oo-sale-ref" placeholder="예: SO-2026-0420" onchange="_ooState.saleRef=this.value">',
+      '          <label>LOT NO:</label><input type="text" id="oo-lot" placeholder="예: 1126013063" style="font-family:Consolas,monospace" onchange="_ooState.lotNo=this.value">',
+      '          <label>출고일:</label><input type="date" id="oo-date">',
+      '        </div>',
+      '        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">빠른 선택 단축키 (Sprint 2): 🔄 고객사 목록 새로고침</div>',
+      '      </div>',
+      /* 수동 실제수량 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">✏️ 수동 실제수량 입력 (선택)</div>',
+      '        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">',
+      '          <label>LOT:</label><input type="text" id="oo-manual-lot" placeholder="LOT NO" style="padding:4px 8px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-family:Consolas,monospace">',
+      '          <label>실제(kg):</label><input type="number" id="oo-manual-actual" step="0.01" placeholder="예: 5001.25" style="padding:4px 8px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;width:100px">',
+      '          <button class="btn" onclick="window.ooAddManualActual()">적용</button>',
+      '          <span id="oo-manual-list" style="color:var(--text-muted);font-size:11px"></span>',
+      '        </div>',
+      '        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">💡 계측 오차 있는 LOT 은 수동 값으로 덮어씀. actual &gt; expected 는 ⛔ 하드스톱</div>',
+      '      </div>',
+      /* Paste 영역 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">📋 붙여넣기 입력</div>',
+      '        <textarea id="oo-paste" class="oo-paste-textarea" placeholder="Excel/CSV 에서 복사한 LOT 정보를 여기에 붙여넣으세요\n예:&#10;LOT_NO\tSAP_NO\tQTY(kg)\tCUSTOMER\tSALE_REF\n1126013063\t2200034449\t5000\tACME\tSO-2026-0420"></textarea>',
+      '        <div style="display:flex;gap:8px;margin-top:8px">',
+      '          <button class="btn" onclick="window.ooInsertSample()">📝 샘플 삽입</button>',
+      '          <button class="btn btn-primary" id="oo-parse-btn" onclick="window.ooParseDraft()">🔄 파싱 → DRAFT ▶</button>',
+      '          <button class="btn" onclick="window.ooClearPaste()">🧹 지우기</button>',
+      '          <span id="oo-parse-hint" style="margin-left:auto;color:var(--text-muted);font-size:11px;align-self:center">고객사 + LOT 또는 붙여넣기 내용 필요</span>',
+      '        </div>',
+      '      </div>',
+      /* 파싱 결과 */
+      '      <div id="oo-draft-result" style="margin-top:10px"></div>',
+      '    </div>',
+      /* --- Tab 2: 톤백 선택 (Phase B placeholder) --- */
+      '    <div class="oo-tab-pane" data-pane="2">',
+      '      <div class="oo-tab-placeholder">',
+      '        <div class="icon">📦</div>',
+      '        <div style="font-weight:700;margin-top:12px">② 톤백 선택</div>',
+      '        <div style="margin-top:6px">Tab 1 에서 ▶ 파싱 → DRAFT 진입 후 자동 활성화됩니다.</div>',
+      '        <div class="phase">Sprint 1-3 Phase B 예정</div>',
+      '        <div style="margin-top:16px;font-size:11px">예정 기능: LOT별 가용 톤백 Treeview · 🎲 랜덤 선택 · ✅ LOT 전체 · ☐ 전체 해제 · DRAFT → WAIT_SCAN ▶</div>',
+      '      </div>',
+      '    </div>',
+      /* --- Tab 3: 스캔 검증 (Phase C placeholder) --- */
+      '    <div class="oo-tab-pane" data-pane="3">',
+      '      <div class="oo-tab-placeholder">',
+      '        <div class="icon">📊</div>',
+      '        <div style="font-weight:700;margin-top:12px">③ 스캔 검증</div>',
+      '        <div style="margin-top:6px">Tab 2 에서 톤백 선택 → WAIT_SCAN 진입 후 활성화됩니다.</div>',
+      '        <div class="phase">Sprint 1-3 Phase C 예정</div>',
+      '        <div style="margin-top:16px;font-size:11px">예정 기능: OUT 스캔 파일 upload (csv/xlsx) · ⚡ 전체 검증 실행 · 검증 결과 Treeview · actual &gt; expected 하드스톱</div>',
+      '      </div>',
+      '    </div>',
+      /* --- Tab 4: 완료 (Phase D placeholder) --- */
+      '    <div class="oo-tab-pane" data-pane="4">',
+      '      <div class="oo-tab-placeholder">',
+      '        <div class="icon">✅</div>',
+      '        <div style="font-weight:700;margin-top:12px">④ 완료</div>',
+      '        <div style="margin-top:6px">Tab 3 검증 통과 후 활성화됩니다.</div>',
+      '        <div class="phase">Sprint 1-3 Phase D 예정</div>',
+      '        <div style="margin-top:16px;font-size:11px">예정 기능: 📦 확정건 출고 완료 ▶ · ✅ 승인 → FINALIZED · 완료 이력 Treeview · 📋 감사 로그 sub-popup (CSV export)</div>',
+      '      </div>',
+      '    </div>',
+      '  </div>',  /* /oo-tab-body */
+      /* 하단 버튼 */
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">❌ 닫기</button>',
+      '    <button class="btn" onclick="window.ooViewAuditLog()">📋 감사 로그 보기</button>',
+      '    <button class="btn btn-wip" id="oo-final-btn" onclick="window.ooFinalize()" disabled title="Sprint 1-3 Phase D 예정">📦 확정건 출고 완료 ▶</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+
+    showDataModal('', html);
+
+    /* 기본 출고일 = 오늘 */
+    var dateInput = document.getElementById('oo-date');
+    if (dateInput) {
+      var d = new Date();
+      dateInput.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+  }
+  window.showOneStopOutboundModal = showOneStopOutboundModal;
+
+  /* ─── Tab 전환 ─────────────────────────────────────────────────────── */
+  window.ooSwitchTab = function(tab) {
+    _ooState.currentTab = tab;
+    document.querySelectorAll('.oo-tab-header').forEach(function(h){
+      h.classList.toggle('active', parseInt(h.dataset.tab, 10) === tab);
+    });
+    document.querySelectorAll('.oo-tab-pane').forEach(function(p){
+      p.classList.toggle('active', parseInt(p.dataset.pane, 10) === tab);
+    });
+  };
+
+  /* ─── 상태 업데이트 ─────────────────────────────────────────────────── */
+  function _ooSetState(newState) {
+    _ooState.state = newState;
+    var badge = document.getElementById('oo-status-badge');
+    if (!badge) return;
+    badge.className = 'oo-status-badge ' + newState.toLowerCase();
+    var map = { DRAFT: '● DRAFT', WAIT_SCAN: '● WAIT_SCAN', FINALIZED: '● FINALIZED', REVIEW: '● REVIEW', ERROR: '● ERROR' };
+    badge.textContent = map[newState] || ('● ' + newState);
+
+    /* progress dots */
+    var draft = document.getElementById('oo-dot-draft');
+    var scan  = document.getElementById('oo-dot-scan');
+    var final = document.getElementById('oo-dot-final');
+    [draft, scan, final].forEach(function(d){ if (d) d.className = 'oo-status-dot'; });
+    if (newState === 'DRAFT')         { if(draft) draft.className = 'oo-status-dot active'; }
+    else if (newState === 'WAIT_SCAN'){ if(draft) draft.className = 'oo-status-dot done'; if(scan) scan.className = 'oo-status-dot active'; }
+    else if (newState === 'FINALIZED'){ if(draft) draft.className = 'oo-status-dot done'; if(scan) scan.className = 'oo-status-dot done'; if(final) final.className = 'oo-status-dot active'; }
+
+    /* 탭 활성화 */
+    var tab2 = document.querySelector('.oo-tab-header[data-tab="2"]');
+    var tab3 = document.querySelector('.oo-tab-header[data-tab="3"]');
+    var tab4 = document.querySelector('.oo-tab-header[data-tab="4"]');
+    if (tab2) tab2.disabled = !(newState === 'DRAFT' || newState === 'WAIT_SCAN' || newState === 'FINALIZED');
+    if (tab3) tab3.disabled = !(newState === 'WAIT_SCAN' || newState === 'FINALIZED');
+    if (tab4) tab4.disabled = !(newState === 'FINALIZED' || newState === 'REVIEW');
+
+    var hint = document.getElementById('oo-status-hint');
+    if (hint) {
+      var hintMap = {
+        DRAFT:     '📋 Tab 2 에서 톤백 선택 → DRAFT → WAIT_SCAN',
+        WAIT_SCAN: '📊 Tab 3 에서 OUT 스캔 검증',
+        FINALIZED: '✅ 완료 — Tab 4 에서 출고 확정',
+        REVIEW:    '🔍 검토 필요 (불일치 발견)',
+        ERROR:     '🚫 에러 — actual > expected',
+      };
+      hint.textContent = hintMap[newState] || '';
+    }
+  }
+
+  /* ─── 근거문서 파일 관리 ────────────────────────────────────────────── */
+  window.ooAddProofFiles = function(fileList) {
+    if (!fileList) return;
+    Array.from(fileList).forEach(function(f){ _ooState.proofDocs.push(f); });
+    _ooRenderProofFiles();
+  };
+  window.ooRemoveProofFile = function(idx) {
+    _ooState.proofDocs.splice(idx, 1);
+    _ooRenderProofFiles();
+  };
+  function _ooRenderProofFiles() {
+    var el = document.getElementById('oo-proof-files');
+    if (!el) return;
+    if (!_ooState.proofDocs.length) { el.innerHTML = '<span style="color:var(--text-muted);font-size:11px">첨부된 파일 없음</span>'; return; }
+    el.innerHTML = _ooState.proofDocs.map(function(f, i){
+      return '<span class="oo-file-chip">📄 ' + escapeHtml(f.name) + ' <span class="remove" onclick="window.ooRemoveProofFile(' + i + ')">✕</span></span>';
+    }).join('');
+  }
+
+  /* ─── 수동 실제수량 ─────────────────────────────────────────────────── */
+  window.ooAddManualActual = function() {
+    var lot = (document.getElementById('oo-manual-lot') || {}).value || '';
+    var act = (document.getElementById('oo-manual-actual') || {}).value || '';
+    lot = String(lot).trim();
+    if (!lot || !act) { showToast('warn', 'LOT NO 와 실제(kg) 값 필요'); return; }
+    _ooState.manualActuals[lot] = { actual_kg: parseFloat(act) };
+    document.getElementById('oo-manual-lot').value = '';
+    document.getElementById('oo-manual-actual').value = '';
+    var list = document.getElementById('oo-manual-list');
+    if (list) {
+      var items = Object.keys(_ooState.manualActuals).map(function(k){
+        return k + '=' + _ooState.manualActuals[k].actual_kg + 'kg';
+      });
+      list.textContent = items.length ? '(' + items.length + '건: ' + items.slice(0, 3).join(', ') + (items.length > 3 ? '…' : '') + ')' : '';
+    }
+    showToast('success', '수동값 ' + lot + ' = ' + act + 'kg 저장됨');
+  };
+
+  /* ─── Paste / Sample / Clear ───────────────────────────────────────── */
+  window.ooInsertSample = function() {
+    var ta = document.getElementById('oo-paste');
+    if (!ta) return;
+    ta.value = 'LOT_NO\tSAP_NO\tQTY(kg)\tCUSTOMER\tSALE_REF\n' +
+               '1126013063\t2200034449\t5001.25\tACME Corp\tSO-2026-0420\n' +
+               '1126013064\t2200034449\t5000.50\tACME Corp\tSO-2026-0420\n' +
+               '1126013065\t2200034449\t4998.75\tACME Corp\tSO-2026-0420';
+    showToast('info', '샘플 3행 삽입됨 — 파싱해 보세요');
+  };
+  window.ooClearPaste = function() {
+    var ta = document.getElementById('oo-paste');
+    if (ta) ta.value = '';
+    var rb = document.getElementById('oo-draft-result');
+    if (rb) rb.innerHTML = '';
+  };
+
+  /* ─── 파싱 → DRAFT 전환 ────────────────────────────────────────────── */
+  window.ooParseDraft = function() {
+    var customer = (document.getElementById('oo-customer') || {}).value || '';
+    var saleRef  = (document.getElementById('oo-sale-ref') || {}).value || '';
+    var lotNo    = (document.getElementById('oo-lot') || {}).value || '';
+    var paste    = (document.getElementById('oo-paste') || {}).value || '';
+    customer = customer.trim(); saleRef = saleRef.trim(); lotNo = lotNo.trim(); paste = paste.trim();
+
+    if (!customer && !paste) { showToast('error', '고객사 또는 붙여넣기 내용 필요'); return; }
+
+    _ooState.customer = customer;
+    _ooState.saleRef = saleRef;
+    _ooState.lotNo = lotNo;
+    _ooState.pasteText = paste;
+
+    /* paste 파싱 — TSV/CSV 구분 + 헤더 자동 인식 */
+    var items = [];
+    if (paste) {
+      var lines = paste.split(/\r?\n/).filter(function(l){ return l.trim(); });
+      if (lines.length >= 2) {
+        /* 헤더 감지 */
+        var headers = lines[0].split(/\t|,/).map(function(s){ return s.trim().toLowerCase(); });
+        var iLot  = headers.findIndex(function(h){ return /lot[_ ]?no|lot/.test(h); });
+        var iSap  = headers.findIndex(function(h){ return /sap/.test(h); });
+        var iQty  = headers.findIndex(function(h){ return /qty|weight|net/.test(h); });
+        var iCust = headers.findIndex(function(h){ return /customer|고객/.test(h); });
+        var iRef  = headers.findIndex(function(h){ return /sale[_ ]?ref|sale/.test(h); });
+        /* 데이터 행 */
+        for (var i = 1; i < lines.length; i++) {
+          var cols = lines[i].split(/\t|,/).map(function(s){ return s.trim(); });
+          if (!cols.length) continue;
+          items.push({
+            lot_no:     iLot  >= 0 ? cols[iLot]  : cols[0] || '',
+            sap_no:     iSap  >= 0 ? cols[iSap]  : '',
+            qty_kg:     iQty  >= 0 ? parseFloat(cols[iQty] || 0) : 0,
+            customer:   iCust >= 0 ? cols[iCust] : customer,
+            sale_ref:   iRef  >= 0 ? cols[iRef]  : saleRef,
+          });
+        }
+      } else {
+        /* 단일 행 텍스트 → LOT NO 만 추출 */
+        items.push({ lot_no: paste, sap_no: '', qty_kg: 0, customer: customer, sale_ref: saleRef });
+      }
+    } else if (lotNo) {
+      items.push({ lot_no: lotNo, sap_no: '', qty_kg: 0, customer: customer, sale_ref: saleRef });
+    }
+
+    if (!items.length) { showToast('error', '파싱 결과가 비어있습니다'); return; }
+
+    _ooState.parsedItems = items;
+    _ooSetState('DRAFT');
+
+    var rb = document.getElementById('oo-draft-result');
+    if (rb) {
+      rb.innerHTML =
+        '<div style="padding:10px;background:rgba(102,187,106,.1);border-left:3px solid var(--success);border-radius:4px">' +
+        '<div style="font-weight:700;color:var(--success)">✅ DRAFT 생성 완료 — ' + items.length + '건</div>' +
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">' +
+        '고객사: ' + escapeHtml(customer || '(paste 기반)') + ' · Sale Ref: ' + escapeHtml(saleRef || '-') +
+        ' · 근거문서: ' + _ooState.proofDocs.length + '건' +
+        ' · 수동값: ' + Object.keys(_ooState.manualActuals).length + '건</div>' +
+        '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px">파싱된 LOT 목록</summary>' +
+        '<table class="data-table" style="margin-top:6px;font-size:11px"><thead><tr><th>#</th><th>LOT</th><th>SAP</th><th>QTY(kg)</th><th>고객</th><th>Ref</th></tr></thead><tbody>' +
+        items.map(function(it, i){
+          return '<tr><td>' + (i+1) + '</td><td class="mono-cell">' + escapeHtml(it.lot_no||'-') + '</td><td class="mono-cell">' + escapeHtml(it.sap_no||'-') + '</td><td class="mono-cell" style="text-align:right">' + (it.qty_kg || 0) + '</td><td>' + escapeHtml(it.customer||'-') + '</td><td class="mono-cell">' + escapeHtml(it.sale_ref||'-') + '</td></tr>';
+        }).join('') + '</tbody></table></details>' +
+        '<div style="margin-top:8px;font-size:11px;color:var(--info, #42a5f5)">💡 다음 단계: 상단 <strong>② 톤백 선택</strong> 탭으로 이동 (Sprint 1-3 Phase B 에서 활성화 예정)</div>' +
+        '</div>';
+    }
+    showToast('success', 'DRAFT 생성: ' + items.length + '건');
+  };
+
+  /* ─── 플레이스홀더 ──────────────────────────────────────────────────── */
+  window.ooFinalize = function() {
+    showToast('info', '출고 확정: Sprint 1-3 Phase D (Tab 4 완료) 에서 구현 예정');
+  };
+  window.ooViewAuditLog = function() {
+    showToast('info', '감사 로그 sub-popup: Sprint 1-3 Phase D 에서 구현 (오늘은 기존 📋 감사 로그 조회 메뉴 사용)');
+  };
+
+  /* 기존 showQuickOutboundModal (레거시 — 단순 즉시 출고) */
   function showQuickOutboundModal() {
     var html = [
       '<div style="max-width:560px">',
@@ -4306,7 +4667,8 @@
         return;
       }
       if (conf.u === 'quick-outbound') {
-        showQuickOutboundModal();
+        /* [Sprint 1-3] OneStop 4탭 wizard 모달로 전환 */
+        showOneStopOutboundModal();
         return;
       }
       if (conf.u === 'do-update') {
