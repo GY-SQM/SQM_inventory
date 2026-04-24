@@ -7278,6 +7278,121 @@
   }
   window.showDnCrossCheckModal = showDnCrossCheckModal;
   window.dnRefresh = function() { showDnCrossCheckModal(); };
+  /* =====================================================================
+     [Sprint 2-P] ReturnStatisticsDialog — 반품 사유 통계 + 월별 추이
+     v864-2: dialogs/return_statistics_dialog.py (481 lines)
+     백엔드 reuse: GET /api/q2/return-stats
+     ===================================================================== */
+  function showReturnStatsModal() {
+    showDataModal('', '<div style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 반품 통계 조회 중...</div>');
+    apiGet('/api/q2/return-stats')
+      .then(function(res){
+        if (!res || !res.ok) throw new Error((res && res.error) || '조회 실패');
+        var d = res.data || {};
+        var byReason = d.by_reason || [];
+        var monthly = d.monthly_trend || [];
+        var total = d.total || { cnt: 0, total_mt: 0 };
+
+        /* 사유별 막대 그래프 (CSS bars) */
+        var maxCnt = byReason.reduce(function(m, r){ return Math.max(m, r.cnt || 0); }, 1);
+        var reasonBars = byReason.length === 0
+          ? '<div style="padding:30px;text-align:center;color:var(--text-muted)">📭 반품 이력 없음</div>'
+          : byReason.map(function(r, i){
+              var pct = (r.cnt / maxCnt) * 100;
+              var hue = (i * 50) % 360;
+              return '<div style="margin-bottom:8px">' +
+                '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px">' +
+                '<strong>' + escapeHtml(r.reason) + '</strong>' +
+                '<span>' + r.cnt + '건 · ' + (r.total_mt || 0).toFixed(3) + ' MT</span>' +
+                '</div>' +
+                '<div style="background:var(--bg-hover);border-radius:3px;height:18px;overflow:hidden">' +
+                '<div style="background:hsl(' + hue + ',60%,55%);height:100%;width:' + pct + '%;transition:width .3s"></div>' +
+                '</div>' +
+                '</div>';
+            }).join('');
+
+        /* 월별 추이 — 간단한 막대 차트 */
+        var maxMonthCnt = monthly.reduce(function(m, r){ return Math.max(m, r.cnt || 0); }, 1);
+        var monthlyHtml = monthly.length === 0
+          ? '<div style="padding:30px;text-align:center;color:var(--text-muted)">월별 데이터 없음</div>'
+          : '<div style="display:flex;align-items:flex-end;gap:6px;height:180px;padding:10px;background:var(--bg-hover);border-radius:4px">' +
+            monthly.slice().reverse().map(function(m){
+              var hpct = (m.cnt / maxMonthCnt) * 100;
+              return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;font-size:10px" title="' + escapeHtml(m.month) + ': ' + m.cnt + '건 / ' + (m.total_mt || 0).toFixed(3) + ' MT">' +
+                '<div style="background:var(--accent);width:80%;height:' + hpct + '%;min-height:2px;border-radius:2px 2px 0 0"></div>' +
+                '<div style="margin-top:3px;color:var(--text-muted);font-family:Consolas,monospace">' + escapeHtml(m.month) + '</div>' +
+                '<div style="font-weight:700">' + m.cnt + '</div>' +
+                '</div>';
+            }).join('') +
+            '</div>';
+
+        var html =
+          '<div style="max-width:1000px">' +
+          '  <h2 style="margin:0 0 8px 0">📊 반품 사유 통계 (Return Statistics)</h2>' +
+          /* 전체 요약 */
+          '  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">' +
+          '    <div style="background:var(--panel);border-left:4px solid var(--warning);padding:10px 12px;border-radius:4px">' +
+          '      <div style="font-size:11px;color:var(--text-muted);font-weight:600">📦 총 반품 건수</div>' +
+          '      <div style="font-size:22px;font-weight:700;color:var(--warning);margin-top:2px">' + (total.cnt || 0) + '건</div>' +
+          '    </div>' +
+          '    <div style="background:var(--panel);border-left:4px solid #ec407a;padding:10px 12px;border-radius:4px">' +
+          '      <div style="font-size:11px;color:var(--text-muted);font-weight:600">⚖️ 총 반품 중량</div>' +
+          '      <div style="font-size:22px;font-weight:700;color:#ec407a;margin-top:2px">' + (total.total_mt || 0).toFixed(3) + ' MT</div>' +
+          '    </div>' +
+          '  </div>' +
+          /* 좌우 분할: 사유별 / 월별 */
+          '  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+          '    <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:12px">' +
+          '      <h3 style="font-size:13px;margin:0 0 8px 0">📋 사유별 분포 (' + byReason.length + ')</h3>' +
+          '      <div style="max-height:280px;overflow-y:auto">' + reasonBars + '</div>' +
+          '    </div>' +
+          '    <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:12px">' +
+          '      <h3 style="font-size:13px;margin:0 0 8px 0">📅 월별 추이 (최근 12개월)</h3>' +
+          monthlyHtml +
+          '    </div>' +
+          '  </div>' +
+          /* 액션 */
+          '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">' +
+          '    <button class="btn" onclick="window.rsRefresh()">🔄 새로고침</button>' +
+          '    <button class="btn" onclick="window.rsExportCsv()">📥 Excel 저장</button>' +
+          '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+          '  </div>' +
+          '</div>';
+        document.getElementById('sqm-modal-content').innerHTML = html;
+        window._rsLastResult = d;
+      })
+      .catch(function(e){
+        document.getElementById('sqm-modal-content').innerHTML = '<div class="empty" style="padding:30px">조회 실패: ' + escapeHtml(e.message || String(e)) + '</div>';
+      });
+  }
+  window.showReturnStatsModal = showReturnStatsModal;
+  window.rsRefresh = function() { showReturnStatsModal(); };
+  window.rsExportCsv = function() {
+    var d = window._rsLastResult || {};
+    var lines = ['# 반품 통계 — Total: ' + (d.total ? d.total.cnt + '건 / ' + (d.total.total_mt || 0).toFixed(3) + ' MT' : '0')];
+    lines.push('');
+    lines.push('## 사유별');
+    lines.push('reason,cnt,total_mt');
+    function csvEsc(v){ var s = String(v == null ? '' : v); if (/[,"\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"'; return s; }
+    (d.by_reason || []).forEach(function(r){
+      lines.push([csvEsc(r.reason), r.cnt, r.total_mt].join(','));
+    });
+    lines.push('');
+    lines.push('## 월별 추이');
+    lines.push('month,cnt,total_mt');
+    (d.monthly_trend || []).forEach(function(r){
+      lines.push([csvEsc(r.month), r.cnt, r.total_mt].join(','));
+    });
+    var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url;
+    var ts = new Date();
+    a.download = 'return_stats_' + ts.getFullYear() + String(ts.getMonth()+1).padStart(2,'0') + String(ts.getDate()).padStart(2,'0') + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('success', '📥 ' + a.download);
+  };
+
   window.dnExportCsv = function() {
     var d = window._dnLastResult || {};
     var headers = ['type','lot_no','do_no','bl_no','sap_no','product','vessel','status','arrival_or_inbound','weight_kg'];
@@ -7422,7 +7537,7 @@
     'onReturnDialog':    {m:'JS',   u:'return-dialog',                             lbl:'반품 (재입고)'},
     /* v864.3 Phase 4-B: 반품 입고 — 네이티브 Excel 업로드 모달 */
     'onReturnInboundUpload': {m:'JS', u:'return-upload', lbl:'반품 입고 Excel'},
-    'onReturnStatistics': {m:'GET', u:'/api/q2/return-stats',                   lbl:'반품 사유 통계'},
+    'onReturnStatistics': {m:'JS',  u:'return-stats',                            lbl:'반품 사유 통계'},  /* [Sprint 2-P] */
     'onRecentFiles':     {m:'GET',  u:'/api/q2/recent-files',                   lbl:'최근 파일'},
     'onExit':            {m:'JS',   u:'exit',                                    lbl:'종료'},
 
@@ -7727,6 +7842,8 @@
       if (conf.u === 'inbound-history') { showInboundHistoryModal(); return; }
       /* [Sprint 2-O] DN Cross Check */
       if (conf.u === 'dn-cross-check') { showDnCrossCheckModal(); return; }
+      /* [Sprint 2-P] Return Statistics */
+      if (conf.u === 'return-stats') { showReturnStatsModal(); return; }
       dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
       renderPage(conf.u);
       return;
