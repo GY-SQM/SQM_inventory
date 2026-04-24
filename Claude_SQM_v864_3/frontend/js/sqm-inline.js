@@ -2162,8 +2162,11 @@
     lotsWithTonbags: {},    /* { lot_no: [{sub_lt, weight, status, location, ...}, ...] } */
     selectedTonbags: null,  /* Set<"lot.sub_lt"> */
     expandedLots: null,     /* Set<lot_no> */
-    outScanFile: null,      /* Tab 3 OUT 스캔 파일 */
-    validationResults: [],
+    /* [Sprint 1-3-C] Tab 3 OUT 스캔 검증 */
+    scanFile: null,         /* 업로드한 파일 객체 */
+    scanRows: [],           /* [{tonbag_uid, actual_kg}, ...] - 백엔드 파싱 결과 */
+    manualScans: [],        /* 수동 입력 [{tonbag_uid, actual_kg}, ...] */
+    validationResults: [],  /* [{tonbag_uid, lot_no, expected_kg, actual_kg, diff_pct, level: ok|warn|stop, message}] */
     completedItems: [],
   };
 
@@ -2180,7 +2183,9 @@
     _ooState.lotsWithTonbags = {};
     _ooState.selectedTonbags = new Set();
     _ooState.expandedLots = new Set();
-    _ooState.outScanFile = null;
+    _ooState.scanFile = null;
+    _ooState.scanRows = [];
+    _ooState.manualScans = [];
     _ooState.validationResults = [];
     _ooState.completedItems = [];
   }
@@ -2293,14 +2298,47 @@
       '        </div>',
       '      </div>',
       '    </div>',
-      /* --- Tab 3: 스캔 검증 (Phase C placeholder) --- */
+      /* --- Tab 3: 스캔 검증 (Sprint 1-3-C 실구현) --- */
       '    <div class="oo-tab-pane" data-pane="3">',
-      '      <div class="oo-tab-placeholder">',
-      '        <div class="icon">📊</div>',
-      '        <div style="font-weight:700;margin-top:12px">③ 스캔 검증</div>',
-      '        <div style="margin-top:6px">Tab 2 에서 톤백 선택 → WAIT_SCAN 진입 후 활성화됩니다.</div>',
-      '        <div class="phase">Sprint 1-3 Phase C 예정</div>',
-      '        <div style="margin-top:16px;font-size:11px">예정 기능: OUT 스캔 파일 upload (csv/xlsx) · ⚡ 전체 검증 실행 · 검증 결과 Treeview · actual &gt; expected 하드스톱</div>',
+      /* 통계 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">📊 검증 요약</div>',
+      '        <div id="oo-t3-stats" style="font-size:13px;color:var(--text-muted)">Tab 2 에서 톤백을 선택해야 검증 가능</div>',
+      '      </div>',
+      /* 파일 업로드 + 수동 입력 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">📊 OUT 스캔 파일 업로드</div>',
+      '        <input type="file" id="oo-scan-input" accept=".csv,.xlsx,.xls" style="display:none" onchange="window.ooHandleScanFile(this.files[0])">',
+      '        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">',
+      '          <button class="btn btn-primary" onclick="document.getElementById(\'oo-scan-input\').click()">📂 파일 선택 (csv/xlsx)</button>',
+      '          <span id="oo-scan-filename" style="font-family:Consolas,monospace;font-size:11px;color:var(--text-muted)">선택된 파일 없음</span>',
+      '          <button class="btn" onclick="window.ooClearScan()" style="margin-left:auto">🧹 초기화</button>',
+      '        </div>',
+      '        <div style="margin-top:6px;font-size:11px;color:var(--text-muted)">💡 컬럼 자동 인식: <code>tonbag_uid</code>(또는 sub_lt/id) + <code>actual_kg</code>(또는 weight/net_kg)</div>',
+      '      </div>',
+      /* 수동 입력 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">✏️ 수동 입력 (선택)</div>',
+      '        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12px">',
+      '          <label>톤백 ID:</label><input type="text" id="oo-scan-uid" placeholder="T-1234" style="padding:4px 8px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-family:Consolas,monospace">',
+      '          <label>실제(kg):</label><input type="number" id="oo-scan-actual" step="0.01" placeholder="1001.25" style="padding:4px 8px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;width:110px">',
+      '          <button class="btn" onclick="window.ooAddManualScan()">➕ 추가</button>',
+      '        </div>',
+      '      </div>',
+      /* 검증 실행 */
+      '      <div class="oo-section">',
+      '        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">',
+      '          <button class="btn btn-primary" onclick="window.ooRunValidation()">⚡ 전체 검증 실행</button>',
+      '          <span id="oo-validation-hint" style="color:var(--text-muted);font-size:11px">스캔 데이터를 먼저 업로드/입력</span>',
+      '          <button class="btn btn-primary" id="oo-goto-finalize-btn" onclick="window.ooMoveToFinalize()" disabled style="margin-left:auto" title="WAIT_SCAN → FINALIZED">WAIT_SCAN → FINALIZED ▶</button>',
+      '        </div>',
+      '      </div>',
+      /* 검증 결과 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">📋 검증 결과</div>',
+      '        <div id="oo-validation-results" style="max-height:280px;overflow-y:auto">',
+      '          <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">⚡ "전체 검증 실행" 버튼을 눌러 결과를 확인하세요</div>',
+      '        </div>',
       '      </div>',
       '    </div>',
       /* --- Tab 4: 완료 (Phase D placeholder) --- */
@@ -2705,8 +2743,276 @@
     }
     if (!confirm('📦 WAIT_SCAN 진입\n\n선택된 톤백 ' + _ooState.selectedTonbags.size + '개로 스캔 검증 단계로 이동합니다.\n계속하시겠습니까?')) return;
     _ooSetState('WAIT_SCAN');
+    _ooUpdateT3Stats();
     setTimeout(function(){ window.ooSwitchTab(3); }, 300);
-    showToast('success', 'WAIT_SCAN 진입 — Tab 3 에서 OUT 스캔 검증 (Sprint 1-3-C 예정)');
+    showToast('success', 'WAIT_SCAN 진입 — Tab 3 에서 OUT 스캔 검증');
+  };
+
+  /* =====================================================================
+     [Sprint 1-3-C] Tab 3 — OUT 스캔 검증 + 하드스톱
+     ─────────────────────────────────────────────────────────────────────
+     검증 룰 (v864-2 매칭):
+       |diff_pct| <= 0.5%     → ✅ OK
+       0.5% < |diff_pct| ≤ 5% → ⚠️ Warning (REVIEW)
+       |diff_pct| > 5%        → 🚫 STOP (ERROR — FINALIZED 차단)
+       actual > expected      → 🚫 즉시 하드스톱
+     ===================================================================== */
+  function _ooUpdateT3Stats() {
+    var el = document.getElementById('oo-t3-stats');
+    if (!el) return;
+    var selCount = _ooState.selectedTonbags.size;
+    var selKg = 0;
+    Object.keys(_ooState.lotsWithTonbags).forEach(function(lot){
+      (_ooState.lotsWithTonbags[lot] || []).forEach(function(t){
+        var key = lot + '.' + (t.sub_lt || t.tonbag_id);
+        if (_ooState.selectedTonbags.has(key)) selKg += Number(t.weight) || 0;
+      });
+    });
+    var scanned = _ooState.scanRows.length + _ooState.manualScans.length;
+    var ok = _ooState.validationResults.filter(function(r){ return r.level === 'ok'; }).length;
+    var warn = _ooState.validationResults.filter(function(r){ return r.level === 'warn'; }).length;
+    var stop = _ooState.validationResults.filter(function(r){ return r.level === 'stop'; }).length;
+
+    el.innerHTML =
+      '<div>📦 검증 대상: <strong>' + selCount + '개 톤백</strong> (' + (selKg / 1000).toFixed(3) + ' MT)</div>' +
+      '<div style="margin-top:4px">📊 스캔된 항목: <strong>' + scanned + '건</strong>' +
+      (_ooState.validationResults.length ?
+        ' · ✅ 통과 <strong style="color:var(--success)">' + ok + '</strong>' +
+        ' · ⚠️ 경고 <strong style="color:var(--warning)">' + warn + '</strong>' +
+        ' · 🚫 하드스톱 <strong style="color:var(--danger)">' + stop + '</strong>' : '') + '</div>';
+  }
+
+  /* CSV/xlsx 업로드 → 백엔드 파싱 */
+  window.ooHandleScanFile = function(file) {
+    if (!file) return;
+    _ooState.scanFile = file;
+    var fnEl = document.getElementById('oo-scan-filename');
+    if (fnEl) fnEl.textContent = '⏳ 파싱 중: ' + file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+
+    var form = new FormData();
+    form.append('file', file, file.name);
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', API + '/api/outbound/onestop-scan-parse');
+    xhr.onload = function(){
+      var body; try { body = JSON.parse(xhr.responseText); } catch(e){ body = null; }
+      if (xhr.status >= 200 && xhr.status < 300 && body && body.ok) {
+        var d = body.data || {};
+        _ooState.scanRows = d.rows || [];
+        if (fnEl) fnEl.innerHTML = '✅ <strong>' + escapeHtml(d.filename) + '</strong> · ' + d.row_count + '행 (UID ' + d.uid_count + ' / actual ' + d.actual_count + ')';
+        showToast('success', 'OUT 스캔 파싱: ' + d.row_count + '행');
+        _ooUpdateT3Stats();
+        var hint = document.getElementById('oo-validation-hint');
+        if (hint) hint.textContent = '⚡ 전체 검증 실행 준비 완료';
+      } else {
+        var msg = (body && (body.detail || body.error || body.message)) || ('HTTP ' + xhr.status);
+        if (typeof msg === 'object') msg = JSON.stringify(msg);
+        if (fnEl) fnEl.innerHTML = '❌ 파싱 실패: ' + escapeHtml(String(msg));
+        showToast('error', '파싱 실패: ' + msg);
+        _ooState.scanFile = null;
+        _ooState.scanRows = [];
+      }
+    };
+    xhr.onerror = function(){
+      if (fnEl) fnEl.textContent = '❌ 네트워크 에러';
+      showToast('error', '네트워크 에러');
+    };
+    xhr.send(form);
+  };
+
+  window.ooClearScan = function() {
+    _ooState.scanFile = null;
+    _ooState.scanRows = [];
+    _ooState.manualScans = [];
+    _ooState.validationResults = [];
+    var fnEl = document.getElementById('oo-scan-filename');
+    if (fnEl) fnEl.textContent = '선택된 파일 없음';
+    var input = document.getElementById('oo-scan-input');
+    if (input) input.value = '';
+    var resBody = document.getElementById('oo-validation-results');
+    if (resBody) resBody.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">⚡ "전체 검증 실행" 버튼을 눌러 결과를 확인하세요</div>';
+    var goBtn = document.getElementById('oo-goto-finalize-btn');
+    if (goBtn) goBtn.disabled = true;
+    var hint = document.getElementById('oo-validation-hint');
+    if (hint) hint.textContent = '스캔 데이터를 먼저 업로드/입력';
+    _ooUpdateT3Stats();
+  };
+
+  window.ooAddManualScan = function() {
+    var uid = (document.getElementById('oo-scan-uid') || {}).value || '';
+    var act = (document.getElementById('oo-scan-actual') || {}).value || '';
+    uid = String(uid).trim();
+    if (!uid || !act) { showToast('warn', '톤백 ID와 실제(kg) 필요'); return; }
+    var actNum = parseFloat(act);
+    if (isNaN(actNum)) { showToast('error', 'actual_kg 가 숫자 아님'); return; }
+    _ooState.manualScans.push({ tonbag_uid: uid, actual_kg: actNum });
+    document.getElementById('oo-scan-uid').value = '';
+    document.getElementById('oo-scan-actual').value = '';
+    showToast('success', '수동 추가: ' + uid + ' = ' + actNum + 'kg (총 ' + _ooState.manualScans.length + '건)');
+    _ooUpdateT3Stats();
+  };
+
+  /* ⚡ 전체 검증 실행 — 선택된 톤백 vs 스캔된 actual */
+  window.ooRunValidation = function() {
+    if (_ooState.selectedTonbags.size === 0) {
+      showToast('error', 'Tab 2에서 톤백을 먼저 선택하세요');
+      return;
+    }
+    var allScans = (_ooState.scanRows || []).concat(_ooState.manualScans || []);
+    if (!allScans.length) {
+      showToast('error', 'OUT 스캔 데이터를 먼저 업로드/입력하세요');
+      return;
+    }
+
+    /* 선택된 톤백 → expected map */
+    var expectedMap = {};  /* tonbag_uid → {lot_no, expected_kg, weight} */
+    Object.keys(_ooState.lotsWithTonbags).forEach(function(lot){
+      (_ooState.lotsWithTonbags[lot] || []).forEach(function(t){
+        var uid = t.sub_lt || t.tonbag_id;
+        var key = lot + '.' + uid;
+        if (_ooState.selectedTonbags.has(key)) {
+          expectedMap[uid] = {
+            lot_no:      lot,
+            expected_kg: Number(t.weight) || 0,
+            tonbag_no:   t.tonbag_no || '',
+            location:    t.location || '',
+          };
+        }
+      });
+    });
+
+    /* actual map (덮어쓰기 — 마지막 값 우선) */
+    var actualMap = {};
+    allScans.forEach(function(s){
+      if (s.tonbag_uid && s.actual_kg != null) actualMap[s.tonbag_uid] = Number(s.actual_kg);
+    });
+
+    /* 결과 조립 */
+    var results = [];
+    Object.keys(expectedMap).forEach(function(uid){
+      var exp = expectedMap[uid];
+      var actual = actualMap[uid];
+      var level, message, diffPct = null;
+      if (actual == null) {
+        level = 'missing'; message = '🔍 스캔 데이터 없음';
+      } else {
+        diffPct = exp.expected_kg > 0 ? ((actual - exp.expected_kg) / exp.expected_kg) * 100 : 0;
+        var absDiff = Math.abs(diffPct);
+        if (actual > exp.expected_kg) {
+          level = 'stop'; message = '🚫 actual > expected (하드스톱)';
+        } else if (absDiff > 5) {
+          level = 'stop'; message = '🚫 ' + absDiff.toFixed(2) + '% 편차 (>5% 하드스톱)';
+        } else if (absDiff > 0.5) {
+          level = 'warn'; message = '⚠️ ' + absDiff.toFixed(2) + '% 편차 (검토 필요)';
+        } else {
+          level = 'ok'; message = '✅ 통과 (' + absDiff.toFixed(2) + '% 편차)';
+        }
+      }
+      results.push({
+        tonbag_uid:  uid,
+        lot_no:      exp.lot_no,
+        expected_kg: exp.expected_kg,
+        actual_kg:   actual,
+        diff_pct:    diffPct,
+        level:       level,
+        message:     message,
+      });
+    });
+
+    /* 스캔에 있는데 선택 안 된 항목도 표시 (extra) */
+    Object.keys(actualMap).forEach(function(uid){
+      if (!expectedMap[uid]) {
+        results.push({
+          tonbag_uid: uid,
+          lot_no:     '(미선택)',
+          expected_kg: 0,
+          actual_kg:   actualMap[uid],
+          diff_pct:    null,
+          level:       'extra',
+          message:     '⚠️ 선택되지 않은 톤백 (스캔만 존재)',
+        });
+      }
+    });
+
+    _ooState.validationResults = results;
+
+    /* 상태 결정 */
+    var hasStop = results.some(function(r){ return r.level === 'stop'; });
+    var hasWarn = results.some(function(r){ return r.level === 'warn'; });
+    if (hasStop) _ooSetState('ERROR');
+    else if (hasWarn) _ooSetState('REVIEW');
+    /* WAIT_SCAN 유지 (FINALIZED 는 명시적 클릭) */
+
+    _ooRenderValidationResults();
+    _ooUpdateT3Stats();
+
+    var goBtn = document.getElementById('oo-goto-finalize-btn');
+    if (goBtn) {
+      goBtn.disabled = hasStop;
+      if (hasStop) goBtn.title = '🚫 하드스톱 발견 — FINALIZED 진입 불가';
+      else if (hasWarn) goBtn.title = '⚠️ 경고 있음 — 검토 후 FINALIZED 진입 가능';
+      else goBtn.title = '✅ 모두 통과 — FINALIZED 진입 가능';
+    }
+    var hint = document.getElementById('oo-validation-hint');
+    if (hint) {
+      var summary = '✅ ' + results.filter(function(r){return r.level==='ok';}).length +
+                    ' · ⚠️ ' + results.filter(function(r){return r.level==='warn';}).length +
+                    ' · 🚫 ' + results.filter(function(r){return r.level==='stop';}).length;
+      hint.textContent = '검증 완료: ' + summary;
+    }
+    if (hasStop) showToast('error', '🚫 하드스톱 발견 — 파일 확인 후 재검증');
+    else if (hasWarn) showToast('warn', '⚠️ 일부 편차 — 검토 후 진행');
+    else showToast('success', '✅ 모든 톤백 통과 — FINALIZED 진입 가능');
+  };
+
+  function _ooRenderValidationResults() {
+    var body = document.getElementById('oo-validation-results');
+    if (!body) return;
+    var results = _ooState.validationResults;
+    if (!results.length) { body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">검증 결과 없음</div>'; return; }
+
+    var levelStyle = {
+      ok:      'background:rgba(102,187,106,.1)',
+      warn:    'background:rgba(255,167,38,.15)',
+      stop:    'background:rgba(244,67,54,.18)',
+      missing: 'background:rgba(158,158,158,.1)',
+      extra:   'background:rgba(66,165,245,.1)',
+    };
+
+    var rows = results.map(function(r, i){
+      var style = levelStyle[r.level] || '';
+      var diff = (r.diff_pct == null) ? '-' : (r.diff_pct >= 0 ? '+' : '') + r.diff_pct.toFixed(2) + '%';
+      return '<tr style="' + style + '">' +
+        '<td style="text-align:right">' + (i+1) + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.tonbag_uid) + '</td>' +
+        '<td class="mono-cell" style="color:var(--accent)">' + escapeHtml(r.lot_no) + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + (r.expected_kg ? r.expected_kg.toFixed(2) : '-') + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + (r.actual_kg != null ? r.actual_kg.toFixed(2) : '-') + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + diff + '</td>' +
+        '<td>' + escapeHtml(r.message) + '</td>' +
+        '</tr>';
+    }).join('');
+
+    body.innerHTML =
+      '<table class="data-table" style="font-size:11px"><thead><tr>' +
+      '<th>#</th><th>톤백 UID</th><th>LOT</th><th style="text-align:right">Expected (kg)</th><th style="text-align:right">Actual (kg)</th><th style="text-align:right">Diff %</th><th>상태</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  /* WAIT_SCAN → FINALIZED 전환 */
+  window.ooMoveToFinalize = function() {
+    var hasStop = _ooState.validationResults.some(function(r){ return r.level === 'stop'; });
+    if (hasStop) {
+      showToast('error', '🚫 하드스톱 발견 — FINALIZED 진입 불가');
+      return;
+    }
+    var hasWarn = _ooState.validationResults.some(function(r){ return r.level === 'warn'; });
+    var msg = '✅ FINALIZED 진입\n\n검증 통과: ' + _ooState.selectedTonbags.size + '개 톤백\n' +
+              (hasWarn ? '⚠️ 일부 경고 있음 — 검토하셨나요?\n' : '') +
+              'Tab 4 에서 출고 확정합니다. 계속하시겠습니까?';
+    if (!confirm(msg)) return;
+    _ooSetState('FINALIZED');
+    setTimeout(function(){ window.ooSwitchTab(4); }, 300);
+    showToast('success', 'FINALIZED 진입 — Tab 4 에서 출고 확정 (Sprint 1-3-D 예정)');
   };
 
   /* ─── 플레이스홀더 ──────────────────────────────────────────────────── */

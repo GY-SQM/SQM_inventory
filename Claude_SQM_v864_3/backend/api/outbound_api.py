@@ -7,8 +7,11 @@ engine.quick_outbound(lot_no, count, customer, reason, operator) 직접 호출
 import logging
 import os
 import tempfile
+import csv as _csv
+from io import StringIO, BytesIO
+from typing import List, Dict, Any, Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Body
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -464,3 +467,106 @@ def confirm_outbound_endpoint(req: ConfirmOutboundRequest):
             "detail": {"code": "CONFIRM_FAILED", "errors": errors},
             "message": result.get("message") or ("; ".join(errors) if errors else "확정 실패"),
         }
+
+
+# ────────────────────────────────────────────────────────────
+# [Sprint 1-3-C] OneStop Outbound — OUT 스캔 파일 파싱
+#
+# v864-2: onestop_outbound.py Tab 3 OUT 스캔 검증
+# Frontend uploads csv/xlsx → backend extracts {tonbag_uid, actual_kg}
+# 검증 자체는 frontend에서 (선택된 톤백 expected vs actual 비교)
+# ────────────────────────────────────────────────────────────
+def _parse_scan_csv_text(text: str) -> List[Dict[str, Any]]:
+    """CSV/TSV 텍스트 → [{tonbag_uid, actual_kg, raw}] 추출."""
+    rows = []
+    # 자동 구분자 감지 (탭 우선)
+    delim = '\t' if text.count('\t') > text.count(',') else ','
+    reader = _csv.reader(StringIO(text), delimiter=delim)
+    headers = None
+    for raw_row in reader:
+        if not raw_row or all(not str(c).strip() for c in raw_row):
+            continue
+        if headers is None:
+            # 첫 비어있지 않은 행 = 헤더
+            headers = [str(c).strip().lower() for c in raw_row]
+            continue
+        if len(raw_row) < 2:
+            continue
+        d = {h: (raw_row[i] if i < len(raw_row) else '') for i, h in enumerate(headers)}
+        # 컬럼 키 자동 매핑
+        uid = ''
+        for k in ('tonbag_uid', 'tonbag_id', 'sub_lt', 'tonbag', 'uid', 'id'):
+            if d.get(k):
+                uid = str(d[k]).strip()
+                break
+        if not uid and raw_row:
+            uid = str(raw_row[0]).strip()
+        actual = None
+        for k in ('actual_kg', 'actual', 'weight_kg', 'weight', 'kg', 'net_kg'):
+            v = d.get(k)
+            if v:
+                try:
+                    actual = float(str(v).replace(',', '').strip())
+                    break
+                except (ValueError, TypeError):
+                    continue
+        if uid:
+            rows.append({"tonbag_uid": uid, "actual_kg": actual, "raw": d})
+    return rows
+
+
+@router.post(
+    "/onestop-scan-parse",
+    summary="📊 OneStop 출고 — OUT 스캔 파일 파싱 (csv/xlsx) [Sprint 1-3-C]",
+)
+async def onestop_scan_parse(file: UploadFile = File(...)):
+    """
+    OUT 스캔 파일(csv/xlsx)을 파싱해 {tonbag_uid, actual_kg} 행 리스트 반환.
+    Frontend는 이 결과를 selected_tonbags 와 매칭해 검증 수행.
+    """
+    if not file.filename:
+        raise HTTPException(400, "파일명 없음")
+    fname_lower = file.filename.lower()
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "빈 파일")
+
+    rows: List[Dict[str, Any]] = []
+    if fname_lower.endswith(".csv"):
+        try:
+            text = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            try:
+                text = content.decode("cp949")
+            except Exception as e:
+                raise HTTPException(400, f"CSV 인코딩 인식 실패 (utf-8/cp949 시도): {e}")
+        rows = _parse_scan_csv_text(text)
+    elif fname_lower.endswith((".xlsx", ".xls")):
+        try:
+            import pandas as pd
+        except ImportError:
+            raise HTTPException(500, "pandas 미설치 — pip install pandas openpyxl")
+        try:
+            df = pd.read_excel(BytesIO(content), header=0)
+        except Exception as e:
+            raise HTTPException(400, f"Excel 읽기 실패: {e}")
+        # DataFrame → CSV 텍스트 → 파싱 (단일 경로 재사용)
+        text = df.to_csv(index=False)
+        rows = _parse_scan_csv_text(text)
+    else:
+        raise HTTPException(400, f"지원하지 않는 형식: {file.filename} (csv/xlsx 만)")
+
+    if not rows:
+        raise HTTPException(422, "파싱 결과 0행 (헤더에 tonbag_uid/sub_lt 와 actual_kg/weight 컬럼 필요)")
+
+    return {
+        "ok": True,
+        "data": {
+            "filename":     file.filename,
+            "rows":         rows,
+            "row_count":    len(rows),
+            "uid_count":    sum(1 for r in rows if r.get("tonbag_uid")),
+            "actual_count": sum(1 for r in rows if r.get("actual_kg") is not None),
+        },
+        "message": f"파싱 완료 — {len(rows)}행 추출",
+    }
