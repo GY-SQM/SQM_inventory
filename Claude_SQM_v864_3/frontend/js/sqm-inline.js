@@ -7016,6 +7016,85 @@
       });
   };
 
+  /* =====================================================================
+     [Sprint 2-R] Sales Order Upload — 단순 multipart Excel/CSV 업로드
+     매칭: lot_no → sold_table.sales_order_no UPDATE
+     ===================================================================== */
+  function showSalesOrderUploadModal() {
+    var html =
+      '<div style="max-width:700px">' +
+      '  <h2 style="margin:0 0 10px 0">📊 Sales Order 업로드</h2>' +
+      '  <p style="font-size:11px;color:var(--text-muted);margin:0 0 12px 0">Excel/CSV 업로드 → sold_table 의 매칭 LOT 에 sales_order_no 자동 반영. 컬럼 자동 인식: <code>lot_no</code> + <code>sales_order_no</code> (선택: customer, delivery_date)</p>' +
+      '  <input type="file" id="so-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="window.soHandleFile(this.files[0])">' +
+      '  <div style="display:flex;gap:8px;margin-bottom:10px">' +
+      '    <button class="btn btn-primary" onclick="document.getElementById(\'so-input\').click()">📂 파일 선택 (xlsx/xls/csv)</button>' +
+      '    <span id="so-filename" style="align-self:center;color:var(--text-muted);font-size:11px;font-family:Consolas,monospace">선택된 파일 없음</span>' +
+      '  </div>' +
+      '  <div id="so-result" style="margin-top:10px"></div>' +
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">' +
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+      '  </div>' +
+      '</div>';
+    showDataModal('', html);
+  }
+  window.showSalesOrderUploadModal = showSalesOrderUploadModal;
+
+  window.soHandleFile = function(file) {
+    if (!file) return;
+    var fnEl = document.getElementById('so-filename');
+    var resEl = document.getElementById('so-result');
+    if (fnEl) fnEl.textContent = '⏳ 업로드/매칭 중: ' + file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+    if (resEl) resEl.innerHTML = '';
+
+    var form = new FormData();
+    form.append('file', file, file.name);
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', API + '/api/outbound/sales-order-upload');
+    xhr.onload = function(){
+      var body; try { body = JSON.parse(xhr.responseText); } catch(e){ body = null; }
+      if (xhr.status >= 200 && xhr.status < 300 && body && body.ok) {
+        var d = body.data || {};
+        if (fnEl) fnEl.innerHTML = '✅ <strong>' + escapeHtml(d.filename) + '</strong> (' + d.total_rows + ' rows)';
+        var unmatchedHtml = '';
+        if (d.unmatched_count) {
+          unmatchedHtml = '<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--warning);font-size:11px">⚠️ 미매칭 ' + d.unmatched_count + '건 상세</summary>' +
+            '<ul style="font-size:10px;margin:4px 0 0 20px">' +
+            d.unmatched.map(function(u){ return '<li>' + escapeHtml(u.lot_no) + ' → ' + escapeHtml(u.sales_order_no) + ' (' + escapeHtml(u.reason) + ')</li>'; }).join('') +
+            '</ul></details>';
+        }
+        var errorsHtml = '';
+        if (d.error_count) {
+          errorsHtml = '<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--danger);font-size:11px">❌ 에러 ' + d.error_count + '건</summary>' +
+            '<ul style="font-size:10px;margin:4px 0 0 20px">' +
+            d.errors.map(function(er){ return '<li>row ' + er.row + ': ' + escapeHtml(er.reason) + '</li>'; }).join('') +
+            '</ul></details>';
+        }
+        if (resEl) resEl.innerHTML =
+          '<div style="padding:10px;background:rgba(102,187,106,.1);border-left:3px solid var(--success);border-radius:4px">' +
+          '<div style="font-weight:700;color:var(--success)">✅ ' + escapeHtml(body.message) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-muted);margin-top:4px">' +
+            '✅ 매칭 ' + d.matched_count + ' · ⚠️ 미매칭 ' + d.unmatched_count + ' · ❌ 에러 ' + d.error_count +
+          '</div>' +
+          '<div style="font-size:10px;color:var(--text-muted);margin-top:6px">감지된 컬럼: lot=' + escapeHtml(d.columns_detected.lot || '?') + ' · so=' + escapeHtml(d.columns_detected.sales_order_no || '?') + (d.columns_detected.customer ? ' · customer=' + escapeHtml(d.columns_detected.customer) : '') + (d.columns_detected.delivery_date ? ' · date=' + escapeHtml(d.columns_detected.delivery_date) : '') + '</div>' +
+          unmatchedHtml + errorsHtml +
+          '</div>';
+        showToast(d.matched_count > 0 ? 'success' : 'warn', body.message);
+        if (typeof loadKpi === 'function') loadKpi();
+      } else {
+        var msg = (body && (body.detail || body.error || body.message)) || ('HTTP ' + xhr.status);
+        if (typeof msg === 'object') msg = JSON.stringify(msg);
+        if (fnEl) fnEl.innerHTML = '❌ 실패';
+        if (resEl) resEl.innerHTML = '<div style="padding:10px;color:var(--danger);background:rgba(244,67,54,.1);border-radius:4px">❌ ' + escapeHtml(String(msg)) + '</div>';
+        showToast('error', '업로드 실패: ' + msg);
+      }
+    };
+    xhr.onerror = function(){
+      if (fnEl) fnEl.textContent = '❌ 네트워크 에러';
+      showToast('error', '네트워크 에러');
+    };
+    xhr.send(form);
+  };
+
   /* ===================================================
      9. ALERTS + STATUSBAR
      =================================================== */
@@ -7184,6 +7263,10 @@
     'onExportTonbag':    {m:'GET',  u:'/api/action2/export-tonbag-excel',          lbl:'톤백 현황'},
     'onExportIntegrated': {m:'GET', u:'/api/action/export-lot-excel',             lbl:'통합 현황'},
     'onAutoBackupSettings': {m:'JS', u:'auto-backup-settings',                    lbl:'자동 백업 설정'},
+    /* [Sprint 2-R] Sales Order Upload */
+    'onSalesOrderUpload': {m:'JS', u:'sales-order-upload',                         lbl:'Sales Order 업로드'},
+    /* [Sprint 2] Swap report — placeholder Sprint 2 다음 phase */
+    'onSwapReportDialog': {m:'JS', u:'wip',                                        lbl:'Swap 리포트'},
     'onReportTemplates': {m:'GET',  u:'/api/q/audit-log',                          lbl:'보고서 양식 관리'},
     'onReportHistory':   {m:'GET',  u:'/api/q/audit-log',                          lbl:'보고서 이력 조회'},
     'onLotAllocationAudit': {m:'JS', u:'lot-allocation-audit',                    lbl:'LOT Allocation 톤백 현황'},
@@ -7371,6 +7454,8 @@
       if (conf.u === 'inbound-template') { showInboundTemplateModal(); return; }
       /* [Sprint 2] Picking Template */
       if (conf.u === 'picking-template') { showPickingTemplateModal(); return; }
+      /* [Sprint 2-R] Sales Order Upload */
+      if (conf.u === 'sales-order-upload') { showSalesOrderUploadModal(); return; }
       dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
       renderPage(conf.u);
       return;

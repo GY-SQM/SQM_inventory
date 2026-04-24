@@ -809,6 +809,112 @@ async def proof_upload(
     }
 
 
+# ────────────────────────────────────────────────────────────
+# [Sprint 2-R] Sales Order Upload — Excel multipart
+# v864-2 source: gui_app_modular.handlers (별도 dialog 없음, 직접 처리)
+# 매칭: Excel 의 lot_no → sold_table.lot_no UPDATE sales_order_no
+# ────────────────────────────────────────────────────────────
+@router.post("/sales-order-upload", summary="📊 Sales Order 업로드 [Sprint 2-R]")
+async def sales_order_upload(file: UploadFile = File(...)):
+    """
+    Excel/CSV 업로드 → sold_table 의 매칭 row 에 sales_order_no/file 저장.
+    Excel 컬럼 자동 매핑: lot_no, sales_order_no, customer (선택), delivery_date (선택)
+    """
+    if not file.filename:
+        raise HTTPException(400, "파일명 없음")
+    ext = file.filename.lower().rsplit(".", 1)[-1] if "." in file.filename else ""
+    if ext not in ("xlsx", "xls", "csv"):
+        raise HTTPException(400, f"지원 형식: xlsx/xls/csv (받음: {file.filename})")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(400, "빈 파일")
+
+    try:
+        import pandas as pd
+    except ImportError:
+        raise HTTPException(500, "pandas 미설치")
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        if ext == "csv":
+            try:
+                df = pd.read_csv(tmp_path, encoding="utf-8-sig")
+            except UnicodeDecodeError:
+                df = pd.read_csv(tmp_path, encoding="cp949")
+        else:
+            df = pd.read_excel(tmp_path)
+
+        if df.empty:
+            raise HTTPException(400, "빈 시트")
+
+        # 컬럼 자동 매핑 (소문자 비교)
+        cols_lower = {str(c).strip().lower(): c for c in df.columns}
+        col_lot = next((cols_lower[k] for k in cols_lower if "lot" in k), None)
+        col_so = next((cols_lower[k] for k in cols_lower if "sales" in k or "so" in k or "order" in k), None)
+        col_cust = next((cols_lower[k] for k in cols_lower if "customer" in k or "고객" in k), None)
+        col_date = next((cols_lower[k] for k in cols_lower if "delivery" in k or "ship" in k or "date" in k), None)
+        if not col_lot or not col_so:
+            raise HTTPException(400, f"필수 컬럼 없음 (lot_no + sales_order_no). 감지: {list(df.columns)}")
+
+        # 엔진 사용 안 하고 직접 DB
+        from backend.api.inventory_api import _db
+        db = _db()
+
+        matched, unmatched, errors = [], [], []
+        for idx, row in df.iterrows():
+            lot = str(row.get(col_lot) or "").strip()
+            so = str(row.get(col_so) or "").strip()
+            cust = str(row.get(col_cust) or "").strip() if col_cust else ""
+            date = str(row.get(col_date) or "").strip() if col_date else ""
+            if not lot or not so:
+                errors.append({"row": int(idx) + 2, "reason": "lot_no 또는 sales_order_no 빈 값"})
+                continue
+            try:
+                cur = db.execute(
+                    "UPDATE sold_table SET sales_order_no=?, sales_order_file=?"
+                    + (", customer=?" if cust else "")
+                    + (", delivery_date=?" if date else "")
+                    + " WHERE lot_no=?",
+                    ([so, file.filename] + ([cust] if cust else []) + ([date] if date else []) + [lot]),
+                )
+                if cur.rowcount > 0:
+                    matched.append({"lot_no": lot, "sales_order_no": so, "rows_updated": cur.rowcount})
+                else:
+                    unmatched.append({"lot_no": lot, "sales_order_no": so, "reason": "sold_table 매칭 없음"})
+            except Exception as e:
+                errors.append({"row": int(idx) + 2, "lot_no": lot, "reason": str(e)})
+
+        db.commit(); db.close()
+
+        return {
+            "ok": True,
+            "data": {
+                "filename":       file.filename,
+                "total_rows":     int(len(df)),
+                "matched_count":  len(matched),
+                "unmatched_count": len(unmatched),
+                "error_count":    len(errors),
+                "matched":        matched[:50],
+                "unmatched":      unmatched[:50],
+                "errors":         errors[:50],
+                "columns_detected": {
+                    "lot": col_lot, "sales_order_no": col_so,
+                    "customer": col_cust, "delivery_date": col_date,
+                },
+            },
+            "message": f"{len(matched)}건 업데이트 / {len(unmatched)}건 미매칭 / {len(errors)}건 에러",
+        }
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try: os.unlink(tmp_path)
+            except Exception: pass
+
+
 @router.get(
     "/proof-cleanup-status",
     summary="📎 Proof docs 보존 정책 상태 조회 [Sprint 1-3-E]",
