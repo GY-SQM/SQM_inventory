@@ -140,20 +140,24 @@
      =================================================== */
 
   /* ── [UX] ESC = 현재 열린 창 닫기 (전역)
-     우선순위: 컨텍스트 메뉴 → 서브메뉴 드롭다운 → 모달 → 최상위 메뉴 드롭다운
-     input/textarea/select 안에서도 작동 (모달 닫기 우선) ────────────── */
+     우선순위: 컨텍스트 메뉴 → 모달 → 최상위 메뉴 드롭다운 → 입력 포커스
+     input/textarea/select 안에서도 작동 (모달 닫기 우선).
+     최상위 스코프에서 ESC 두 번(1.5초 이내) = 앱 종료 확인 다이얼로그. ── */
+  var _escLastAt = 0;
+  var EXIT_DOUBLE_ESC_WINDOW_MS = 1500;
   document.addEventListener('keydown', function(e){
     if (e.key !== 'Escape' && e.key !== 'Esc') return;
 
     /* 1순위: 컨텍스트 메뉴 (우클릭 팝업) */
     var ctx = document.querySelector('.ctx-menu');
-    if (ctx) { ctx.remove(); e.preventDefault(); return; }
+    if (ctx) { ctx.remove(); e.preventDefault(); _escLastAt = 0; return; }
 
     /* 2순위: 모달 (데이터 모달 / 정보 모달) */
     var modal = document.getElementById('sqm-modal');
     if (modal && modal.style.display !== 'none' && modal.style.display !== '') {
       modal.style.display = 'none';
       e.preventDefault();
+      _escLastAt = 0;
       return;
     }
 
@@ -165,6 +169,7 @@
         try { document.activeElement.blur(); } catch(err) {}
       }
       e.preventDefault();
+      _escLastAt = 0;
       return;
     }
 
@@ -172,6 +177,68 @@
     var ae = document.activeElement;
     if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) {
       try { ae.blur(); } catch(err) {}
+      _escLastAt = 0;
+      return;
+    }
+
+    /* 5순위: 아무것도 열려있지 않음 — 더블 ESC 감지 → 앱 종료 확인 */
+    var now = Date.now();
+    if ((now - _escLastAt) < EXIT_DOUBLE_ESC_WINDOW_MS) {
+      _escLastAt = 0;
+      e.preventDefault();
+      if (confirm('앱을 종료하시겠습니까?')) {
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.exit_app) {
+          window.pywebview.api.exit_app();
+        } else {
+          window.close();
+        }
+      }
+    } else {
+      _escLastAt = now;
+      if (typeof showToast === 'function') {
+        showToast('info', 'ESC 한 번 더 = 앱 종료', 1500);
+      }
+    }
+  });
+
+  /* ── [UX] 모달 Enter = primary 버튼 클릭 & Tab = 모달 내부 포커스 순환 ── */
+  document.addEventListener('keydown', function(e){
+    var modal = document.getElementById('sqm-modal');
+    if (!modal || modal.style.display === 'none' || modal.style.display === '') return;
+
+    /* Enter — primary 버튼 자동 클릭 (단, textarea 안에서는 줄바꿈 허용) */
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+      if (e.target && e.target.tagName === 'TEXTAREA') return;         /* 줄바꿈 */
+      if (e.target && e.target.tagName === 'BUTTON') return;           /* 브라우저 기본 */
+      if (e.target && e.target.tagName === 'SELECT') return;           /* 선택 확정 */
+      /* 우선 순위: .btn-primary > .btn[type=submit] > 모달 내 첫 번째 활성 버튼 */
+      var primary =
+        modal.querySelector('.btn-primary:not([disabled])') ||
+        modal.querySelector('button[type="submit"]:not([disabled])');
+      if (primary) {
+        e.preventDefault();
+        primary.click();
+      }
+      return;
+    }
+
+    /* Tab — 모달 내부 포커스 트랩 (마지막 → 첫 번째, Shift+Tab 시 반대) */
+    if (e.key === 'Tab') {
+      var focusables = modal.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
+        'select:not([disabled]), textarea:not([disabled]), a[href], ' +
+        '[tabindex]:not([tabindex="-1"])'
+      );
+      if (focusables.length === 0) return;
+      var first = focusables[0];
+      var last  = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   });
 
