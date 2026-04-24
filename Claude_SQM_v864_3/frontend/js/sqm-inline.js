@@ -703,65 +703,365 @@
   /* ===================================================
      7a. PAGE: Inventory
      =================================================== */
+  /* =====================================================================
+     [Sprint 1-6] Inventory 24열 풀 — v864-2 inventory_tab.py 매칭
+     ─────────────────────────────────────────────────────────────────────
+     INVENTORY_COLUMNS: 24개
+       Always-on (20): No, LOT, SAP, BL, Product, Status, Balance, NET,
+         Container, MXBG, Avail, Invoice, Ship, Arrival, ConReturn,
+         Free, WH, Customs, Inbound, Outbound, Location
+       Toggle (4): ↓Avail개, ↓Resv개, ↓Pick개, ↓Sold개 (default OFF)
+
+     Features:
+       ✅ Per-header 정렬 ▲▼
+       ✅ Per-column 헤더 필터 row
+       ✅ 상태 필터 chip row (전체/AVAILABLE/RESERVED/PICKED/SOLD/RETURN)
+       ✅ 우클릭 컨텍스트 메뉴 (LOT 복사/Excel/Detail)
+       ✅ ⚙️ 컬럼 토글 (4개 카운터 컬럼) + localStorage 영구화
+       ✅ TotalFooter (Balance/NET/Inbound/Outbound MT 합계)
+     ===================================================================== */
+  var INV_COLUMNS = [
+    { key: 'no',           label: '#',          align: 'right', mono: true,  type: 'num',  always: true },
+    { key: 'lot',          label: 'LOT',        align: 'left',  mono: true,  type: 'str',  always: true,  accent: true },
+    { key: 'sap',          label: 'SAP',        align: 'left',  mono: true,  type: 'str',  always: true },
+    { key: 'bl',           label: 'BL',         align: 'left',  mono: true,  type: 'str',  always: true },
+    { key: 'product',      label: 'Product',    align: 'left',  mono: false, type: 'str',  always: true,  tag: true },
+    { key: 'status',       label: 'Status',     align: 'left',  mono: false, type: 'str',  always: true,  status: true },
+    { key: 'balance',      label: 'Balance(MT)',align: 'right', mono: true,  type: 'num',  always: true,  fmt: 'mt', total: true },
+    { key: 'net',          label: 'NET(MT)',    align: 'right', mono: true,  type: 'num',  always: true,  fmt: 'mt', total: true },
+    { key: 'container',    label: 'Container',  align: 'left',  mono: true,  type: 'str',  always: true },
+    { key: 'mxbg_pallet',  label: 'MXBG',       align: 'center',mono: true,  type: 'num',  always: true },
+    { key: 'avail_bags',   label: 'Avail',      align: 'center',mono: true,  type: 'num',  always: true },
+    /* 4 toggleable counters (default off, default key prefixed with `_count`) */
+    { key: 'avail_count',  label: '↓Avail개',   align: 'right', mono: true,  type: 'num',  toggle: true,  defaultOn: false },
+    { key: 'resv_count',   label: '↓Resv개',    align: 'right', mono: true,  type: 'num',  toggle: true,  defaultOn: false },
+    { key: 'pick_count',   label: '↓Pick개',    align: 'right', mono: true,  type: 'num',  toggle: true,  defaultOn: false },
+    { key: 'sold_count',   label: '↓Sold개',    align: 'right', mono: true,  type: 'num',  toggle: true,  defaultOn: false },
+    { key: 'invoice_no',   label: 'Invoice',    align: 'left',  mono: true,  type: 'str',  always: true },
+    { key: 'ship_date',    label: 'Ship',       align: 'left',  mono: true,  type: 'date', always: true },
+    { key: 'arrival_date', label: 'Arrival',    align: 'left',  mono: true,  type: 'date', always: true },
+    { key: 'con_return',   label: 'ConReturn',  align: 'left',  mono: true,  type: 'date', always: true },
+    { key: 'free_time',    label: 'Free',       align: 'center',mono: true,  type: 'num',  always: true },
+    { key: 'wh',           label: 'WH',         align: 'left',  mono: true,  type: 'str',  always: true },
+    { key: 'customs',      label: 'Customs',    align: 'left',  mono: true,  type: 'str',  always: true },
+    { key: 'initial_weight',label:'Inbound(MT)',align: 'right', mono: true,  type: 'num',  always: true,  fmt: 'mt', total: true },
+    { key: 'outbound_weight',label:'Outbound(MT)',align:'right',mono: true,  type: 'num',  always: true,  fmt: 'mt', total: true },
+    { key: 'location',     label: 'Location',   align: 'left',  mono: false, type: 'str',  always: true,  tag: true },
+    { key: '_actions',     label: '',           align: 'center',mono: false, type: '_skip',always: true },
+  ];
+
+  var _invState = {
+    rawRows:        [],
+    statusFilter:   'all',
+    headerFilters:  {},   /* { columnKey: 'filterText' } */
+    sortKey:        null,
+    sortAsc:        true,
+    visibleToggles: null, /* Set<columnKey> for toggleable cols */
+  };
+
+  function _invLoadToggles() {
+    try {
+      var raw = localStorage.getItem('sqm.inv.toggles');
+      if (raw) _invState.visibleToggles = new Set(JSON.parse(raw));
+    } catch (e) {}
+    if (!_invState.visibleToggles) _invState.visibleToggles = new Set();
+  }
+  function _invSaveToggles() {
+    try {
+      localStorage.setItem('sqm.inv.toggles', JSON.stringify(Array.from(_invState.visibleToggles)));
+    } catch (e) {}
+  }
+
+  function _invVisibleColumns() {
+    return INV_COLUMNS.filter(function(c){
+      return c.always || (c.toggle && _invState.visibleToggles.has(c.key));
+    });
+  }
+
+  function _invFilteredSortedRows() {
+    var rows = _invState.rawRows.slice();
+    /* status filter */
+    if (_invState.statusFilter !== 'all') {
+      var sf = _invState.statusFilter;
+      rows = rows.filter(function(r){ return (r.status || '').toUpperCase() === sf; });
+    }
+    /* header filters (case-insensitive contains) */
+    Object.keys(_invState.headerFilters).forEach(function(k){
+      var v = (_invState.headerFilters[k] || '').toLowerCase().trim();
+      if (!v) return;
+      rows = rows.filter(function(r){
+        var cell = r[k];
+        if (cell == null) return false;
+        return String(cell).toLowerCase().indexOf(v) !== -1;
+      });
+    });
+    /* sort */
+    if (_invState.sortKey) {
+      var col = INV_COLUMNS.find(function(c){ return c.key === _invState.sortKey; });
+      var dir = _invState.sortAsc ? 1 : -1;
+      rows.sort(function(a, b){
+        var va = a[_invState.sortKey], vb = b[_invState.sortKey];
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        if (col && col.type === 'num') return (Number(va) - Number(vb)) * dir;
+        return String(va).localeCompare(String(vb), 'ko') * dir;
+      });
+    }
+    return rows;
+  }
+
   function loadInventoryPage() {
     var route = _currentRoute;
     var c = document.getElementById('page-container');
     if (!c) return;
-    c.innerHTML = '<div style="padding:40px;text-align:center">Loading inventory...</div>';
+    _invLoadToggles();
+    c.innerHTML = '<div style="padding:40px;text-align:center">⏳ 재고 로딩 중...</div>';
     apiGet('/api/inventory').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = extractRows(res);
-      if (!rows.length) {
-        c.innerHTML = '<div class="empty" style="padding:60px;text-align:center">No inventory data</div>';
-        return;
-      }
-      var html = '<section class="page" data-page="inventory">' +
-        '<div style="display:flex;align-items:center;gap:12px;padding:4px 0 10px">' +
-        '<h2 style="margin:0">📦 재고 목록 (Inventory)</h2>' +
-        '<span style="font-size:12px;color:var(--text-muted)">'+rows.length+' LOTs</span>' +
-        '<button class="btn btn-secondary" onclick="renderPage(\'inventory\')" style="margin-left:auto">🔁 새로고침</button>' +
-        '</div>' +
-        '<div style="overflow-x:auto"><table class="data-table"><thead><tr>' +
-        '<th>#</th><th>LOT</th><th>SAP</th><th>BL</th><th>Product</th>' +
-        '<th>Status</th><th>Balance(MT)</th><th>NET(MT)</th><th>Container</th>' +
-        '<th>MXBG</th><th>Avail</th><th>Invoice</th>' +
-        '<th>Ship</th><th>Arrival</th><th>Con Return</th><th>Free</th>' +
-        '<th>WH</th><th>Customs</th><th>Inbound(MT)</th><th>Outbound(MT)</th><th>Location</th><th></th>' +
-        '</tr></thead><tbody>';
-      html += rows.map(function(r, i){
-        return '<tr>' +
-          '<td class="mono-cell" style="color:var(--text-muted)">'+(i+1)+'</td>' +
-          '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+escapeHtml(r.lot||'')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.sap||'')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.bl||'')+'</td>' +
-          '<td><span class="tag">'+escapeHtml(r.product||'')+'</span></td>' +
-          '<td>'+escapeHtml(r.status||'')+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+(r.balance!=null?fmtN(r.balance):'-')+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+(r.net!=null?fmtN(r.net):'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.container||'')+'</td>' +
-          '<td class="mono-cell" style="text-align:center">'+(r.mxbg_pallet||'-')+'</td>' +
-          '<td class="mono-cell" style="text-align:center">'+(r.avail_bags!=null?r.avail_bags:'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.invoice_no||'')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml((r.ship_date||'').slice(0,10))+'</td>' +
-          '<td class="mono-cell">'+escapeHtml((r.arrival_date||'').slice(0,10))+'</td>' +
-          '<td class="mono-cell">'+escapeHtml((r.con_return||'').slice(0,10))+'</td>' +
-          '<td class="mono-cell" style="text-align:center">'+(r.free_time||'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.wh||'')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.customs||'')+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+(r.initial_weight!=null?fmtN(r.initial_weight):'-')+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+(r.outbound_weight!=null?fmtN(r.outbound_weight):'-')+'</td>' +
-          '<td><span class="tag">'+escapeHtml(r.location||'-')+'</span></td>' +
-          '<td><button class="btn btn-ghost btn-xs" onclick="window.showLotDetail(\''+escapeHtml(r.lot||'')+'\')">Detail</button></td>' +
-          '</tr>';
-      }).join('');
-      html += '</tbody></table></div></section>';
-      c.innerHTML = html;
+      _invState.rawRows = extractRows(res);
+      /* No 컬럼 부여 */
+      _invState.rawRows.forEach(function(r, i){ r.no = i + 1; });
+      _invRenderInventoryPage();
     }).catch(function(e){
       if (_currentRoute !== route) return;
-      c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
+      c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: ' + escapeHtml(e.message || String(e)) + '</div>';
       showToast('error', 'Inventory load failed');
     });
   }
+
+  function _invRenderInventoryPage() {
+    var c = document.getElementById('page-container');
+    if (!c) return;
+    var rows = _invFilteredSortedRows();
+    var totalRows = _invState.rawRows.length;
+
+    /* status chips */
+    var STATUSES = ['all', 'AVAILABLE', 'RESERVED', 'PICKED', 'SOLD', 'OUTBOUND', 'RETURN'];
+    var chipsHtml = STATUSES.map(function(s){
+      var label = s === 'all' ? '전체' : s;
+      var count = s === 'all' ? totalRows : _invState.rawRows.filter(function(r){ return (r.status || '').toUpperCase() === s; }).length;
+      var active = _invState.statusFilter === s;
+      return '<button class="alloc-filter-btn ' + (active ? 'active' : '') + '" onclick="window.invSetStatus(\'' + s + '\')">' +
+             escapeHtml(label) + ' <span style="opacity:.7">' + count + '</span></button>';
+    }).join('');
+
+    /* 컬럼 토글 메뉴 */
+    var toggleHtml = INV_COLUMNS.filter(function(col){ return col.toggle; }).map(function(col){
+      var checked = _invState.visibleToggles.has(col.key) ? 'checked' : '';
+      return '<label style="display:block;padding:4px 12px;cursor:pointer;font-size:12px"><input type="checkbox" ' + checked +
+             ' onchange="window.invToggleColumn(\'' + col.key + '\', this.checked)"> ' + escapeHtml(col.label) + '</label>';
+    }).join('');
+
+    var visCols = _invVisibleColumns();
+
+    /* Header row + filter row */
+    var headerHtml = visCols.map(function(col){
+      if (col.key === '_actions') return '<th style="width:60px"></th>';
+      var sortIcon = '';
+      if (_invState.sortKey === col.key) sortIcon = _invState.sortAsc ? ' ▲' : ' ▼';
+      return '<th style="cursor:pointer;text-align:' + col.align + '" onclick="window.invSort(\'' + col.key + '\')" title="클릭으로 정렬">' +
+             escapeHtml(col.label) + sortIcon + '</th>';
+    }).join('');
+
+    var filterHtml = visCols.map(function(col){
+      if (col.key === '_actions' || col.key === 'no') return '<th></th>';
+      var v = _invState.headerFilters[col.key] || '';
+      return '<th style="padding:2px 4px"><input type="text" value="' + escapeHtml(v) +
+             '" placeholder="🔍" oninput="window.invHeaderFilter(\'' + col.key + '\', this.value)"' +
+             ' style="width:100%;padding:2px 4px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-size:10px"></th>';
+    }).join('');
+
+    /* Body rows */
+    var bodyHtml = rows.map(function(r, i){
+      var lot = String(r.lot || '');
+      var cellsHtml = visCols.map(function(col){
+        if (col.key === '_actions') {
+          return '<td style="text-align:center"><button class="btn btn-ghost btn-xs" onclick="event.stopPropagation();window.showLotDetail(\'' + escapeHtml(lot) + '\')">Detail</button></td>';
+        }
+        var v = r[col.key];
+        var display = '';
+        if (v == null) {
+          display = '-';
+        } else if (col.type === 'num' && col.fmt === 'mt') {
+          display = (typeof fmtN === 'function') ? fmtN(v) : Number(v).toFixed(3);
+        } else if (col.type === 'date') {
+          display = String(v).slice(0, 10);
+        } else {
+          display = String(v);
+        }
+        var cls = col.mono ? 'mono-cell' : '';
+        var style = 'text-align:' + col.align;
+        if (col.accent) style += ';color:var(--accent);font-weight:600';
+        var cell;
+        if (col.tag) cell = '<span class="tag">' + escapeHtml(display) + '</span>';
+        else if (col.status) {
+          var st = String(r.status || '').toUpperCase();
+          var stColor = st === 'AVAILABLE' ? '#66bb6a' : st === 'RESERVED' ? '#ffa726' : st === 'PICKED' ? '#42a5f5' : (st === 'SOLD' || st === 'OUTBOUND') ? '#ec407a' : '#9e9e9e';
+          cell = '<span class="tag" style="background:' + stColor + ';color:#fff">' + escapeHtml(display) + '</span>';
+        }
+        else cell = escapeHtml(display);
+        return '<td class="' + cls + '" style="' + style + '">' + cell + '</td>';
+      }).join('');
+      return '<tr oncontextmenu="window.invContextMenu(event, \'' + escapeHtml(lot) + '\'); return false;" ondblclick="window.showLotDetail(\'' + escapeHtml(lot) + '\')">' +
+             cellsHtml + '</tr>';
+    }).join('');
+
+    /* Footer 합계 (filtered rows) */
+    var totals = {};
+    visCols.forEach(function(col){ if (col.total) totals[col.key] = 0; });
+    rows.forEach(function(r){
+      Object.keys(totals).forEach(function(k){
+        var v = Number(r[k]);
+        if (!isNaN(v)) totals[k] += v;
+      });
+    });
+    var footerHtml = visCols.map(function(col){
+      if (col.total) return '<td class="mono-cell" style="text-align:right;font-weight:700">' + totals[col.key].toFixed(3) + '</td>';
+      if (col.key === 'no') return '<td style="text-align:right;font-weight:700">합계 (' + rows.length + ')</td>';
+      return '<td></td>';
+    }).join('');
+
+    c.innerHTML =
+      '<section class="page" data-page="inventory">' +
+      /* 상단 헤더 */
+      '<div style="display:flex;align-items:center;gap:12px;padding:4px 0 8px">' +
+      '  <h2 style="margin:0">📦 재고 목록 (Inventory)</h2>' +
+      '  <span style="font-size:12px;color:var(--text-muted)">' + rows.length + ' / ' + totalRows + ' LOTs</span>' +
+      '  <span style="margin-left:auto;display:flex;gap:6px;align-items:center">' +
+      '    <div style="position:relative;display:inline-block">' +
+      '      <button class="btn btn-secondary" onclick="window.invToggleColumnMenu()">⚙️ 컬럼</button>' +
+      '      <div id="inv-column-menu" style="display:none;position:absolute;right:0;top:100%;margin-top:4px;background:var(--panel);border:1px solid var(--panel-border);border-radius:4px;padding:4px 0;box-shadow:0 4px 12px rgba(0,0,0,.3);z-index:100;min-width:140px">' + toggleHtml + '</div>' +
+      '    </div>' +
+      '    <button class="btn" onclick="window.invExportCsv()">📥 Excel 저장</button>' +
+      '    <button class="btn btn-secondary" onclick="renderPage(\'inventory\')">🔁 새로고침</button>' +
+      '  </span>' +
+      '</div>' +
+      /* 상태 chip filter */
+      '<div style="display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap">' + chipsHtml + '</div>' +
+      /* Table */
+      '<div style="overflow-x:auto;max-height:calc(100vh - 260px);overflow-y:auto">' +
+      '  <table class="data-table" style="font-size:11px">' +
+      '    <thead style="position:sticky;top:0;background:var(--panel);z-index:1">' +
+      '      <tr>' + headerHtml + '</tr>' +
+      '      <tr>' + filterHtml + '</tr>' +
+      '    </thead>' +
+      '    <tbody>' + (rows.length ? bodyHtml : '<tr><td colspan="' + visCols.length + '" style="padding:40px;text-align:center;color:var(--text-muted)">📭 조건에 맞는 재고 없음</td></tr>') + '</tbody>' +
+      (rows.length ? '<tfoot style="position:sticky;bottom:0;background:var(--panel)"><tr>' + footerHtml + '</tr></tfoot>' : '') +
+      '  </table>' +
+      '</div>' +
+      '</section>';
+  }
+
+  /* 핸들러 */
+  window.invSetStatus = function(s) {
+    _invState.statusFilter = s;
+    _invRenderInventoryPage();
+  };
+  window.invSort = function(key) {
+    if (_invState.sortKey === key) _invState.sortAsc = !_invState.sortAsc;
+    else { _invState.sortKey = key; _invState.sortAsc = true; }
+    _invRenderInventoryPage();
+  };
+  window.invHeaderFilter = function(key, val) {
+    _invState.headerFilters[key] = val;
+    /* debounce 없이 즉시 — 작은 데이터셋이라 OK */
+    var sel = document.activeElement;
+    var selStart = sel && sel.selectionStart;
+    _invRenderInventoryPage();
+    /* focus 복구 */
+    var inp = document.querySelector('input[oninput*="' + key + '"]');
+    if (inp) {
+      inp.focus();
+      if (selStart != null) try { inp.setSelectionRange(selStart, selStart); } catch(e){}
+    }
+  };
+  window.invToggleColumn = function(key, checked) {
+    if (checked) _invState.visibleToggles.add(key);
+    else _invState.visibleToggles.delete(key);
+    _invSaveToggles();
+    _invRenderInventoryPage();
+  };
+  window.invToggleColumnMenu = function() {
+    var m = document.getElementById('inv-column-menu');
+    if (!m) return;
+    var open = m.style.display !== 'none';
+    m.style.display = open ? 'none' : 'block';
+    if (!open) {
+      /* 외부 클릭 시 닫기 */
+      setTimeout(function(){
+        var handler = function(e){
+          if (!m.contains(e.target)) {
+            m.style.display = 'none';
+            document.removeEventListener('click', handler);
+          }
+        };
+        document.addEventListener('click', handler);
+      }, 10);
+    }
+  };
+  window.invContextMenu = function(e, lot) {
+    e.preventDefault();
+    var old = document.querySelector('.ctx-menu');
+    if (old) old.remove();
+    var m = document.createElement('div');
+    m.className = 'ctx-menu';
+    m.style.cssText = 'position:fixed;z-index:9999;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:4px 0;min-width:180px;box-shadow:0 4px 16px rgba(0,0,0,.4);font-size:13px;';
+    m.style.left = e.clientX + 'px';
+    m.style.top = e.clientY + 'px';
+    function mi(label, onClick) {
+      var b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 14px;background:transparent;border:none;color:var(--fg);cursor:pointer;font-size:13px';
+      b.addEventListener('mouseover', function(){ b.style.background = 'var(--btn-hover)'; });
+      b.addEventListener('mouseout', function(){ b.style.background = 'transparent'; });
+      b.addEventListener('click', function(){ m.remove(); onClick(); });
+      m.appendChild(b);
+    }
+    mi('📋 LOT 번호 복사', function(){
+      if (navigator.clipboard) navigator.clipboard.writeText(lot).then(function(){ showToast('success', 'LOT NO 복사됨'); });
+      else prompt('수동 복사:', lot);
+    });
+    mi('🔍 LOT 상세 보기', function(){ window.showLotDetail(lot); });
+    mi('📥 행 데이터 CSV 복사', function(){
+      var r = _invState.rawRows.find(function(x){ return String(x.lot || '') === lot; });
+      if (!r) return;
+      var keys = INV_COLUMNS.filter(function(c){ return c.key !== '_actions'; }).map(function(c){ return c.key; });
+      var line = keys.map(function(k){
+        var v = r[k] == null ? '' : String(r[k]);
+        if (/[,"\n]/.test(v)) v = '"' + v.replace(/"/g, '""') + '"';
+        return v;
+      }).join(',');
+      var text = keys.join(',') + '\n' + line;
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(function(){ showToast('success', '행 CSV 복사됨'); });
+      else prompt('수동 복사:', text);
+    });
+    document.body.appendChild(m);
+    setTimeout(function(){
+      var handler = function(ev){ if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', handler); } };
+      document.addEventListener('click', handler);
+    }, 10);
+  };
+  window.invExportCsv = function() {
+    var rows = _invFilteredSortedRows();
+    if (!rows.length) { showToast('warn', '내보낼 데이터 없음'); return; }
+    var visCols = _invVisibleColumns().filter(function(c){ return c.key !== '_actions'; });
+    var headers = visCols.map(function(c){ return c.label; }).join(',');
+    function csvEsc(v){ var s = String(v == null ? '' : v); if (/[,"\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"'; return s; }
+    var lines = [headers];
+    rows.forEach(function(r){
+      lines.push(visCols.map(function(c){ return csvEsc(r[c.key]); }).join(','));
+    });
+    var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    var ts = new Date();
+    a.download = 'inventory_' + ts.getFullYear() + String(ts.getMonth()+1).padStart(2,'0') + String(ts.getDate()).padStart(2,'0') + '_' + String(ts.getHours()).padStart(2,'0') + String(ts.getMinutes()).padStart(2,'0') + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('success', '📥 ' + a.download + ' (' + rows.length + ' LOTs)');
+  };
 
   /* ===================================================
      7b. PAGE: Allocation
