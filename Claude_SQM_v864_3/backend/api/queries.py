@@ -33,28 +33,64 @@ def _rows_to_list(rows) -> list:
 
 
 # ── F009: 입고 현황 조회 ────────────────────────────────────────
+# [Sprint 2-Q] 필터 파라미터 추가 (from_date, to_date, lot_no, product, customer)
 @router.get("/inbound-status", summary="📋 입고 현황 조회 (F009)")
-def get_inbound_status(limit: int = 200):
-    """inventory 테이블 — 입고일자 내림차순"""
+def get_inbound_status(
+    limit: int = 500,
+    from_date: "str | None" = None,
+    to_date: "str | None" = None,
+    lot_no: "str | None" = None,
+    product: "str | None" = None,
+    customer: "str | None" = None,
+):
+    """inventory 테이블 — 입고일자 내림차순. 모든 필터 선택적."""
     try:
         con = _db()
-        rows = con.execute("""
+        sql = """
             SELECT
-                id, lot_no, lot_sqm, sap_no, bl_no,
-                product, net_weight, current_weight, tonbag_count,
+                id, lot_no, lot_sqm, sap_no, bl_no, container_no,
+                product, sold_to AS customer, net_weight, current_weight, tonbag_count,
                 status, inbound_date, arrival_date, warehouse,
                 vessel, created_at
             FROM inventory
-            ORDER BY inbound_date DESC, created_at DESC
-            LIMIT ?
-        """, (limit,)).fetchall()
+            WHERE 1=1
+        """
+        params = []
+        if from_date:
+            sql += " AND DATE(inbound_date) >= DATE(?)"
+            params.append(from_date)
+        if to_date:
+            sql += " AND DATE(inbound_date) <= DATE(?)"
+            params.append(to_date)
+        if lot_no:
+            sql += " AND lot_no LIKE ?"
+            params.append(f"%{lot_no}%")
+        if product:
+            sql += " AND product LIKE ?"
+            params.append(f"%{product}%")
+        if customer:
+            sql += " AND sold_to LIKE ?"
+            params.append(f"%{customer}%")
+        sql += " ORDER BY inbound_date DESC, created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = con.execute(sql, params).fetchall()
+        # 통계
+        total_lot = len(rows)
+        total_kg = sum((r["current_weight"] or 0) for r in rows)
+        total_initial = sum((r["net_weight"] or 0) for r in rows)
         con.close()
         return ok_response(data={
-            "items": _rows_to_list(rows),
-            "total": len(rows),
-            "columns": ["lot_no", "lot_sqm", "sap_no", "bl_no", "product",
-                        "net_weight", "current_weight", "tonbag_count",
-                        "status", "inbound_date", "arrival_date", "warehouse", "vessel"]
+            "items":  _rows_to_list(rows),
+            "total":  total_lot,
+            "stats": {
+                "total_lots":       total_lot,
+                "total_current_mt": round(total_kg / 1000.0, 3),
+                "total_initial_mt": round(total_initial / 1000.0, 3),
+            },
+            "filters": {
+                "from_date": from_date, "to_date": to_date,
+                "lot_no": lot_no, "product": product, "customer": customer,
+            },
         })
     except Exception as e:
         logger.error("inbound-status error: %s", e)

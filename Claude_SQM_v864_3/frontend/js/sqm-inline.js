@@ -7039,6 +7039,140 @@
   }
   window.showSalesOrderUploadModal = showSalesOrderUploadModal;
 
+  /* =====================================================================
+     [Sprint 2-Q] InboundHistoryDialog — 모달 형식 입고 이력 조회 + 필터 + Excel
+     ===================================================================== */
+  var _ihState = { rows: [], stats: null };
+
+  function showInboundHistoryModal() {
+    var today = new Date();
+    var monthAgo = new Date(today.getTime() - 30 * 86400000);
+    var fmt = function(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+
+    var html =
+      '<div style="max-width:1100px">' +
+      '  <h2 style="margin:0 0 10px 0">📋 입고 현황 조회 (Inbound History)</h2>' +
+      /* 필터 */
+      '  <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:8px 10px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;margin-bottom:8px;font-size:12px">' +
+      '    <label>From:</label><input type="date" id="ih-from" value="' + fmt(monthAgo) + '" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '    <label>To:</label><input type="date" id="ih-to" value="' + fmt(today) + '" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '    <label>LOT:</label><input type="text" id="ih-lot" placeholder="LOT NO" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-family:Consolas,monospace;width:130px">' +
+      '    <label>Product:</label><input type="text" id="ih-product" placeholder="제품명" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;width:150px">' +
+      '    <label>Customer:</label><input type="text" id="ih-customer" placeholder="고객사" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;width:120px">' +
+      '    <button class="btn" onclick="window.ihSearch()">🔄 조회</button>' +
+      '    <button class="btn" onclick="window.ihReset()">✖ 초기화</button>' +
+      '    <button class="btn" onclick="window.ihExportCsv()" style="margin-left:auto">📥 Excel 저장</button>' +
+      '  </div>' +
+      /* 통계 카드 */
+      '  <div id="ih-stats" style="font-size:12px;color:var(--text-muted);margin-bottom:8px"></div>' +
+      /* 결과 테이블 */
+      '  <div id="ih-results" style="max-height:420px;overflow-y:auto;border:1px solid var(--panel-border);border-radius:6px">' +
+      '    <div style="padding:30px;text-align:center;color:var(--text-muted)">⏳ 로딩 중...</div>' +
+      '  </div>' +
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+      '  </div>' +
+      '</div>';
+    showDataModal('', html);
+    window.ihSearch();  /* 자동 조회 */
+  }
+  window.showInboundHistoryModal = showInboundHistoryModal;
+
+  window.ihSearch = function() {
+    var qs = ['limit=500'];
+    var from = (document.getElementById('ih-from') || {}).value || '';
+    var to = (document.getElementById('ih-to') || {}).value || '';
+    var lot = (document.getElementById('ih-lot') || {}).value || '';
+    var prod = (document.getElementById('ih-product') || {}).value || '';
+    var cust = (document.getElementById('ih-customer') || {}).value || '';
+    if (from) qs.push('from_date=' + encodeURIComponent(from));
+    if (to)   qs.push('to_date='   + encodeURIComponent(to));
+    if (lot.trim())  qs.push('lot_no='   + encodeURIComponent(lot.trim()));
+    if (prod.trim()) qs.push('product='  + encodeURIComponent(prod.trim()));
+    if (cust.trim()) qs.push('customer=' + encodeURIComponent(cust.trim()));
+
+    var body = document.getElementById('ih-results');
+    var stats = document.getElementById('ih-stats');
+    if (body) body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted)">⏳ 조회 중...</div>';
+
+    apiGet('/api/q/inbound-status?' + qs.join('&'))
+      .then(function(res){
+        var d = (res && res.data) || {};
+        _ihState.rows = d.items || [];
+        _ihState.stats = d.stats || {};
+        if (stats) {
+          stats.innerHTML = '📊 <strong>' + (d.stats.total_lots || 0) + ' LOTs</strong> · ' +
+            '현재 잔량 <strong>' + (d.stats.total_current_mt || 0).toFixed(3) + ' MT</strong> · ' +
+            '초기 입고 <strong>' + (d.stats.total_initial_mt || 0).toFixed(3) + ' MT</strong>';
+        }
+        if (!_ihState.rows.length) {
+          if (body) body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)">📭 조건에 맞는 입고 기록 없음</div>';
+          return;
+        }
+        var rowsHtml = _ihState.rows.map(function(r, i){
+          var st = (r.status || '').toUpperCase();
+          var stColor = st === 'AVAILABLE' ? '#66bb6a' : st === 'RESERVED' ? '#ffa726' : st === 'PICKED' ? '#42a5f5' : (st === 'SOLD' || st === 'OUTBOUND') ? '#ec407a' : '#9e9e9e';
+          return '<tr ondblclick="window.gsGoLot(\'' + escapeHtml(r.lot_no) + '\')" style="cursor:pointer">' +
+            '<td style="text-align:right">' + (i + 1) + '</td>' +
+            '<td class="mono-cell" style="color:var(--accent);font-weight:600">' + escapeHtml(r.lot_no || '') + '</td>' +
+            '<td class="mono-cell">' + escapeHtml(r.sap_no || '-') + '</td>' +
+            '<td class="mono-cell">' + escapeHtml(r.bl_no || '-') + '</td>' +
+            '<td class="mono-cell">' + escapeHtml(r.container_no || '-') + '</td>' +
+            '<td>' + escapeHtml(r.product || '-') + '</td>' +
+            '<td>' + escapeHtml(r.customer || '-') + '</td>' +
+            '<td class="mono-cell" style="text-align:right">' + ((r.net_weight || 0) / 1000).toFixed(3) + '</td>' +
+            '<td class="mono-cell" style="text-align:right">' + ((r.current_weight || 0) / 1000).toFixed(3) + '</td>' +
+            '<td class="mono-cell" style="text-align:right">' + (r.tonbag_count || 0) + '</td>' +
+            '<td><span class="tag" style="background:' + stColor + ';color:#fff;font-size:10px">' + escapeHtml(r.status || '-') + '</span></td>' +
+            '<td class="mono-cell">' + escapeHtml((r.inbound_date || '').slice(0,10)) + '</td>' +
+            '<td class="mono-cell">' + escapeHtml((r.arrival_date || '').slice(0,10)) + '</td>' +
+            '<td>' + escapeHtml(r.warehouse || '-') + '</td>' +
+            '<td>' + escapeHtml(r.vessel || '-') + '</td>' +
+            '</tr>';
+        }).join('');
+        if (body) body.innerHTML =
+          '<table class="data-table" style="font-size:11px"><thead style="position:sticky;top:0;background:var(--panel)"><tr>' +
+          '<th>#</th><th>LOT NO</th><th>SAP</th><th>BL</th><th>Container</th><th>Product</th><th>Customer</th>' +
+          '<th style="text-align:right">초기(MT)</th><th style="text-align:right">잔량(MT)</th><th style="text-align:right">톤백</th>' +
+          '<th>Status</th><th>입고일</th><th>도착일</th><th>창고</th><th>Vessel</th>' +
+          '</tr></thead><tbody>' + rowsHtml + '</tbody></table>' +
+          '<div style="text-align:right;padding:6px 10px;font-size:11px;color:var(--text-muted)">💡 더블클릭 → LOT 상세</div>';
+      })
+      .catch(function(e){
+        if (body) body.innerHTML = '<div style="padding:30px;color:var(--danger);text-align:center">조회 실패: ' + escapeHtml(e.message || String(e)) + '</div>';
+      });
+  };
+
+  window.ihReset = function() {
+    var today = new Date();
+    var monthAgo = new Date(today.getTime() - 30 * 86400000);
+    var fmt = function(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+    var ids = { 'ih-from': fmt(monthAgo), 'ih-to': fmt(today), 'ih-lot': '', 'ih-product': '', 'ih-customer': '' };
+    Object.keys(ids).forEach(function(k){ var el = document.getElementById(k); if (el) el.value = ids[k]; });
+    window.ihSearch();
+  };
+
+  window.ihExportCsv = function() {
+    if (!_ihState.rows.length) { showToast('warn', '내보낼 데이터 없음'); return; }
+    var headers = ['lot_no','sap_no','bl_no','container_no','product','customer','net_weight_kg','current_weight_kg','tonbag_count','status','inbound_date','arrival_date','warehouse','vessel'];
+    function csvEsc(v){ var s = String(v == null ? '' : v); if (/[,"\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"'; return s; }
+    var lines = [headers.join(',')];
+    _ihState.rows.forEach(function(r){
+      lines.push(headers.map(function(h){
+        var key = h.replace('_kg', '');  /* net_weight_kg → net_weight */
+        return csvEsc(r[key]);
+      }).join(','));
+    });
+    var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url;
+    var ts = new Date();
+    a.download = 'inbound_history_' + ts.getFullYear() + String(ts.getMonth()+1).padStart(2,'0') + String(ts.getDate()).padStart(2,'0') + '_' + String(ts.getHours()).padStart(2,'0') + String(ts.getMinutes()).padStart(2,'0') + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('success', '📥 ' + a.download + ' (' + _ihState.rows.length + ' LOTs)');
+  };
+
   window.soHandleFile = function(file) {
     if (!file) return;
     var fnEl = document.getElementById('so-filename');
@@ -7165,7 +7299,8 @@
     'onOnPdfInbound':    {m:'JS', u:'pdf-inbound-upload', lbl:'PDF 스캔 입고'},
     /* v864.3 Phase 4-B: 수동 입고는 네이티브 모달로 처리 (tkinter filedialog 대체) */
     'onInboundManual':   {m:'JS', u:'inbound-upload', lbl:'수동 입고'},
-    'onInboundList':     {m:'JS',   u:'inbound',                                  lbl:'입고 목록'},
+    /* [Sprint 2-Q] InboundHistoryDialog — 모달 형식 (Inbound 탭과 별개 — v864-2 _bulk_import_inventory) */
+    'onInboundList':     {m:'JS',   u:'inbound-history',                          lbl:'입고 현황 조회'},
     'onInboundCancel':   {m:'JS',   u:'inbound-cancel',                            lbl:'입고 취소'},
 
     /* ── 출고 메뉴 ── */
@@ -7456,6 +7591,8 @@
       if (conf.u === 'picking-template') { showPickingTemplateModal(); return; }
       /* [Sprint 2-R] Sales Order Upload */
       if (conf.u === 'sales-order-upload') { showSalesOrderUploadModal(); return; }
+      /* [Sprint 2-Q] Inbound History */
+      if (conf.u === 'inbound-history') { showInboundHistoryModal(); return; }
       dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
       renderPage(conf.u);
       return;
