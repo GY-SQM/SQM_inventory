@@ -231,6 +231,146 @@ def get_audit_log(
         return err_response(str(e))
 
 
+# ────────────────────────────────────────────────────────────
+# [Sprint 2-C] 전역 검색 — 모든 도메인 통합 검색
+# v864-2: menu_mixin.py의 🔍 검색 액션
+# ────────────────────────────────────────────────────────────
+@router.get("/global-search", summary="🔍 전역 검색 [Sprint 2-C]")
+def global_search(q: str = "", limit: int = 30):
+    """
+    모든 주요 도메인 통합 검색.
+    검색 대상:
+      - inventory (LOT NO, SAP NO, BL NO, Container, Product, Customer)
+      - inventory_tonbag (sub_lt, tonbag_uid, tonbag_no)
+      - allocation_plan (lot_no, customer, sale_ref, picking_no)
+      - audit_log (event_data, batch_id, tonbag_id)
+
+    응답: { categories: { lots, tonbags, allocations, audits }, total }
+    """
+    q = (q or "").strip()
+    if len(q) < 2:
+        return ok_response(data={
+            "q":          q,
+            "categories": {"lots": [], "tonbags": [], "allocations": [], "audits": []},
+            "total":      0,
+            "message":    "최소 2글자 이상 입력하세요",
+        })
+
+    wild = f"%{q}%"
+    try:
+        con = _db()
+        results = {"lots": [], "tonbags": [], "allocations": [], "audits": []}
+
+        # 1. Inventory (LOT)
+        lot_rows = con.execute("""
+            SELECT lot_no, sap_no, bl_no, container_no, product, sold_to,
+                   status, current_weight, warehouse, inbound_date
+            FROM inventory
+            WHERE lot_no LIKE ? OR sap_no LIKE ? OR bl_no LIKE ?
+               OR container_no LIKE ? OR product LIKE ? OR sold_to LIKE ?
+            ORDER BY inbound_date DESC
+            LIMIT ?
+        """, (wild, wild, wild, wild, wild, wild, limit)).fetchall()
+        for r in lot_rows:
+            results["lots"].append({
+                "lot_no":         r["lot_no"],
+                "sap_no":         r["sap_no"],
+                "bl_no":          r["bl_no"],
+                "container":      r["container_no"],
+                "product":        r["product"],
+                "customer":       r["sold_to"],
+                "status":         r["status"],
+                "current_weight": r["current_weight"],
+                "warehouse":      r["warehouse"],
+                "inbound_date":   r["inbound_date"],
+            })
+
+        # 2. Tonbags
+        tb_rows = con.execute("""
+            SELECT t.sub_lt, t.tonbag_uid, t.tonbag_no, t.lot_no,
+                   t.weight, t.status, t.location, i.product
+            FROM inventory_tonbag t
+            LEFT JOIN inventory i ON i.lot_no = t.lot_no
+            WHERE t.sub_lt LIKE ? OR t.tonbag_uid LIKE ? OR t.tonbag_no LIKE ?
+               OR t.lot_no LIKE ?
+            ORDER BY t.created_at DESC
+            LIMIT ?
+        """, (wild, wild, wild, wild, limit)).fetchall()
+        for r in tb_rows:
+            results["tonbags"].append({
+                "sub_lt":     r["sub_lt"],
+                "tonbag_uid": r["tonbag_uid"],
+                "tonbag_no":  r["tonbag_no"],
+                "lot_no":     r["lot_no"],
+                "weight":     r["weight"],
+                "status":     r["status"],
+                "location":   r["location"],
+                "product":    r["product"],
+            })
+
+        # 3. Allocations
+        try:
+            alloc_rows = con.execute("""
+                SELECT ap.lot_no, ap.customer, ap.sale_ref, ap.picking_no,
+                       ap.qty_mt, ap.status, ap.outbound_date
+                FROM allocation_plan ap
+                WHERE ap.lot_no LIKE ? OR ap.customer LIKE ?
+                   OR ap.sale_ref LIKE ? OR ap.picking_no LIKE ?
+                ORDER BY ap.created_at DESC
+                LIMIT ?
+            """, (wild, wild, wild, wild, limit)).fetchall()
+            for r in alloc_rows:
+                results["allocations"].append({
+                    "lot_no":        r["lot_no"],
+                    "customer":      r["customer"],
+                    "sale_ref":      r["sale_ref"],
+                    "picking_no":    r["picking_no"],
+                    "qty_mt":        r["qty_mt"],
+                    "status":        r["status"],
+                    "outbound_date": r["outbound_date"],
+                })
+        except Exception:
+            pass  # allocation_plan 미존재 시 skip
+
+        # 4. Audit log (최근 30일)
+        try:
+            audit_rows = con.execute("""
+                SELECT id, event_type, event_data, batch_id, tonbag_id, created_at
+                FROM audit_log
+                WHERE event_data LIKE ? OR batch_id LIKE ? OR tonbag_id LIKE ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (wild, wild, wild, min(limit, 20))).fetchall()
+            for r in audit_rows:
+                results["audits"].append({
+                    "id":         r["id"],
+                    "event_type": r["event_type"],
+                    "event_data": r["event_data"],
+                    "batch_id":   r["batch_id"],
+                    "tonbag_id":  r["tonbag_id"],
+                    "created_at": r["created_at"],
+                })
+        except Exception:
+            pass
+
+        con.close()
+        total = sum(len(v) for v in results.values())
+        return ok_response(data={
+            "q":          q,
+            "categories": results,
+            "total":      total,
+            "counts": {
+                "lots":        len(results["lots"]),
+                "tonbags":     len(results["tonbags"]),
+                "allocations": len(results["allocations"]),
+                "audits":      len(results["audits"]),
+            },
+        })
+    except Exception as e:
+        logger.error("global-search error: %s", e)
+        return err_response(str(e))
+
+
 # ── F038: 재고 추이 차트 ────────────────────────────────────────
 @router.get("/inventory-trend", summary="📊 재고 추이 차트 (F038)")
 def get_inventory_trend():

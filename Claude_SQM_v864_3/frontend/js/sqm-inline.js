@@ -6205,6 +6205,202 @@
     showToast('info', 'LOT PDF 출력: 기존 보고서 메뉴의 🔖 LOT 상세 PDF 사용 권장 (Sprint 2 통합 예정)');
   };
 
+  /* =====================================================================
+     [Sprint 2-C] 전역 🔍 검색 — v864-2 menu_mixin.py 검색 액션 매칭
+     모든 도메인 통합 (LOT / Tonbag / Allocation / Audit)
+     ===================================================================== */
+  var _gsState = { q: '', timer: null };
+
+  function showGlobalSearchModal() {
+    var html =
+      '<div style="max-width:900px">' +
+      '  <h2 style="margin:0 0 12px 0">🔍 전역 검색 — Global Search</h2>' +
+      '  <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px 0">검색 대상: LOT NO, SAP NO, BL, Container, Product, Customer, Tonbag UID, Sale Ref, Picking No, Audit 데이터 — 입력 시 실시간 조회</p>' +
+      '  <div style="display:flex;gap:6px;margin-bottom:10px">' +
+      '    <input type="text" id="gs-input" placeholder="🔍 검색어 입력 (최소 2자) — 예: 1126013063 / ACME / MAEU265083673" autofocus' +
+      '      style="flex:1;padding:10px 14px;background:var(--bg);color:var(--fg);border:1px solid var(--accent);border-radius:6px;font-family:Consolas,monospace;font-size:13px">' +
+      '    <button class="btn" onclick="window.gsClear()">🧹 초기화</button>' +
+      '    <span id="gs-count" style="align-self:center;color:var(--text-muted);font-size:11px;min-width:80px;text-align:right"></span>' +
+      '  </div>' +
+      '  <div id="gs-results" style="max-height:480px;overflow-y:auto">' +
+      '    <div style="padding:40px;text-align:center;color:var(--text-muted);font-size:12px">2글자 이상 입력하면 자동 검색됩니다</div>' +
+      '  </div>' +
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
+      '    <span style="margin-right:auto;color:var(--text-muted);font-size:11px">💡 결과 클릭 → 해당 항목으로 이동 / Esc 닫기</span>' +
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+      '  </div>' +
+      '</div>';
+    showDataModal('', html);
+
+    var inp = document.getElementById('gs-input');
+    if (inp) {
+      inp.addEventListener('input', function(){
+        if (_gsState.timer) clearTimeout(_gsState.timer);
+        _gsState.timer = setTimeout(function(){ window.gsRunSearch(inp.value); }, 250);
+      });
+      inp.addEventListener('keydown', function(e){
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (_gsState.timer) clearTimeout(_gsState.timer);
+          window.gsRunSearch(inp.value);
+        }
+      });
+    }
+  }
+  window.showGlobalSearchModal = showGlobalSearchModal;
+
+  window.gsClear = function() {
+    var inp = document.getElementById('gs-input');
+    if (inp) { inp.value = ''; inp.focus(); }
+    _gsState.q = '';
+    var cnt = document.getElementById('gs-count');
+    if (cnt) cnt.textContent = '';
+    var body = document.getElementById('gs-results');
+    if (body) body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);font-size:12px">2글자 이상 입력하면 자동 검색됩니다</div>';
+  };
+
+  window.gsRunSearch = function(q) {
+    q = (q || '').trim();
+    _gsState.q = q;
+    var body = document.getElementById('gs-results');
+    var cnt = document.getElementById('gs-count');
+    if (q.length < 2) {
+      if (body) body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);font-size:12px">2글자 이상 입력하면 자동 검색됩니다</div>';
+      if (cnt) cnt.textContent = '';
+      return;
+    }
+    if (body) body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted)">⏳ 검색 중... "' + escapeHtml(q) + '"</div>';
+
+    apiGet('/api/q/global-search?q=' + encodeURIComponent(q) + '&limit=30')
+      .then(function(res){
+        if (_gsState.q !== q) return;  /* stale response */
+        if (!res || !res.ok) throw new Error((res && res.error) || '검색 실패');
+        var d = res.data || {};
+        if (cnt) cnt.textContent = '총 ' + (d.total || 0) + '건';
+        _gsRenderResults(d);
+      })
+      .catch(function(e){
+        if (body) body.innerHTML = '<div style="padding:30px;color:var(--danger);text-align:center">검색 오류: ' + escapeHtml(e.message || String(e)) + '</div>';
+      });
+  };
+
+  function _gsRenderResults(d) {
+    var body = document.getElementById('gs-results');
+    if (!body) return;
+    var cats = d.categories || {};
+    var sections = [];
+
+    /* LOT */
+    if (cats.lots && cats.lots.length) {
+      var lotsRows = cats.lots.map(function(r){
+        var st = (r.status || '').toUpperCase();
+        var stColor = st === 'AVAILABLE' ? '#66bb6a' : st === 'RESERVED' ? '#ffa726' : st === 'PICKED' ? '#42a5f5' : '#9e9e9e';
+        return '<tr style="cursor:pointer" onclick="window.gsGoLot(\'' + escapeHtml(r.lot_no) + '\')">' +
+          '<td class="mono-cell" style="color:var(--accent);font-weight:600">' + escapeHtml(r.lot_no || '-') + '</td>' +
+          '<td class="mono-cell">' + escapeHtml(r.sap_no || '-') + '</td>' +
+          '<td class="mono-cell">' + escapeHtml(r.bl_no || '-') + '</td>' +
+          '<td>' + escapeHtml(r.product || '-') + '</td>' +
+          '<td>' + escapeHtml(r.customer || '-') + '</td>' +
+          '<td><span class="tag" style="background:' + stColor + ';color:#fff;font-size:10px">' + escapeHtml(r.status || '-') + '</span></td>' +
+          '<td class="mono-cell">' + escapeHtml((r.inbound_date || '').slice(0,10)) + '</td>' +
+          '</tr>';
+      }).join('');
+      sections.push(
+        '<div style="margin-bottom:12px">' +
+        '  <h3 style="font-size:13px;color:var(--accent);margin:0 0 6px 0">📦 Inventory LOT (' + cats.lots.length + ')</h3>' +
+        '  <table class="data-table" style="font-size:11px"><thead><tr>' +
+        '    <th>LOT NO</th><th>SAP</th><th>BL</th><th>Product</th><th>Customer</th><th>Status</th><th>Inbound</th>' +
+        '  </tr></thead><tbody>' + lotsRows + '</tbody></table>' +
+        '</div>'
+      );
+    }
+
+    /* Tonbag */
+    if (cats.tonbags && cats.tonbags.length) {
+      var tbRows = cats.tonbags.map(function(r){
+        return '<tr style="cursor:pointer" onclick="window.gsGoLot(\'' + escapeHtml(r.lot_no) + '\')">' +
+          '<td class="mono-cell" style="color:var(--accent)">' + escapeHtml(r.sub_lt || r.tonbag_uid || '-') + '</td>' +
+          '<td class="mono-cell">' + escapeHtml(r.lot_no || '-') + '</td>' +
+          '<td>' + escapeHtml(r.product || '-') + '</td>' +
+          '<td class="mono-cell" style="text-align:right">' + (r.weight != null ? Number(r.weight).toFixed(2) : '-') + '</td>' +
+          '<td>' + escapeHtml(r.status || '-') + '</td>' +
+          '<td>' + escapeHtml(r.location || '-') + '</td>' +
+          '</tr>';
+      }).join('');
+      sections.push(
+        '<div style="margin-bottom:12px">' +
+        '  <h3 style="font-size:13px;color:var(--accent);margin:0 0 6px 0">📦 Tonbag (' + cats.tonbags.length + ')</h3>' +
+        '  <table class="data-table" style="font-size:11px"><thead><tr>' +
+        '    <th>톤백 ID</th><th>LOT</th><th>Product</th><th style="text-align:right">중량(kg)</th><th>Status</th><th>위치</th>' +
+        '  </tr></thead><tbody>' + tbRows + '</tbody></table>' +
+        '</div>'
+      );
+    }
+
+    /* Allocation */
+    if (cats.allocations && cats.allocations.length) {
+      var alRows = cats.allocations.map(function(r){
+        return '<tr style="cursor:pointer" onclick="window.gsGoAllocation(\'' + escapeHtml(r.lot_no) + '\')">' +
+          '<td class="mono-cell" style="color:var(--accent)">' + escapeHtml(r.lot_no || '-') + '</td>' +
+          '<td>' + escapeHtml(r.customer || '-') + '</td>' +
+          '<td class="mono-cell">' + escapeHtml(r.sale_ref || '-') + '</td>' +
+          '<td class="mono-cell">' + escapeHtml(r.picking_no || '-') + '</td>' +
+          '<td class="mono-cell" style="text-align:right">' + (r.qty_mt != null ? Number(r.qty_mt).toFixed(3) : '-') + '</td>' +
+          '<td>' + escapeHtml(r.status || '-') + '</td>' +
+          '</tr>';
+      }).join('');
+      sections.push(
+        '<div style="margin-bottom:12px">' +
+        '  <h3 style="font-size:13px;color:var(--accent);margin:0 0 6px 0">📋 Allocation (' + cats.allocations.length + ')</h3>' +
+        '  <table class="data-table" style="font-size:11px"><thead><tr>' +
+        '    <th>LOT</th><th>Customer</th><th>Sale Ref</th><th>Picking</th><th style="text-align:right">QTY(MT)</th><th>Status</th>' +
+        '  </tr></thead><tbody>' + alRows + '</tbody></table>' +
+        '</div>'
+      );
+    }
+
+    /* Audit */
+    if (cats.audits && cats.audits.length) {
+      var auRows = cats.audits.map(function(r){
+        var t = r.created_at ? new Date(r.created_at).toLocaleString('ko-KR') : '';
+        return '<tr>' +
+          '<td><span class="tag" style="font-size:10px">' + escapeHtml(r.event_type || '-') + '</span></td>' +
+          '<td class="mono-cell" style="font-size:10px">' + escapeHtml(t) + '</td>' +
+          '<td class="mono-cell" style="font-size:10px">' + escapeHtml(r.tonbag_id || '-') + '</td>' +
+          '<td style="font-size:10px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(r.event_data || '') + '">' + escapeHtml(r.event_data || '-') + '</td>' +
+          '</tr>';
+      }).join('');
+      sections.push(
+        '<div style="margin-bottom:12px">' +
+        '  <h3 style="font-size:13px;color:var(--accent);margin:0 0 6px 0">📋 Audit (' + cats.audits.length + ')</h3>' +
+        '  <table class="data-table" style="font-size:11px"><thead><tr>' +
+        '    <th>이벤트</th><th>시간</th><th>Tonbag</th><th>데이터</th>' +
+        '  </tr></thead><tbody>' + auRows + '</tbody></table>' +
+        '</div>'
+      );
+    }
+
+    if (!sections.length) {
+      body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted)">📭 검색 결과 없음 (' + escapeHtml(d.q || '') + ')</div>';
+    } else {
+      body.innerHTML = sections.join('');
+    }
+  }
+
+  /* 결과 클릭 → navigate */
+  window.gsGoLot = function(lot) {
+    if (!lot) return;
+    document.getElementById('sqm-modal').style.display = 'none';
+    setTimeout(function(){ window.showLotDetail(lot); }, 100);
+  };
+  window.gsGoAllocation = function(lot) {
+    document.getElementById('sqm-modal').style.display = 'none';
+    setTimeout(function(){
+      renderPage('allocation');
+      setTimeout(function(){ window.toggleAllocDetail && window.toggleAllocDetail(lot); }, 300);
+    }, 100);
+  };
+
   /* ===================================================
      9. ALERTS + STATUSBAR
      =================================================== */
@@ -6395,8 +6591,8 @@
     'onExportLot':         {m:'JS', u:'wip',                                       lbl:'📊 LOT 리스트 Excel'},
     'onStockTrendChart':   {m:'JS', u:'wip',                                       lbl:'📊 재고 추이 차트'},
 
-    /* ── [Sprint 0-3] 🔍 전역 검색 버튼 (placeholder — Sprint 2에서 실구현) ── */
-    'onGlobalSearch':      {m:'JS', u:'wip',                                       lbl:'🔍 전역 검색'},
+    /* ── [Sprint 2-C] 🔍 전역 검색 버튼 — 실구현 ── */
+    'onGlobalSearch':      {m:'JS', u:'global-search',                             lbl:'🔍 전역 검색'},
 
     /* View 메뉴 탭 이동 */
     'onGoInventoryTab':  {m:'JS',   u:'inventory',                                lbl:'Inventory 탭'},
@@ -6554,6 +6750,8 @@
       /* [Sprint 1-4] integrity 분리 */
       if (conf.u === 'integrity-report') { showIntegrityV760Modal(); return; }
       if (conf.u === 'integrity-fix') { showIntegrityV760Modal(true); return; }
+      /* [Sprint 2-C] 전역 검색 */
+      if (conf.u === 'global-search') { showGlobalSearchModal(); return; }
       dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
       renderPage(conf.u);
       return;
