@@ -333,6 +333,33 @@ html[data-theme="dark"] {
   background: var(--panel); border: 1px dashed var(--panel-border); border-radius: 6px;
 }
 
+/* [Sprint 1-2-C] 인라인 편집 셀 스타일 */
+.onestop-preview-table td.onestop-editable {
+  cursor: text;
+  transition: background 0.1s;
+}
+.onestop-preview-table td.onestop-editable:hover {
+  background: rgba(66, 165, 245, 0.12) !important;
+  outline: 1px dashed var(--accent);
+  outline-offset: -2px;
+}
+.onestop-preview-table td.onestop-edited {
+  background: rgba(255, 193, 7, 0.18) !important;
+  font-weight: 700;
+  position: relative;
+}
+.onestop-preview-table td.onestop-edited::before {
+  content: '✏️';
+  position: absolute;
+  top: 1px; right: 2px;
+  font-size: 9px;
+  opacity: 0.7;
+}
+.onestop-edit-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .menubar-spacer { flex: 1; }
 
 .topbar-btn {

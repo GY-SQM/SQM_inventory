@@ -10,7 +10,7 @@ import tempfile
 import os
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Body
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -384,14 +384,19 @@ async def onestop_inbound_upload(
     pl: UploadFile = File(...),
     invoice: "UploadFile | None" = File(None),
     do_file: "UploadFile | None" = File(None),
+    dry_run: bool = Query(True, description="True면 파싱만 실행, DB 저장은 하지 않음 (Sprint 1-2-C 기본값)"),
 ):
     """
-    4종 PDF 를 업로드하면 파싱 + 크로스체크 + PL DB 저장 수행.
+    4종 PDF 를 업로드하면 파싱 + 크로스체크 (+ 선택적 PL DB 저장) 수행.
 
     - `pl`: Packing List (필수)
     - `bl`: Bill of Lading (선택 — 크로스체크 용도)
     - `invoice`: Invoice / FA (선택 — 크로스체크 용도)
     - `do_file`: Delivery Order (선택 — 크로스체크 + 나중에 등록 가능)
+    - `dry_run`: True(기본) = 파싱만, False = 기존처럼 PL 자동 저장 (레거시 호환)
+
+    v864-2 워크플로우를 따르려면 `dry_run=True` 로 파싱 → 프론트에서 편집 →
+    `/api/inbound/onestop-save` 호출로 최종 저장.
     """
     # 1. 각 파일 임시 저장
     inputs = [
@@ -508,20 +513,21 @@ async def onestop_inbound_upload(
                 "xc_tag":      xc_tag,
             })
 
-        # 5. PL 데이터 DB 저장 (기존 로직 재활용 — /pdf base64 호출)
+        # 5. PL 데이터 DB 저장 — dry_run=True 면 스킵 (Sprint 1-2-C 기본값)
         saved_result = None
-        try:
-            with open(tmp_paths["pl"], "rb") as f:
-                pl_bytes = f.read()
-            import base64 as _b64
-            save_req = PdfInboundRequest(
-                pdf_base64=_b64.b64encode(pl_bytes).decode("ascii"),
-                filename=pl.filename,
-            )
-            saved_result = pdf_inbound(save_req)
-        except Exception as e:
-            logger.warning(f"PL DB 저장 실패 (파싱은 성공): {e}", exc_info=True)
-            saved_result = {"ok": False, "message": f"DB 저장 실패: {e}"}
+        if not dry_run:
+            try:
+                with open(tmp_paths["pl"], "rb") as f:
+                    pl_bytes = f.read()
+                import base64 as _b64
+                save_req = PdfInboundRequest(
+                    pdf_base64=_b64.b64encode(pl_bytes).decode("ascii"),
+                    filename=pl.filename,
+                )
+                saved_result = pdf_inbound(save_req)
+            except Exception as e:
+                logger.warning(f"PL DB 저장 실패 (파싱은 성공): {e}", exc_info=True)
+                saved_result = {"ok": False, "message": f"DB 저장 실패: {e}"}
 
         # 6. 응답 조립
         return {
@@ -556,6 +562,121 @@ async def onestop_inbound_upload(
                     os.unlink(p)
                 except Exception:
                     pass
+
+
+# ────────────────────────────────────────────────────────────
+# [Sprint 1-2-C] OneStop 입고 — 편집된 미리보기 → DB 저장
+#
+# v864-2 workflow: 파싱 → 미리보기에서 편집 → 확인 → DB 저장
+# Frontend 는 /onestop-upload?dry_run=true 로 파싱만 받은 뒤,
+# 18열 테이블에서 더블클릭으로 셀 편집하고, "DB 업로드" 버튼 클릭시
+# 편집된 preview_rows JSON 을 이 엔드포인트로 POST.
+# ────────────────────────────────────────────────────────────
+class OneStopSaveRequest(BaseModel):
+    rows: "list[dict]"
+
+
+# 프론트 preview_rows (18열) → engine.add_inventory_from_dict 표준 키 매핑
+_ONESTOP_ROW_KEY_MAP = {
+    "lot_no":           "lot_no",
+    "sap_no":           "sap_no",
+    "bl_no":            "bl_no",
+    "product":          "product",
+    "container":        "container_no",
+    "code":             "product_code",
+    "lot_sqm":          "lot_sqm",
+    "mxbg":             "mxbg_pallet",
+    "net_kg":           "net_weight",
+    "gross_kg":         "gross_weight",
+    "invoice_no":       "salar_invoice_no",
+    "ship_date":        "ship_date",
+    "arrival":          "arrival_date",
+    "con_return":       "con_return",
+    "free_time":        "free_time",
+    "wh":               "warehouse",
+}
+
+
+def _onestop_row_to_engine_dict(row: dict) -> dict:
+    """프론트 18열 row → engine.add_inventory_from_dict 입력 dict 변환."""
+    out = {}
+    for fe_key, eng_key in _ONESTOP_ROW_KEY_MAP.items():
+        v = row.get(fe_key)
+        if v is None:
+            continue
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                continue
+        out[eng_key] = v
+    return out
+
+
+@router.post(
+    "/onestop-save",
+    summary="📤 OneStop 입고 — 편집된 18열 미리보기 → DB 저장 (Sprint 1-2-C)",
+)
+def onestop_inbound_save(req: OneStopSaveRequest):
+    """
+    /onestop-upload?dry_run=true 로 파싱 후 프론트에서 편집된 preview_rows 를
+    받아 실제 DB에 저장.
+
+    각 row 는 18개 필드를 가진 dict (lot_no/sap_no/bl_no/... /wh) 이며,
+    engine.add_inventory_from_dict 로 저장된다.
+    """
+    rows = req.rows or []
+    if not rows:
+        raise HTTPException(400, "rows 가 비어있습니다")
+
+    # 엔진 확인
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진이 사용 불가 상태입니다.")
+
+    success_count, fail_count = 0, 0
+    errors: "list[dict]" = []
+
+    for idx, row in enumerate(rows, start=1):
+        data = _onestop_row_to_engine_dict(row)
+        if not data.get("lot_no"):
+            fail_count += 1
+            errors.append({"row": idx, "reason": "lot_no 빈 값"})
+            continue
+        try:
+            result = engine.add_inventory_from_dict(data)
+            if result.get("success"):
+                success_count += 1
+            else:
+                fail_count += 1
+                errors.append({
+                    "row":    idx,
+                    "lot_no": str(data.get("lot_no", "")),
+                    "reason": result.get("message") or result.get("error") or "unknown",
+                })
+        except Exception as e:
+            fail_count += 1
+            errors.append({
+                "row":    idx,
+                "lot_no": str(data.get("lot_no", "")),
+                "reason": f"exception: {e}",
+            })
+            logger.warning(f"[onestop-save] row {idx} 실패: {e}")
+
+    logger.info(f"[onestop-save] 완료: 성공 {success_count} / 실패 {fail_count} / 총 {len(rows)}")
+
+    return {
+        "ok": True,
+        "data": {
+            "total":         len(rows),
+            "success_count": success_count,
+            "fail_count":    fail_count,
+            "errors":        errors[:50],  # 최대 50건
+        },
+        "message": f"{success_count}건 입고 완료 / {fail_count}건 실패",
+    }
 
 
 @router.post("/pdf")

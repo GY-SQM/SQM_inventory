@@ -2365,7 +2365,19 @@
     template: null,
     carrier: '',
     step: 1,
+    /* [Sprint 1-2-C] 편집 상태 */
+    previewRows: [],        /* 현재 미리보기 rows (편집 반영됨) */
+    originalRows: [],       /* 원본 백업 — 편집 롤백용 */
+    editedCells: {},        /* { "rowIdx.field": true } — 편집된 셀 표시용 */
+    parsed: false,          /* 파싱 완료 여부 (true면 DB 업로드 가능) */
   };
+  /* [Sprint 1-2-C] 편집 가능 컬럼 (18열 중 — v864-2 EDITABLE_COLS 참고) */
+  var ONESTOP_EDITABLE_FIELDS = new Set([
+    'lot_no', 'sap_no', 'bl_no', 'product', 'container', 'code',
+    'lot_sqm', 'mxbg', 'net_kg', 'gross_kg',
+    'invoice_no', 'ship_date', 'arrival', 'con_return', 'free_time', 'wh'
+  ]);
+  /* 읽기 전용: no (순번), status (NEW 고정) */
   var ONESTOP_DOC_TYPES = [
     { key: 'BL',           icon: '🚢', seq: '①', name: 'Bill of Loading',  required: true  },
     { key: 'PACKING_LIST', icon: '📦', seq: '②', name: 'Packing List',     required: true  },
@@ -2541,7 +2553,8 @@
     if (s.DO)      form.append('do_file', s.DO,      s.DO.name);
 
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', API + '/api/inbound/onestop-upload');
+    /* [Sprint 1-2-C] dry_run=true 로 DB 저장 없이 파싱만 실행 */
+    xhr.open('POST', API + '/api/inbound/onestop-upload?dry_run=true');
     xhr.onload = function(){
       var body; try { body = JSON.parse(xhr.responseText); } catch(e){ body = null; }
       if (xhr.status >= 200 && xhr.status < 300 && body && body.ok) {
@@ -2571,24 +2584,27 @@
         }
 
         if (pb) pb.innerHTML =
-          '<div style="color:var(--success);font-weight:700">✅ ' + escapeHtml(body.message || '파싱 완료') + '</div>' +
+          '<div style="color:var(--success);font-weight:700">✅ ' + escapeHtml(body.message || '파싱 완료') + ' <span style="font-size:11px;color:var(--text-muted);font-weight:400">(미리보기 단계 — DB 저장 전)</span></div>' +
           '<div style="color:var(--text-muted);font-size:12px;margin-top:6px">📑 서류: ' + docsBadges + '</div>' +
           '<div style="color:' + xcColor + ';font-size:13px;font-weight:600;margin-top:6px">' + xcIcon + ' ' + escapeHtml(xc.summary || '') + '</div>' +
           xcItemsHtml +
-          (xc.has_critical ? '<div style="color:var(--danger);font-size:11px;margin-top:6px;font-weight:600">🚫 심각 불일치 감지 — 파일 확인 후 다시 파싱 권장</div>' : '');
+          (xc.has_critical ? '<div style="color:var(--danger);font-size:11px;margin-top:6px;font-weight:600">🚫 심각 불일치 감지 — 파일 확인 후 다시 파싱 권장</div>' : '') +
+          '<div style="color:var(--info, #42a5f5);font-size:11px;margin-top:8px">💡 셀 더블클릭으로 편집 가능 · 완료 후 하단 "📤 DB 업로드" 버튼 클릭</div>';
 
-        /* 18열 미리보기 테이블 채우기 */
-        _onestopRenderPreview(d.preview_rows || []);
+        /* 18열 미리보기 테이블 채우기 + 편집 상태 초기화 */
+        var rows = d.preview_rows || [];
+        _onestopState.previewRows = rows.slice();  /* 편집 대상 */
+        _onestopState.originalRows = JSON.parse(JSON.stringify(rows));  /* deep copy */
+        _onestopState.editedCells = {};
+        _onestopState.parsed = rows.length > 0;
+        _onestopRenderPreview(rows);
 
         _onestopSetStep(3);
-        if (d.saved_result && (d.saved_result.saved_count != null)) {
-          _onestopSetStep(4);
+        if (rows.length > 0) {
           var saveBtn = document.getElementById('onestop-save-btn');
-          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '✅ 완료 (이미 DB 저장됨 ' + d.saved_result.saved_count + '건)'; }
-          showToast('success', '입고 등록: ' + d.saved_result.saved_count + '건');
-          if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
-          if (typeof loadKpi === 'function') loadKpi();
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '📤 DB 업로드 (' + rows.length + '건)'; }
         }
+        showToast('success', '파싱 완료: ' + rows.length + ' LOT — 편집 후 DB 업로드');
       } else {
         var errMsg = (body && (body.detail || body.error || body.message)) || ('HTTP ' + xhr.status);
         if (typeof errMsg === 'object') errMsg = JSON.stringify(errMsg);
@@ -2608,7 +2624,8 @@
     if (reparseBtn) reparseBtn.disabled = false;
   };
 
-  /* 18열 미리보기 렌더 — preview_rows (백엔드 응답) → Table body */
+  /* 18열 미리보기 렌더 — preview_rows (백엔드 응답) → Table body
+     [Sprint 1-2-C] 각 셀에 data-row / data-field 부여, 더블클릭 편집 지원 */
   function _onestopRenderPreview(rows) {
     var tbody = document.getElementById('onestop-preview-body');
     if (!tbody) return;
@@ -2623,37 +2640,152 @@
       if (tag === 'xc_info')     return 'background:rgba(66,165,245,.08)';
       return '';
     }
-    tbody.innerHTML = rows.map(function(r){
+    /* field 키 → 컬럼 정의 (편집가능 여부 + 정렬 스타일) */
+    var fields = [
+      { key: 'no',          align: 'right',  accent: false },
+      { key: 'lot_no',      align: 'left',   accent: true  },
+      { key: 'sap_no',      align: 'left',   accent: false },
+      { key: 'bl_no',       align: 'left',   accent: false },
+      { key: 'product',     align: 'left',   accent: false, mono: false },
+      { key: 'status',      align: 'left',   accent: false, tag: true },
+      { key: 'container',   align: 'left',   accent: false },
+      { key: 'code',        align: 'left',   accent: false },
+      { key: 'lot_sqm',     align: 'left',   accent: false },
+      { key: 'mxbg',        align: 'right',  accent: false },
+      { key: 'net_kg',      align: 'right',  accent: false },
+      { key: 'gross_kg',    align: 'right',  accent: false },
+      { key: 'invoice_no',  align: 'left',   accent: false },
+      { key: 'ship_date',   align: 'left',   accent: false },
+      { key: 'arrival',     align: 'left',   accent: false },
+      { key: 'con_return',  align: 'left',   accent: false },
+      { key: 'free_time',   align: 'left',   accent: false },
+      { key: 'wh',          align: 'left',   accent: false, mono: false },
+    ];
+
+    tbody.innerHTML = rows.map(function(r, rowIdx){
       var style = tagColor(r.xc_tag);
-      return '<tr' + (style ? ' style="' + style + '"' : '') + '>' +
-        '<td class="mono-cell" style="text-align:right">' + (r.no != null ? r.no : '') + '</td>' +
-        '<td class="mono-cell" style="color:var(--accent);font-weight:600">' + escapeHtml(r.lot_no || '') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.sap_no || '') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.bl_no || '') + '</td>' +
-        '<td>' + escapeHtml(r.product || '') + '</td>' +
-        '<td><span class="tag">' + escapeHtml(r.status || '') + '</span></td>' +
-        '<td class="mono-cell">' + escapeHtml(r.container || '') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.code || '') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.lot_sqm || '') + '</td>' +
-        '<td class="mono-cell" style="text-align:right">' + escapeHtml(r.mxbg || '') + '</td>' +
-        '<td class="mono-cell" style="text-align:right">' + escapeHtml(r.net_kg || '') + '</td>' +
-        '<td class="mono-cell" style="text-align:right">' + escapeHtml(r.gross_kg || '') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.invoice_no || '') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.ship_date || '') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.arrival || '') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.con_return || '') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.free_time || '') + '</td>' +
-        '<td>' + escapeHtml(r.wh || '') + '</td>' +
-        '</tr>';
+      var cellsHtml = fields.map(function(f){
+        var val = r[f.key];
+        var text = (val == null ? '' : String(val));
+        var editable = ONESTOP_EDITABLE_FIELDS.has(f.key);
+        var edited = _onestopState.editedCells[rowIdx + '.' + f.key];
+        var cellClass = [
+          (f.mono !== false ? 'mono-cell' : ''),
+          (editable ? 'onestop-editable' : ''),
+          (edited ? 'onestop-edited' : ''),
+        ].filter(Boolean).join(' ');
+        var cellStyle = [
+          'text-align:' + f.align,
+          (f.accent ? 'color:var(--accent);font-weight:600' : ''),
+        ].filter(Boolean).join(';');
+        var attrs = 'class="' + cellClass + '"' +
+                    (cellStyle ? ' style="' + cellStyle + '"' : '') +
+                    ' data-row="' + rowIdx + '" data-field="' + f.key + '"' +
+                    (editable ? ' ondblclick="window.onestopEditCell(this)" title="더블클릭으로 편집"' : '');
+        var rendered = f.tag ? '<span class="tag">' + escapeHtml(text) + '</span>' : escapeHtml(text);
+        return '<td ' + attrs + '>' + rendered + '</td>';
+      }).join('');
+      return '<tr' + (style ? ' style="' + style + '"' : '') + '>' + cellsHtml + '</tr>';
     }).join('');
   }
+
+  /* 셀 더블클릭 → input 으로 교체, blur/Enter 로 커밋, Escape 로 취소 */
+  window.onestopEditCell = function(td) {
+    if (!td || td.querySelector('input')) return;  /* 이미 편집 중 */
+    var rowIdx = parseInt(td.dataset.row, 10);
+    var field  = td.dataset.field;
+    if (isNaN(rowIdx) || !field) return;
+    var curVal = (_onestopState.previewRows[rowIdx] || {})[field];
+    curVal = (curVal == null ? '' : String(curVal));
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.value = curVal;
+    input.className = 'onestop-edit-input';
+    input.style.cssText = 'width:100%;padding:2px 4px;background:var(--bg);color:var(--fg);border:1px solid var(--accent);border-radius:3px;font-size:11px;font-family:inherit';
+
+    td.innerHTML = '';
+    td.appendChild(input);
+    input.focus();
+    input.select();
+
+    function commit() {
+      var newVal = input.value;
+      /* 상태 업데이트 */
+      if (!_onestopState.previewRows[rowIdx]) _onestopState.previewRows[rowIdx] = {};
+      _onestopState.previewRows[rowIdx][field] = newVal;
+      var origVal = (_onestopState.originalRows[rowIdx] || {})[field];
+      var cellKey = rowIdx + '.' + field;
+      if (String(newVal) !== String(origVal == null ? '' : origVal)) {
+        _onestopState.editedCells[cellKey] = true;
+      } else {
+        delete _onestopState.editedCells[cellKey];
+      }
+      _onestopRenderPreview(_onestopState.previewRows);
+    }
+    function cancel() {
+      _onestopRenderPreview(_onestopState.previewRows);
+    }
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      else if (e.key === 'Escape') { e.preventDefault(); input.removeEventListener('blur', commit); cancel(); }
+      /* Tab 은 기본 동작 허용 (포커스 이동) + blur 로 commit 됨 */
+    });
+  };
   window.onestopParseRedo = function() {
     _onestopState.step = 1;
     _onestopSetStep(1);
     window.onestopParseStart();
   };
+  /* [Sprint 1-2-C] 편집된 미리보기 rows → /onestop-save POST → DB 저장 */
   window.onestopSaveDb = function() {
-    showToast('info', 'Sprint 1-2-A: DB 저장은 파싱 시점에 자동 완료됩니다. Sprint 1-2-B에서 "DB 업로드" 버튼은 편집 후 저장 용도로 활성화됩니다');
+    if (!_onestopState.parsed || !_onestopState.previewRows.length) {
+      showToast('warn', '파싱된 데이터가 없습니다. ▶ 파싱 시작을 먼저 실행하세요');
+      return;
+    }
+    var editedCount = Object.keys(_onestopState.editedCells).length;
+    var rowCount = _onestopState.previewRows.length;
+    var confirmMsg = '💾 DB 저장 확인\n\n' +
+      '총 ' + rowCount + ' LOT (편집된 셀 ' + editedCount + '개)\n' +
+      '실제 재고 DB에 등록됩니다. 계속하시겠습니까?';
+    if (!confirm(confirmMsg)) return;
+
+    var saveBtn = document.getElementById('onestop-save-btn');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ 저장 중...'; }
+
+    apiPost('/api/inbound/onestop-save', { rows: _onestopState.previewRows })
+      .then(function(res){
+        var d = (res && res.data) || {};
+        if (res && res.ok) {
+          _onestopSetStep(4);
+          if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '✅ 저장 완료 (' + (d.success_count || 0) + '건)'; }
+          var pb = document.getElementById('onestop-progress-body');
+          var errHtml = '';
+          if (d.errors && d.errors.length) {
+            errHtml = '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;color:var(--warning)">⚠️ 실패 ' + d.errors.length + '건 상세</summary>' +
+              '<ul style="font-size:11px;margin:4px 0 0 20px">' +
+              d.errors.map(function(er){
+                return '<li>row ' + er.row + ' — ' + escapeHtml(er.lot_no || '-') + ': ' + escapeHtml(er.reason || '') + '</li>';
+              }).join('') + '</ul></details>';
+          }
+          if (pb) pb.innerHTML +=
+            '<div style="margin-top:10px;padding:8px;background:rgba(102,187,106,.1);border-left:3px solid var(--success);border-radius:4px">' +
+            '<div style="color:var(--success);font-weight:700">💾 DB 저장 완료 — 성공 ' + (d.success_count || 0) + '건 / 실패 ' + (d.fail_count || 0) + '건</div>' +
+            errHtml + '</div>';
+          showToast(d.fail_count ? 'warn' : 'success', 'DB 저장: 성공 ' + d.success_count + '건 / 실패 ' + d.fail_count + '건');
+          if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+          if (typeof loadKpi === 'function') loadKpi();
+        } else {
+          var msg = (res && (res.message || res.error)) || 'DB 저장 실패';
+          showToast('error', msg);
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '📤 DB 업로드 재시도'; }
+        }
+      })
+      .catch(function(e){
+        showToast('error', 'DB 저장 오류: ' + (e.message || String(e)));
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '📤 DB 업로드 재시도'; }
+      });
   };
   function _onestopSetStep(step) {
     _onestopState.step = step;
