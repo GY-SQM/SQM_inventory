@@ -2033,55 +2033,197 @@
   /* ===================================================
      7h. PAGE: Scan + PDF Upload
      =================================================== */
+  /* =====================================================================
+     [Sprint 1-7] Scan 탭 — 5단계 상태 전환 + 빠른스캔 + 무음 + 5열 history
+     v864-2 source: tabs/scan_tab.py (805줄)
+     ===================================================================== */
+  var _scanState = {
+    quickMode:  false,   /* ⚡ 빠른 스캔: 다이얼로그/팝업 스킵, 자동 처리 */
+    silentMode: false,   /* 🔕 무음: 에러 토스트 억제 (오디오는 향후) */
+    lastAction: 'lookup',
+  };
+
   function loadScanPage() {
     var c = document.getElementById('page-container');
     if (!c) return;
+    /* localStorage 복원 */
+    try {
+      _scanState.quickMode = localStorage.getItem('sqm.scan.quick') === '1';
+      _scanState.silentMode = localStorage.getItem('sqm.scan.silent') === '1';
+    } catch (e) {}
+
     c.innerHTML = [
       '<section class="page" data-page="scan">',
-      '<h2>Scan - Barcode / PDF Inbound</h2>',
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">',
-
-      '<!-- Barcode Panel -->',
-      '<div class="card" style="padding:20px">',
-      '<h3 style="margin-bottom:12px">Barcode Scan</h3>',
-      '<input id="scan-input" class="input" placeholder="Scan or type barcode + Enter" style="width:100%;margin-bottom:12px">',
-      '<div style="display:flex;gap:8px;margin-bottom:16px">',
-      '<button class="btn btn-primary btn-sm" onclick="window.ScanActions.quickAction(\'inbound\')">Inbound</button>',
-      '<button class="btn btn-warning btn-sm" onclick="window.ScanActions.quickAction(\'outbound\')">Outbound</button>',
-      '<button class="btn btn-secondary btn-sm" onclick="window.ScanActions.quickAction(\'move\')">Move</button>',
+      '<div style="display:flex;align-items:center;gap:12px;padding:4px 0 10px">',
+      '  <h2 style="margin:0">📷 Scan — 바코드 상태 전환</h2>',
+      '  <span style="font-size:11px;color:var(--text-muted)">5단계 워크플로우: AVAILABLE → RESERVED → PICKED → OUTBOUND → RETURN → AVAILABLE</span>',
       '</div>',
-      '<table class="data-table"><thead><tr><th>Time</th><th>Barcode</th><th>Action</th><th>Result</th></tr></thead>',
-      '<tbody id="scan-history-tbody"><tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text-muted)">No scan history</td></tr></tbody></table>',
+      /* 입력 + 토글 */
+      '<div style="display:flex;gap:8px;align-items:center;background:var(--panel);padding:10px;border-radius:6px;margin-bottom:8px;flex-wrap:wrap">',
+      '  <input id="scan-input" placeholder="🔍 바코드 스캔 또는 입력 + Enter" autocomplete="off" autofocus',
+      '    style="flex:1;min-width:200px;padding:8px 12px;background:var(--bg);color:var(--fg);border:1px solid var(--panel-border);border-radius:4px;font-family:Consolas,monospace;font-size:14px">',
+      '  <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer" title="활성 시 액션 버튼 클릭으로 즉시 처리, 비활성 시 스캔 → 액션 선택">',
+      '    <input type="checkbox" id="scan-quick" ' + (_scanState.quickMode ? 'checked' : '') + ' onchange="window.scanToggleMode(\'quick\', this.checked)"> ⚡ 빠른 스캔',
+      '  </label>',
+      '  <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer" title="활성 시 에러 토스트 표시 안 함">',
+      '    <input type="checkbox" id="scan-silent" ' + (_scanState.silentMode ? 'checked' : '') + ' onchange="window.scanToggleMode(\'silent\', this.checked)"> 🔕 무음',
+      '  </label>',
+      '  <button class="btn" onclick="window.scanClearHist()">🧹 이력 초기화</button>',
       '</div>',
-
-      '<!-- PDF Panel -->',
-      '<div class="card" style="padding:20px">',
-      '<h3 style="margin-bottom:12px">PDF Inbound</h3>',
-      '<div id="pdf-drop-zone" style="border:2px dashed var(--border);border-radius:8px;padding:40px;text-align:center;cursor:pointer;color:var(--text-muted)" onclick="document.getElementById(\'pdf-file-input\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--accent)\'" ondragleave="this.style.borderColor=\'var(--border)\'" ondrop="window.PdfInbound.handleDrop(event)">',
-      '<div style="font-size:2rem">&#x1F4C4;</div>',
-      '<div style="margin-top:8px">Drag PDF here or click to select</div>',
-      '<div style="font-size:0.8rem;margin-top:4px;color:var(--text-muted)">Picking List / BL / Inbound PDF</div>',
+      /* 5단계 액션 버튼 */
+      '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px">',
+      '  <button class="btn" style="background:#66bb6a;color:#fff;font-weight:700;padding:12px 8px" onclick="window.scanAction(\'reserve\')" title="AVAILABLE → RESERVED">📌 배정 등록</button>',
+      '  <button class="btn" style="background:#ffa726;color:#000;font-weight:700;padding:12px 8px" onclick="window.scanAction(\'pick\')" title="RESERVED → PICKED">🚛 화물 결정</button>',
+      '  <button class="btn" style="background:#42a5f5;color:#fff;font-weight:700;padding:12px 8px" onclick="window.scanAction(\'outbound\')" title="PICKED → OUTBOUND">📤 출고 확정</button>',
+      '  <button class="btn" style="background:#ec407a;color:#fff;font-weight:700;padding:12px 8px" onclick="window.scanAction(\'return\')" title="OUTBOUND → RETURN">🔄 반품 등록</button>',
+      '  <button class="btn" style="background:#9e9e9e;color:#fff;font-weight:700;padding:12px 8px" onclick="window.scanAction(\'restock\')" title="RETURN → AVAILABLE">♻️ 재입고</button>',
       '</div>',
-      '<input type="file" id="pdf-file-input" accept=".pdf" style="display:none" onchange="window.PdfInbound.handleFile(this.files[0])">',
-      '<div id="pdf-status" style="margin-top:12px;color:var(--text-muted);font-size:0.9rem"></div>',
-      '<button class="btn btn-primary" id="pdf-upload-btn" style="display:none;margin-top:8px" onclick="window.PdfInbound.upload()">Upload &amp; Process</button>',
+      /* 마지막 결과 */
+      '<div id="scan-last-result" style="margin-bottom:8px"></div>',
+      /* 5열 history */
+      '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:10px">',
+      '  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">',
+      '    <strong style="font-size:13px">📋 스캔 이력</strong>',
+      '    <span id="scan-hist-count" style="font-size:11px;color:var(--text-muted)">(0건)</span>',
+      '    <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">최신 50건</span>',
+      '  </div>',
+      '  <div style="max-height:340px;overflow-y:auto">',
+      '    <table class="data-table" style="font-size:11px"><thead><tr>',
+      '      <th>시간</th><th>바코드</th><th>액션</th><th>결과</th><th>상세</th>',
+      '    </tr></thead>',
+      '    <tbody id="scan-history-tbody">',
+      '      <tr><td colspan="5" style="padding:30px;text-align:center;color:var(--text-muted)">스캔 이력 없음</td></tr>',
+      '    </tbody></table>',
+      '  </div>',
       '</div>',
-
-      '</div></section>'
+      '</section>'
     ].join('');
 
+    /* Enter → 빠른 스캔이면 lastAction 적용, 아니면 lookup */
     var inp = document.getElementById('scan-input');
     if (inp) {
       inp.addEventListener('keydown', function(e){
-        if (e.key==='Enter') {
+        if (e.key === 'Enter') {
           e.preventDefault();
-          window.ScanActions.processBarcode(inp.value.trim());
-          inp.value='';
+          var bc = inp.value.trim();
+          if (!bc) return;
+          var act = _scanState.quickMode ? _scanState.lastAction : 'lookup';
+          window.scanProcess(bc, act);
+          inp.value = '';
         }
       });
-      inp.focus();
+      setTimeout(function(){ inp.focus(); }, 100);
     }
+    _scanRenderHistory();
   }
+
+  /* 토글 */
+  window.scanToggleMode = function(mode, checked) {
+    if (mode === 'quick')  { _scanState.quickMode = checked; try { localStorage.setItem('sqm.scan.quick', checked ? '1' : '0'); } catch(e){} }
+    if (mode === 'silent') { _scanState.silentMode = checked; try { localStorage.setItem('sqm.scan.silent', checked ? '1' : '0'); } catch(e){} }
+    showToast('info', (mode === 'quick' ? '⚡ 빠른 스캔' : '🔕 무음') + ' ' + (checked ? 'ON' : 'OFF'));
+  };
+
+  /* 액션 버튼 클릭 — 입력값 또는 최근 바코드 사용 */
+  window.scanAction = function(action) {
+    var inp = document.getElementById('scan-input');
+    var bc = (inp ? inp.value.trim() : '');
+    if (!bc) {
+      /* lastBarcode 사용 (history 첫 항목) */
+      bc = (_scanHistory[0] && _scanHistory[0].barcode) || '';
+    }
+    if (!bc) {
+      showToast('warn', '바코드를 먼저 스캔/입력하세요');
+      if (inp) inp.focus();
+      return;
+    }
+    _scanState.lastAction = action;
+    window.scanProcess(bc, action);
+    if (inp) { inp.value = ''; inp.focus(); }
+  };
+
+  window.scanProcess = function(barcode, action) {
+    if (!barcode) return;
+    apiPost('/api/scan/process', { barcode: barcode, action: action })
+      .then(function(res){
+        var ok = res && res.success;
+        var level = res.level || (ok ? 'ok' : 'fail');
+        var msg = res.message || (ok ? '완료' : '실패');
+        _scanAddHist({ barcode: barcode, action: action, level: level, message: msg, data: res.data });
+        _scanRenderLastResult(barcode, action, level, msg);
+        if (ok) showToast('success', msg);
+        else if (!_scanState.silentMode) showToast(level === 'warn' ? 'warn' : 'error', msg);
+      })
+      .catch(function(e){
+        _scanAddHist({ barcode: barcode, action: action, level: 'fail', message: e.message || String(e) });
+        if (!_scanState.silentMode) showToast('error', '스캔 오류: ' + (e.message || String(e)));
+      });
+  };
+
+  function _scanAddHist(entry) {
+    var now = new Date();
+    entry.time = [now.getHours(), now.getMinutes(), now.getSeconds()].map(function(n){ return String(n).padStart(2,'0'); }).join(':');
+    _scanHistory.unshift(entry);
+    if (_scanHistory.length > 50) _scanHistory.pop();
+    _scanRenderHistory();
+  }
+
+  function _scanRenderHistory() {
+    var tbody = document.getElementById('scan-history-tbody');
+    var cnt = document.getElementById('scan-hist-count');
+    if (cnt) cnt.textContent = '(' + _scanHistory.length + '건)';
+    if (!tbody) return;
+    if (!_scanHistory.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:30px;text-align:center;color:var(--text-muted)">스캔 이력 없음</td></tr>';
+      return;
+    }
+    var actLabels = {
+      lookup:   '🔍 조회',
+      reserve:  '📌 배정 등록',
+      pick:     '🚛 화물 결정',
+      outbound: '📤 출고 확정',
+      return:   '🔄 반품 등록',
+      restock:  '♻️ 재입고',
+    };
+    var levelStyle = {
+      ok:   'background:rgba(102,187,106,.1);color:var(--success)',
+      warn: 'background:rgba(255,167,38,.15);color:var(--warning)',
+      fail: 'background:rgba(244,67,54,.15);color:var(--danger)',
+    };
+    var levelIcon = { ok: '✅', warn: '⚠️', fail: '❌' };
+
+    tbody.innerHTML = _scanHistory.map(function(h){
+      var stl = levelStyle[h.level] || '';
+      return '<tr style="' + stl + '">' +
+        '<td class="mono-cell" style="width:80px">' + h.time + '</td>' +
+        '<td class="mono-cell" style="font-weight:600">' + escapeHtml(h.barcode) + '</td>' +
+        '<td>' + (actLabels[h.action] || escapeHtml(h.action)) + '</td>' +
+        '<td style="text-align:center">' + (levelIcon[h.level] || '') + '</td>' +
+        '<td style="font-size:11px">' + escapeHtml(h.message || '') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function _scanRenderLastResult(barcode, action, level, msg) {
+    var el = document.getElementById('scan-last-result');
+    if (!el) return;
+    var color = level === 'ok' ? 'var(--success)' : level === 'warn' ? 'var(--warning)' : 'var(--danger)';
+    var bg    = level === 'ok' ? 'rgba(102,187,106,.1)' : level === 'warn' ? 'rgba(255,167,38,.12)' : 'rgba(244,67,54,.12)';
+    var icon  = level === 'ok' ? '✅' : level === 'warn' ? '⚠️' : '❌';
+    el.innerHTML =
+      '<div style="padding:8px 12px;background:' + bg + ';border-left:3px solid ' + color + ';border-radius:4px;font-size:12px">' +
+      '<strong style="color:' + color + '">' + icon + ' ' + escapeHtml(barcode) + '</strong> · ' + escapeHtml(msg) + '</div>';
+  }
+
+  window.scanClearHist = function() {
+    if (!_scanHistory.length) { showToast('info', '이력 없음'); return; }
+    if (!confirm('스캔 이력 초기화 (' + _scanHistory.length + '건)?')) return;
+    _scanHistory = [];
+    _scanRenderHistory();
+    var lr = document.getElementById('scan-last-result');
+    if (lr) lr.innerHTML = '';
+    showToast('success', '이력 초기화됨');
+  };
 
   var _scanHistory = [];
   window.ScanActions = {

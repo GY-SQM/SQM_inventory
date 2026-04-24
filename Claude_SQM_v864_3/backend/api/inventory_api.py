@@ -402,7 +402,22 @@ def get_tonbags(
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # POST /api/scan/process  — 바코드 스캔 처리
+# [Sprint 1-7] 5단계 상태 전환 지원
+#   AVAILABLE → RESERVED (reserve 배정 등록)
+#   RESERVED → PICKED   (pick 화물 결정)
+#   PICKED → OUTBOUND   (outbound 출고확정)
+#   OUTBOUND → RETURN   (return 반품등록)
+#   RETURN → AVAILABLE  (restock 재입고)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_SCAN_TRANSITIONS = {
+    "reserve":   {"from": "AVAILABLE", "to": "RESERVED",  "label": "배정 등록"},
+    "pick":      {"from": "RESERVED",  "to": "PICKED",    "label": "화물 결정"},
+    "outbound":  {"from": "PICKED",    "to": "OUTBOUND",  "label": "출고확정"},
+    "return":    {"from": "OUTBOUND",  "to": "RETURN",    "label": "반품등록"},
+    "restock":   {"from": "RETURN",    "to": "AVAILABLE", "label": "재입고"},
+}
+
+
 @scan_router.post("/process")
 def scan_process(payload: dict):
     barcode = (payload.get("barcode") or "").strip()
@@ -422,27 +437,80 @@ def scan_process(payload: dict):
 
         if not row:
             db.close()
-            return {"success": False, "message": f"바코드를 찾을 수 없음: {barcode}"}
+            return {"success": False, "message": f"바코드를 찾을 수 없음: {barcode}", "level": "fail"}
 
         r = dict(row)
+        cur_status = (r.get("status") or "").upper()
+
         if action == "lookup":
             db.close()
             return {
                 "success": True,
-                "message": f"LOT {r.get('lot_no')} / {r.get('sub_lt')} — 위치: {r.get('location','-')}",
-                "data": r
+                "message": f"LOT {r.get('lot_no')} / {r.get('sub_lt')} · 상태={cur_status} · 위치={r.get('location') or '-'}",
+                "data": r,
+                "level": "ok",
             }
+
+        # 5단계 상태 전환
+        if action not in _SCAN_TRANSITIONS:
+            db.close()
+            return {
+                "success": False,
+                "message": f"알 수 없는 액션: {action}",
+                "level": "fail",
+                "valid_actions": list(_SCAN_TRANSITIONS.keys()) + ["lookup"],
+            }
+
+        tr = _SCAN_TRANSITIONS[action]
+        # source state 가드
+        if cur_status != tr["from"]:
+            db.close()
+            return {
+                "success": False,
+                "message": f"⛔ 상태 불일치: {cur_status} (필요: {tr['from']})",
+                "level": "warn",
+                "data": r,
+                "expected_from": tr["from"],
+                "actual": cur_status,
+            }
+
+        # 상태 업데이트
+        date_field = None
+        if action == "pick":
+            date_field = "picked_date"
         elif action == "outbound":
+            date_field = "outbound_date"
+        # 기타 액션은 별도 날짜 필드 없음
+
+        if date_field:
             db.execute(
-                "UPDATE inventory_tonbag SET status='PICKED', picked_date=date('now') WHERE sub_lt=?",
-                (barcode,)
+                f"UPDATE inventory_tonbag SET status=?, {date_field}=date('now') WHERE sub_lt=? OR tonbag_uid=?",
+                (tr["to"], barcode, barcode),
             )
-            db.commit()
-            db.close()
-            return {"success": True, "message": f"{barcode} 출고 처리 완료", "data": r}
         else:
-            db.close()
-            return {"success": True, "message": f"{barcode} 조회 완료", "data": r}
+            db.execute(
+                "UPDATE inventory_tonbag SET status=? WHERE sub_lt=? OR tonbag_uid=?",
+                (tr["to"], barcode, barcode),
+            )
+        # audit_log 기록 시도 (실패해도 무시)
+        try:
+            db.execute(
+                "INSERT INTO audit_log (event_type, event_data, tonbag_id, created_by, created_at) "
+                "VALUES (?, ?, ?, ?, datetime('now'))",
+                (f"SCAN_{action.upper()}", f"{cur_status}→{tr['to']}", barcode, "scan_user"),
+            )
+        except Exception:
+            pass
+
+        db.commit()
+        db.close()
+        return {
+            "success": True,
+            "message": f"✅ {tr['label']}: {barcode} ({cur_status}→{tr['to']})",
+            "level": "ok",
+            "data": {**r, "status": tr["to"]},
+            "transition": {"from": cur_status, "to": tr["to"], "action": action},
+        }
     except Exception as e:
         log.error(f"scan process error: {e}")
         raise HTTPException(500, str(e))
