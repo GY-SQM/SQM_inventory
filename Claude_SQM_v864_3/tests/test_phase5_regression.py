@@ -308,25 +308,10 @@ class TestQueriesRouter:
 
 
 # ============================================================================
-# 6. Menubar  /api/menu/*
+# [Sprint 0] Section "6. Menubar /api/menu/*" removed with backend/api/menubar.py.
+# Real menu action routing lives under /api/inbound, /api/outbound, /api/allocation,
+# /api/action*, /api/q*, etc.
 # ============================================================================
-
-class TestMenubarRouter:
-    @requires_app
-    def test_on_quick_outbound(self):
-        """POST /api/menu/-on-s1-onestop-outbound -> 200/400/422"""
-        post_ok("/api/menu/-on-s1-onestop-outbound")
-
-    @requires_app
-    def test_on_settings(self):
-        """POST /api/menu/-on-settings -> 200/400/422"""
-        post_ok("/api/menu/-on-settings")
-
-    @requires_app
-    def test_refresh_all(self):
-        """POST /api/menu/-refresh-all-data -> 200/400/422"""
-        post_ok("/api/menu/-refresh-all-data")
-
 
 # ============================================================================
 # 7. Info  /api/info/*   (DB 독립 — 정적 응답)

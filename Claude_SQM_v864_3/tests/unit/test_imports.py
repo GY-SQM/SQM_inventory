@@ -41,19 +41,6 @@ def test_can_import_backend_common_errors():
     )
 
 
-def test_can_import_backend_api_menubar():
-    """backend.api.menubar defines the F001-F062 router."""
-    try:
-        mod = importlib.import_module("backend.api.menubar")
-    except Exception as e:  # noqa: BLE001
-        pytest.fail(
-            f"Cannot import backend.api.menubar: {type(e).__name__}: {e}"
-        )
-    assert hasattr(mod, "router"), (
-        "backend.api.menubar must expose `router` (APIRouter instance)"
-    )
-
-
 def test_engine_class_exists():
     """
     SQMInventoryEngineV3 class must be importable even if instantiation

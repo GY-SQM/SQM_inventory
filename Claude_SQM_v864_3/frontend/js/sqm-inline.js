@@ -3077,7 +3077,8 @@
     'onAuditLog':        {m:'GET',  u:'/api/q/audit-log',                         lbl:'감사 로그'},
 
     /* ── 설정/도구 메뉴 ── */
-    'onSettings':        {m:'POST', u:'/api/menu/-on-settings',                   lbl:'환경 설정'},
+    /* [Sprint 0] 'onSettings' removed — was wired to /api/menu/-on-settings (NotReadyError stub).
+       Real settings dialog ships in Sprint 2 (SettingsDialogMixin port, ~5d). */
     'onProductMaster':   {m:'GET',  u:'/api/info/system-info',                    lbl:'제품 마스터'},
     'onProductInventoryReport': {m:'GET', u:'/api/q/product-inventory',           lbl:'제품별 재고 현황'},
     'onIntegrityRepair': {m:'GET',  u:'/api/action/integrity-check',                     lbl:'정합성 검사/복구'},
@@ -3111,7 +3112,7 @@
     'tb-inventory':      {m:'JS',   u:'inventory',                                lbl:'재고 조회'},
     'tb-integrity':      {m:'GET',  u:'/api/action/integrity-check',              lbl:'정합성'},
     'tb-backup':         {m:'POST', u:'/api/action/backup-create',                lbl:'백업'},
-    'tb-settings':       {m:'POST', u:'/api/menu/-on-settings',                   lbl:'설정'},
+    /* [Sprint 0] 'tb-settings' removed — same reason as onSettings (real dialog in Sprint 2). */
 
     /* ── v864.2 신규 액션 (메뉴 구조 동기화) ── */
     'onBarcodeScanUpload': {m:'JS', u:'barcode-scan-upload',                       lbl:'바코드 스캔 업로드'},
@@ -3137,6 +3138,22 @@
     'onProductSummary':  {m:'JS',   u:'product-summary',                           lbl:'품목별 재고 요약'},
     'onProductLotLookup': {m:'JS',  u:'product-lot-lookup',                        lbl:'품목별 LOT 조회'},
     'onProductMovement': {m:'JS',   u:'product-movement',                          lbl:'품목별 입출고 현황'},
+
+    /* ── [Sprint 0-3b] v864-2 파일 메뉴 슬롯 복원 (placeholder — Sprint 2에서 실구현) ── */
+    'onBlCarrierRegister': {m:'JS', u:'wip',                                       lbl:'🚢 선사 BL 등록 도구'},
+    'onBlCarrierAnalyze':  {m:'JS', u:'wip',                                       lbl:'🔬 선사 패턴 분석'},
+    'onGeminiToggle':      {m:'JS', u:'wip',                                       lbl:'🔀 Gemini AI 사용'},
+    'onAiChat':            {m:'JS', u:'wip',                                       lbl:'💬 AI 채팅'},
+    'onGeminiApiSettings': {m:'JS', u:'wip',                                       lbl:'🔐 Gemini API 설정'},
+    'onGeminiApiTest':     {m:'JS', u:'wip',                                       lbl:'🧪 Gemini API 테스트'},
+
+    /* ── [Sprint 0-3] v864-2 재고 메뉴 슬롯 (placeholder — Sprint 1/2에서 실구현) ── */
+    'onExportLot':         {m:'JS', u:'wip',                                       lbl:'📊 LOT 리스트 Excel'},
+    'onStockTrendChart':   {m:'JS', u:'wip',                                       lbl:'📊 재고 추이 차트'},
+
+    /* ── [Sprint 0-3] 🔍 전역 검색 버튼 (placeholder — Sprint 2에서 실구현) ── */
+    'onGlobalSearch':      {m:'JS', u:'wip',                                       lbl:'🔍 전역 검색'},
+
     /* View 메뉴 탭 이동 */
     'onGoInventoryTab':  {m:'JS',   u:'inventory',                                lbl:'Inventory 탭'},
     'onGoPickedTab':     {m:'JS',   u:'picked',                                   lbl:'Picked 탭'},

@@ -72,11 +72,8 @@ except Exception as e:
     logging.warning(f"tonbag_api router load failed: {e}")
 
 # ── Tier 2 Stage 2: 자동 생성 라우터 include ─────────────────
-try:
-    from backend.api.menubar import router as menubar_router
-    app.include_router(menubar_router)
-except Exception as e:
-    logging.warning(f"menubar router load failed: {e}")
+# [Sprint 0] backend.api.menubar was a 634-line NotReadyError stub set and has been removed.
+# Real menu action routing lives in /api/inbound, /api/outbound, /api/allocation, /api/action*, etc.
 
 try:
     from backend.api.controls import router as controls_router

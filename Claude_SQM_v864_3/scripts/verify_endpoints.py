@@ -199,14 +199,10 @@ NEW_POST_TESTS = [
     },
 ]
 
-# 기존 POST — NOT_READY 투명화 확인 (샘플 5개)
-NOT_READY_POST_SAMPLES = [
-    "/api/menu/-on-move-approval-queue",       # F005
-    "/api/menu/-bulk-import-inventory-simple", # F002 (기존 경로 — 이제 NOT_READY)
-    "/api/menu/-show-return-dialog",            # F006
-    "/api/menu/-on-quick-outbound-paste",       # F016 (기존 경로)
-    "/api/menu/-on-picking-list-upload",        # F017 (기존 경로)
-]
+# [Sprint 0] NOT_READY_POST_SAMPLES emptied — backend/api/menubar.py was the 62-endpoint
+# NotReadyError stub set, now deleted. Real menu action routing lives under /api/inbound,
+# /api/outbound, /api/allocation, /api/action*, /api/q*.
+NOT_READY_POST_SAMPLES: list[str] = []
 
 
 def main() -> int:
