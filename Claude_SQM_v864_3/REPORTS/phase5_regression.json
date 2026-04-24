@@ -1,0 +1,447 @@
+{
+  "timestamp": "2026-04-24 10:16:03",
+  "summary": {
+    "total": 87,
+    "pass": 87,
+    "fail": 0,
+    "rate": 100.0
+  },
+  "errors": [],
+  "results": [
+    {
+      "test": "schema_common_tables",
+      "pass": true,
+      "detail": "common=33, only_v2=0, only_v3=1"
+    },
+    {
+      "test": "schema_new_in_v3",
+      "pass": true,
+      "detail": "v864.3 new: {'outbound_event_log'}"
+    },
+    {
+      "test": "schema_inventory_columns",
+      "pass": true,
+      "detail": "38 cols"
+    },
+    {
+      "test": "schema_inventory_tonbag_columns",
+      "pass": true,
+      "detail": "28 cols"
+    },
+    {
+      "test": "schema_stock_movement_columns",
+      "pass": true,
+      "detail": "20 cols"
+    },
+    {
+      "test": "schema_document_do_columns",
+      "pass": true,
+      "detail": "30 cols"
+    },
+    {
+      "test": "schema_document_invoice_columns",
+      "pass": true,
+      "detail": "33 cols"
+    },
+    {
+      "test": "schema_audit_log_columns",
+      "pass": true,
+      "detail": "8 cols"
+    },
+    {
+      "test": "schema_return_history_columns",
+      "pass": true,
+      "detail": "10 cols"
+    },
+    {
+      "test": "api_health",
+      "pass": true,
+      "detail": "status=ok, lots=42"
+    },
+    {
+      "test": "api_get_inbound-status",
+      "pass": true,
+      "detail": "42 items"
+    },
+    {
+      "test": "api_get_approval-history",
+      "pass": true,
+      "detail": "0 items"
+    },
+    {
+      "test": "api_get_outbound-status",
+      "pass": true,
+      "detail": "0 items"
+    },
+    {
+      "test": "api_get_backup-list",
+      "pass": true,
+      "detail": "5 items"
+    },
+    {
+      "test": "api_get_audit-log",
+      "pass": true,
+      "detail": "35 items"
+    },
+    {
+      "test": "api_get_inventory-trend",
+      "pass": true,
+      "detail": "9 items"
+    },
+    {
+      "test": "api_get_inventory-report",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_movement-history",
+      "pass": true,
+      "detail": "42 items"
+    },
+    {
+      "test": "api_get_picked-list",
+      "pass": true,
+      "detail": "0 items"
+    },
+    {
+      "test": "api_get_sold-list",
+      "pass": true,
+      "detail": "0 items"
+    },
+    {
+      "test": "api_get_product-inventory",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_allocation-summary",
+      "pass": true,
+      "detail": "0 items"
+    },
+    {
+      "test": "api_get_report-daily",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_report-monthly",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_recent-files",
+      "pass": true,
+      "detail": "20 items"
+    },
+    {
+      "test": "api_get_return-stats",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_detail-outbound",
+      "pass": true,
+      "detail": "0 items"
+    },
+    {
+      "test": "api_get_sales-order-dn",
+      "pass": true,
+      "detail": "20 items"
+    },
+    {
+      "test": "api_get_dn-cross-check",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_settings-info",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_info-usage",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_info-shortcuts",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_info-status-guide",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_info-backup-guide",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_info-version",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "api_get_dashboard-stats",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "api_get_dashboard-alerts",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "api_get_inventory-list",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "api_get_allocation-list",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "api_get_tonbags-list",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "api_get_integrity-check",
+      "pass": true,
+      "detail": "data type=dict"
+    },
+    {
+      "test": "integrity_inventory_count",
+      "pass": true,
+      "detail": "DB=42, API=42"
+    },
+    {
+      "test": "integrity_tonbag_count",
+      "pass": true,
+      "detail": "DB=482, API=300 (API limit)"
+    },
+    {
+      "test": "integrity_dashboard_lots",
+      "pass": true,
+      "detail": "dashboard=42, DB=42"
+    },
+    {
+      "test": "integrity_dashboard_tonbags",
+      "pass": true,
+      "detail": "dashboard=482, DB=482"
+    },
+    {
+      "test": "integrity_movement_count",
+      "pass": true,
+      "detail": "DB=42, API=42"
+    },
+    {
+      "test": "integrity_audit_count",
+      "pass": true,
+      "detail": "DB=35, API=35"
+    },
+    {
+      "test": "ui_page_load",
+      "pass": true,
+      "detail": "page loaded"
+    },
+    {
+      "test": "ui_element_menubar",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "ui_element_toolbar",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "ui_element_sidebar",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "ui_element_dashboard",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "ui_element_statusbar",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "ui_tab_inventory_content",
+      "pass": true,
+      "detail": "text_len=6319"
+    },
+    {
+      "test": "ui_tab_allocation_content",
+      "pass": true,
+      "detail": "text_len=50"
+    },
+    {
+      "test": "ui_tab_picked_content",
+      "pass": true,
+      "detail": "text_len=43"
+    },
+    {
+      "test": "ui_tab_outbound_content",
+      "pass": true,
+      "detail": "text_len=44"
+    },
+    {
+      "test": "ui_tab_return_content",
+      "pass": true,
+      "detail": "text_len=42"
+    },
+    {
+      "test": "ui_tab_move_content",
+      "pass": true,
+      "detail": "text_len=2359"
+    },
+    {
+      "test": "ui_tab_dashboard_content",
+      "pass": true,
+      "detail": "text_len=481"
+    },
+    {
+      "test": "ui_tab_log_content",
+      "pass": true,
+      "detail": "text_len=6735"
+    },
+    {
+      "test": "ui_tab_scan_content",
+      "pass": true,
+      "detail": "text_len=185"
+    },
+    {
+      "test": "ui_dashboard_kpi",
+      "pass": true,
+      "detail": "4/4 KPI cards with data"
+    },
+    {
+      "test": "ui_inventory_rows",
+      "pass": true,
+      "detail": "0 rows, page_content=True"
+    },
+    {
+      "test": "ui_allocation_2tier",
+      "pass": true,
+      "detail": "detail panel present"
+    },
+    {
+      "test": "ui_picked_2tier",
+      "pass": true,
+      "detail": "detail panel present"
+    },
+    {
+      "test": "ui_outbound_2tier",
+      "pass": true,
+      "detail": "detail panel present"
+    },
+    {
+      "test": "feature_matrix_count",
+      "pass": true,
+      "detail": "85 features defined"
+    },
+    {
+      "test": "feature_no_wip",
+      "pass": true,
+      "detail": "0 WIP endpoints remaining"
+    },
+    {
+      "test": "feature_action_coverage",
+      "pass": true,
+      "detail": "84 actions covered"
+    },
+    {
+      "test": "feature_endpoint_count",
+      "pass": true,
+      "detail": "99 ENDPOINTS registered"
+    },
+    {
+      "test": "feature_onOnPdfInbound",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onInboundManual",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onOnQuickOutbound",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onQuickOutboundPaste",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onReturnDialog",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onIntegrityCheck",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onOnBackup",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onRestore",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onInventoryReport",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onMovementHistory",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onInvoiceGenerate",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "feature_onProductMaster",
+      "pass": true,
+      "detail": ""
+    },
+    {
+      "test": "compare_inventory_schema",
+      "pass": true,
+      "detail": "common=38, v2=38, v3=38"
+    },
+    {
+      "test": "compare_lot_overlap",
+      "pass": true,
+      "detail": "no common LOTs (expected - separate environments): v2=['1126012313', '1126012314', '1126012315'], v3=['1126013019', '1126013020', '1126013022']"
+    },
+    {
+      "test": "compare_tonbag_schema",
+      "pass": true,
+      "detail": "v2 cols in v3: 28/28"
+    },
+    {
+      "test": "compare_products",
+      "pass": true,
+      "detail": "common=1, v2=1, v3=2"
+    }
+  ]
+}
