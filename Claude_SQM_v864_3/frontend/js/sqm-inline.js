@@ -2213,7 +2213,7 @@
     });
   }
 
-  /* F001 PDF 스캔 입고 (Packing List) */
+  /* F001 PDF 스캔 입고 (Packing List) — 레거시 단일 PDF 업로드 (Sprint 1-2 이후 showOneStopInboundModal로 대체) */
   function showPdfInboundUploadModal() {
     _showPdfUploadModal({
       title: '📄 PDF 스캔 입고 (Packing List)',
@@ -2234,6 +2234,250 @@
     });
   }
   window.showPdfInboundUploadModal = showPdfInboundUploadModal;
+
+  /* =====================================================================
+     [Sprint 1-2-A] OneStop Inbound — 4슬롯 wizard 모달
+     ─────────────────────────────────────────────────────────────────────
+     v864-2 source : gui_app_modular/dialogs/onestop_inbound.py (4302줄)
+     v864-2 DOC_TYPES: [BL 필수, PACKING_LIST 필수, INVOICE 필수, DO 선택]
+
+     이 Phase(A)에서 구현:
+       ✅ 4단계 Wizard 스텝 표시
+       ✅ 템플릿/선사 Combobox (placeholder — Sprint 2에서 CRUD 연결)
+       ✅ 4 업로드 슬롯 (BL/PL/Invoice/DO) + 파일 선택 + 상태 표시
+       ✅ 파싱 시작 / 다시 파싱 / 멀티 선택 / D/O 나중에 버튼
+       ✅ 진행 상태 영역
+       ✅ 필터 바 + 18열 미리보기 테이블 (뼈대)
+       ✅ BL PDF 1장만 기존 /api/inbound/pdf-upload 로 파싱 (fallback)
+
+     다음 Phase(B)에서 추가:
+       🟡 백엔드 /api/inbound/onestop-upload (4종 multipart)
+       🟡 4종 크로스체크 검증 (5 weight 소수 일치 등)
+       🟡 18열 실데이터 미리보기
+       🟡 인라인 편집 + Undo/Redo + 서브팝업 4개
+     ===================================================================== */
+  var _onestopState = {
+    files: { BL: null, PACKING_LIST: null, INVOICE: null, DO: null },
+    template: null,
+    carrier: '',
+    step: 1,
+  };
+  var ONESTOP_DOC_TYPES = [
+    { key: 'BL',           icon: '🚢', seq: '①', name: 'Bill of Loading',  required: true  },
+    { key: 'PACKING_LIST', icon: '📦', seq: '②', name: 'Packing List',     required: true  },
+    { key: 'INVOICE',      icon: '📄', seq: '③', name: 'Invoice, FA',      required: true  },
+    { key: 'DO',           icon: '📋', seq: '④', name: 'Delivery Order',   required: false },
+  ];
+  var ONESTOP_PREVIEW_COLS = [
+    'NO','LOT NO','SAP NO','BL NO','PRODUCT','STATUS','CONTAINER','CODE',
+    'LOT SQM','MXBG','NET(Kg)','GROSS(kg)','INVOICE NO','SHIP DATE','ARRIVAL',
+    'CON RETURN','FREE TIME','WH'
+  ];
+
+  function showOneStopInboundModal() {
+    /* 상태 초기화 */
+    _onestopState.files = { BL: null, PACKING_LIST: null, INVOICE: null, DO: null };
+    _onestopState.step = 1;
+
+    var slotsHtml = ONESTOP_DOC_TYPES.map(function(dt){
+      return (
+        '<div class="upload-slot" id="onestop-slot-' + dt.key + '">' +
+          '<div class="upload-slot-icon">' + dt.icon + '</div>' +
+          '<div class="upload-slot-label">' + dt.seq + ' ' + escapeHtml(dt.name) +
+            ' <span class="upload-slot-req ' + (dt.required ? 'required' : 'optional') + '">' +
+            (dt.required ? '필수' : '선택') + '</span>' +
+            '<small class="upload-slot-filename" id="onestop-filename-' + dt.key + '"></small>' +
+          '</div>' +
+          '<button class="upload-slot-pick-btn" onclick="window.onestopPickFile(\'' + dt.key + '\')">📂 파일 선택</button>' +
+          '<input type="file" id="onestop-input-' + dt.key + '" accept=".pdf" style="display:none" onchange="window.onestopOnFileChange(\'' + dt.key + '\', this)">' +
+          '<span class="upload-slot-status" id="onestop-status-' + dt.key + '">○</span>' +
+        '</div>'
+      );
+    }).join('');
+
+    var filterHtml = ['SAP','BL','CONTAINER','PRODUCT','STATUS'].map(function(f){
+      return '<label>' + f + ':</label><input type="text" id="onestop-filter-' + f.toLowerCase() + '" placeholder=" ">';
+    }).join('');
+
+    var previewHeader = ONESTOP_PREVIEW_COLS.map(function(c){ return '<th>' + c + '</th>'; }).join('');
+
+    var html = [
+      '<div class="onestop-modal">',
+      '  <h2>📥 입고 — SQM v8.6.4.3 (OneStop)</h2>',
+      /* 4단계 Wizard */
+      '  <div class="wizard-steps">',
+      '    <div class="step active" data-step="1"><span class="step-num">①</span><span class="step-label">서류 선택<small>파일 업로드</small></span></div>',
+      '    <div class="step-arrow">›</div>',
+      '    <div class="step" data-step="2"><span class="step-num">②</span><span class="step-label">파싱 실행<small>AI 분석</small></span></div>',
+      '    <div class="step-arrow">›</div>',
+      '    <div class="step" data-step="3"><span class="step-num">③</span><span class="step-label">결과 확인<small>미리보기</small></span></div>',
+      '    <div class="step-arrow">›</div>',
+      '    <div class="step" data-step="4"><span class="step-num">④</span><span class="step-label">DB 저장<small>입고 완료</small></span></div>',
+      '  </div>',
+      /* 템플릿 줄 */
+      '  <div class="onestop-row">',
+      '    <label>적용 템플릿:</label>',
+      '    <select id="onestop-template" disabled><option>MAERSK — 리튬카보네이트 500 kg (500kg BL:숫자9)</option></select>',
+      '    <span class="chip">Sprint 2 예정</span>',
+      '    <button class="btn" style="margin-left:auto" onclick="window.onestopSkipDo()">📋 D/O 나중에</button>',
+      '  </div>',
+      /* 선사 줄 */
+      '  <div class="onestop-row">',
+      '    <label>🚢 선사:</label>',
+      '    <input type="text" id="onestop-carrier" placeholder="Maersk / ONE / Evergreen ...">',
+      '    <span class="chip">[선사: Maersk] (템플릿)</span>',
+      '    <button class="btn" onclick="window.onestopReparseCarrier()" disabled>🚢 선사 재파싱</button>',
+      '  </div>',
+      /* 4 업로드 슬롯 */
+      '  <div class="upload-slots">' + slotsHtml + '</div>',
+      /* 액션 버튼 */
+      '  <div class="onestop-actions">',
+      '    <button class="btn" onclick="window.onestopMultiPick()">📁 멀티 선택</button>',
+      '    <button class="btn btn-primary" id="onestop-parse-btn" onclick="window.onestopParseStart()" disabled>▶ 파싱 시작</button>',
+      '    <button class="btn" id="onestop-reparse-btn" onclick="window.onestopParseRedo()" disabled>↻ 다시 파싱</button>',
+      '    <span class="hint" id="onestop-hint">💡 최소 Packing List를 선택하세요</span>',
+      '  </div>',
+      /* 진행 상태 */
+      '  <div class="onestop-progress">',
+      '    <div class="onestop-progress-title">📊 진행 상태</div>',
+      '    <div id="onestop-progress-body" class="onestop-progress-empty">파싱을 시작하면 진행 상황이 여기에 표시됩니다.</div>',
+      '  </div>',
+      /* 필터 바 */
+      '  <div class="onestop-filter-bar">',
+      '    <span style="font-weight:700">▼ 필터:</span>' + filterHtml,
+      '    <button class="btn" onclick="window.onestopResetFilter()" style="margin-left:auto">✖ 초기화</button>',
+      '  </div>',
+      /* 미리보기 */
+      '  <div style="overflow-x:auto;max-height:320px;overflow-y:auto">',
+      '    <table class="onestop-preview-table"><thead><tr>' + previewHeader + '</tr></thead>',
+      '      <tbody id="onestop-preview-body"><tr><td colspan="' + ONESTOP_PREVIEW_COLS.length + '" class="onestop-preview-empty">📭 파싱 결과가 없습니다. 파일 선택 후 ▶ 파싱 시작을 눌러주세요.</td></tr></tbody>',
+      '    </table>',
+      '  </div>',
+      /* 하단 버튼 */
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">',
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">❌ 취소</button>',
+      '    <button class="btn btn-primary" id="onestop-save-btn" onclick="window.onestopSaveDb()" disabled>📤 DB 업로드</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+
+    showDataModal('', html);
+  }
+  window.showOneStopInboundModal = showOneStopInboundModal;
+
+  /* ── 슬롯 핸들러 ─────────────────────────────────────────────────── */
+  window.onestopPickFile = function(docKey) {
+    var input = document.getElementById('onestop-input-' + docKey);
+    if (input) input.click();
+  };
+  window.onestopOnFileChange = function(docKey, inputEl) {
+    if (!inputEl.files || !inputEl.files[0]) return;
+    var f = inputEl.files[0];
+    if (!/\.pdf$/i.test(f.name)) { showToast('error', 'PDF 파일만 가능: ' + f.name); return; }
+    _onestopState.files[docKey] = f;
+    var slot = document.getElementById('onestop-slot-' + docKey);
+    var nameEl = document.getElementById('onestop-filename-' + docKey);
+    var statusEl = document.getElementById('onestop-status-' + docKey);
+    if (slot) slot.classList.add('filled');
+    if (nameEl) nameEl.textContent = f.name + ' (' + Math.round(f.size/1024) + ' KB)';
+    if (statusEl) statusEl.textContent = '✓';
+    _onestopUpdateEnableState();
+  };
+  function _onestopUpdateEnableState() {
+    var s = _onestopState.files;
+    /* 최소 Packing List 필수 */
+    var canParse = !!s.PACKING_LIST;
+    var parseBtn = document.getElementById('onestop-parse-btn');
+    var hint = document.getElementById('onestop-hint');
+    if (parseBtn) parseBtn.disabled = !canParse;
+    if (hint) {
+      if (!s.PACKING_LIST) hint.textContent = '💡 최소 Packing List(PL)를 선택하세요';
+      else if (!s.BL || !s.INVOICE) hint.textContent = '⚠️ BL/Invoice 없음 — 크로스체크 제한 (파싱은 가능)';
+      else if (!s.DO) hint.textContent = 'ℹ️ D/O 선택 — 나중에 첨부 가능';
+      else hint.textContent = '✅ 4종 준비 완료 — 크로스체크 실행 가능';
+    }
+  }
+  window.onestopMultiPick = function() {
+    showToast('info', '멀티 선택은 Sprint 1-2-B에서 자동 분류와 함께 구현됩니다 (임시: 각 슬롯 개별 선택)');
+  };
+  window.onestopSkipDo = function() {
+    showToast('info', 'D/O 나중에 처리: 파싱은 BL/PL/Invoice 3종으로 진행되고, D/O는 재고 탭의 "📋 D/O 후속 연결" 메뉴로 나중에 등록');
+  };
+  window.onestopReparseCarrier = function() {
+    showToast('info', '선사 재파싱은 Sprint 1-2-B (백엔드 파싱 엔진) 이후 연결됩니다');
+  };
+  window.onestopResetFilter = function() {
+    ['sap','bl','container','product','status'].forEach(function(k){
+      var el = document.getElementById('onestop-filter-' + k);
+      if (el) el.value = '';
+    });
+  };
+
+  /* ── 파싱 실행 (Sprint 1-2-A: PL PDF 1건만 기존 pdf-upload 로 fallback) ── */
+  window.onestopParseStart = function() {
+    var pl = _onestopState.files.PACKING_LIST;
+    if (!pl) { showToast('error', 'Packing List(PL) 먼저 선택하세요'); return; }
+
+    _onestopSetStep(2);
+    var pb = document.getElementById('onestop-progress-body');
+    if (pb) pb.innerHTML = '<div style="padding:4px;color:var(--fg)">⏳ Packing List 파싱 중... <strong>' + escapeHtml(pl.name) + '</strong></div>';
+
+    var form = new FormData();
+    form.append('file', pl, pl.name);
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', API + '/api/inbound/pdf-upload');
+    xhr.onload = function(){
+      var body; try { body = JSON.parse(xhr.responseText); } catch(e){ body = null; }
+      if (xhr.status >= 200 && xhr.status < 300 && body && body.ok) {
+        var d = body.data || {};
+        _onestopSetStep(3);
+        if (pb) pb.innerHTML =
+          '<div style="color:var(--success);font-weight:700">✅ ' + escapeHtml(body.message || '파싱 완료') + '</div>' +
+          '<div style="color:var(--text-muted);font-size:12px;margin-top:4px">' +
+          '파일: ' + escapeHtml(d.filename || '-') + ' · Folio: ' + escapeHtml(d.folio || '-') +
+          ' · 제품: ' + escapeHtml(d.product || '-') + ' · LOT ' + (d.lots_total || 0) + '개' +
+          ' · 저장 ' + (d.saved_count || 0) + '건</div>' +
+          '<div style="color:var(--warning);font-size:11px;margin-top:6px">⚠️ Sprint 1-2-A: PL 단일 파일만 처리. BL/Invoice/DO 크로스체크 및 18열 미리보기는 Sprint 1-2-B에서 추가됩니다.</div>';
+        _onestopSetStep(4);
+        var saveBtn = document.getElementById('onestop-save-btn');
+        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '✅ 완료 (이미 DB 저장됨)'; }
+        showToast('success', '입고 등록 완료: ' + (d.saved_count || 0) + '건');
+        if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+        if (typeof loadKpi === 'function') loadKpi();
+      } else {
+        var errMsg = (body && (body.detail || body.error || body.message)) || ('HTTP ' + xhr.status);
+        if (typeof errMsg === 'object') errMsg = JSON.stringify(errMsg);
+        if (pb) pb.innerHTML = '<div style="color:var(--danger);font-weight:700">❌ 파싱 실패</div><div style="color:var(--text-muted);font-size:12px;margin-top:4px">' + escapeHtml(String(errMsg)) + '</div>';
+        showToast('error', '파싱 실패: ' + errMsg);
+        _onestopSetStep(1);
+      }
+    };
+    xhr.onerror = function(){
+      if (pb) pb.innerHTML = '<div style="color:var(--danger)">❌ 네트워크 에러</div>';
+      showToast('error', '네트워크 에러');
+      _onestopSetStep(1);
+    };
+    xhr.send(form);
+
+    var reparseBtn = document.getElementById('onestop-reparse-btn');
+    if (reparseBtn) reparseBtn.disabled = false;
+  };
+  window.onestopParseRedo = function() {
+    _onestopState.step = 1;
+    _onestopSetStep(1);
+    window.onestopParseStart();
+  };
+  window.onestopSaveDb = function() {
+    showToast('info', 'Sprint 1-2-A: DB 저장은 파싱 시점에 자동 완료됩니다. Sprint 1-2-B에서 "DB 업로드" 버튼은 편집 후 저장 용도로 활성화됩니다');
+  };
+  function _onestopSetStep(step) {
+    _onestopState.step = step;
+    document.querySelectorAll('.wizard-steps .step').forEach(function(el){
+      var n = parseInt(el.dataset.step, 10);
+      el.classList.toggle('active', n === step);
+      el.classList.toggle('done', n < step);
+    });
+  }
 
   /* F017 Picking List PDF 업로드 */
   function showPickingListPdfModal() {
@@ -3377,7 +3621,8 @@
         return;
       }
       if (conf.u === 'pdf-inbound-upload') {
-        showPdfInboundUploadModal();
+        /* [Sprint 1-2] OneStop 4슬롯 wizard 모달 (v864-2 OneStopInboundDialog 매칭) */
+        showOneStopInboundModal();
         return;
       }
       if (conf.u === 'picking-list-pdf') {

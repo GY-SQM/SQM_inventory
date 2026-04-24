@@ -214,6 +214,125 @@ html[data-theme="dark"] {
   background: var(--btn-hover);
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   [Sprint 1-2] OneStop Inbound 4-slot modal (v864-2 OneStopInboundDialog 매칭)
+   ══════════════════════════════════════════════════════════════════════ */
+.onestop-modal { max-width: 1100px; }
+.onestop-modal h2 { margin: 0 0 12px 0; font-size: 18px; font-weight: 700; }
+
+/* 4단계 Wizard */
+.wizard-steps {
+  display: flex; align-items: stretch; gap: 0;
+  background: var(--panel); border: 1px solid var(--panel-border); border-radius: 8px;
+  padding: 4px; margin-bottom: 14px;
+}
+.wizard-steps .step {
+  flex: 1; display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-radius: 6px;
+  opacity: 0.45; transition: all 0.2s;
+}
+.wizard-steps .step.active { opacity: 1; background: var(--sidebar-active-bg); color: var(--sidebar-active-fg); }
+.wizard-steps .step.done { opacity: 0.85; }
+.wizard-steps .step-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--panel-border); color: var(--fg); font-weight: 700;
+}
+.wizard-steps .step.active .step-num { background: #fff; color: var(--sidebar-active-bg); }
+.wizard-steps .step-label { font-weight: 600; font-size: 13px; line-height: 1.2; }
+.wizard-steps .step-label small { display: block; font-weight: 400; font-size: 11px; opacity: 0.8; }
+.wizard-steps .step-arrow { display: flex; align-items: center; color: var(--text-muted); font-size: 16px; padding: 0 2px; }
+
+/* 템플릿/선사 줄 */
+.onestop-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: var(--panel); border: 1px solid var(--panel-border);
+  border-radius: 6px; margin-bottom: 6px; font-size: 13px;
+}
+.onestop-row label { font-weight: 600; min-width: 80px; }
+.onestop-row select, .onestop-row input[type=text] {
+  padding: 6px 10px; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--panel-border); border-radius: 4px; min-width: 180px;
+}
+.onestop-row .chip {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  background: var(--bg-hover); color: var(--text-muted); font-size: 11px; font-weight: 600;
+}
+
+/* 4 업로드 슬롯 */
+.upload-slots { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.upload-slot {
+  display: grid; grid-template-columns: 36px 1fr auto auto 28px;
+  align-items: center; gap: 10px;
+  padding: 10px 14px; background: var(--panel);
+  border: 1px solid var(--panel-border); border-radius: 6px;
+}
+.upload-slot.filled { border-color: #66bb6a; background: rgba(102, 187, 106, 0.08); }
+.upload-slot-icon { font-size: 22px; text-align: center; }
+.upload-slot-label { font-weight: 600; font-size: 13px; }
+.upload-slot-label small { display: block; font-weight: 400; font-size: 11px; color: var(--text-muted); }
+.upload-slot-filename { font-family: Consolas, monospace; font-size: 11px; color: var(--text-muted); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-slot-pick-btn {
+  padding: 6px 14px; background: var(--panel); color: var(--fg);
+  border: 1px solid var(--panel-border); border-radius: 4px; cursor: pointer;
+  font-size: 12px; font-weight: 600;
+}
+.upload-slot-pick-btn:hover { background: var(--btn-hover); }
+.upload-slot-status {
+  font-size: 18px; font-weight: 700; text-align: center; color: var(--text-muted);
+}
+.upload-slot.filled .upload-slot-status { color: #66bb6a; }
+.upload-slot-req { padding: 1px 6px; font-size: 10px; font-weight: 700; border-radius: 3px; }
+.upload-slot-req.required { background: #d32f2f; color: #fff; }
+.upload-slot-req.optional { background: var(--bg-hover); color: var(--text-muted); }
+
+/* 액션 버튼 영역 */
+.onestop-actions {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; background: var(--panel);
+  border: 1px solid var(--panel-border); border-radius: 6px;
+  margin-bottom: 10px; flex-wrap: wrap;
+}
+.onestop-actions .hint { color: var(--text-muted); font-size: 11px; margin-left: auto; }
+
+/* 진행 상태 */
+.onestop-progress {
+  padding: 12px 14px; background: var(--panel); border: 1px solid var(--panel-border);
+  border-radius: 6px; margin-bottom: 10px; font-size: 13px;
+}
+.onestop-progress-title { font-weight: 700; margin-bottom: 6px; }
+.onestop-progress-empty { color: var(--text-muted); font-size: 12px; }
+
+/* 필터 바 + 미리보기 테이블 */
+.onestop-filter-bar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 8px 12px; background: var(--panel);
+  border: 1px solid var(--panel-border); border-radius: 6px; margin-bottom: 6px;
+  font-size: 12px;
+}
+.onestop-filter-bar label { font-weight: 600; color: var(--text-muted); }
+.onestop-filter-bar input {
+  padding: 4px 8px; background: var(--bg); color: var(--fg);
+  border: 1px solid var(--panel-border); border-radius: 4px; min-width: 90px;
+  font-size: 12px;
+}
+.onestop-preview-table {
+  width: 100%; border-collapse: collapse; font-size: 12px;
+}
+.onestop-preview-table th {
+  padding: 6px 8px; background: var(--panel);
+  border-bottom: 2px solid var(--panel-border);
+  font-size: 11px; font-weight: 700; text-align: left; white-space: nowrap;
+}
+.onestop-preview-table td {
+  padding: 5px 8px; border-bottom: 1px solid var(--panel-border);
+  font-size: 11px; white-space: nowrap;
+}
+.onestop-preview-empty {
+  padding: 40px; text-align: center; color: var(--text-muted);
+  background: var(--panel); border: 1px dashed var(--panel-border); border-radius: 6px;
+}
+
 .menubar-spacer { flex: 1; }
 
 .topbar-btn {
