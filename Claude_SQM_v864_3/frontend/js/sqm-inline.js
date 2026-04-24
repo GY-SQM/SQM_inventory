@@ -138,6 +138,43 @@
   /* ===================================================
      1b. KEYBOARD SHORTCUTS (v864.2 동일)
      =================================================== */
+
+  /* ── [UX] ESC = 현재 열린 창 닫기 (전역)
+     우선순위: 컨텍스트 메뉴 → 서브메뉴 드롭다운 → 모달 → 최상위 메뉴 드롭다운
+     input/textarea/select 안에서도 작동 (모달 닫기 우선) ────────────── */
+  document.addEventListener('keydown', function(e){
+    if (e.key !== 'Escape' && e.key !== 'Esc') return;
+
+    /* 1순위: 컨텍스트 메뉴 (우클릭 팝업) */
+    var ctx = document.querySelector('.ctx-menu');
+    if (ctx) { ctx.remove(); e.preventDefault(); return; }
+
+    /* 2순위: 모달 (데이터 모달 / 정보 모달) */
+    var modal = document.getElementById('sqm-modal');
+    if (modal && modal.style.display !== 'none' && modal.style.display !== '') {
+      modal.style.display = 'none';
+      e.preventDefault();
+      return;
+    }
+
+    /* 3순위: 열린 상단 메뉴 드롭다운 (.menu-btn.open) */
+    var openMenus = document.querySelectorAll('.menu-btn.open');
+    if (openMenus.length) {
+      openMenus.forEach(function(m){ m.classList.remove('open'); });
+      if (document.activeElement && document.activeElement.blur) {
+        try { document.activeElement.blur(); } catch(err) {}
+      }
+      e.preventDefault();
+      return;
+    }
+
+    /* 4순위: 활성 input/textarea 포커스 해제 (편집 중단) */
+    var ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) {
+      try { ae.blur(); } catch(err) {}
+    }
+  });
+
   document.addEventListener('keydown', function(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     var key = (e.ctrlKey?'C-':'') + (e.shiftKey?'S-':'') + (e.altKey?'A-':'') + e.key;
