@@ -7,8 +7,8 @@ POST /api/scan/process       바코드 스캔 처리
 GET  /api/health             시스템 헬스체크
 """
 import sqlite3, os, sys, logging
-from typing import Optional
-from fastapi import APIRouter, Query as QP, HTTPException
+from typing import Optional, Dict, Any
+from fastapi import APIRouter, Query as QP, HTTPException, Body
 from fastapi.responses import JSONResponse
 
 log = logging.getLogger(__name__)
@@ -210,6 +210,146 @@ def cancel_allocation(lot_no: str):
         db.commit(); db.close()
         return {"success": True, "message": f"{lot_no} 배정 취소"}
     except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# [Sprint 1-1-D] PATCH /api/allocation/{lot_no} — 행 필드 업데이트
+# v864-2 AllocationDialog 인라인 편집 워크플로우 포팅
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_ALLOC_EDITABLE_FIELDS = {
+    "customer", "sale_ref", "qty_mt", "outbound_date", "status",
+}
+
+
+@alloc_router.patch("/{lot_no}")
+def update_allocation(lot_no: str, updates: Dict[str, Any] = Body(...)):
+    """
+    allocation_plan 행의 허용된 필드를 업데이트.
+    Body: {field_name: value, ...}
+
+    허용 필드: customer, sale_ref, qty_mt, outbound_date, status
+    (lot_no/sap_no/product 는 외래키·조인 영향으로 편집 불허)
+    """
+    fields = {k: v for k, v in (updates or {}).items() if k in _ALLOC_EDITABLE_FIELDS}
+    if not fields:
+        raise HTTPException(
+            400,
+            f"허용된 필드 없음. 편집 가능: {sorted(_ALLOC_EDITABLE_FIELDS)}"
+        )
+    # qty_mt 는 numeric 강제
+    if "qty_mt" in fields:
+        try:
+            fields["qty_mt"] = float(fields["qty_mt"])
+        except (TypeError, ValueError):
+            raise HTTPException(400, "qty_mt 는 숫자여야 합니다")
+    sets = ", ".join(f"{k}=?" for k in fields.keys())
+    values = list(fields.values()) + [lot_no]
+    try:
+        db = _db()
+        cursor = db.execute(
+            f"UPDATE allocation_plan SET {sets}, updated_at=datetime('now') WHERE lot_no=?",
+            values
+        )
+        if cursor.rowcount == 0:
+            db.close()
+            raise HTTPException(404, f"allocation_plan 에서 {lot_no} 찾지 못함")
+        db.commit(); db.close()
+        return {"success": True, "lot_no": lot_no, "updated_fields": list(fields.keys())}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"PATCH /api/allocation/{lot_no} error: {e}")
+        raise HTTPException(500, str(e))
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# [Sprint 1-1-E] POST /api/allocation/{lot_no}/pick — RESERVED → PICKED
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@alloc_router.post("/{lot_no}/pick")
+def pick_allocation(lot_no: str):
+    """배정 → 출고 실행 (RESERVED → PICKED)."""
+    try:
+        db = _db()
+        cursor = db.execute(
+            """UPDATE allocation_plan
+               SET status='PICKED', picked_at=datetime('now')
+               WHERE lot_no=? AND status='RESERVED'""",
+            (lot_no,)
+        )
+        changes = cursor.rowcount
+        db.commit(); db.close()
+        if changes == 0:
+            raise HTTPException(404, f"{lot_no}: RESERVED 상태가 아니거나 존재하지 않음")
+        return {"success": True, "lot_no": lot_no, "message": f"{lot_no} → PICKED"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"POST /api/allocation/{lot_no}/pick error: {e}")
+        raise HTTPException(500, str(e))
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# [Sprint 1-1-E] POST /api/allocation/{lot_no}/confirm — PICKED → SOLD
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@alloc_router.post("/{lot_no}/confirm")
+def confirm_allocation(lot_no: str):
+    """출고 확정 (PICKED → SOLD)."""
+    try:
+        db = _db()
+        cursor = db.execute(
+            """UPDATE allocation_plan
+               SET status='SOLD', confirmed_at=datetime('now')
+               WHERE lot_no=? AND status='PICKED'""",
+            (lot_no,)
+        )
+        changes = cursor.rowcount
+        # inventory 테이블 상태도 SOLD 로
+        db.execute(
+            "UPDATE inventory SET status='SOLD' WHERE lot_no=?",
+            (lot_no,)
+        )
+        db.commit(); db.close()
+        if changes == 0:
+            raise HTTPException(404, f"{lot_no}: PICKED 상태가 아니거나 존재하지 않음")
+        return {"success": True, "lot_no": lot_no, "message": f"{lot_no} → SOLD"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"POST /api/allocation/{lot_no}/confirm error: {e}")
+        raise HTTPException(500, str(e))
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# [Sprint 1-1-E] POST /api/allocation/{lot_no}/reset — LOT 배정 초기화
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@alloc_router.post("/{lot_no}/reset")
+def reset_allocation(lot_no: str):
+    """
+    LOT 배정 완전 초기화.
+    - allocation_plan 에서 해당 lot_no 행 DELETE
+    - inventory 테이블 status 를 AVAILABLE 로 원복 (SOLD 가 아닌 경우만)
+    """
+    try:
+        db = _db()
+        # inventory status 가 이미 SOLD 면 보호 (출고 완료된 건 reset 불가)
+        row = db.execute("SELECT status FROM inventory WHERE lot_no=?", (lot_no,)).fetchone()
+        if row and row[0] == "SOLD":
+            raise HTTPException(409, f"{lot_no}: SOLD 상태는 reset 불가 (반품으로 처리하세요)")
+        del_cur = db.execute("DELETE FROM allocation_plan WHERE lot_no=?", (lot_no,))
+        deleted = del_cur.rowcount
+        db.execute(
+            "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL WHERE lot_no=? AND status!='SOLD'",
+            (lot_no,)
+        )
+        db.commit(); db.close()
+        if deleted == 0:
+            return {"success": True, "lot_no": lot_no, "message": f"{lot_no}: 배정 기록 없음 (inventory만 초기화)"}
+        return {"success": True, "lot_no": lot_no, "message": f"{lot_no} 배정 완전 초기화 ({deleted}건 삭제)"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"POST /api/allocation/{lot_no}/reset error: {e}")
         raise HTTPException(500, str(e))
 
 

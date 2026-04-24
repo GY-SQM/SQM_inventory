@@ -792,6 +792,8 @@
        🟡 우클릭 컨텍스트 메뉴 (행 삭제/복사)
      =================================================================== */
   var _allocState = { currentFilter: 'all', rows: [], selectedLots: new Set() };
+  /* [Sprint 1-1-D] 편집 가능 필드 (백엔드 _ALLOC_EDITABLE_FIELDS 와 일치 필요) */
+  var ALLOC_EDITABLE_FIELDS = new Set(['customer', 'sale_ref', 'qty_mt', 'outbound_date']);
 
   function loadAllocationPage() {
     var route = _currentRoute;
@@ -815,9 +817,9 @@
       '  <button class="btn btn-danger" onclick="window.allocCancelSelected()">❌ 선택 배정 취소</button>',
       '  <span style="width:1px;height:22px;background:var(--panel-border);margin:0 4px"></span>',
       /* 백엔드 엔드포인트 미구현 — Sprint 1-1-E에서 연결 */
-      '  <button class="btn btn-wip" onclick="window.allocWipToast(\'출고 실행\')" title="Sprint 1-1-E 예정">📦 출고 실행 (PICKED) [준비 중]</button>',
-      '  <button class="btn btn-wip" onclick="window.allocWipToast(\'출고 확정\')" title="Sprint 1-1-E 예정">🔒 출고 확정 (SOLD) [준비 중]</button>',
-      '  <button class="btn btn-wip" onclick="window.allocWipToast(\'LOT 예약 초기화\')" title="Sprint 1-1-E 예정">🧹 LOT 초기화 [준비 중]</button>',
+      '  <button class="btn" onclick="window.allocPickSelected()" title="RESERVED → PICKED">📦 출고 실행 (PICKED)</button>',
+      '  <button class="btn" onclick="window.allocConfirmSelected()" title="PICKED → SOLD">🔒 출고 확정 (SOLD)</button>',
+      '  <button class="btn" onclick="window.allocResetSelected()" title="LOT 배정 완전 삭제">🧹 LOT 초기화</button>',
       '</div>',
       /* ── 상태 필터 ── */
       '<div class="alloc-filter" style="display:flex;gap:4px;margin-bottom:8px">',
@@ -902,6 +904,7 @@
     if (lbl) lbl.textContent = '(' + rows.length + '/' + _allocState.rows.length + '건)';
 
     var totalMt = 0;
+    /* [Sprint 1-1-D] 편집 가능 셀에 data-lot/data-field + ondblclick + oncontextmenu */
     tbody.innerHTML = rows.map(function(r, i){
       var lot = escapeHtml(r.lot_no || '');
       var qtyMt = (r.total_mt != null) ? Number(r.total_mt) : (r.qty_mt != null ? Number(r.qty_mt) : 0);
@@ -910,17 +913,27 @@
       var statusColor = status === 'SOLD' ? '#66bb6a' : status === 'PICKED' ? '#42a5f5' : 'var(--warning)';
       var statusFg = status === 'RESERVED' ? '#000' : '#fff';
       var checked = _allocState.selectedLots.has(lot) ? 'checked' : '';
-      return '<tr class="alloc-summary-row" data-lot="' + lot + '" data-status="' + status + '">' +
+
+      /* 편집 가능 셀 attrs 헬퍼 */
+      function editTd(field, display, extraClass, extraStyle) {
+        var attrs = 'class="' + (extraClass || '') + ' alloc-editable" ' +
+          'data-lot="' + lot + '" data-field="' + field + '"' +
+          (extraStyle ? ' style="' + extraStyle + '"' : '') +
+          ' ondblclick="window.allocEditCell(this)" title="더블클릭으로 편집";';
+        return '<td ' + attrs + '>' + display + '</td>';
+      }
+
+      return '<tr class="alloc-summary-row" data-lot="' + lot + '" data-status="' + status + '" oncontextmenu="window.allocContextMenu(event, \'' + lot + '\'); return false;">' +
         '<td style="text-align:center"><input type="checkbox" ' + checked + ' onclick="event.stopPropagation();window.allocToggleRow(\'' + lot + '\',this.checked)"></td>' +
         '<td class="mono-cell" style="text-align:right">' + (i + 1) + '</td>' +
         '<td class="mono-cell" style="color:var(--accent);font-weight:600;cursor:pointer" onclick="window.toggleAllocDetail(\'' + lot + '\')">' +
           '<span class="alloc-expand-icon">▶</span> ' + lot + '</td>' +
         '<td class="mono-cell">' + escapeHtml(r.sap_no || '-') + '</td>' +
         '<td>' + escapeHtml(r.product || '-') + '</td>' +
-        '<td class="mono-cell" style="text-align:right">' + (qtyMt ? qtyMt.toFixed(4) : '-') + '</td>' +
-        '<td>' + escapeHtml(r.customer || r.sold_to || '-') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.sale_ref || '-') + '</td>' +
-        '<td class="mono-cell">' + escapeHtml(r.outbound_date || r.ship_date || '-') + '</td>' +
+        editTd('qty_mt', (qtyMt ? qtyMt.toFixed(4) : '-'), 'mono-cell', 'text-align:right') +
+        editTd('customer', escapeHtml(r.customer || r.sold_to || '-'), '', '') +
+        editTd('sale_ref', escapeHtml(r.sale_ref || '-'), 'mono-cell', '') +
+        editTd('outbound_date', escapeHtml(r.outbound_date || r.ship_date || '-'), 'mono-cell', '') +
         '<td>' + escapeHtml(r.warehouse || r.wh || '-') + '</td>' +
         '<td><span class="tag" style="background:' + statusColor + ';color:' + statusFg + '">' + status + '</span></td>' +
         '</tr>';
@@ -974,19 +987,209 @@
     else _allocState.selectedLots.delete(lot);
   };
   window.allocCancelSelected = function() {
+    _allocBulkAction({
+      url_suffix:   '/cancel',
+      method:       'POST',
+      label:        '배정 취소',
+      icon:         '❌',
+      confirmMsg:   '건 배정 취소?',
+    });
+  };
+
+  /* ── [Sprint 1-1-E] 상태 전환 버튼 핸들러 ──────────────────────────── */
+  window.allocPickSelected = function() {
+    _allocBulkAction({
+      url_suffix:   '/pick',
+      method:       'POST',
+      label:        '출고 실행 (PICKED)',
+      icon:         '📦',
+      confirmMsg:   '건을 PICKED 상태로 변경?\n(RESERVED → PICKED)',
+    });
+  };
+  window.allocConfirmSelected = function() {
+    _allocBulkAction({
+      url_suffix:   '/confirm',
+      method:       'POST',
+      label:        '출고 확정 (SOLD)',
+      icon:         '🔒',
+      confirmMsg:   '건을 SOLD 상태로 확정?\n(PICKED → SOLD — 되돌릴 수 없음)',
+    });
+  };
+  window.allocResetSelected = function() {
+    _allocBulkAction({
+      url_suffix:   '/reset',
+      method:       'POST',
+      label:        'LOT 배정 초기화',
+      icon:         '🧹',
+      confirmMsg:   '건 배정 완전 초기화?\nallocation_plan 에서 삭제 + inventory AVAILABLE 원복\n(SOLD 는 보호됨)',
+    });
+  };
+
+  /* 공통 다중 선택 액션 헬퍼 */
+  function _allocBulkAction(opts) {
     var selected = Array.from(_allocState.selectedLots);
-    if (!selected.length) { showToast('warn', '취소할 배정을 먼저 선택하세요'); return; }
-    if (!confirm(selected.length + '건 배정 취소?\n' + selected.slice(0, 5).join(', ') + (selected.length > 5 ? ' …외 '+(selected.length-5)+'건' : ''))) return;
-    var okCount = 0, errCount = 0;
+    if (!selected.length) { showToast('warn', opts.label + ': 대상을 먼저 선택하세요'); return; }
+    var preview = selected.slice(0, 5).join(', ') + (selected.length > 5 ? ' …외 ' + (selected.length - 5) + '건' : '');
+    if (!confirm(opts.icon + ' ' + opts.label + '\n\n' + selected.length + opts.confirmMsg + '\n\n' + preview)) return;
+
+    var okCount = 0, errors = [];
     var promises = selected.map(function(lot){
-      return apiPost('/api/allocation/' + encodeURIComponent(lot) + '/cancel', {})
+      return apiPost('/api/allocation/' + encodeURIComponent(lot) + opts.url_suffix, {})
         .then(function(){ okCount++; })
-        .catch(function(){ errCount++; });
+        .catch(function(e){ errors.push({ lot: lot, reason: (e && e.message) || String(e) }); });
     });
     Promise.all(promises).then(function(){
-      showToast(errCount ? 'warn' : 'success', '성공 ' + okCount + '건 / 실패 ' + errCount + '건');
+      var errCount = errors.length;
+      if (errCount === 0) {
+        showToast('success', opts.icon + ' ' + opts.label + ': ' + okCount + '건 성공');
+      } else {
+        var errSample = errors.slice(0, 3).map(function(e){ return e.lot + ' (' + e.reason + ')'; }).join(', ');
+        showToast('warn', opts.label + ': 성공 ' + okCount + ' / 실패 ' + errCount + ' (' + errSample + ')');
+      }
+      _allocState.selectedLots.clear();
       loadAllocationPage();
     });
+  }
+
+  /* ── [Sprint 1-1-D] 인라인 편집 — 셀 더블클릭 → PATCH ─────────────── */
+  window.allocEditCell = function(td) {
+    if (!td || td.querySelector('input')) return;
+    var lot = td.dataset.lot;
+    var field = td.dataset.field;
+    if (!lot || !field || !ALLOC_EDITABLE_FIELDS.has(field)) return;
+
+    /* 현재 값 추출 (display 에서 HTML tag 제거) */
+    var curDisplay = td.textContent.trim();
+    var curVal = curDisplay === '-' ? '' : curDisplay;
+
+    /* qty_mt 는 number input */
+    var input = document.createElement('input');
+    input.type = (field === 'qty_mt') ? 'number' : (field === 'outbound_date' ? 'date' : 'text');
+    if (field === 'qty_mt') input.step = '0.0001';
+    input.value = curVal;
+    input.className = 'alloc-edit-input';
+    input.style.cssText = 'width:100%;padding:2px 4px;background:var(--bg);color:var(--fg);border:1px solid var(--accent);border-radius:3px;font-size:11px;font-family:inherit';
+
+    td.innerHTML = '';
+    td.appendChild(input);
+    input.focus();
+    input.select && input.select();
+
+    var committed = false;
+    function cancel() {
+      if (committed) return;
+      committed = true;
+      _renderAllocTable();  /* 원복 */
+    }
+    function commit() {
+      if (committed) return;
+      committed = true;
+      var newVal = input.value;
+      if (String(newVal).trim() === String(curVal).trim()) {
+        _renderAllocTable();
+        return;
+      }
+      /* PATCH /api/allocation/{lot} */
+      td.innerHTML = '<span style="color:var(--text-muted);font-size:11px">⏳ 저장 중...</span>';
+      var payload = {};
+      payload[field] = newVal;
+      fetch(API + '/api/allocation/' + encodeURIComponent(lot), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(function(r){ return r.json().then(function(b){ return { ok: r.ok, body: b }; }); })
+        .then(function(res){
+          if (!res.ok || !res.body.success) {
+            throw new Error((res.body && (res.body.detail || res.body.message)) || 'PATCH 실패');
+          }
+          /* 로컬 rows 업데이트 */
+          var row = _allocState.rows.find(function(r){ return (r.lot_no || '') === lot; });
+          if (row) {
+            row[field] = (field === 'qty_mt') ? Number(newVal) : newVal;
+            if (field === 'customer') row.sold_to = newVal;
+          }
+          showToast('success', '💾 ' + lot + '.' + field + ' 저장됨');
+          _renderAllocTable();
+        })
+        .catch(function(e){
+          showToast('error', '편집 실패: ' + (e.message || String(e)));
+          _renderAllocTable();
+        });
+    }
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', function(e){
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      else if (e.key === 'Escape') {
+        e.preventDefault();
+        input.removeEventListener('blur', commit);
+        cancel();
+      }
+    });
+  };
+
+  /* ── [Sprint 1-1-D] 우클릭 컨텍스트 메뉴 — 행 삭제/복사 ─────────────── */
+  window.allocContextMenu = function(e, lot) {
+    e.preventDefault();
+    /* 기존 컨텍스트 메뉴 제거 */
+    var old = document.querySelector('.ctx-menu');
+    if (old) old.remove();
+
+    var row = _allocState.rows.find(function(r){ return (r.lot_no || '') === lot; });
+    if (!row) return;
+
+    var m = document.createElement('div');
+    m.className = 'ctx-menu';
+    m.style.cssText = 'position:fixed;z-index:9999;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:4px 0;min-width:160px;box-shadow:0 4px 16px rgba(0,0,0,.4);font-size:13px;';
+    m.style.left = e.clientX + 'px';
+    m.style.top = e.clientY + 'px';
+
+    function mi(label, onClick, danger) {
+      var b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'display:block;width:100%;text-align:left;padding:6px 14px;background:transparent;border:none;color:' + (danger ? 'var(--danger)' : 'var(--fg)') + ';cursor:pointer;font-size:13px';
+      b.addEventListener('mouseover', function(){ b.style.background = 'var(--btn-hover)'; });
+      b.addEventListener('mouseout', function(){ b.style.background = 'transparent'; });
+      b.addEventListener('click', function(){ m.remove(); onClick(); });
+      m.appendChild(b);
+    }
+
+    mi('📋 행 복사 (CSV)', function(){
+      var cols = ['lot_no', 'sap_no', 'product', 'qty_mt', 'customer', 'sale_ref', 'outbound_date', 'warehouse', 'status'];
+      var header = cols.join(',');
+      var values = cols.map(function(c){ return String(row[c] != null ? row[c] : (c === 'customer' ? (row.sold_to || '') : '')); }).join(',');
+      var text = header + '\n' + values;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function(){
+          showToast('success', '📋 클립보드에 복사됨');
+        }).catch(function(){
+          prompt('수동 복사:', text);
+        });
+      } else {
+        prompt('수동 복사:', text);
+      }
+    });
+
+    mi('❌ 이 행 배정 취소', function(){
+      if (!confirm('❌ ' + lot + '\n배정 취소하시겠습니까?')) return;
+      apiPost('/api/allocation/' + encodeURIComponent(lot) + '/cancel', {})
+        .then(function(){ showToast('success', lot + ' 취소됨'); loadAllocationPage(); })
+        .catch(function(err){ showToast('error', '취소 실패: ' + (err.message || err)); });
+    }, false);
+
+    mi('🧹 이 행 초기화 (삭제)', function(){
+      if (!confirm('🧹 ' + lot + '\nallocation 기록 삭제 + inventory AVAILABLE 원복\n(SOLD 는 보호됨)\n계속하시겠습니까?')) return;
+      apiPost('/api/allocation/' + encodeURIComponent(lot) + '/reset', {})
+        .then(function(res){ showToast('success', (res.data && res.data.message) || (lot + ' 초기화됨')); loadAllocationPage(); })
+        .catch(function(err){ showToast('error', '초기화 실패: ' + (err.message || err)); });
+    }, true);
+
+    document.body.appendChild(m);
+    /* 다음 클릭 또는 ESC 로 자동 닫기 */
+    var closeHandler = function(ev){
+      if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', closeHandler); }
+    };
+    setTimeout(function(){ document.addEventListener('click', closeHandler); }, 10);
   };
 
   var _allocExpandedLot = null;

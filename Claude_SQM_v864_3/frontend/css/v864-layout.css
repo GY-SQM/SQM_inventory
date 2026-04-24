@@ -360,6 +360,22 @@ html[data-theme="dark"] {
   outline-offset: -1px;
 }
 
+/* [Sprint 1-1-D] Allocation 인라인 편집 셀 */
+.data-table td.alloc-editable {
+  cursor: text;
+  transition: background 0.1s;
+  position: relative;
+}
+.data-table td.alloc-editable:hover {
+  background: rgba(66, 165, 245, 0.1) !important;
+  outline: 1px dashed var(--accent);
+  outline-offset: -2px;
+}
+.alloc-edit-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .menubar-spacer { flex: 1; }
 
 .topbar-btn {
