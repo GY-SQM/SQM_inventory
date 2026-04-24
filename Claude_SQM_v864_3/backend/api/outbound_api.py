@@ -620,6 +620,119 @@ except Exception as _e:
     logger.warning(f"[proof-docs] startup cleanup error: {_e}")
 
 
+# ────────────────────────────────────────────────────────────
+# [Sprint 2] Picking Template CRUD
+# v864-2 source: dialogs/picking_template_dialog.py (447 lines)
+# Table: picking_template (existing schema, 13 columns)
+# ────────────────────────────────────────────────────────────
+def _pt_db():
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(os.path.dirname(here))
+    db_path = os.path.join(root, "data", "db", "sqm_inventory.db")
+    import sqlite3
+    con = sqlite3.connect(db_path, timeout=5, check_same_thread=False)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    return con
+
+
+@router.get("/templates", summary="📦 Picking 템플릿 목록 [Sprint 2]")
+def list_picking_templates(active_only: bool = False):
+    try:
+        con = _pt_db()
+        sql = "SELECT * FROM picking_template"
+        if active_only:
+            sql += " WHERE is_active = 1"
+        sql += " ORDER BY template_name"
+        rows = con.execute(sql).fetchall()
+        con.close()
+        return {"ok": True, "data": {"items": [dict(r) for r in rows], "total": len(rows)}}
+    except Exception as e:
+        logger.error(f"list_picking_templates error: {e}")
+        raise HTTPException(500, str(e))
+
+
+@router.post("/templates", summary="📦 Picking 템플릿 생성 [Sprint 2]")
+def create_picking_template(payload: "Dict[str, Any]" = Body(...)):
+    tid = (payload or {}).get("template_id", "").strip()
+    name = (payload or {}).get("template_name", "").strip()
+    customer = (payload or {}).get("customer", "").strip()
+    if not tid or not name:
+        raise HTTPException(400, "template_id 와 template_name 필수")
+    fields = {
+        "template_id":      tid,
+        "template_name":    name,
+        "customer":         customer,
+        "customer_code":    payload.get("customer_code", ""),
+        "port_loading":     payload.get("port_loading", "GWANGYANG, SOUTH KOREA"),
+        "port_discharge":   payload.get("port_discharge", ""),
+        "delivery_terms":   payload.get("delivery_terms", "CIF"),
+        "contact_person":   payload.get("contact_person", ""),
+        "contact_email":    payload.get("contact_email", ""),
+        "bag_weight_kg":    int(payload.get("bag_weight_kg", 500)),
+        "storage_location": payload.get("storage_location", "1001 GY logistics"),
+        "note":             payload.get("note", ""),
+        "is_active":        1 if payload.get("is_active", True) else 0,
+    }
+    cols = ", ".join(fields.keys())
+    placeholders = ", ".join(["?"] * len(fields))
+    try:
+        con = _pt_db()
+        con.execute(f"INSERT INTO picking_template ({cols}) VALUES ({placeholders})", list(fields.values()))
+        con.commit(); con.close()
+        return {"ok": True, "data": fields, "message": f"템플릿 생성됨: {name}"}
+    except Exception as e:
+        if "UNIQUE" in str(e) or "PRIMARY" in str(e):
+            raise HTTPException(409, f"template_id 중복: {tid}")
+        raise HTTPException(500, str(e))
+
+
+@router.patch("/templates/{template_id}", summary="📦 Picking 템플릿 수정 [Sprint 2]")
+def update_picking_template(template_id: str, updates: "Dict[str, Any]" = Body(...)):
+    allowed = {"template_name", "customer", "customer_code", "port_loading", "port_discharge",
+               "delivery_terms", "contact_person", "contact_email", "bag_weight_kg",
+               "storage_location", "note", "is_active"}
+    fields = {k: v for k, v in (updates or {}).items() if k in allowed}
+    if not fields:
+        raise HTTPException(400, f"수정 가능 필드 없음. 허용: {sorted(allowed)}")
+    if "is_active" in fields:
+        fields["is_active"] = 1 if fields["is_active"] else 0
+    if "bag_weight_kg" in fields:
+        try: fields["bag_weight_kg"] = int(fields["bag_weight_kg"])
+        except (ValueError, TypeError):
+            raise HTTPException(400, "bag_weight_kg 는 정수")
+    sets = ", ".join(f"{k}=?" for k in fields.keys())
+    values = list(fields.values()) + [template_id]
+    try:
+        con = _pt_db()
+        cur = con.execute(f"UPDATE picking_template SET {sets} WHERE template_id=?", values)
+        if cur.rowcount == 0:
+            con.close()
+            raise HTTPException(404, f"템플릿 없음: {template_id}")
+        con.commit(); con.close()
+        return {"ok": True, "data": {"template_id": template_id, "updated": list(fields.keys())}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@router.delete("/templates/{template_id}", summary="📦 Picking 템플릿 삭제 [Sprint 2]")
+def delete_picking_template(template_id: str):
+    try:
+        con = _pt_db()
+        cur = con.execute("DELETE FROM picking_template WHERE template_id=?", (template_id,))
+        if cur.rowcount == 0:
+            con.close()
+            raise HTTPException(404, f"템플릿 없음: {template_id}")
+        con.commit(); con.close()
+        return {"ok": True, "message": f"삭제됨: {template_id}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 @router.post(
     "/proof-upload",
     summary="📎 OneStop Outbound 근거문서 multi-file 업로드 [Sprint 1-3-E]",

@@ -6847,6 +6847,175 @@
     }, 100);
   };
 
+  /* =====================================================================
+     [Sprint 2] PickingTemplateDialog — v864-2 picking_template_dialog.py 매칭
+     InboundTemplate 패턴 재사용 — 단순 단일 폼 (탭 없음, 한 화면 편집)
+     ===================================================================== */
+  var _ptState = { templates: [], selectedId: null };
+
+  function showPickingTemplateModal() {
+    showDataModal('', '<div style="padding:40px;text-align:center;color:var(--text-muted)">⏳ Picking 템플릿 로딩 중...</div>');
+    apiGet('/api/outbound/templates')
+      .then(function(res){
+        var d = (res && res.data) || {};
+        _ptState.templates = d.items || [];
+        _ptState.selectedId = null;
+        _ptRender();
+      })
+      .catch(function(e){
+        document.getElementById('sqm-modal-content').innerHTML = '<div class="empty">로드 실패: ' + escapeHtml(e.message || String(e)) + '</div>';
+      });
+  }
+  window.showPickingTemplateModal = showPickingTemplateModal;
+
+  function _ptRender() {
+    var sel = _ptState.templates.find(function(t){ return t.template_id === _ptState.selectedId; }) || null;
+    var listHtml = _ptState.templates.length === 0
+      ? '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">📭 템플릿 없음<br><button class="btn btn-primary" onclick="window.ptNew()" style="margin-top:10px">➕ 첫 템플릿 만들기</button></div>'
+      : _ptState.templates.map(function(t){
+          var active = t.template_id === _ptState.selectedId;
+          var bg = active ? 'background:var(--sidebar-active-bg);color:var(--sidebar-active-fg)' : '';
+          var inactive = !t.is_active ? '<span style="font-size:9px;background:var(--bg-hover);color:var(--text-muted);padding:1px 4px;border-radius:6px;margin-left:4px">OFF</span>' : '';
+          return '<div onclick="window.ptSelect(\'' + escapeHtml(t.template_id) + '\')" style="padding:8px 10px;border-bottom:1px solid var(--panel-border);cursor:pointer;font-size:12px;' + bg + '">' +
+            '<div style="font-weight:600">' + escapeHtml(t.template_name) + inactive + '</div>' +
+            '<div style="font-size:10px;color:' + (active ? 'inherit' : 'var(--text-muted)') + '">' + escapeHtml(t.customer || '-') + ' · ' + (t.bag_weight_kg || 500) + 'kg · ' + escapeHtml(t.template_id) + '</div>' +
+            '</div>';
+        }).join('');
+
+    var formHtml = sel ? _ptForm(sel) :
+      '<div style="padding:30px;text-align:center;color:var(--text-muted)"><strong>📦 좌측에서 템플릿 선택</strong><br><br>또는 ➕ 신규 버튼으로 새 템플릿 만들기</div>';
+
+    var html =
+      '<div style="max-width:1000px">' +
+      '  <h2 style="margin:0 0 10px 0">📦 출고 피킹 템플릿 관리</h2>' +
+      '  <div style="display:grid;grid-template-columns:280px 1fr;gap:10px;height:480px">' +
+      '    <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;display:flex;flex-direction:column">' +
+      '      <div style="padding:6px;display:flex;gap:4px;border-bottom:1px solid var(--panel-border)">' +
+      '        <strong style="flex:1;font-size:12px;align-self:center">템플릿 (' + _ptState.templates.length + ')</strong>' +
+      '        <button class="btn" onclick="window.ptNew()" style="padding:2px 8px;font-size:11px">➕ 신규</button>' +
+      '      </div>' +
+      '      <div style="flex:1;overflow-y:auto">' + listHtml + '</div>' +
+      '    </div>' +
+      '    <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:14px;overflow-y:auto">' + formHtml + '</div>' +
+      '  </div>' +
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
+      (sel ? '<button class="btn btn-danger" onclick="window.ptDelete()">🗑️ 삭제</button>' : '') +
+      '    <button class="btn btn-primary" onclick="window.ptSave()">💾 저장</button>' +
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+      '  </div>' +
+      '</div>';
+    document.getElementById('sqm-modal-content').innerHTML = html;
+  }
+
+  function _ptForm(t) {
+    function row(label, id, type, val, opts) {
+      opts = opts || {};
+      if (type === 'textarea') {
+        return '<div style="margin-bottom:8px"><label style="font-weight:600;font-size:12px;display:block;margin-bottom:3px">' + label + '</label>' +
+          '<textarea id="' + id + '" style="width:100%;min-height:60px;padding:6px;background:var(--bg-hover);color:var(--fg);border:1px solid var(--panel-border);border-radius:3px;font-size:12px;resize:vertical">' + escapeHtml(val || '') + '</textarea></div>';
+      }
+      if (type === 'select') {
+        var optsHtml = opts.options.map(function(o){
+          return '<option value="' + escapeHtml(o) + '"' + (val === o ? ' selected' : '') + '>' + escapeHtml(o) + '</option>';
+        }).join('');
+        return '<div style="display:grid;grid-template-columns:130px 1fr;gap:8px;align-items:center;margin-bottom:6px"><label style="font-weight:600;font-size:12px">' + label + '</label>' +
+          '<select id="' + id + '" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' + optsHtml + '</select></div>';
+      }
+      if (type === 'checkbox') {
+        return '<div style="margin:8px 0"><label style="font-weight:600;font-size:12px"><input type="checkbox" id="' + id + '"' + (val ? ' checked' : '') + '> ' + label + '</label></div>';
+      }
+      return '<div style="display:grid;grid-template-columns:130px 1fr;gap:8px;align-items:center;margin-bottom:6px"><label style="font-weight:600;font-size:12px">' + label + '</label>' +
+        '<input type="' + (type || 'text') + '" id="' + id + '" value="' + escapeHtml(val || '') + '"' + (opts.readonly ? ' readonly' : '') +
+        ' placeholder="' + escapeHtml(opts.placeholder || '') + '" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px' + (opts.mono ? ';font-family:Consolas,monospace' : '') + '"></div>';
+    }
+    return row('템플릿 ID', 'pt-tid', 'text', t.template_id, { readonly: !!t.template_id, mono: true }) +
+           row('템플릿 이름 *', 'pt-name', 'text', t.template_name, { placeholder: '예: ACME 표준 출고' }) +
+           row('고객사 *', 'pt-customer', 'text', t.customer, { placeholder: '예: ACME Corp' }) +
+           row('고객 코드', 'pt-cust-code', 'text', t.customer_code, { placeholder: 'C001', mono: true }) +
+           row('출항지', 'pt-port-load', 'text', t.port_loading, { placeholder: 'GWANGYANG, SOUTH KOREA' }) +
+           row('도착지', 'pt-port-disc', 'text', t.port_discharge, { placeholder: '예: SHANGHAI, CHINA' }) +
+           row('Delivery Terms', 'pt-terms', 'select', t.delivery_terms || 'CIF', { options: ['CIF', 'FOB', 'CFR', 'EXW', 'DAP', 'DDP'] }) +
+           row('담당자', 'pt-contact', 'text', t.contact_person, { placeholder: '홍길동' }) +
+           row('담당자 이메일', 'pt-email', 'email', t.contact_email, { placeholder: 'gd.hong@acme.com' }) +
+           row('톤백 단가(kg)', 'pt-bagweight', 'select', String(t.bag_weight_kg || 500), { options: ['500', '1000'] }) +
+           row('보관 위치', 'pt-loc', 'text', t.storage_location, { placeholder: '1001 GY logistics' }) +
+           row('메모', 'pt-note', 'textarea', t.note) +
+           row('사용 중', 'pt-active', 'checkbox', t.is_active != 0);
+  }
+
+  /* 핸들러 */
+  window.ptSelect = function(tid) { _ptState.selectedId = tid; _ptRender(); };
+  window.ptNew = function() {
+    var t = {
+      template_id:   'PT_' + Date.now().toString(36).toUpperCase(),
+      template_name: '',
+      customer:      '',
+      bag_weight_kg: 500,
+      delivery_terms: 'CIF',
+      port_loading: 'GWANGYANG, SOUTH KOREA',
+      storage_location: '1001 GY logistics',
+      is_active:     1,
+    };
+    _ptState.templates.unshift(t);
+    _ptState.selectedId = t.template_id;
+    _ptRender();
+  };
+  window.ptSave = function() {
+    var tid = (document.getElementById('pt-tid') || {}).value || '';
+    var name = (document.getElementById('pt-name') || {}).value || '';
+    var customer = (document.getElementById('pt-customer') || {}).value || '';
+    if (!tid || !name.trim() || !customer.trim()) { showToast('error', 'ID/이름/고객사 필수'); return; }
+    var payload = {
+      template_id:      tid,
+      template_name:    name.trim(),
+      customer:         customer.trim(),
+      customer_code:    (document.getElementById('pt-cust-code') || {}).value || '',
+      port_loading:     (document.getElementById('pt-port-load') || {}).value || 'GWANGYANG, SOUTH KOREA',
+      port_discharge:   (document.getElementById('pt-port-disc') || {}).value || '',
+      delivery_terms:   (document.getElementById('pt-terms') || {}).value || 'CIF',
+      contact_person:   (document.getElementById('pt-contact') || {}).value || '',
+      contact_email:    (document.getElementById('pt-email') || {}).value || '',
+      bag_weight_kg:    parseInt((document.getElementById('pt-bagweight') || {}).value || 500, 10),
+      storage_location: (document.getElementById('pt-loc') || {}).value || '1001 GY logistics',
+      note:             (document.getElementById('pt-note') || {}).value || '',
+      is_active:        (document.getElementById('pt-active') || {}).checked,
+    };
+    apiPost('/api/outbound/templates', payload)
+      .then(function(res){
+        if (res && res.ok) {
+          showToast('success', '✅ 신규 저장: ' + payload.template_name);
+          showPickingTemplateModal();
+        } else throw new Error((res && (res.detail || res.error)) || 'fail');
+      })
+      .catch(function(e){
+        if (String(e.message || '').indexOf('409') !== -1 || String(e.message || '').indexOf('중복') !== -1) {
+          fetch(API + '/api/outbound/templates/' + encodeURIComponent(tid), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }).then(function(r){ return r.json().then(function(b){ return { ok: r.ok, body: b }; }); })
+            .then(function(res){
+              if (res.ok && res.body.ok) { showToast('success', '💾 수정됨'); showPickingTemplateModal(); }
+              else showToast('error', '저장 실패');
+            }).catch(function(err){ showToast('error', err.message); });
+        } else {
+          showToast('error', '저장 실패: ' + e.message);
+        }
+      });
+  };
+  window.ptDelete = function() {
+    var tid = _ptState.selectedId;
+    if (!tid) return;
+    var t = _ptState.templates.find(function(x){ return x.template_id === tid; });
+    if (!confirm('🗑️ 삭제\n\n' + (t ? t.template_name : tid) + '\n계속?')) return;
+    fetch(API + '/api/outbound/templates/' + encodeURIComponent(tid), { method: 'DELETE' })
+      .then(function(r){ return r.json().then(function(b){ return { ok: r.ok, body: b }; }); })
+      .then(function(res){
+        if (res.ok && res.body.ok) { showToast('success', '삭제됨'); showPickingTemplateModal(); }
+        else showToast('error', '삭제 실패');
+      });
+  };
+
   /* ===================================================
      9. ALERTS + STATUSBAR
      =================================================== */
@@ -7200,6 +7369,8 @@
       if (conf.u === 'global-search') { showGlobalSearchModal(); return; }
       /* [Sprint 2-A] Inbound Template */
       if (conf.u === 'inbound-template') { showInboundTemplateModal(); return; }
+      /* [Sprint 2] Picking Template */
+      if (conf.u === 'picking-template') { showPickingTemplateModal(); return; }
       dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
       renderPage(conf.u);
       return;
