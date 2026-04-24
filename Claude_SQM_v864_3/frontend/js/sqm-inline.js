@@ -7173,6 +7173,138 @@
     showToast('success', '📥 ' + a.download + ' (' + _ihState.rows.length + ' LOTs)');
   };
 
+  /* =====================================================================
+     [Sprint 2-O] DNCheckDialog — DN 교차검증 (Sales Order vs SQM DB)
+     v864-2: dialogs/dn_cross_check_dialog.py (192 lines)
+     백엔드 reuse: GET /api/q3/dn-cross-check
+     ===================================================================== */
+  function showDnCrossCheckModal() {
+    showDataModal('', '<div style="padding:40px;text-align:center;color:var(--text-muted)">⏳ DN 교차검증 조회 중...</div>');
+    apiGet('/api/q3/dn-cross-check')
+      .then(function(res){
+        if (!res || !res.ok) throw new Error((res && res.error) || '조회 실패');
+        var d = res.data || {};
+        var doNoInv = d.do_without_inventory || [];
+        var invNoDo = d.inventory_without_do || [];
+        var matched = d.matched_count || 0;
+        var issues = d.issues_count || 0;
+
+        /* 좌측: DO있음/재고없음 */
+        var leftRows = doNoInv.length === 0
+          ? '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--success)">✅ 없음</td></tr>'
+          : doNoInv.map(function(r){
+              return '<tr style="background:rgba(244,67,54,.08)">' +
+                '<td class="mono-cell" style="color:var(--accent)">' + escapeHtml(r.lot_no || '-') + '</td>' +
+                '<td class="mono-cell">' + escapeHtml(r.do_no || '-') + '</td>' +
+                '<td class="mono-cell">' + escapeHtml(r.bl_no || '-') + '</td>' +
+                '<td>' + escapeHtml(r.vessel || '-') + '</td>' +
+                '<td class="mono-cell">' + escapeHtml((r.arrival_date || '').slice(0,10)) + '</td>' +
+                '<td class="mono-cell" style="text-align:right">' + ((r.gross_weight_kg || 0) / 1000).toFixed(3) + '</td>' +
+                '</tr>';
+            }).join('');
+
+        /* 우측: 재고있음/DO없음 */
+        var rightRows = invNoDo.length === 0
+          ? '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--success)">✅ 없음</td></tr>'
+          : invNoDo.map(function(r){
+              return '<tr style="background:rgba(255,167,38,.1);cursor:pointer" ondblclick="window.gsGoLot(\'' + escapeHtml(r.lot_no) + '\')">' +
+                '<td class="mono-cell" style="color:var(--accent)">' + escapeHtml(r.lot_no || '-') + '</td>' +
+                '<td class="mono-cell">' + escapeHtml(r.sap_no || '-') + '</td>' +
+                '<td class="mono-cell">' + escapeHtml(r.bl_no || '-') + '</td>' +
+                '<td>' + escapeHtml(r.product || '-') + '</td>' +
+                '<td><span class="tag">' + escapeHtml(r.status || '-') + '</span></td>' +
+                '<td class="mono-cell" style="text-align:right">' + ((r.current_weight || 0) / 1000).toFixed(3) + '</td>' +
+                '</tr>';
+            }).join('');
+
+        var statusIcon = issues === 0 ? '✅' : '⚠️';
+        var statusColor = issues === 0 ? 'var(--success)' : 'var(--warning)';
+        var statusText = issues === 0 ? '교차검증 통과 — 불일치 없음' : '⚠️ 불일치 ' + issues + '건 발견';
+
+        var html =
+          '<div style="max-width:1200px">' +
+          '  <h2 style="margin:0 0 8px 0">🔁 DN 교차검증 (Sales Order vs SQM DB)</h2>' +
+          /* 통계 카드 */
+          '  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">' +
+          '    <div style="background:var(--panel);border-left:4px solid var(--success);padding:10px 12px;border-radius:4px">' +
+          '      <div style="font-size:11px;color:var(--text-muted);font-weight:600">✅ 매칭 (정상)</div>' +
+          '      <div style="font-size:22px;font-weight:700;color:var(--success);margin-top:2px">' + matched + ' LOTs</div>' +
+          '    </div>' +
+          '    <div style="background:var(--panel);border-left:4px solid var(--danger);padding:10px 12px;border-radius:4px">' +
+          '      <div style="font-size:11px;color:var(--text-muted);font-weight:600">🔴 DO 있음 / 재고 없음</div>' +
+          '      <div style="font-size:22px;font-weight:700;color:var(--danger);margin-top:2px">' + doNoInv.length + ' LOTs</div>' +
+          '    </div>' +
+          '    <div style="background:var(--panel);border-left:4px solid var(--warning);padding:10px 12px;border-radius:4px">' +
+          '      <div style="font-size:11px;color:var(--text-muted);font-weight:600">🟡 재고 있음 / DO 없음</div>' +
+          '      <div style="font-size:22px;font-weight:700;color:var(--warning);margin-top:2px">' + invNoDo.length + ' LOTs</div>' +
+          '    </div>' +
+          '  </div>' +
+          /* 상태 메시지 */
+          '  <div style="padding:8px 12px;background:rgba(' + (issues === 0 ? '102,187,106' : '255,167,38') + ',.1);border-left:3px solid ' + statusColor + ';border-radius:4px;margin-bottom:10px;font-size:13px">' +
+          statusIcon + ' <strong style="color:' + statusColor + '">' + statusText + '</strong>' +
+          '  </div>' +
+          /* 사이드-바이-사이드 테이블 */
+          '  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+          '    <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px">' +
+          '      <div style="padding:8px 10px;background:rgba(244,67,54,.1);font-weight:700;font-size:12px;color:var(--danger)">🔴 DO 있는데 재고 없는 LOT (' + doNoInv.length + ')</div>' +
+          '      <div style="max-height:340px;overflow-y:auto">' +
+          '        <table class="data-table" style="font-size:11px"><thead><tr>' +
+          '          <th>LOT</th><th>DO</th><th>BL</th><th>Vessel</th><th>도착일</th><th style="text-align:right">중량(MT)</th>' +
+          '        </tr></thead><tbody>' + leftRows + '</tbody></table>' +
+          '      </div>' +
+          '    </div>' +
+          '    <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px">' +
+          '      <div style="padding:8px 10px;background:rgba(255,167,38,.1);font-weight:700;font-size:12px;color:var(--warning)">🟡 재고 있는데 DO 없는 LOT (' + invNoDo.length + ') — 더블클릭 LOT 상세</div>' +
+          '      <div style="max-height:340px;overflow-y:auto">' +
+          '        <table class="data-table" style="font-size:11px"><thead><tr>' +
+          '          <th>LOT</th><th>SAP</th><th>BL</th><th>Product</th><th>상태</th><th style="text-align:right">잔량(MT)</th>' +
+          '        </tr></thead><tbody>' + rightRows + '</tbody></table>' +
+          '      </div>' +
+          '    </div>' +
+          '  </div>' +
+          /* 액션 */
+          '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
+          '    <button class="btn" onclick="window.dnRefresh()">🔄 새로고침</button>' +
+          '    <button class="btn" onclick="window.dnExportCsv()">📥 Excel 저장</button>' +
+          '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+          '  </div>' +
+          '</div>';
+        document.getElementById('sqm-modal-content').innerHTML = html;
+        window._dnLastResult = d;
+      })
+      .catch(function(e){
+        document.getElementById('sqm-modal-content').innerHTML = '<div class="empty" style="padding:30px">조회 실패: ' + escapeHtml(e.message || String(e)) + '</div>';
+      });
+  }
+  window.showDnCrossCheckModal = showDnCrossCheckModal;
+  window.dnRefresh = function() { showDnCrossCheckModal(); };
+  window.dnExportCsv = function() {
+    var d = window._dnLastResult || {};
+    var headers = ['type','lot_no','do_no','bl_no','sap_no','product','vessel','status','arrival_or_inbound','weight_kg'];
+    function csvEsc(v){ var s = String(v == null ? '' : v); if (/[,"\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"'; return s; }
+    var lines = [headers.join(',')];
+    (d.do_without_inventory || []).forEach(function(r){
+      lines.push([
+        'DO있음_재고없음', csvEsc(r.lot_no), csvEsc(r.do_no), csvEsc(r.bl_no), '', '', csvEsc(r.vessel),
+        '', csvEsc(r.arrival_date), csvEsc(r.gross_weight_kg)
+      ].join(','));
+    });
+    (d.inventory_without_do || []).forEach(function(r){
+      lines.push([
+        '재고있음_DO없음', csvEsc(r.lot_no), '', csvEsc(r.bl_no), csvEsc(r.sap_no), csvEsc(r.product), '',
+        csvEsc(r.status), csvEsc(r.inbound_date), csvEsc(r.current_weight)
+      ].join(','));
+    });
+    var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url;
+    var ts = new Date();
+    a.download = 'dn_cross_check_' + ts.getFullYear() + String(ts.getMonth()+1).padStart(2,'0') + String(ts.getDate()).padStart(2,'0') + '_' + String(ts.getHours()).padStart(2,'0') + String(ts.getMinutes()).padStart(2,'0') + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('success', '📥 ' + a.download);
+  };
+
   window.soHandleFile = function(file) {
     if (!file) return;
     var fnEl = document.getElementById('so-filename');
@@ -7334,7 +7466,7 @@
     'onInvoiceGenerate': {m:'GET',  u:'/api/action3/export-invoice-excel',         lbl:'거래명세서 생성'},
     'onDetailOfOutbound': {m:'GET', u:'/api/q2/detail-outbound',                 lbl:'Detail of Outbound'},
     'onSalesOrderDN':    {m:'GET',  u:'/api/q3/sales-order-dn',                  lbl:'Sales Order DN'},
-    'onDnCrossCheck':    {m:'GET',  u:'/api/q3/dn-cross-check',                  lbl:'DN 교차검증'},
+    'onDnCrossCheck':    {m:'JS',   u:'dn-cross-check',                         lbl:'DN 교차검증'},  /* [Sprint 2-O] */
     'onLotDetailPdf':    {m:'GET',  u:'/api/action/lot-detail',                  lbl:'LOT 상세'},
     'onLotListExcel':    {m:'GET',  u:'/api/action/export-lot-excel',             lbl:'LOT 리스트 Excel'},
     'onTonbagListExcel': {m:'GET',  u:'/api/action2/export-tonbag-excel',          lbl:'톤백리스트 Excel'},
@@ -7593,6 +7725,8 @@
       if (conf.u === 'sales-order-upload') { showSalesOrderUploadModal(); return; }
       /* [Sprint 2-Q] Inbound History */
       if (conf.u === 'inbound-history') { showInboundHistoryModal(); return; }
+      /* [Sprint 2-O] DN Cross Check */
+      if (conf.u === 'dn-cross-check') { showDnCrossCheckModal(); return; }
       dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
       renderPage(conf.u);
       return;
