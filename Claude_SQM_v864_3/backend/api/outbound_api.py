@@ -8,10 +8,14 @@ import logging
 import os
 import tempfile
 import csv as _csv
+import shutil
+import uuid
+from datetime import datetime, timedelta
 from io import StringIO, BytesIO
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Body
+from fastapi import APIRouter, HTTPException, UploadFile, File, Body, Form
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -569,4 +573,167 @@ async def onestop_scan_parse(file: UploadFile = File(...)):
             "actual_count": sum(1 for r in rows if r.get("actual_kg") is not None),
         },
         "message": f"파싱 완료 — {len(rows)}행 추출",
+    }
+
+
+# ────────────────────────────────────────────────────────────
+# [Sprint 1-3-E] Proof Documents 저장소 + 90일 자동 정리
+#
+# v864-2: data/proof_docs/YYYY-MM-DD/ 에 근거문서 저장 + 90일 보존
+# 프론트는 출고 확정(ooConfirmOutbound) 직후 이 endpoint 호출
+# ────────────────────────────────────────────────────────────
+PROOF_DOCS_ROOT = Path("data") / "proof_docs"
+PROOF_DOCS_RETENTION_DAYS = 90
+
+
+def _cleanup_old_proof_docs() -> Dict[str, Any]:
+    """90일 이상된 proof_docs/{YYYY-MM-DD}/ 폴더 자동 정리. 시작 시 1회 호출."""
+    if not PROOF_DOCS_ROOT.exists():
+        return {"removed": 0, "skipped": 0}
+    cutoff = datetime.now() - timedelta(days=PROOF_DOCS_RETENTION_DAYS)
+    cutoff_str = cutoff.strftime("%Y-%m-%d")
+    removed, skipped = 0, 0
+    for date_dir in PROOF_DOCS_ROOT.iterdir():
+        if not date_dir.is_dir():
+            continue
+        # 폴더명이 YYYY-MM-DD 형식인지 검증
+        try:
+            datetime.strptime(date_dir.name, "%Y-%m-%d")
+        except ValueError:
+            skipped += 1
+            continue
+        if date_dir.name < cutoff_str:
+            try:
+                shutil.rmtree(date_dir)
+                removed += 1
+                logger.info(f"[proof-docs] cleanup: removed {date_dir}")
+            except Exception as e:
+                logger.warning(f"[proof-docs] cleanup failed for {date_dir}: {e}")
+    return {"removed": removed, "skipped": skipped, "cutoff_date": cutoff_str}
+
+
+# 모듈 import 시 1회 cleanup (앱 시작 시점)
+try:
+    _cleanup_result = _cleanup_old_proof_docs()
+    logger.info(f"[proof-docs] startup cleanup: {_cleanup_result}")
+except Exception as _e:
+    logger.warning(f"[proof-docs] startup cleanup error: {_e}")
+
+
+@router.post(
+    "/proof-upload",
+    summary="📎 OneStop Outbound 근거문서 multi-file 업로드 [Sprint 1-3-E]",
+)
+async def proof_upload(
+    files: List[UploadFile] = File(...),
+    batch_id: Optional[str] = Form(None),
+):
+    """
+    근거문서 multi-file 업로드.
+
+    저장 경로: `data/proof_docs/YYYY-MM-DD/{batch_id}/`
+    파일명 sanitize (알파벳/숫자/`. _ -` 만 유지) + 중복 시 _N 접미사
+    90일 이상된 폴더는 앱 시작 시 자동 삭제됨.
+    """
+    if not files:
+        raise HTTPException(400, "파일 없음")
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    if not batch_id:
+        batch_id = str(uuid.uuid4())[:8]
+
+    target_dir = PROOF_DOCS_ROOT / today / batch_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    saved: List[Dict[str, Any]] = []
+    failed: List[Dict[str, Any]] = []
+    for f in files:
+        original = f.filename or "unknown"
+        # 안전한 파일명 (한글 보존, 기호만 제거)
+        safe_chars = []
+        for c in original:
+            if c.isalnum() or c in "._- ()[]가-힣":
+                safe_chars.append(c)
+            elif '\uac00' <= c <= '\ud7af' or '\u3131' <= c <= '\u3163':  # 한글
+                safe_chars.append(c)
+            else:
+                safe_chars.append("_")
+        safe_name = "".join(safe_chars).strip() or f"file_{len(saved)+1}"
+        target = target_dir / safe_name
+        # 중복 회피
+        if target.exists():
+            stem = target.stem
+            ext = target.suffix
+            counter = 1
+            while target.exists():
+                target = target_dir / f"{stem}_{counter}{ext}"
+                counter += 1
+        try:
+            content = await f.read()
+            target.write_bytes(content)
+            saved.append({
+                "original":  original,
+                "saved_as":  str(target.relative_to(PROOF_DOCS_ROOT)).replace("\\", "/"),
+                "size":      len(content),
+            })
+        except Exception as e:
+            logger.error(f"[proof-upload] {original} 저장 실패: {e}")
+            failed.append({"original": original, "reason": str(e)})
+
+    return {
+        "ok": True,
+        "data": {
+            "batch_id":     batch_id,
+            "date":         today,
+            "saved_count":  len(saved),
+            "failed_count": len(failed),
+            "files":        saved,
+            "errors":       failed,
+            "directory":    str(target_dir).replace("\\", "/"),
+            "retention_days": PROOF_DOCS_RETENTION_DAYS,
+        },
+        "message": f"{len(saved)}개 근거문서 저장됨 (batch={batch_id}, dir={today})",
+    }
+
+
+@router.get(
+    "/proof-cleanup-status",
+    summary="📎 Proof docs 보존 정책 상태 조회 [Sprint 1-3-E]",
+)
+def proof_cleanup_status():
+    """현재 proof_docs 디렉터리 상태 + 보존 정책 정보."""
+    if not PROOF_DOCS_ROOT.exists():
+        return {
+            "ok": True,
+            "data": {
+                "exists": False,
+                "retention_days": PROOF_DOCS_RETENTION_DAYS,
+                "directory": str(PROOF_DOCS_ROOT),
+            },
+        }
+    date_dirs = []
+    total_files, total_size = 0, 0
+    for date_dir in sorted(PROOF_DOCS_ROOT.iterdir()):
+        if not date_dir.is_dir():
+            continue
+        sub_count = sum(1 for _ in date_dir.rglob("*") if _.is_file())
+        sub_size = sum(p.stat().st_size for p in date_dir.rglob("*") if p.is_file())
+        date_dirs.append({
+            "date": date_dir.name,
+            "file_count": sub_count,
+            "size_bytes": sub_size,
+        })
+        total_files += sub_count
+        total_size += sub_size
+    return {
+        "ok": True,
+        "data": {
+            "exists":         True,
+            "retention_days": PROOF_DOCS_RETENTION_DAYS,
+            "directory":      str(PROOF_DOCS_ROOT).replace("\\", "/"),
+            "date_count":     len(date_dirs),
+            "total_files":    total_files,
+            "total_size_bytes": total_size,
+            "dates":          date_dirs[-30:],  # 최근 30일만
+        },
     }

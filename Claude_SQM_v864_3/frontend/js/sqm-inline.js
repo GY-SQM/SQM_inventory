@@ -3104,16 +3104,43 @@
     Promise.all(promises).then(function(results){
       var totalOk = results.reduce(function(s, r){ return s + (r.ok ? r.confirmed : 0); }, 0);
       var totalFail = results.filter(function(r){ return !r.ok; }).length;
-      _ooState.completedItems.push({
-        timestamp: new Date().toISOString(),
-        results:   results,
-        total_ok:  totalOk,
+      var batchId = 'oo_' + Date.now().toString(36);
+      var record = {
+        timestamp:  new Date().toISOString(),
+        batch_id:   batchId,
+        results:    results,
+        total_ok:   totalOk,
         total_fail: totalFail,
-        customer:  _ooState.customer,
-        sale_ref:  _ooState.saleRef,
-      });
+        customer:   _ooState.customer,
+        sale_ref:   _ooState.saleRef,
+        proof_dir:  null,  /* proof-upload 후 채워짐 */
+      };
+      _ooState.completedItems.push(record);
       _ooUpdateT4Stats();
       _ooRenderT4History();
+
+      /* [Sprint 1-3-E] 출고 성공 시 근거문서 업로드 */
+      if (totalFail === 0 && _ooState.proofDocs.length > 0) {
+        var pForm = new FormData();
+        pForm.append('batch_id', batchId);
+        _ooState.proofDocs.forEach(function(f){ pForm.append('files', f, f.name); });
+        var pXhr = new XMLHttpRequest();
+        pXhr.open('POST', API + '/api/outbound/proof-upload');
+        pXhr.onload = function(){
+          var pBody; try { pBody = JSON.parse(pXhr.responseText); } catch(e){ pBody = null; }
+          if (pXhr.status >= 200 && pXhr.status < 300 && pBody && pBody.ok) {
+            var pd = pBody.data || {};
+            record.proof_dir = pd.directory;
+            _ooRenderT4History();
+            showToast('success', '📎 근거문서 ' + pd.saved_count + '개 저장됨 (' + pd.date + '/' + batchId + ')');
+          } else {
+            showToast('warn', '근거문서 저장 실패 (출고는 완료됨) — ' + ((pBody && pBody.detail) || pXhr.status));
+          }
+        };
+        pXhr.onerror = function(){ showToast('warn', '근거문서 저장 네트워크 에러'); };
+        pXhr.send(pForm);
+      }
+
       if (btn) {
         btn.textContent = totalFail === 0 ? '✅ 출고 완료 (' + totalOk + '개)' : '⚠️ 부분 실패 (' + totalOk + '/' + (totalOk + totalFail) + ')';
       }
@@ -3141,6 +3168,9 @@
       var lotsSummary = item.results.map(function(r){
         return '<span style="color:' + (r.ok ? 'var(--success)' : 'var(--danger)') + '">' + escapeHtml(r.lot) + '×' + r.count + (r.ok ? '' : ' ❌') + '</span>';
       }).join(', ');
+      var proofBadge = item.proof_dir
+        ? ' <span class="tag" style="background:rgba(66,165,245,.2);color:#42a5f5;font-size:9px" title="' + escapeHtml(item.proof_dir) + '">📎 ' + (item.proof_dir.split('/').pop() || 'docs') + '</span>'
+        : '';
       return '<tr>' +
         '<td style="text-align:right">' + (i+1) + '</td>' +
         '<td class="mono-cell">' + timeStr + '</td>' +
@@ -3148,7 +3178,7 @@
         '<td class="mono-cell" style="text-align:right">' + (item.total_ok + item.total_fail) + '</td>' +
         '<td>' + escapeHtml(item.customer || '-') + '</td>' +
         '<td class="mono-cell">' + escapeHtml(item.sale_ref || '-') + '</td>' +
-        '<td>' + (item.total_fail === 0 ? '<span style="color:var(--success)">✅ OK</span>' : '<span style="color:var(--warning)">⚠️ ' + item.total_fail + ' 실패</span>') + '</td>' +
+        '<td>' + (item.total_fail === 0 ? '<span style="color:var(--success)">✅ OK</span>' : '<span style="color:var(--warning)">⚠️ ' + item.total_fail + ' 실패</span>') + proofBadge + '</td>' +
         '</tr>';
     }).join('');
     el.innerHTML =
