@@ -5831,18 +5831,236 @@
     });
   }
 
+  /* =====================================================================
+     [Sprint 1-5] LOT Detail 3탭 다이얼로그 — v864-2 lot_detail_dialog.py 매칭
+     ───────────────────────────────────────────────────────────────────────
+     Tab 1: 📦 톤백 현황 (9 cols)
+     Tab 2: 📋 이동 이력 (8 cols, 유형 아이콘)
+     Tab 3: 📊 Allocation·배정 (LOT Allocation audit)
+     ===================================================================== */
+  var _lotDetailState = { lotNo: null, currentTab: 1, data: null, allocations: [] };
+
   window.showLotDetail = function(lotNo) {
     if (!lotNo) return;
-    showDataModal('LOT Detail: '+lotNo,'<div style="padding:20px;text-align:center">Loading...</div>');
-    apiGet('/api/action/lot-detail/'+encodeURIComponent(lotNo)).then(function(res){
-      var d=res.data||res||{};
-      var html='<table class="data-table"><tbody>'+Object.entries(d).map(function(kv){
-        return '<tr><td style="font-weight:600;width:40%">'+escapeHtml(kv[0])+'</td><td>'+escapeHtml(String(kv[1]))+'</td></tr>';
-      }).join('')+'</tbody></table>';
-      document.getElementById('sqm-modal-content').innerHTML='<h2 style="margin-bottom:16px">LOT Detail: '+escapeHtml(lotNo)+'</h2>'+html;
-    }).catch(function(e){
-      document.getElementById('sqm-modal-content').innerHTML='<h2>LOT Detail: '+escapeHtml(lotNo)+'</h2><div class="empty">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
+    _lotDetailState.lotNo = lotNo;
+    _lotDetailState.currentTab = 1;
+    showDataModal('', '<div style="padding:40px;text-align:center;color:var(--text-muted)">⏳ LOT 상세 로딩 중...</div>');
+
+    /* 병렬 fetch: lot-detail + allocation-detail */
+    Promise.all([
+      apiGet('/api/action/lot-detail/' + encodeURIComponent(lotNo)).catch(function(e){ return { ok:false, error:String(e) }; }),
+      apiGet('/api/q/allocation-detail/' + encodeURIComponent(lotNo)).catch(function(){ return { ok:false }; }),
+    ]).then(function(results){
+      var lotRes = results[0], allocRes = results[1];
+      if (!lotRes || lotRes.ok === false) {
+        document.getElementById('sqm-modal-content').innerHTML =
+          '<h2>LOT Detail: ' + escapeHtml(lotNo) + '</h2>' +
+          '<div class="empty" style="padding:30px">조회 실패: ' + escapeHtml(lotRes.error || '데이터 없음') + '</div>';
+        return;
+      }
+      _lotDetailState.data = lotRes.data || {};
+      _lotDetailState.allocations = (allocRes && allocRes.data && (allocRes.data.items || allocRes.data.rows)) || extractRows(allocRes) || [];
+      _lotDetailRender();
     });
+  };
+
+  function _lotDetailRender() {
+    var d = _lotDetailState.data || {};
+    var lot = d.lot || {};
+    var tonbags = d.tonbags || [];
+    var movements = d.movements || [];
+    var summary = d.summary || {};
+    var stats = d.tb_stats || [];
+    var lotNo = _lotDetailState.lotNo;
+
+    /* 톤백 상태 집계 헤더 카드 */
+    var statCards = ['AVAILABLE', 'RESERVED', 'PICKED', 'SOLD', 'OUTBOUND', 'RETURN'].map(function(s){
+      var stat = stats.find(function(x){ return (x.status || '').toUpperCase() === s; });
+      var cnt = stat ? stat.cnt : 0;
+      var mt  = stat ? (stat.mt || 0) : 0;
+      var color = s === 'AVAILABLE' ? '#66bb6a' : s === 'RESERVED' ? '#ffa726' : s === 'PICKED' ? '#42a5f5' : (s === 'SOLD' || s === 'OUTBOUND') ? '#ec407a' : '#9e9e9e';
+      return '<div style="background:var(--panel);border:1px solid var(--panel-border);border-left:3px solid ' + color + ';border-radius:4px;padding:6px 10px;font-size:11px;min-width:90px">' +
+             '<div style="color:' + color + ';font-weight:700">' + s + '</div>' +
+             '<div style="color:var(--fg);font-size:14px;font-weight:700">' + cnt + '개</div>' +
+             '<div style="color:var(--text-muted)">' + mt.toFixed(3) + ' MT</div>' +
+             '</div>';
+    }).join('');
+
+    /* Tab 1: 톤백 현황 (9 cols) */
+    var tab1Html = '';
+    if (!tonbags.length) {
+      tab1Html = '<div style="padding:40px;text-align:center;color:var(--text-muted)">📭 톤백 없음</div>';
+    } else {
+      var tonbagRows = tonbags.map(function(t, i){
+        var st = (t.status || '').toUpperCase();
+        var rowClass = st === 'AVAILABLE' ? 'oo-row-avail' :
+                       st === 'PICKED' ? 'oo-row-picked' :
+                       (st === 'SOLD' || st === 'OUTBOUND') ? 'oo-row-shipped' :
+                       st === 'RESERVED' ? 'oo-row-reserved' : '';
+        var rowStyle = rowClass === 'oo-row-avail' ? 'background:rgba(102,187,106,.06)' :
+                       rowClass === 'oo-row-picked' ? 'background:rgba(66,165,245,.08)' :
+                       rowClass === 'oo-row-shipped' ? 'background:rgba(236,64,122,.06)' :
+                       rowClass === 'oo-row-reserved' ? 'background:rgba(255,167,38,.08)' : '';
+        return '<tr style="' + rowStyle + '">' +
+          '<td style="text-align:right">' + (i+1) + '</td>' +
+          '<td class="mono-cell" style="color:var(--accent);font-weight:600">' + escapeHtml(t.sub_lt || t.tonbag_no || '-') + '</td>' +
+          '<td class="mono-cell" style="text-align:right">' + (t.weight != null ? Number(t.weight).toFixed(2) : '-') + '</td>' +
+          '<td><span class="tag">' + escapeHtml(t.status || '-') + '</span></td>' +
+          '<td>' + escapeHtml(t.tonbag_no || '-') + '</td>' +
+          '<td>' + escapeHtml(t.location || '-') + '</td>' +
+          '<td>' + escapeHtml(t.picked_to || '-') + '</td>' +
+          '<td class="mono-cell">' + escapeHtml((t.picked_date || '').slice(0, 10)) + '</td>' +
+          '<td class="mono-cell">' + escapeHtml((t.outbound_date || '').slice(0, 10)) + '</td>' +
+          '</tr>';
+      }).join('');
+      tab1Html =
+        '<table class="data-table" style="font-size:11px"><thead><tr>' +
+        '<th>No.</th><th>톤백#</th><th style="text-align:right">중량(kg)</th><th>상태</th><th>구분</th><th>위치</th><th>출고처</th><th>출고지정일</th><th>출고완료일</th>' +
+        '</tr></thead><tbody>' + tonbagRows + '</tbody></table>';
+    }
+
+    /* Tab 2: 이동 이력 (8 cols, 유형 아이콘) */
+    var tab2Html = '';
+    if (!movements.length) {
+      tab2Html = '<div style="padding:40px;text-align:center;color:var(--text-muted)">📭 이동 이력 없음</div>';
+    } else {
+      var mvIcon = function(t){
+        var s = (t || '').toUpperCase();
+        if (s.indexOf('INBOUND') !== -1)  return '📥';
+        if (s.indexOf('OUTBOUND') !== -1) return '📤';
+        if (s.indexOf('RETURN') !== -1)   return '🔄';
+        if (s.indexOf('ADJUST') !== -1)   return '⚙️';
+        if (s.indexOf('MOVE') !== -1)     return '🔀';
+        if (s.indexOf('PICK') !== -1)     return '🚛';
+        return '📋';
+      };
+      /* 이전/이후 잔량은 백엔드에 없으면 누적 계산 */
+      var prevBalance = 0;
+      var movementRows = movements.slice().reverse().map(function(m){
+        var qty = Number(m.qty_kg) || 0;
+        var sign = String(m.movement_type || '').indexOf('OUTBOUND') !== -1 || String(m.movement_type || '').indexOf('PICK') !== -1 ? -1 : 1;
+        prevBalance += qty * sign;
+        return Object.assign({}, m, { running_balance: prevBalance });
+      }).reverse();
+      var rows2 = movementRows.map(function(m, i){
+        var dt = m.movement_date ? new Date(m.movement_date).toLocaleString('ko-KR') : '-';
+        return '<tr>' +
+          '<td style="text-align:right">' + (i+1) + '</td>' +
+          '<td>' + mvIcon(m.movement_type) + ' ' + escapeHtml(m.movement_type || '-') + '</td>' +
+          '<td class="mono-cell" style="font-size:10px">' + escapeHtml(dt) + '</td>' +
+          '<td class="mono-cell" style="text-align:right">' + (m.qty_kg != null ? Number(m.qty_kg).toFixed(2) : '-') + '</td>' +
+          '<td class="mono-cell" style="text-align:right;color:var(--text-muted)">-</td>' +  /* 이전잔량 */
+          '<td class="mono-cell" style="text-align:right">' + Number(m.running_balance).toFixed(2) + '</td>' +
+          '<td>' + escapeHtml(m.customer || m.actor || '-') + '</td>' +
+          '<td>' + escapeHtml(m.remarks || '-') + '</td>' +
+          '</tr>';
+      }).join('');
+      tab2Html =
+        '<table class="data-table" style="font-size:11px"><thead><tr>' +
+        '<th>No.</th><th>유형</th><th>일시</th><th style="text-align:right">수량(kg)</th><th style="text-align:right">이전잔량</th><th style="text-align:right">이후잔량</th><th>참조</th><th>비고</th>' +
+        '</tr></thead><tbody>' + rows2 + '</tbody></table>';
+    }
+
+    /* Tab 3: Allocation·배정 */
+    var tab3Html = '';
+    var allocs = _lotDetailState.allocations || [];
+    if (!allocs.length) {
+      tab3Html = '<div style="padding:40px;text-align:center;color:var(--text-muted)">📭 Allocation 정보 없음</div>';
+    } else {
+      var rows3 = allocs.map(function(a, i){
+        return '<tr>' +
+          '<td style="text-align:right">' + (i+1) + '</td>' +
+          '<td class="mono-cell">' + escapeHtml(a.tonbag_id || a.sub_lt || '-') + '</td>' +
+          '<td class="mono-cell" style="text-align:right">' + (a.weight != null ? Number(a.weight).toFixed(2) : '-') + '</td>' +
+          '<td>' + escapeHtml(a.location || '-') + '</td>' +
+          '<td><span class="tag">' + escapeHtml(a.status || '-') + '</span></td>' +
+          '<td class="mono-cell">' + escapeHtml(a.plan_date || a.allocated_date || a.outbound_date || '-') + '</td>' +
+          '<td>' + escapeHtml(a.customer || a.sold_to || '-') + '</td>' +
+          '<td class="mono-cell">' + escapeHtml(a.sale_ref || '-') + '</td>' +
+          '</tr>';
+      }).join('');
+      tab3Html =
+        '<table class="data-table" style="font-size:11px"><thead><tr>' +
+        '<th>No.</th><th>톤백 ID</th><th style="text-align:right">중량(kg)</th><th>위치</th><th>상태</th><th>배정일</th><th>고객</th><th>Sale Ref</th>' +
+        '</tr></thead><tbody>' + rows3 + '</tbody></table>';
+    }
+
+    /* 메인 HTML */
+    var html =
+      '<div style="max-width:1100px">' +
+      '  <h2 style="margin:0 0 8px 0">🔖 LOT 상세 추적 — <span style="color:var(--accent);font-family:Consolas,monospace">' + escapeHtml(lotNo) + '</span></h2>' +
+      /* 헤더 정보 */
+      '  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;font-size:12px">' +
+      '    <div><span style="color:var(--text-muted)">제품:</span> <strong>' + escapeHtml(lot.product || '-') + '</strong></div>' +
+      '    <div><span style="color:var(--text-muted)">SAP:</span> <span class="mono-cell">' + escapeHtml(lot.sap_no || '-') + '</span></div>' +
+      '    <div><span style="color:var(--text-muted)">BL:</span> <span class="mono-cell">' + escapeHtml(lot.bl_no || '-') + '</span></div>' +
+      '    <div><span style="color:var(--text-muted)">컨테이너:</span> <span class="mono-cell">' + escapeHtml(lot.container_no || '-') + '</span></div>' +
+      '    <div><span style="color:var(--text-muted)">상태:</span> <strong>' + escapeHtml(lot.status || '-') + '</strong></div>' +
+      '    <div><span style="color:var(--text-muted)">잔량:</span> <strong>' + (lot.current_weight != null ? (lot.current_weight / 1000).toFixed(3) + ' MT' : '-') + '</strong></div>' +
+      '    <div><span style="color:var(--text-muted)">입고일:</span> <span class="mono-cell">' + escapeHtml((lot.inbound_date || '').slice(0,10)) + '</span></div>' +
+      '    <div><span style="color:var(--text-muted)">창고:</span> <strong>' + escapeHtml(lot.warehouse || '-') + '</strong></div>' +
+      '  </div>' +
+      /* 상태 집계 카드 */
+      '  <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">' + statCards + '</div>' +
+      /* 탭 헤더 */
+      '  <div style="display:flex;border-bottom:2px solid var(--panel-border);margin-bottom:8px">' +
+      '    <button class="lot-tab-btn" data-tab="1" onclick="window.lotSwitchTab(1)" style="padding:8px 16px;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;color:var(--fg);font-weight:600;font-size:13px">📦 톤백 현황 (' + tonbags.length + '개)</button>' +
+      '    <button class="lot-tab-btn" data-tab="2" onclick="window.lotSwitchTab(2)" style="padding:8px 16px;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;color:var(--fg);font-weight:600;font-size:13px">📋 이동 이력 (' + movements.length + '건)</button>' +
+      '    <button class="lot-tab-btn" data-tab="3" onclick="window.lotSwitchTab(3)" style="padding:8px 16px;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;color:var(--fg);font-weight:600;font-size:13px">📊 Allocation·배정 (' + allocs.length + ')</button>' +
+      '  </div>' +
+      /* 탭 본문 */
+      '  <div style="max-height:340px;overflow-y:auto">' +
+      '    <div class="lot-tab-pane" data-pane="1">' + tab1Html + '</div>' +
+      '    <div class="lot-tab-pane" data-pane="2" style="display:none">' + tab2Html + '</div>' +
+      '    <div class="lot-tab-pane" data-pane="3" style="display:none">' + tab3Html + '</div>' +
+      '  </div>' +
+      /* 액션 */
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">' +
+      (tonbags.some(function(t){ return (t.status || '').toUpperCase() === 'AVAILABLE'; }) ?
+        '    <button class="btn btn-primary" onclick="window.lotQuickOutbound(\'' + escapeHtml(lotNo) + '\')">📤 빠른 출고</button>' : '') +
+      '    <button class="btn" onclick="window.lotExportPdf(\'' + escapeHtml(lotNo) + '\')">📋 PDF 출력</button>' +
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+      '  </div>' +
+      '</div>';
+
+    document.getElementById('sqm-modal-content').innerHTML = html;
+    /* Tab 1 활성 표시 */
+    window.lotSwitchTab(_lotDetailState.currentTab || 1);
+  }
+
+  window.lotSwitchTab = function(tab) {
+    _lotDetailState.currentTab = tab;
+    document.querySelectorAll('.lot-tab-btn').forEach(function(b){
+      var n = parseInt(b.dataset.tab, 10);
+      var active = n === tab;
+      b.style.borderBottomColor = active ? 'var(--accent)' : 'transparent';
+      b.style.color = active ? 'var(--accent)' : 'var(--fg)';
+    });
+    document.querySelectorAll('.lot-tab-pane').forEach(function(p){
+      var n = parseInt(p.dataset.pane, 10);
+      p.style.display = n === tab ? '' : 'none';
+    });
+  };
+
+  window.lotQuickOutbound = function(lotNo) {
+    document.getElementById('sqm-modal').style.display = 'none';
+    setTimeout(function(){
+      if (typeof showOneStopOutboundModal === 'function') {
+        showOneStopOutboundModal();
+        setTimeout(function(){
+          var lotInput = document.getElementById('oo-lot');
+          if (lotInput) lotInput.value = lotNo;
+          _ooState.lotNo = lotNo;
+          showToast('info', 'LOT ' + lotNo + ' 사전 입력됨 — 출고 정보 입력 후 ▶ 파싱');
+        }, 200);
+      } else {
+        showToast('warn', 'OneStop Outbound 모달 미초기화');
+      }
+    }, 100);
+  };
+
+  window.lotExportPdf = function(lotNo) {
+    showToast('info', 'LOT PDF 출력: 기존 보고서 메뉴의 🔖 LOT 상세 PDF 사용 권장 (Sprint 2 통합 예정)');
   };
 
   /* ===================================================
