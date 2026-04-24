@@ -2158,6 +2158,10 @@
     pasteText: '',
     manualActuals: {},      /* {lot_no: {expected_kg, actual_kg}} */
     parsedItems: [],        /* 파싱된 출고 아이템 */
+    /* [Sprint 1-3-B] Tab 2 톤백 선택 */
+    lotsWithTonbags: {},    /* { lot_no: [{sub_lt, weight, status, location, ...}, ...] } */
+    selectedTonbags: null,  /* Set<"lot.sub_lt"> */
+    expandedLots: null,     /* Set<lot_no> */
     outScanFile: null,      /* Tab 3 OUT 스캔 파일 */
     validationResults: [],
     completedItems: [],
@@ -2173,6 +2177,9 @@
     _ooState.pasteText = '';
     _ooState.manualActuals = {};
     _ooState.parsedItems = [];
+    _ooState.lotsWithTonbags = {};
+    _ooState.selectedTonbags = new Set();
+    _ooState.expandedLots = new Set();
     _ooState.outScanFile = null;
     _ooState.validationResults = [];
     _ooState.completedItems = [];
@@ -2260,14 +2267,30 @@
       /* 파싱 결과 */
       '      <div id="oo-draft-result" style="margin-top:10px"></div>',
       '    </div>',
-      /* --- Tab 2: 톤백 선택 (Phase B placeholder) --- */
+      /* --- Tab 2: 톤백 선택 (Sprint 1-3-B 실구현) --- */
       '    <div class="oo-tab-pane" data-pane="2">',
-      '      <div class="oo-tab-placeholder">',
-      '        <div class="icon">📦</div>',
-      '        <div style="font-weight:700;margin-top:12px">② 톤백 선택</div>',
-      '        <div style="margin-top:6px">Tab 1 에서 ▶ 파싱 → DRAFT 진입 후 자동 활성화됩니다.</div>',
-      '        <div class="phase">Sprint 1-3 Phase B 예정</div>',
-      '        <div style="margin-top:16px;font-size:11px">예정 기능: LOT별 가용 톤백 Treeview · 🎲 랜덤 선택 · ✅ LOT 전체 · ☐ 전체 해제 · DRAFT → WAIT_SCAN ▶</div>',
+      /* 통계 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">📊 선택 요약</div>',
+      '        <div id="oo-t2-stats" style="font-size:13px;color:var(--text-muted)">DRAFT 진입 전 — Tab 1 에서 ▶ 파싱을 먼저 실행하세요</div>',
+      '      </div>',
+      /* 액션 버튼 */
+      '      <div class="oo-section">',
+      '        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">',
+      '          <button class="btn" onclick="window.ooRandomSelect()" title="가용 톤백 중 무작위 선택">🎲 랜덤 선택</button>',
+      '          <button class="btn" onclick="window.ooSelectAllLots()">✅ 전체 LOT 전체</button>',
+      '          <button class="btn" onclick="window.ooDeselectAll()">☐ 전체 해제</button>',
+      '          <button class="btn" onclick="window.ooExpandAll(true)">▼ 모두 펼침</button>',
+      '          <button class="btn" onclick="window.ooExpandAll(false)">▶ 모두 접기</button>',
+      '          <button class="btn btn-primary" id="oo-goto-scan-btn" onclick="window.ooMoveToScan()" disabled style="margin-left:auto" title="DRAFT → WAIT_SCAN">DRAFT → WAIT_SCAN ▶</button>',
+      '        </div>',
+      '      </div>',
+      /* 톤백 리스트 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">📦 LOT별 가용 톤백</div>',
+      '        <div id="oo-tonbags-body" style="max-height:360px;overflow-y:auto">',
+      '          <div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">⏳ DRAFT 진입 시 자동 로드됩니다</div>',
+      '        </div>',
       '      </div>',
       '    </div>',
       /* --- Tab 3: 스캔 검증 (Phase C placeholder) --- */
@@ -2482,10 +2505,208 @@
         items.map(function(it, i){
           return '<tr><td>' + (i+1) + '</td><td class="mono-cell">' + escapeHtml(it.lot_no||'-') + '</td><td class="mono-cell">' + escapeHtml(it.sap_no||'-') + '</td><td class="mono-cell" style="text-align:right">' + (it.qty_kg || 0) + '</td><td>' + escapeHtml(it.customer||'-') + '</td><td class="mono-cell">' + escapeHtml(it.sale_ref||'-') + '</td></tr>';
         }).join('') + '</tbody></table></details>' +
-        '<div style="margin-top:8px;font-size:11px;color:var(--info, #42a5f5)">💡 다음 단계: 상단 <strong>② 톤백 선택</strong> 탭으로 이동 (Sprint 1-3 Phase B 에서 활성화 예정)</div>' +
+        '<div style="margin-top:8px;font-size:11px;color:var(--info, #42a5f5)">💡 다음 단계: 상단 <strong>② 톤백 선택</strong> 탭으로 이동 중...</div>' +
         '</div>';
     }
-    showToast('success', 'DRAFT 생성: ' + items.length + '건');
+    showToast('success', 'DRAFT 생성: ' + items.length + '건 — 톤백 로드 중...');
+    /* [Sprint 1-3-B] Tab 2 로 자동 이동 + 톤백 로드 */
+    _ooLoadTonbagsForLots();
+    setTimeout(function(){ window.ooSwitchTab(2); }, 600);
+  };
+
+  /* =====================================================================
+     [Sprint 1-3-B] Tab 2 — 톤백 선택 로직
+     ===================================================================== */
+  function _ooLoadTonbagsForLots() {
+    var lots = _ooState.parsedItems.map(function(it){ return it.lot_no; }).filter(Boolean);
+    if (!lots.length) return;
+    _ooState.lotsWithTonbags = {};
+    _ooState.selectedTonbags.clear();
+    _ooState.expandedLots.clear();
+
+    var body = document.getElementById('oo-tonbags-body');
+    if (body) body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">⏳ ' + lots.length + ' LOT 톤백 조회 중...</div>';
+
+    /* 각 LOT에 대해 GET /api/tonbags?lot_no=<lot>&status=AVAILABLE */
+    var promises = lots.map(function(lot){
+      return apiGet('/api/tonbags?lot_no=' + encodeURIComponent(lot) + '&status=AVAILABLE')
+        .then(function(res){ return { lot: lot, rows: extractRows(res) }; })
+        .catch(function(){ return { lot: lot, rows: [] }; });
+    });
+
+    Promise.all(promises).then(function(results){
+      results.forEach(function(r){
+        _ooState.lotsWithTonbags[r.lot] = r.rows.filter(function(t){
+          /* LOT NO 정확 매치 (LIKE 는 여러 LOT 잡을 수 있음) */
+          return (t.lot_no || '') === r.lot;
+        });
+        /* 기본 확장 */
+        _ooState.expandedLots.add(r.lot);
+      });
+      _ooRenderTonbags();
+      _ooUpdateT2Stats();
+    });
+  }
+
+  function _ooRenderTonbags() {
+    var body = document.getElementById('oo-tonbags-body');
+    if (!body) return;
+    var lots = _ooState.parsedItems.map(function(it){ return it.lot_no; }).filter(Boolean);
+    if (!lots.length) { body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted)">LOT 없음</div>'; return; }
+
+    var html = lots.map(function(lot){
+      var tonbags = _ooState.lotsWithTonbags[lot] || [];
+      var selectedInLot = tonbags.filter(function(t){
+        return _ooState.selectedTonbags.has(lot + '.' + (t.sub_lt || t.tonbag_id));
+      });
+      var expanded = _ooState.expandedLots.has(lot);
+      var totalKg = tonbags.reduce(function(s, t){ return s + (Number(t.weight) || 0); }, 0);
+      var selKg   = selectedInLot.reduce(function(s, t){ return s + (Number(t.weight) || 0); }, 0);
+
+      var header =
+        '<div class="oo-lot-header" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:4px;cursor:pointer;margin-top:4px;font-size:12px" onclick="window.ooToggleLotExpand(\'' + escapeHtml(lot) + '\')">' +
+        '<span style="font-size:12px;color:var(--text-muted)">' + (expanded ? '▼' : '▶') + '</span>' +
+        '<strong style="color:var(--accent);font-family:Consolas,monospace">' + escapeHtml(lot) + '</strong>' +
+        '<span style="color:var(--text-muted)">· 가용 ' + tonbags.length + '개 · ' + totalKg.toFixed(2) + 'kg</span>' +
+        (selectedInLot.length > 0 ? '<span style="color:var(--success);font-weight:700">· 선택 ' + selectedInLot.length + '개 (' + selKg.toFixed(2) + 'kg)</span>' : '') +
+        '<span style="margin-left:auto;display:flex;gap:4px" onclick="event.stopPropagation()">' +
+        '<button class="btn" style="padding:2px 8px;font-size:11px" onclick="window.ooSelectAllForLot(\'' + escapeHtml(lot) + '\')">✅ LOT 전체</button>' +
+        '<button class="btn" style="padding:2px 8px;font-size:11px" onclick="window.ooDeselectForLot(\'' + escapeHtml(lot) + '\')">☐ 해제</button>' +
+        '</span>' +
+        '</div>';
+
+      if (!expanded) return header;
+
+      if (!tonbags.length) {
+        return header + '<div style="padding:10px 20px;color:var(--text-muted);font-size:11px">📭 가용 톤백 없음</div>';
+      }
+
+      var rows = tonbags.map(function(t){
+        var key = lot + '.' + (t.sub_lt || t.tonbag_id);
+        var checked = _ooState.selectedTonbags.has(key) ? 'checked' : '';
+        return '<tr style="font-size:11px">' +
+          '<td style="width:28px;text-align:center"><input type="checkbox" ' + checked + ' onchange="window.ooToggleTonbag(\'' + escapeHtml(lot) + '\',\'' + escapeHtml(t.sub_lt || t.tonbag_id) + '\',this.checked)"></td>' +
+          '<td class="mono-cell">' + escapeHtml(t.sub_lt || t.tonbag_id || '-') + '</td>' +
+          '<td class="mono-cell" style="text-align:right">' + (Number(t.weight) || 0).toFixed(2) + '</td>' +
+          '<td>' + escapeHtml(t.status || '-') + '</td>' +
+          '<td>' + escapeHtml(t.location || '-') + '</td>' +
+          '<td class="mono-cell">' + escapeHtml(t.container || '-') + '</td>' +
+          '</tr>';
+      }).join('');
+
+      return header +
+        '<table class="data-table" style="margin-top:2px;font-size:11px"><thead><tr><th></th><th>톤백 ID</th><th style="text-align:right">중량(kg)</th><th>상태</th><th>위치</th><th>컨테이너</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    }).join('');
+
+    body.innerHTML = html;
+  }
+
+  function _ooUpdateT2Stats() {
+    var el = document.getElementById('oo-t2-stats');
+    var btn = document.getElementById('oo-goto-scan-btn');
+    if (!el) return;
+    var lots = _ooState.parsedItems.map(function(it){ return it.lot_no; }).filter(Boolean);
+    var totalTonbags = 0, totalKg = 0, selectedCount = _ooState.selectedTonbags.size, selectedKg = 0;
+
+    lots.forEach(function(lot){
+      var arr = _ooState.lotsWithTonbags[lot] || [];
+      arr.forEach(function(t){
+        totalTonbags++;
+        totalKg += Number(t.weight) || 0;
+        var key = lot + '.' + (t.sub_lt || t.tonbag_id);
+        if (_ooState.selectedTonbags.has(key)) selectedKg += Number(t.weight) || 0;
+      });
+    });
+
+    el.innerHTML =
+      '<div>📦 파싱 LOT <strong>' + lots.length + '개</strong> · 전체 가용 톤백 <strong>' + totalTonbags + '개</strong> (' + (totalKg / 1000).toFixed(3) + ' MT)</div>' +
+      '<div style="margin-top:4px">✅ 선택됨: <strong style="color:' + (selectedCount > 0 ? 'var(--success)' : 'var(--text-muted)') + '">' + selectedCount + '개</strong> (' + (selectedKg / 1000).toFixed(3) + ' MT)</div>';
+
+    if (btn) btn.disabled = selectedCount === 0;
+  }
+
+  /* 개별/일괄 토글 */
+  window.ooToggleLotExpand = function(lot) {
+    if (_ooState.expandedLots.has(lot)) _ooState.expandedLots.delete(lot);
+    else _ooState.expandedLots.add(lot);
+    _ooRenderTonbags();
+  };
+  window.ooToggleTonbag = function(lot, subLt, checked) {
+    var key = lot + '.' + subLt;
+    if (checked) _ooState.selectedTonbags.add(key);
+    else _ooState.selectedTonbags.delete(key);
+    _ooUpdateT2Stats();
+    /* 헤더 요약 갱신을 위해 재렌더 (가벼운 구현 — 필요하면 부분 업데이트 최적화) */
+    _ooRenderTonbags();
+  };
+  window.ooSelectAllForLot = function(lot) {
+    var arr = _ooState.lotsWithTonbags[lot] || [];
+    arr.forEach(function(t){ _ooState.selectedTonbags.add(lot + '.' + (t.sub_lt || t.tonbag_id)); });
+    _ooRenderTonbags();
+    _ooUpdateT2Stats();
+  };
+  window.ooDeselectForLot = function(lot) {
+    var arr = _ooState.lotsWithTonbags[lot] || [];
+    arr.forEach(function(t){ _ooState.selectedTonbags.delete(lot + '.' + (t.sub_lt || t.tonbag_id)); });
+    _ooRenderTonbags();
+    _ooUpdateT2Stats();
+  };
+  window.ooSelectAllLots = function() {
+    Object.keys(_ooState.lotsWithTonbags).forEach(function(lot){
+      (_ooState.lotsWithTonbags[lot] || []).forEach(function(t){
+        _ooState.selectedTonbags.add(lot + '.' + (t.sub_lt || t.tonbag_id));
+      });
+    });
+    _ooRenderTonbags();
+    _ooUpdateT2Stats();
+  };
+  window.ooDeselectAll = function() {
+    _ooState.selectedTonbags.clear();
+    _ooRenderTonbags();
+    _ooUpdateT2Stats();
+  };
+  window.ooExpandAll = function(expand) {
+    _ooState.expandedLots.clear();
+    if (expand) {
+      Object.keys(_ooState.lotsWithTonbags).forEach(function(lot){ _ooState.expandedLots.add(lot); });
+    }
+    _ooRenderTonbags();
+  };
+
+  /* 🎲 랜덤 선택 — 각 LOT에서 parsedItems.qty_kg 에 가장 가까운 조합 선택
+     단순 heuristic: qty_kg를 톤백 평균으로 나눈 개수만큼 선택 */
+  window.ooRandomSelect = function() {
+    _ooState.selectedTonbags.clear();
+    _ooState.parsedItems.forEach(function(item){
+      var arr = (_ooState.lotsWithTonbags[item.lot_no] || []).slice();
+      if (!arr.length) return;
+      var avgKg = arr.reduce(function(s, t){ return s + (Number(t.weight) || 0); }, 0) / arr.length;
+      var needCount = item.qty_kg > 0 && avgKg > 0 ? Math.max(1, Math.round(item.qty_kg / avgKg)) : 1;
+      needCount = Math.min(needCount, arr.length);
+      /* Fisher-Yates shuffle */
+      for (var i = arr.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+      }
+      for (var k = 0; k < needCount; k++) {
+        _ooState.selectedTonbags.add(item.lot_no + '.' + (arr[k].sub_lt || arr[k].tonbag_id));
+      }
+    });
+    _ooRenderTonbags();
+    _ooUpdateT2Stats();
+    showToast('success', '🎲 랜덤 선택: ' + _ooState.selectedTonbags.size + '개');
+  };
+
+  /* DRAFT → WAIT_SCAN 전환 */
+  window.ooMoveToScan = function() {
+    if (_ooState.selectedTonbags.size === 0) {
+      showToast('warn', '선택된 톤백이 없습니다');
+      return;
+    }
+    if (!confirm('📦 WAIT_SCAN 진입\n\n선택된 톤백 ' + _ooState.selectedTonbags.size + '개로 스캔 검증 단계로 이동합니다.\n계속하시겠습니까?')) return;
+    _ooSetState('WAIT_SCAN');
+    setTimeout(function(){ window.ooSwitchTab(3); }, 300);
+    showToast('success', 'WAIT_SCAN 진입 — Tab 3 에서 OUT 스캔 검증 (Sprint 1-3-C 예정)');
   };
 
   /* ─── 플레이스홀더 ──────────────────────────────────────────────────── */
