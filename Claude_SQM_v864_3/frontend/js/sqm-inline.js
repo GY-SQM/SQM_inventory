@@ -222,6 +222,30 @@
       return;
     }
 
+    /* [Sprint 1-2-D] Ctrl+Z / Ctrl+Y — 모달 안 편집 Undo/Redo
+       OneStop Inbound 미리보기가 렌더된 상태에서만 작동 */
+    if (e.ctrlKey && !e.altKey && typeof _onestopState !== 'undefined' && _onestopState.parsed) {
+      /* input 안에서는 기본 undo 동작 허용 */
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+        /* Ctrl+Z 는 input 자체 undo 가 우선, Ctrl+Shift+Z 만 커스텀 redo */
+        if (e.key === 'z' && e.shiftKey && typeof window.onestopRedo === 'function') {
+          e.preventDefault();
+          window.onestopRedo();
+        }
+        return;
+      }
+      if (e.key === 'z' && !e.shiftKey && typeof window.onestopUndo === 'function') {
+        e.preventDefault();
+        window.onestopUndo();
+        return;
+      }
+      if ((e.key === 'y' || (e.key === 'z' && e.shiftKey)) && typeof window.onestopRedo === 'function') {
+        e.preventDefault();
+        window.onestopRedo();
+        return;
+      }
+    }
+
     /* Tab — 모달 내부 포커스 트랩 (마지막 → 첫 번째, Shift+Tab 시 반대) */
     if (e.key === 'Tab') {
       var focusables = modal.querySelectorAll(
@@ -2370,7 +2394,12 @@
     originalRows: [],       /* 원본 백업 — 편집 롤백용 */
     editedCells: {},        /* { "rowIdx.field": true } — 편집된 셀 표시용 */
     parsed: false,          /* 파싱 완료 여부 (true면 DB 업로드 가능) */
+    /* [Sprint 1-2-D] Undo/Redo + D/O 수동 정보 */
+    history: [],            /* [{rowIdx, field, oldVal, newVal}, ...] max 50 */
+    historyIdx: -1,         /* 현재 위치 (stack pointer) */
+    manualDo: null,         /* D/O 미첨부 시 수동 입력 정보 {free_time, warehouse, arrival_date} */
   };
+  var ONESTOP_MAX_HISTORY = 50;
   /* [Sprint 1-2-C] 편집 가능 컬럼 (18열 중 — v864-2 EDITABLE_COLS 참고) */
   var ONESTOP_EDITABLE_FIELDS = new Set([
     'lot_no', 'sap_no', 'bl_no', 'product', 'container', 'code',
@@ -2458,6 +2487,17 @@
       '    <div class="onestop-progress-title">📊 진행 상태</div>',
       '    <div id="onestop-progress-body" class="onestop-progress-empty">파싱을 시작하면 진행 상황이 여기에 표시됩니다.</div>',
       '  </div>',
+      /* [Sprint 1-2-D] 편집 툴바 (Undo/Redo + 템플릿 + 힌트) */
+      '  <div class="onestop-edit-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;margin-bottom:6px;flex-wrap:wrap">',
+      '    <span style="font-weight:700;color:var(--text-muted);font-size:12px">✏️ 편집:</span>',
+      '    <button class="btn" id="onestop-undo-btn" onclick="window.onestopUndo()" disabled title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>',
+      '    <button class="btn" id="onestop-redo-btn" onclick="window.onestopRedo()" disabled title="다시 실행 (Ctrl+Y)">↷ 다시 실행</button>',
+      '    <button class="btn" id="onestop-reset-btn" onclick="window.onestopResetAll()" disabled title="모든 편집 되돌림">⟲ 원본 초기화</button>',
+      '    <span style="width:1px;height:20px;background:var(--panel-border);margin:0 2px"></span>',
+      '    <button class="btn btn-wip" onclick="window.onestopTemplateSave()" title="Sprint 2 예정">📋 템플릿 저장</button>',
+      '    <button class="btn btn-wip" onclick="window.onestopTemplateLoad()" title="Sprint 2 예정">📋 템플릿 선택</button>',
+      '    <span class="hint" style="margin-left:auto;color:var(--text-muted);font-size:11px">셀 더블클릭 → Enter 저장 · Esc 취소</span>',
+      '  </div>',
       /* 필터 바 */
       '  <div class="onestop-filter-bar">',
       '    <span style="font-weight:700">▼ 필터:</span>' + filterHtml,
@@ -2514,14 +2554,127 @@
     }
   }
   window.onestopMultiPick = function() {
-    showToast('info', '멀티 선택은 Sprint 1-2-B에서 자동 분류와 함께 구현됩니다 (임시: 각 슬롯 개별 선택)');
+    showToast('info', '멀티 선택은 Sprint 2에서 자동 분류와 함께 구현됩니다 (임시: 각 슬롯 개별 선택)');
   };
+
+  /* [Sprint 1-2-D] D/O 나중에 — 수동 정보 입력 프롬프트 체인 */
   window.onestopSkipDo = function() {
-    showToast('info', 'D/O 나중에 처리: 파싱은 BL/PL/Invoice 3종으로 진행되고, D/O는 재고 탭의 "📋 D/O 후속 연결" 메뉴로 나중에 등록');
+    var cur = _onestopState.manualDo || {};
+    var ft = prompt('📋 D/O 수동 입력 (1/3) — Free Time (일수)\n\n예: 7\n(취소 → 전체 입력 취소)', cur.free_time || '');
+    if (ft === null) return;
+    ft = String(ft || '').trim();
+    var wh = prompt('📋 D/O 수동 입력 (2/3) — 창고명\n\n예: 광양창고\n(빈값 허용)', cur.warehouse || '');
+    if (wh === null) return;
+    wh = String(wh || '').trim();
+    var ar = prompt('📋 D/O 수동 입력 (3/3) — 도착일 (YYYY-MM-DD)\n\n예: 2026-04-20\n(빈값 허용)', cur.arrival_date || '');
+    if (ar === null) return;
+    ar = String(ar || '').trim();
+    /* 도착일 형식 검증 (빈값 OK, 입력된 경우 YYYY-MM-DD) */
+    if (ar && !/^\d{4}-\d{2}-\d{2}$/.test(ar)) {
+      if (!confirm('도착일 형식이 YYYY-MM-DD가 아닙니다: "' + ar + '"\n그래도 저장하시겠습니까?')) return;
+    }
+    _onestopState.manualDo = { free_time: ft, warehouse: wh, arrival_date: ar };
+    /* 파싱된 rows 가 있으면 DO 누락 필드에 수동 값 채우기 */
+    if (_onestopState.parsed && _onestopState.previewRows.length) {
+      _onestopState.previewRows.forEach(function(r, i){
+        if (!r) return;
+        if (ft && !r.free_time)  { r.free_time = ft;  _onestopState.editedCells[i + '.free_time'] = true; }
+        if (wh && !r.wh)          { r.wh = wh;         _onestopState.editedCells[i + '.wh'] = true; }
+        if (ar && !r.arrival)     { r.arrival = ar;    _onestopState.editedCells[i + '.arrival'] = true; }
+      });
+      _onestopRenderPreview(_onestopState.previewRows);
+    }
+    showToast('success',
+      'D/O 수동 정보 저장됨 — Free Time=' + (ft || '-') +
+      ' / 창고=' + (wh || '-') +
+      ' / 도착=' + (ar || '-') +
+      (_onestopState.parsed ? ' · 미리보기 반영됨' : ' (파싱 후 적용)')
+    );
   };
+
   window.onestopReparseCarrier = function() {
-    showToast('info', '선사 재파싱은 Sprint 1-2-B (백엔드 파싱 엔진) 이후 연결됩니다');
+    showToast('info', '선사 재파싱은 Sprint 2 (선사별 템플릿 재적용) 이후 연결됩니다');
   };
+
+  /* [Sprint 1-2-D] Undo / Redo — 편집 이력 50-stack */
+  window.onestopUndo = function() {
+    if (_onestopState.historyIdx < 0) { showToast('info', '되돌릴 작업이 없습니다'); return; }
+    var entry = _onestopState.history[_onestopState.historyIdx];
+    if (!_onestopState.previewRows[entry.rowIdx]) _onestopState.previewRows[entry.rowIdx] = {};
+    _onestopState.previewRows[entry.rowIdx][entry.field] = entry.oldVal;
+    /* editedCells 재계산 */
+    var origVal = (_onestopState.originalRows[entry.rowIdx] || {})[entry.field];
+    var cellKey = entry.rowIdx + '.' + entry.field;
+    if (String(entry.oldVal) !== String(origVal == null ? '' : origVal)) {
+      _onestopState.editedCells[cellKey] = true;
+    } else {
+      delete _onestopState.editedCells[cellKey];
+    }
+    _onestopState.historyIdx--;
+    _onestopRenderPreview(_onestopState.previewRows);
+    _onestopUpdateHistoryButtons();
+    showToast('info', '↶ 되돌림: ' + entry.field + ' · row ' + (entry.rowIdx + 1));
+  };
+
+  window.onestopRedo = function() {
+    if (_onestopState.historyIdx >= _onestopState.history.length - 1) {
+      showToast('info', '다시 실행할 작업이 없습니다');
+      return;
+    }
+    _onestopState.historyIdx++;
+    var entry = _onestopState.history[_onestopState.historyIdx];
+    if (!_onestopState.previewRows[entry.rowIdx]) _onestopState.previewRows[entry.rowIdx] = {};
+    _onestopState.previewRows[entry.rowIdx][entry.field] = entry.newVal;
+    var origVal = (_onestopState.originalRows[entry.rowIdx] || {})[entry.field];
+    var cellKey = entry.rowIdx + '.' + entry.field;
+    if (String(entry.newVal) !== String(origVal == null ? '' : origVal)) {
+      _onestopState.editedCells[cellKey] = true;
+    } else {
+      delete _onestopState.editedCells[cellKey];
+    }
+    _onestopRenderPreview(_onestopState.previewRows);
+    _onestopUpdateHistoryButtons();
+    showToast('info', '↷ 다시 실행: ' + entry.field + ' · row ' + (entry.rowIdx + 1));
+  };
+
+  window.onestopResetAll = function() {
+    if (!_onestopState.history.length) { showToast('info', '편집 내역이 없습니다'); return; }
+    if (!confirm('⟲ 원본 초기화\n\n모든 편집 내용을 파싱 직후 상태로 되돌립니다. 계속하시겠습니까?')) return;
+    _onestopState.previewRows = JSON.parse(JSON.stringify(_onestopState.originalRows));
+    _onestopState.editedCells = {};
+    _onestopState.history = [];
+    _onestopState.historyIdx = -1;
+    _onestopRenderPreview(_onestopState.previewRows);
+    _onestopUpdateHistoryButtons();
+    showToast('success', '원본 상태로 초기화되었습니다');
+  };
+
+  /* [Sprint 1-2-D] Sprint 2 에서 구현될 기능 플레이스홀더 */
+  window.onestopTemplateSave = function() {
+    showToast('info', '📋 현재 파싱 설정 → 템플릿 저장: Sprint 2 (InboundTemplateDialog CRUD) 이후 활성화');
+  };
+  window.onestopTemplateLoad = function() {
+    showToast('info', '📋 파싱 템플릿 선택: Sprint 2 (InboundTemplateDialog CRUD) 이후 활성화');
+  };
+  window.onestopParseErrorRecovery = function(docType, errorCode) {
+    showToast('info', (docType || 'PDF') + ' 파싱 오류 복구 (9 ERROR_CODES): Sprint 2 (ParseErrorRecoveryDialog) 이후 활성화');
+  };
+
+  /* Undo/Redo 버튼 상태 갱신 */
+  function _onestopUpdateHistoryButtons() {
+    var undoBtn = document.getElementById('onestop-undo-btn');
+    var redoBtn = document.getElementById('onestop-redo-btn');
+    var resetBtn = document.getElementById('onestop-reset-btn');
+    var canUndo = _onestopState.historyIdx >= 0;
+    var canRedo = _onestopState.historyIdx < _onestopState.history.length - 1;
+    var hasHistory = _onestopState.history.length > 0;
+    if (undoBtn)  undoBtn.disabled  = !canUndo;
+    if (redoBtn)  redoBtn.disabled  = !canRedo;
+    if (resetBtn) resetBtn.disabled = !hasHistory;
+    /* 카운터 표시 */
+    if (undoBtn) undoBtn.title = '되돌리기 (Ctrl+Z) · 이력 ' + (_onestopState.historyIdx + 1) + '/' + _onestopState.history.length;
+    if (redoBtn) redoBtn.title = '다시 실행 (Ctrl+Y) · ' + Math.max(0, _onestopState.history.length - _onestopState.historyIdx - 1) + '단계 남음';
+  }
   window.onestopResetFilter = function() {
     ['sap','bl','container','product','status'].forEach(function(k){
       var el = document.getElementById('onestop-filter-' + k);
@@ -2597,7 +2750,21 @@
         _onestopState.originalRows = JSON.parse(JSON.stringify(rows));  /* deep copy */
         _onestopState.editedCells = {};
         _onestopState.parsed = rows.length > 0;
-        _onestopRenderPreview(rows);
+        /* [Sprint 1-2-D] 새 파싱 → Undo 히스토리 리셋 */
+        _onestopState.history = [];
+        _onestopState.historyIdx = -1;
+        /* D/O 수동 정보가 있고 DO 파일이 없었다면 새 rows 에 적용 */
+        if (_onestopState.manualDo && !_onestopState.files.DO) {
+          var md = _onestopState.manualDo;
+          _onestopState.previewRows.forEach(function(r, i){
+            if (!r) return;
+            if (md.free_time && !r.free_time)   { r.free_time = md.free_time; _onestopState.editedCells[i + '.free_time'] = true; }
+            if (md.warehouse && !r.wh)           { r.wh = md.warehouse;        _onestopState.editedCells[i + '.wh'] = true; }
+            if (md.arrival_date && !r.arrival)  { r.arrival = md.arrival_date; _onestopState.editedCells[i + '.arrival'] = true; }
+          });
+        }
+        _onestopRenderPreview(_onestopState.previewRows);
+        _onestopUpdateHistoryButtons();
 
         _onestopSetStep(3);
         if (rows.length > 0) {
@@ -2711,6 +2878,19 @@
 
     function commit() {
       var newVal = input.value;
+      /* 값 변화 없으면 history 기록 생략 */
+      if (String(newVal) === String(curVal)) {
+        _onestopRenderPreview(_onestopState.previewRows);
+        return;
+      }
+      /* [Sprint 1-2-D] Undo 스택에 push (현재 위치 이후 redo 엔트리 제거) */
+      _onestopState.history = _onestopState.history.slice(0, _onestopState.historyIdx + 1);
+      _onestopState.history.push({ rowIdx: rowIdx, field: field, oldVal: curVal, newVal: newVal });
+      if (_onestopState.history.length > ONESTOP_MAX_HISTORY) {
+        _onestopState.history.shift();
+      }
+      _onestopState.historyIdx = _onestopState.history.length - 1;
+
       /* 상태 업데이트 */
       if (!_onestopState.previewRows[rowIdx]) _onestopState.previewRows[rowIdx] = {};
       _onestopState.previewRows[rowIdx][field] = newVal;
@@ -2722,6 +2902,7 @@
         delete _onestopState.editedCells[cellKey];
       }
       _onestopRenderPreview(_onestopState.previewRows);
+      _onestopUpdateHistoryButtons();
     }
     function cancel() {
       _onestopRenderPreview(_onestopState.previewRows);
