@@ -3368,6 +3368,237 @@
   /* ooFinalize 는 이전에 placeholder. 이제 ooConfirmOutbound 로 대체됨 — 호환성 위해 유지 */
   window.ooFinalize = function() { window.ooConfirmOutbound(); };
 
+  /* =====================================================================
+     [Sprint 1-4] IntegrityV760Dialog — v864-2 integrity_v760_dialog.py 매칭
+     6 카드 + LOT 신호등 테이블 + 상세 패널 + 자동 복구
+     ===================================================================== */
+  var _intState = { data: null, selectedLot: null };
+
+  function showIntegrityV760Modal(autoFix) {
+    var cardsHtml =
+      '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px">' +
+      ['total_lots:전체 LOT:#42a5f5',
+       'error_lots:🔴 오류:#f44336',
+       'warning_lots:🟡 경고:#ffa726',
+       'ok_lots:✅ 정상:#66bb6a',
+       'partial_lots:⚠️ 부분 출고:#ab47bc',
+       'alloc_issues:📊 Alloc 이상:#ec407a'].map(function(spec){
+        var p = spec.split(':');
+        return '<div style="background:var(--panel);border:1px solid var(--panel-border);border-left:4px solid ' + p[2] + ';border-radius:6px;padding:10px 12px">' +
+          '<div style="font-size:11px;color:var(--text-muted);font-weight:600">' + p[1] + '</div>' +
+          '<div id="int-card-' + p[0] + '" style="font-size:22px;font-weight:700;color:' + p[2] + ';margin-top:2px">--</div>' +
+          '</div>';
+      }).join('') + '</div>';
+
+    var html = [
+      '<div style="max-width:1100px">',
+      '  <h2 style="margin:0 0 8px 0">📋 정합성 검증 리포트 v7.7.0 <span style="font-size:11px;color:var(--text-muted);font-weight:400" id="int-status-line">— 로딩 중...</span></h2>',
+      cardsHtml,
+      /* 좌: LOT 테이블 / 우: 상세 패널 */
+      '  <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:12px;margin-bottom:10px">',
+      '    <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:10px">',
+      '      <div style="font-weight:700;margin-bottom:6px;font-size:13px">📋 LOT 정합성 상세</div>',
+      '      <div id="int-lots-body" style="max-height:340px;overflow-y:auto">',
+      '        <div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">⏳ 로딩 중...</div>',
+      '      </div>',
+      '    </div>',
+      '    <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:10px">',
+      '      <div style="font-weight:700;margin-bottom:6px;font-size:13px">🔍 선택 LOT 상세</div>',
+      '      <div id="int-detail-body" style="height:340px;overflow-y:auto;font-family:Consolas,monospace;font-size:11px;background:var(--bg);border:1px solid var(--panel-border);border-radius:4px;padding:10px;white-space:pre-wrap;color:var(--fg)">LOT 행을 클릭하면 상세 정보가 표시됩니다.</div>',
+      '    </div>',
+      '  </div>',
+      /* Alloc 이상 (있으면) */
+      '  <div id="int-alloc-issues-section" style="display:none;background:rgba(236,64,122,.1);border-left:3px solid #ec407a;padding:10px;border-radius:4px;margin-bottom:10px">',
+      '    <div style="font-weight:700;color:#ec407a;font-size:12px;margin-bottom:4px">📊 Allocation 이상 (inventory 없음)</div>',
+      '    <div id="int-alloc-issues-body" style="font-size:11px;color:var(--text-muted)"></div>',
+      '  </div>',
+      /* 액션 */
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;align-items:center">',
+      '    <span id="int-checked-at" style="margin-right:auto;color:var(--text-muted);font-size:11px"></span>',
+      '    <button class="btn" onclick="window.intRefresh()">🔄 새로고침</button>',
+      '    <button class="btn" onclick="window.intExportCsv()">📥 Excel 저장</button>',
+      '    <button class="btn btn-primary" onclick="window.intRunFix()" id="int-fix-btn" disabled>🛠️ 자동 복구</button>',
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>',
+      '  </div>',
+      '</div>'
+    ].join('');
+    showDataModal('', html);
+    window.intRefresh(autoFix);
+  }
+  window.showIntegrityV760Modal = showIntegrityV760Modal;
+
+  window.intRefresh = function(autoFixAfterLoad) {
+    _intState.data = null;
+    _intState.selectedLot = null;
+    apiGet('/api/action/integrity-report')
+      .then(function(res){
+        if (!res || !res.ok) throw new Error((res && res.error) || '정합성 조회 실패');
+        var d = res.data || {};
+        _intState.data = d;
+        /* 카드 채우기 */
+        ['total_lots','error_lots','warning_lots','ok_lots','partial_lots','alloc_issues'].forEach(function(k){
+          var el = document.getElementById('int-card-' + k);
+          if (el) el.textContent = (d.cards && d.cards[k] != null) ? d.cards[k] : '0';
+        });
+        /* 상태 라인 */
+        var statusEl = document.getElementById('int-status-line');
+        if (statusEl) {
+          var lvl = d.overall_level || 'unknown';
+          var txt = lvl === 'ok' ? '✅ 통과' : (lvl === 'warning' ? '⚠️ 경고 있음' : '🔴 오류 있음');
+          var color = lvl === 'ok' ? 'var(--success)' : (lvl === 'warning' ? 'var(--warning)' : 'var(--danger)');
+          statusEl.innerHTML = '— <span style="color:' + color + '">' + txt + '</span>';
+        }
+        /* LOT 테이블 */
+        _intRenderLots(d.lots || []);
+        /* Alloc 이상 */
+        var allocSec = document.getElementById('int-alloc-issues-section');
+        var allocBody = document.getElementById('int-alloc-issues-body');
+        if (d.alloc_issues && d.alloc_issues.length) {
+          if (allocSec) allocSec.style.display = '';
+          if (allocBody) allocBody.innerHTML = d.alloc_issues.map(function(a){
+            return '• <strong>' + escapeHtml(a.lot_no) + '</strong> (' + (a.qty_mt || 0).toFixed(3) + ' MT, alloc_status=' + escapeHtml(a.alloc_status || '-') + ')';
+          }).join('<br>');
+        } else {
+          if (allocSec) allocSec.style.display = 'none';
+        }
+        /* 검사 시간 */
+        var atEl = document.getElementById('int-checked-at');
+        if (atEl && d.checked_at) atEl.textContent = '검사 시각: ' + d.checked_at;
+        /* 자동 복구 버튼 활성화 */
+        var fixBtn = document.getElementById('int-fix-btn');
+        var canFix = (d.cards && (d.cards.error_lots > 0 || d.cards.orphan_tonbags > 0));
+        if (fixBtn) fixBtn.disabled = !canFix;
+
+        if (autoFixAfterLoad && canFix) {
+          /* 메뉴에서 "🛠️ LOT 상태 정합성 복구"로 진입한 경우 자동 확인 */
+          setTimeout(function(){ window.intRunFix(); }, 200);
+        }
+      })
+      .catch(function(e){
+        var body = document.getElementById('int-lots-body');
+        if (body) body.innerHTML = '<div style="padding:30px;color:var(--danger);text-align:center">조회 실패: ' + escapeHtml(e.message || String(e)) + '</div>';
+      });
+  };
+
+  function _intRenderLots(lots) {
+    var body = document.getElementById('int-lots-body');
+    if (!body) return;
+    if (!lots.length) {
+      body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--success);font-weight:700">✅ 모든 LOT 정합성 통과</div>';
+      return;
+    }
+    var levelColor = {
+      error:   'rgba(244,67,54,.18)',
+      warning: 'rgba(255,167,38,.15)',
+      ok:      'transparent',
+    };
+    var rows = lots.map(function(l){
+      var bg = levelColor[l.level] || '';
+      var icon = l.level === 'error' ? '🔴' : (l.level === 'warning' ? '🟡' : '✅');
+      var sample = l.errors.length ? l.errors[0].message : (l.warnings.length ? l.warnings[0].message : (l.partial ? '부분 출고 ' + l.partial.shipped + '/' + l.partial.total : '-'));
+      return '<tr style="background:' + bg + ';cursor:pointer" onclick="window.intSelectLot(\'' + escapeHtml(l.lot_no) + '\')">' +
+        '<td>' + icon + '</td>' +
+        '<td class="mono-cell" style="color:var(--accent)">' + escapeHtml(l.lot_no) + '</td>' +
+        '<td>' + (l.partial ? '⚠️ ' + l.partial.shipped + '/' + l.partial.total : '-') + '</td>' +
+        '<td>' + (l.in_allocation ? '📊' : '-') + '</td>' +
+        '<td style="text-align:right">' + l.errors.length + '</td>' +
+        '<td style="text-align:right">' + l.warnings.length + '</td>' +
+        '</tr>';
+    }).join('');
+    body.innerHTML =
+      '<table class="data-table" style="font-size:11px"><thead><tr>' +
+      '<th></th><th>LOT NO</th><th>부분 출고</th><th>Alloc</th><th style="text-align:right">오류</th><th style="text-align:right">경고</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  window.intSelectLot = function(lot) {
+    _intState.selectedLot = lot;
+    var detail = document.getElementById('int-detail-body');
+    if (!detail || !_intState.data) return;
+    var l = (_intState.data.lots || []).find(function(x){ return x.lot_no === lot; });
+    if (!l) { detail.textContent = '선택 정보 없음'; return; }
+    var lines = [];
+    lines.push('LOT NO: ' + lot);
+    lines.push('상태:   ' + l.level);
+    lines.push('');
+    if (l.errors.length) {
+      lines.push('━━ 오류 (' + l.errors.length + '건) ━━');
+      l.errors.forEach(function(e){ lines.push('🔴 [' + e.code + '] ' + e.message); });
+      lines.push('');
+    }
+    if (l.warnings.length) {
+      lines.push('━━ 경고 (' + l.warnings.length + '건) ━━');
+      l.warnings.forEach(function(e){ lines.push('🟡 [' + e.code + '] ' + e.message); });
+      lines.push('');
+    }
+    if (l.partial) {
+      lines.push('━━ 부분 출고 ━━');
+      lines.push('⚠️ 출고 ' + l.partial.shipped + ' / 전체 ' + l.partial.total + ' 톤백');
+      lines.push('');
+    }
+    if (l.in_allocation) {
+      lines.push('━━ Allocation ━━');
+      lines.push('📊 Allocation 이상 리스트에 포함됨 (하단 참조)');
+      lines.push('');
+    }
+    if (!l.errors.length && !l.warnings.length && !l.partial && !l.in_allocation) {
+      lines.push('✅ 이 LOT는 정상입니다.');
+    }
+    detail.textContent = lines.join('\n');
+  };
+
+  window.intExportCsv = function() {
+    if (!_intState.data || !_intState.data.lots) { showToast('warn', '데이터 없음'); return; }
+    var lots = _intState.data.lots;
+    var lines = ['lot_no,level,errors,warnings,partial_shipped,partial_total,in_allocation,error_msgs,warning_msgs'];
+    lots.forEach(function(l){
+      var errMsgs = l.errors.map(function(e){ return e.code + ':' + e.message; }).join(';');
+      var warnMsgs = l.warnings.map(function(e){ return e.code + ':' + e.message; }).join(';');
+      function csvEsc(v){ var s = String(v == null ? '' : v); if (/[,"\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"'; return s; }
+      lines.push([
+        csvEsc(l.lot_no), csvEsc(l.level),
+        l.errors.length, l.warnings.length,
+        l.partial ? l.partial.shipped : '',
+        l.partial ? l.partial.total : '',
+        l.in_allocation ? 'Y' : 'N',
+        csvEsc(errMsgs), csvEsc(warnMsgs)
+      ].join(','));
+    });
+    var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    var ts = new Date();
+    a.download = 'integrity_v760_' + ts.getFullYear() + String(ts.getMonth()+1).padStart(2,'0') + String(ts.getDate()).padStart(2,'0') + '_' + String(ts.getHours()).padStart(2,'0') + String(ts.getMinutes()).padStart(2,'0') + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('success', '📥 ' + a.download + ' 다운로드됨 (' + lots.length + 'LOT)');
+  };
+
+  window.intRunFix = function() {
+    if (!confirm('🛠️ 정합성 자동 복구\n\n다음을 자동 처리:\n  - tonbag_count 동기화\n  - 고아(orphan) 톤백 삭제\n\n상태 혼재는 수동 처리 필요.\n계속하시겠습니까?')) return;
+    var btn = document.getElementById('int-fix-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 복구 중...'; }
+    apiPost('/api/action/fix-integrity', {})
+      .then(function(res){
+        if (!res || !res.ok) throw new Error((res && res.error) || '복구 실패');
+        var d = res.data || {};
+        var msg = '복구 완료 — ' + (d.fix_count || 0) + '건 처리';
+        if (d.fixes && d.fixes.length) {
+          msg += '\n' + d.fixes.map(function(f){ return '  ' + f.action + ': ' + f.affected_rows + '건'; }).join('\n');
+        } else {
+          msg = '복구할 항목 없음 (이미 정상)';
+        }
+        alert(msg);
+        if (btn) btn.textContent = '🛠️ 자동 복구';
+        window.intRefresh();
+      })
+      .catch(function(e){
+        showToast('error', '복구 실패: ' + (e.message || String(e)));
+        if (btn) { btn.disabled = false; btn.textContent = '🛠️ 자동 복구 재시도'; }
+      });
+  };
+
   /* ─── 플레이스홀더 ──────────────────────────────────────────────────── */
   window.ooFinalize = function() {
     showToast('info', '출고 확정: Sprint 1-3 Phase D (Tab 4 완료) 에서 구현 예정');
@@ -5431,7 +5662,10 @@
        Real settings dialog ships in Sprint 2 (SettingsDialogMixin port, ~5d). */
     'onProductMaster':   {m:'GET',  u:'/api/info/system-info',                    lbl:'제품 마스터'},
     'onProductInventoryReport': {m:'GET', u:'/api/q/product-inventory',           lbl:'제품별 재고 현황'},
-    'onIntegrityRepair': {m:'GET',  u:'/api/action/integrity-check',                     lbl:'정합성 검사/복구'},
+    /* [Sprint 1-4] integrity 분리: report (read-only) vs fix (mutating) */
+    'onIntegrityReport':   {m:'JS',  u:'integrity-report',                                lbl:'정합성 검증 (V760)'},
+    'onFixLotIntegrity':   {m:'JS',  u:'integrity-fix',                                   lbl:'LOT 정합성 복구'},
+    'onIntegrityRepair':   {m:'JS',  u:'integrity-report',                                lbl:'정합성 검사/복구'},
     'onOptimizeDb':      {m:'POST', u:'/api/action3/optimize-db',                 lbl:'DB 최적화'},
     'onCleanupLogs':     {m:'POST', u:'/api/action3/cleanup-logs',                lbl:'로그 정리'},
     'onDbInfo':          {m:'GET',  u:'/api/info/system-info',                    lbl:'DB 정보'},
@@ -5657,6 +5891,9 @@
         showToast('info', conf.lbl + ': 준비 중');
         return;
       }
+      /* [Sprint 1-4] integrity 분리 */
+      if (conf.u === 'integrity-report') { showIntegrityV760Modal(); return; }
+      if (conf.u === 'integrity-fix') { showIntegrityV760Modal(true); return; }
       dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
       renderPage(conf.u);
       return;

@@ -149,6 +149,193 @@ def integrity_check():
         return err_response(str(e))
 
 
+# ────────────────────────────────────────────────────────────
+# [Sprint 1-4] IntegrityV760 — v864-2 IntegrityV760Dialog 매칭
+# 6개 카드 + LOT 별 신호등 + 상세 패널
+# ────────────────────────────────────────────────────────────
+@router.get("/integrity-report", summary="🔍 정합성 V760 리포트 [Sprint 1-4]")
+def integrity_report_v760():
+    """
+    LOT 별 정합성 결과를 카드/테이블 형식으로 반환.
+    - 6 cards: total / errors / warnings / ok / partial / alloc_issues
+    - LOTs: per-LOT detail (sample/partial/allocation/errors/warnings)
+    """
+    try:
+        con = _db()
+
+        # 전체 LOT
+        total_lots = con.execute("SELECT COUNT(*) FROM inventory").fetchone()[0]
+
+        # ① 톤백 카운트 불일치 (ERROR)
+        error_lots = {}
+        rows = con.execute("""
+            SELECT i.lot_no, i.tonbag_count AS declared, COUNT(t.id) AS actual
+            FROM inventory i
+            LEFT JOIN inventory_tonbag t ON t.inventory_id = i.id
+            GROUP BY i.id
+            HAVING declared != actual
+        """).fetchall()
+        for r in rows:
+            lot = r["lot_no"]
+            error_lots.setdefault(lot, []).append({
+                "code":    "TONBAG_COUNT_MISMATCH",
+                "level":   "error",
+                "message": f"톤백 수 불일치 (선언={r['declared']}, 실제={r['actual']})",
+            })
+
+        # ② 고아 톤백 (ERROR — 해당 LOT 모름이라 별도 집계)
+        orphan_count = con.execute("""
+            SELECT COUNT(*) FROM inventory_tonbag t
+            LEFT JOIN inventory i ON i.id = t.inventory_id
+            WHERE i.id IS NULL
+        """).fetchone()[0]
+
+        # ③ 상태 혼재 (WARNING)
+        warning_lots = {}
+        rows = con.execute("""
+            SELECT i.lot_no, i.status AS lot_status,
+                   GROUP_CONCAT(DISTINCT t.status) AS tonbag_statuses
+            FROM inventory i
+            JOIN inventory_tonbag t ON t.inventory_id = i.id
+            WHERE i.status = 'AVAILABLE'
+            GROUP BY i.id
+            HAVING tonbag_statuses NOT LIKE '%AVAILABLE%'
+               AND tonbag_statuses IS NOT NULL
+        """).fetchall()
+        for r in rows:
+            lot = r["lot_no"]
+            warning_lots.setdefault(lot, []).append({
+                "code":    "STATUS_MISMATCH",
+                "level":   "warning",
+                "message": f"상태 혼재 (LOT={r['lot_status']}, 톤백={r['tonbag_statuses']})",
+            })
+
+        # ④ 부분 출고 (WARNING) — LOT 일부만 SOLD/PICKED
+        partial_lots = {}
+        rows = con.execute("""
+            SELECT i.lot_no,
+                   COUNT(t.id) AS total,
+                   SUM(CASE WHEN t.status IN ('SOLD','PICKED','OUTBOUND') THEN 1 ELSE 0 END) AS shipped
+            FROM inventory i
+            JOIN inventory_tonbag t ON t.inventory_id = i.id
+            GROUP BY i.id
+            HAVING shipped > 0 AND shipped < total
+        """).fetchall()
+        for r in rows:
+            lot = r["lot_no"]
+            partial_lots[lot] = {
+                "shipped": int(r["shipped"]),
+                "total":   int(r["total"]),
+            }
+
+        # ⑤ Allocation 이상 (ERROR) — allocation_plan 에 있지만 inventory 없음
+        alloc_issues = []
+        try:
+            rows = con.execute("""
+                SELECT ap.lot_no, ap.qty_mt, ap.status
+                FROM allocation_plan ap
+                LEFT JOIN inventory i ON i.lot_no = ap.lot_no
+                WHERE i.lot_no IS NULL AND ap.status NOT IN ('CANCELLED')
+                LIMIT 50
+            """).fetchall()
+            alloc_issues = [
+                {"lot_no": r["lot_no"], "qty_mt": r["qty_mt"], "alloc_status": r["status"]}
+                for r in rows
+            ]
+        except Exception:
+            pass  # allocation_plan 미존재 시 무시
+
+        # LOTs 결과 통합
+        all_lots = set(error_lots.keys()) | set(warning_lots.keys()) | set(partial_lots.keys())
+        lot_details = []
+        for lot in sorted(all_lots):
+            errs = error_lots.get(lot, [])
+            warns = warning_lots.get(lot, [])
+            partial = partial_lots.get(lot)
+            row_level = "error" if errs else ("warning" if (warns or partial) else "ok")
+            lot_details.append({
+                "lot_no":    lot,
+                "level":     row_level,
+                "errors":    errs,
+                "warnings":  warns,
+                "partial":   partial,
+                "in_allocation": any(a["lot_no"] == lot for a in alloc_issues),
+            })
+
+        # 6 카드 통계
+        cards = {
+            "total_lots":     total_lots,
+            "error_lots":     len(error_lots),
+            "warning_lots":   len(warning_lots),
+            "ok_lots":        max(0, total_lots - len(all_lots)),
+            "partial_lots":   len(partial_lots),
+            "alloc_issues":   len(alloc_issues),
+            "orphan_tonbags": orphan_count,
+        }
+        con.close()
+
+        return ok_response(data={
+            "cards":         cards,
+            "lots":          lot_details,
+            "alloc_issues":  alloc_issues,
+            "checked_at":    datetime.now(KST).isoformat(timespec="seconds"),
+            "overall_level": "error" if cards["error_lots"] > 0 or cards["alloc_issues"] > 0 else
+                             ("warning" if cards["warning_lots"] > 0 or cards["partial_lots"] > 0 else "ok"),
+        })
+    except Exception as e:
+        logger.error("integrity-report error: %s", e)
+        return err_response(str(e))
+
+
+@router.post("/fix-integrity", summary="🛠️ LOT 정합성 자동 복구 [Sprint 1-4]")
+def fix_integrity():
+    """
+    가능한 자동 복구:
+    - tonbag_count 불일치 → inventory.tonbag_count 를 실제 tonbag 수로 동기화
+    - orphan tonbag → 삭제
+    - 상태 혼재는 보고만, 자동 변경 안 함 (인간 판단 필요)
+    """
+    try:
+        con = _db()
+        fixes = []
+
+        # ① tonbag_count 동기화
+        cur = con.execute("""
+            UPDATE inventory
+            SET tonbag_count = (
+                SELECT COUNT(*) FROM inventory_tonbag t WHERE t.inventory_id = inventory.id
+            )
+            WHERE id IN (
+                SELECT i.id FROM inventory i
+                LEFT JOIN inventory_tonbag t ON t.inventory_id = i.id
+                GROUP BY i.id
+                HAVING i.tonbag_count != COUNT(t.id)
+            )
+        """)
+        if cur.rowcount > 0:
+            fixes.append({"action": "TONBAG_COUNT_SYNC", "affected_rows": cur.rowcount})
+
+        # ② 고아 톤백 삭제
+        cur2 = con.execute("""
+            DELETE FROM inventory_tonbag
+            WHERE inventory_id NOT IN (SELECT id FROM inventory)
+        """)
+        if cur2.rowcount > 0:
+            fixes.append({"action": "ORPHAN_TONBAG_DELETE", "affected_rows": cur2.rowcount})
+
+        con.commit()
+        con.close()
+        return ok_response(data={
+            "fixes":       fixes,
+            "fix_count":   sum(f["affected_rows"] for f in fixes),
+            "fixed_at":    datetime.now(KST).isoformat(timespec="seconds"),
+            "note":        "상태 혼재는 자동 복구하지 않음 (인간 판단 필요)",
+        })
+    except Exception as e:
+        logger.error("fix-integrity error: %s", e)
+        return err_response(str(e))
+
+
 # ── F029: 백업 생성 ───────────────────────────────────────────
 @router.post("/backup-create", summary="💾 백업 생성 (F029)")
 def backup_create():
