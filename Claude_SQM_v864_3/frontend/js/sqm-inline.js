@@ -7394,6 +7394,195 @@
   };
 
   /* =====================================================================
+     [Sprint 2 batch] 작은 다이얼로그들 — placeholder 일괄 활성화
+     ===================================================================== */
+
+  /* PDF/이미지 변환 (onDocConvert) — 기존 기능 안내 */
+  window.showDocConvertModal = function() {
+    showDataModal('', '<div style="max-width:600px;padding:14px">' +
+      '<h2>📷 PDF/이미지 변환</h2>' +
+      '<p style="font-size:12px">PDF·이미지 파일을 OCR/리사이즈/병합합니다.</p>' +
+      '<p style="font-size:11px;color:var(--text-muted)">현재는 PDF 입고/Picking List 업로드 메뉴를 통해 자동 처리됩니다. 별도 변환 도구는 Phase 2에서 추가 예정.</p>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">' +
+      '<button class="btn" onclick="window.showOneStopInboundModal()">📥 PDF 스캔 입고로 이동</button>' +
+      '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+      '</div></div>');
+  };
+
+  /* 제품 마스터 관리 — 기존 기능 안내 + product master 데이터 표시 */
+  window.showProductMasterModal = function() {
+    showDataModal('', '<div style="padding:30px;text-align:center;color:var(--text-muted)">⏳ 제품 마스터 로딩...</div>');
+    apiGet('/api/info/system-info').catch(function(){ return null; }).then(function(){
+      apiGet('/api/q/inbound-status?limit=200').catch(function(){ return null; }).then(function(res){
+        var rows = ((res && res.data && res.data.items) || []);
+        // group by product
+        var products = {};
+        rows.forEach(function(r){
+          if (!r.product) return;
+          if (!products[r.product]) products[r.product] = { count: 0, total_kg: 0 };
+          products[r.product].count++;
+          products[r.product].total_kg += (r.current_weight || 0);
+        });
+        var rowsHtml = Object.keys(products).sort().map(function(p, i){
+          var p2 = products[p];
+          return '<tr><td>' + (i+1) + '</td><td><strong>' + escapeHtml(p) + '</strong></td><td style="text-align:right">' + p2.count + ' LOT</td><td class="mono-cell" style="text-align:right">' + (p2.total_kg/1000).toFixed(3) + ' MT</td></tr>';
+        }).join('');
+        document.getElementById('sqm-modal-content').innerHTML =
+          '<div style="max-width:700px"><h2>📦 제품 마스터 관리</h2>' +
+          '<p style="font-size:11px;color:var(--text-muted)">현재 inventory 에 존재하는 제품 목록 (집계). 신규 제품 등록은 PDF 입고 시 자동 등록됩니다.</p>' +
+          '<table class="data-table" style="font-size:12px"><thead><tr><th>#</th><th>제품명</th><th style="text-align:right">LOT 수</th><th style="text-align:right">총 잔량</th></tr></thead>' +
+          '<tbody>' + (rowsHtml || '<tr><td colspan="4" style="padding:30px;text-align:center;color:var(--text-muted)">📭 제품 데이터 없음</td></tr>') + '</tbody></table>' +
+          '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
+          '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+          '</div></div>';
+      });
+    });
+  };
+
+  /* 이메일 설정 — Sprint 3 시작 */
+  window.showEmailConfigModal = function() {
+    var html = '<div style="max-width:600px"><h2>⚙️ 이메일 알림 설정</h2>' +
+      '<p style="font-size:11px;color:var(--text-muted)">Gmail SMTP 기준 — 출고/반품 발생 시 자동 이메일 발송. 실제 적용은 백엔드 SMTP 설정 후.</p>' +
+      '<div style="display:grid;grid-template-columns:130px 1fr;gap:8px;align-items:center">' +
+      '<label><input type="checkbox" id="em-enable"> 이메일 알림 활성화</label><span></span>' +
+      '<label>SMTP 서버:</label><input type="text" id="em-smtp" value="smtp.gmail.com" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label>포트:</label><input type="number" id="em-port" value="587" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label>Gmail 계정:</label><input type="email" id="em-account" placeholder="user@gmail.com" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label>앱 비밀번호:</label><input type="password" id="em-pass" placeholder="16자리" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-family:Consolas,monospace">' +
+      '<label>발신자:</label><input type="email" id="em-from" placeholder="alerts@company.com" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label>수신자:</label><input type="text" id="em-to" placeholder="kidong@..., admin@..." style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label>회사명:</label><input type="text" id="em-company" value="(주)지와이로지스" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label>창고명:</label><input type="text" id="em-wh" value="광양 창고" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label>반품 임계:</label><input type="number" id="em-thresh" value="3" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label>조회 기간(일):</label><input type="number" id="em-period" value="30" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '</div>' +
+      '<p style="font-size:10px;color:var(--text-muted);margin-top:10px">💡 Gmail 앱 비밀번호: Google 계정 → 보안 → 앱 비밀번호</p>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
+      '<button class="btn" onclick="showToast(\'info\', \'테스트 발송: 백엔드 SMTP 설정 후 활성화 예정\')">📧 테스트 발송</button>' +
+      '<button class="btn btn-primary" onclick="showToast(\'info\', \'설정 저장: 백엔드 settings 엔드포인트 확장 후 동작 예정 (현재는 UI만)\')">💾 저장</button>' +
+      '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+      '</div></div>';
+    showDataModal('', html);
+  };
+
+  /* 자동 백업 설정 */
+  window.showAutoBackupModal = function() {
+    showDataModal('', '<div style="max-width:550px"><h2>⏰ 자동 백업 설정</h2>' +
+      '<p style="font-size:11px;color:var(--text-muted)">백업 주기와 보존 기간 설정.</p>' +
+      '<div style="display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:center">' +
+      '<label><input type="checkbox" id="ab-enable" checked> 자동 백업 활성화</label><span></span>' +
+      '<label>백업 주기:</label><select id="ab-interval" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px"><option value="hourly">매 시간</option><option value="daily" selected>매일</option><option value="weekly">매주</option></select>' +
+      '<label>백업 시각:</label><input type="time" id="ab-time" value="03:00" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label>보존 기간(일):</label><input type="number" id="ab-keep" value="30" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label>백업 위치:</label><input type="text" value="data/backups/" readonly style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-family:Consolas,monospace">' +
+      '</div>' +
+      '<p style="font-size:10px;color:var(--text-muted);margin-top:10px">💡 즉시 백업: 메뉴 → 파일 → 백업 → 💾 백업 생성</p>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
+      '<button class="btn" onclick="dispatchAction(\'onOnBackup\')">💾 즉시 백업 실행</button>' +
+      '<button class="btn btn-primary" onclick="showToast(\'info\', \'자동 백업 스케줄러: Phase 2 cron 통합\')">💾 저장</button>' +
+      '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+      '</div></div>');
+  };
+
+  /* 단축키 가이드 */
+  window.showShortcutsModal = function() {
+    showDataModal('', '<div style="max-width:600px"><h2>⌨️ 단축키 안내</h2>' +
+      '<table class="data-table" style="font-size:12px"><thead><tr><th>키</th><th>동작</th></tr></thead><tbody>' +
+      [
+        ['Ctrl+R / F5', '현재 페이지 새로고침'],
+        ['Ctrl+1', 'Inventory 탭'],
+        ['Ctrl+2', 'Allocation 탭'],
+        ['Ctrl+3', 'Picked 탭'],
+        ['Ctrl+4', 'Outbound 탭'],
+        ['Ctrl+5', 'Return 탭'],
+        ['Ctrl+6', 'Move 탭'],
+        ['Ctrl+7', 'Dashboard'],
+        ['Ctrl+8', 'Log 탭'],
+        ['Ctrl+9', 'Scan 탭'],
+        ['Ctrl+B', '백업 생성'],
+        ['Ctrl+E', 'Excel 내보내기'],
+        ['Ctrl+I', '정합성 검사'],
+        ['Esc', '모달/메뉴 닫기'],
+        ['Esc Esc (1.5초내)', '앱 종료 확인'],
+        ['Enter (모달 안)', 'Primary 버튼 클릭'],
+        ['Tab (모달 안)', '포커스 순환'],
+        ['더블클릭 (셀)', '인라인 편집'],
+        ['우클릭 (행)', '컨텍스트 메뉴'],
+        ['Ctrl+Z (편집 중)', 'Undo (max 50)'],
+        ['Ctrl+Y / Ctrl+Shift+Z', 'Redo'],
+      ].map(function(r){ return '<tr><td class="mono-cell"><kbd>' + escapeHtml(r[0]) + '</kbd></td><td>' + escapeHtml(r[1]) + '</td></tr>'; }).join('') +
+      '</tbody></table>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:10px">' +
+      '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button></div></div>');
+  };
+
+  /* STATUS 가이드 */
+  window.showStatusGuideModal = function() {
+    showDataModal('', '<div style="max-width:700px"><h2>📊 STATUS 상태값 안내</h2>' +
+      '<table class="data-table" style="font-size:12px"><thead><tr><th>상태</th><th>의미</th><th>다음 단계</th></tr></thead><tbody>' +
+      [
+        ['<span class="tag" style="background:#66bb6a;color:#fff">AVAILABLE</span>', '판매 가능 (입고 완료, 미배정)', '→ RESERVED (배정 등록)'],
+        ['<span class="tag" style="background:#ffa726">RESERVED</span>', '판매 배정됨 (예약)', '→ PICKED (화물 결정) / → AVAILABLE (취소)'],
+        ['<span class="tag" style="background:#42a5f5;color:#fff">PICKED</span>', '피킹 완료 (출고 준비)', '→ OUTBOUND (출고 확정) / → RESERVED (되돌림)'],
+        ['<span class="tag" style="background:#ec407a;color:#fff">OUTBOUND</span>', '출고 진행 중', '→ SOLD (확정) / → RETURN (반품)'],
+        ['<span class="tag" style="background:#ec407a;color:#fff">SOLD</span>', '판매 완료 (확정)', '→ RETURN (반품 시)'],
+        ['<span class="tag" style="background:#9e9e9e;color:#fff">RETURN</span>', '반품 처리 중', '→ AVAILABLE (재입고)'],
+      ].map(function(r){ return '<tr><td>' + r[0] + '</td><td>' + escapeHtml(r[1]) + '</td><td style="font-size:11px">' + escapeHtml(r[2]) + '</td></tr>'; }).join('') +
+      '</tbody></table>' +
+      '<p style="font-size:11px;color:var(--text-muted);margin-top:10px">📷 Scan 탭의 5개 버튼을 통해 상태 전환 가능. 잘못된 source state시 ⛔ 가드.</p>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:10px">' +
+      '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button></div></div>');
+  };
+
+  /* 도움말 / About */
+  window.showHelpModal = function() {
+    showDataModal('', '<div style="max-width:700px"><h2>📖 SQM 재고관리 시스템 사용법</h2>' +
+      '<h3 style="font-size:13px;margin-top:14px">🎯 주요 워크플로우</h3>' +
+      '<ol style="font-size:12px;padding-left:18px;line-height:1.6">' +
+      '<li><strong>📥 입고</strong>: 메뉴 → 입고 → 📄 PDF 스캔 입고 → 4종 PDF (BL/PL/Invoice/DO) 업로드 → 18열 미리보기 편집 → 📤 DB 업로드</li>' +
+      '<li><strong>📋 배정</strong>: Allocation 탭에서 LOT별 9열 편집 + 7버튼 (예약 실행/취소/PICKED 전환/SOLD 확정 등)</li>' +
+      '<li><strong>🚀 출고</strong>: 메뉴 → 출고 → 🚀 즉시 출고 (원스톱) → 4탭 wizard (입력 → 톤백 선택 → OUT 스캔 검증 → 완료)</li>' +
+      '<li><strong>📷 바코드 스캔</strong>: Scan 탭 5단계 상태 전환 + ⚡ 빠른 스캔 + 🔕 무음 모드</li>' +
+      '<li><strong>📊 정합성</strong>: 메뉴 → 입고 → 🔍 정합성 검증 → 6 카드 + 신호등 + 자동 복구</li>' +
+      '</ol>' +
+      '<h3 style="font-size:13px;margin-top:14px">🔍 자주 쓰는 메뉴</h3>' +
+      '<ul style="font-size:12px;padding-left:18px;line-height:1.6">' +
+      '<li>🔍 <strong>전역 검색</strong>: 메뉴바의 🔍 버튼 — 4 도메인 통합 검색</li>' +
+      '<li>📋 <strong>입고 현황</strong>: 메뉴 → 입고 → 📋 입고 현황 조회</li>' +
+      '<li>🔁 <strong>DN 교차검증</strong>: 메뉴 → 보고서 → 🔍 DN 교차검증</li>' +
+      '<li>📊 <strong>반품 통계</strong>: 메뉴 → 입고 → 📊 반품 사유 통계</li>' +
+      '</ul>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">' +
+      '<button class="btn" onclick="window.showShortcutsModal()">⌨️ 단축키</button>' +
+      '<button class="btn" onclick="window.showStatusGuideModal()">📊 STATUS 가이드</button>' +
+      '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button></div></div>');
+  };
+
+  window.showAboutModal = function() {
+    showDataModal('', '<div style="max-width:500px;text-align:center;padding:20px"><h2>📦 SQM 재고관리 시스템</h2>' +
+      '<p style="font-size:24px;font-weight:700;color:var(--accent);margin:20px 0">v8.6.4.3</p>' +
+      '<p style="font-size:12px;color:var(--text-muted)">WebView Edition (FastAPI + pywebview)</p>' +
+      '<hr style="border:0;border-top:1px solid var(--panel-border);margin:20px 0">' +
+      '<p style="font-size:11px">v864-2 (Tkinter) 의 모든 기능을 WebView 로 포팅한 버전입니다.</p>' +
+      '<p style="font-size:10px;color:var(--text-muted);margin-top:10px">Powered by Claude Code · 한국어 지원 · Windows/Mac 호환</p>' +
+      '<div style="display:flex;justify-content:center;margin-top:20px">' +
+      '<button class="btn btn-primary" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">확인</button></div></div>');
+  };
+
+  window.showSystemInfoModal = function() {
+    apiGet('/api/info/system-info').catch(function(){ return null; }).then(function(res){
+      var d = (res && res.data) || res || {};
+      var rows = Object.entries(d).map(function(kv){
+        return '<tr><td style="font-weight:600">' + escapeHtml(kv[0]) + '</td><td class="mono-cell" style="font-size:11px">' + escapeHtml(String(kv[1])) + '</td></tr>';
+      }).join('');
+      showDataModal('', '<div style="max-width:600px"><h2>ℹ️ 시스템 정보</h2>' +
+        '<table class="data-table" style="font-size:11px"><tbody>' + rows + '</tbody></table>' +
+        '<div style="display:flex;justify-content:flex-end;margin-top:10px">' +
+        '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button></div></div>');
+    });
+  };
+
+  /* =====================================================================
      [Sprint 2-B] Settings + Carrier Rules — v864-2 SettingsDialogMixin (869줄)
      ===================================================================== */
   var _settingsState = { tab: 'api', apiKeys: null, rules: [] };
@@ -7803,7 +7992,7 @@
     /* ── 설정/도구 메뉴 ── */
     /* [Sprint 0] 'onSettings' removed — was wired to /api/menu/-on-settings (NotReadyError stub).
        Real settings dialog ships in Sprint 2 (SettingsDialogMixin port, ~5d). */
-    'onProductMaster':   {m:'GET',  u:'/api/info/system-info',                    lbl:'제품 마스터'},
+    'onProductMaster':   {m:'JS',   u:'product-master',                           lbl:'제품 마스터 관리'},  /* [Sprint 2/3] */
     'onProductInventoryReport': {m:'GET', u:'/api/q/product-inventory',           lbl:'제품별 재고 현황'},
     /* [Sprint 1-4] integrity 분리: report (read-only) vs fix (mutating) */
     'onIntegrityReport':   {m:'JS',  u:'integrity-report',                                lbl:'정합성 검증 (V760)'},
@@ -7820,11 +8009,12 @@
     'onResetWindowSize': {m:'JS',   u:'reset-window-size',                         lbl:'창 크기 초기화'},
 
     /* ── 도움말 메뉴 ── */
-    'onHelp':            {m:'GET',  u:'/api/info/usage',                          lbl:'사용자 매뉴얼'},
-    'onShortcuts':       {m:'GET',  u:'/api/info/shortcuts',                      lbl:'단축키'},
-    'onStatusGuide':     {m:'GET',  u:'/api/info/status-guide',                   lbl:'STATUS 안내'},
+    /* [Sprint 3] 도움말 다이얼로그들 — 풀 모달 (이전 raw JSON → 사용자 친화 다이얼로그) */
+    'onHelp':            {m:'JS',   u:'help',                                     lbl:'사용법'},
+    'onShortcuts':       {m:'JS',   u:'shortcuts',                                lbl:'단축키 안내'},
+    'onStatusGuide':     {m:'JS',   u:'status-guide',                             lbl:'STATUS 가이드'},
     'onBackupGuide':     {m:'GET',  u:'/api/info/backup-guide',                   lbl:'백업/복구 가이드'},
-    'onAbout':           {m:'GET',  u:'/api/info/version',                        lbl:'정보'},
+    'onAbout':           {m:'JS',   u:'about',                                    lbl:'버전 정보'},
 
     /* ── 탭 이동 ── */
     'onGoScanTab':       {m:'JS',   u:'scan',                                     lbl:'스캔 탭'},
@@ -7870,7 +8060,7 @@
     'onLotAllocationAudit': {m:'JS', u:'lot-allocation-audit',                    lbl:'LOT Allocation 톤백 현황'},
     'onDocConvert':      {m:'JS',   u:'doc-convert',                               lbl:'문서 변환 (OCR/PDF)'},
     'onTestDbReset':     {m:'JS',   u:'test-db-reset',                             lbl:'테스트 DB 초기화'},
-    'onSystemInfo':      {m:'GET',  u:'/api/q3/settings-info',                    lbl:'시스템 정보'},
+    'onSystemInfo':      {m:'JS',   u:'system-info',                              lbl:'시스템 정보'},  /* [Sprint 3] */
     'onProductSummary':  {m:'JS',   u:'product-summary',                           lbl:'품목별 재고 요약'},
     'onProductLotLookup': {m:'JS',  u:'product-lot-lookup',                        lbl:'품목별 LOT 조회'},
     'onProductMovement': {m:'JS',   u:'product-movement',                          lbl:'품목별 입출고 현황'},
@@ -8073,6 +8263,16 @@
       /* [Sprint 2] 작은 모달들 */
       if (conf.u === 'swap-report') { showSwapReportModal(); return; }
       if (conf.u === 'stock-alerts') { showStockAlertsModal(); return; }
+      /* [Sprint 2/3] 작은 다이얼로그 batch */
+      if (conf.u === 'doc-convert') { showDocConvertModal(); return; }
+      if (conf.u === 'product-master') { showProductMasterModal(); return; }
+      if (conf.u === 'email-config') { showEmailConfigModal(); return; }
+      if (conf.u === 'auto-backup-settings') { showAutoBackupModal(); return; }
+      if (conf.u === 'shortcuts') { showShortcutsModal(); return; }
+      if (conf.u === 'status-guide') { showStatusGuideModal(); return; }
+      if (conf.u === 'help') { showHelpModal(); return; }
+      if (conf.u === 'about') { showAboutModal(); return; }
+      if (conf.u === 'system-info') { showSystemInfoModal(); return; }
       dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
       renderPage(conf.u);
       return;
