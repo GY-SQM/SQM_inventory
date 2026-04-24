@@ -4766,12 +4766,12 @@
     showToast('success', '원본 상태로 초기화되었습니다');
   };
 
-  /* [Sprint 1-2-D] Sprint 2 에서 구현될 기능 플레이스홀더 */
+  /* [Sprint 2-A] Inbound Template CRUD 연동 — 풀 다이얼로그 */
   window.onestopTemplateSave = function() {
-    showToast('info', '📋 현재 파싱 설정 → 템플릿 저장: Sprint 2 (InboundTemplateDialog CRUD) 이후 활성화');
+    showInboundTemplateModal({ mode: 'create-from-current' });
   };
   window.onestopTemplateLoad = function() {
-    showToast('info', '📋 파싱 템플릿 선택: Sprint 2 (InboundTemplateDialog CRUD) 이후 활성화');
+    showInboundTemplateModal({ mode: 'select' });
   };
   window.onestopParseErrorRecovery = function(docType, errorCode) {
     showToast('info', (docType || 'PDF') + ' 파싱 오류 복구 (9 ERROR_CODES): Sprint 2 (ParseErrorRecoveryDialog) 이후 활성화');
@@ -6401,6 +6401,262 @@
     }, 100);
   };
 
+  /* =====================================================================
+     [Sprint 2-A] InboundTemplateDialog — v864-2 inbound_template_dialog.py 매칭
+     PanedWindow: 좌측 템플릿 목록 + 우측 3-tab 편집 (기본정보/Gemini힌트/메모)
+     opts.mode = 'manage' (default) | 'select' | 'create-from-current'
+     ===================================================================== */
+  var _itState = { mode: 'manage', templates: [], selectedId: null, currentTab: 1 };
+
+  function showInboundTemplateModal(opts) {
+    opts = opts || {};
+    _itState.mode = opts.mode || 'manage';
+    _itState.selectedId = null;
+    _itState.currentTab = 1;
+    showDataModal('', '<div style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 템플릿 로딩 중...</div>');
+    apiGet('/api/inbound/templates')
+      .then(function(res){
+        var d = (res && res.data) || {};
+        _itState.templates = d.items || [];
+        _itRender();
+      })
+      .catch(function(e){
+        document.getElementById('sqm-modal-content').innerHTML = '<div class="empty">로드 실패: ' + escapeHtml(e.message || String(e)) + '</div>';
+      });
+  }
+  window.showInboundTemplateModal = showInboundTemplateModal;
+
+  function _itRender() {
+    var sel = _itState.templates.find(function(t){ return t.template_id === _itState.selectedId; }) || null;
+    var headerExtra = _itState.mode === 'select' ?
+      ' <span style="font-size:11px;color:var(--accent)">선택 모드 — 더블클릭 또는 ✅ 적용</span>' :
+      _itState.mode === 'create-from-current' ?
+      ' <span style="font-size:11px;color:var(--warning)">현재 파싱 설정에서 새 템플릿 생성</span>' : '';
+
+    var listHtml = _itState.templates.length === 0
+      ? '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">📭 템플릿 없음<br><button class="btn btn-primary" onclick="window.itNew()" style="margin-top:10px">➕ 첫 템플릿 만들기</button></div>'
+      : _itState.templates.map(function(t){
+          var active = t.template_id === _itState.selectedId;
+          var bg = active ? 'background:var(--sidebar-active-bg);color:var(--sidebar-active-fg)' : '';
+          var inactive = !t.is_active ? '<span style="font-size:9px;background:var(--bg-hover);color:var(--text-muted);padding:1px 4px;border-radius:6px;margin-left:4px">OFF</span>' : '';
+          return '<div ondblclick="window.itDoubleClick(\'' + escapeHtml(t.template_id) + '\')" onclick="window.itSelect(\'' + escapeHtml(t.template_id) + '\')" style="padding:8px 10px;border-bottom:1px solid var(--panel-border);cursor:pointer;font-size:12px;' + bg + '">' +
+            '<div style="font-weight:600">' + escapeHtml(t.template_name) + inactive + '</div>' +
+            '<div style="font-size:10px;color:' + (active ? 'inherit' : 'var(--text-muted)') + '">🚢 ' + escapeHtml(t.carrier_id || '-') + ' · ' + (t.bag_weight_kg || 500) + 'kg · ' + escapeHtml(t.template_id) + '</div>' +
+            '</div>';
+        }).join('');
+
+    var tab1Html = sel ? _itTab1Form(sel) : _itEmptyForm();
+    var tab2Html = sel ? _itTab2Form(sel) : '<div style="padding:30px;text-align:center;color:var(--text-muted)">템플릿을 선택하세요</div>';
+    var tab3Html = sel ? _itTab3Form(sel) : '<div style="padding:30px;text-align:center;color:var(--text-muted)">템플릿을 선택하세요</div>';
+
+    var html =
+      '<div style="max-width:1100px">' +
+      '  <h2 style="margin:0 0 10px 0">📋 입고 파싱 템플릿 관리' + headerExtra + '</h2>' +
+      '  <div style="display:grid;grid-template-columns:280px 1fr;gap:10px;height:480px">' +
+      /* 좌: 목록 */
+      '    <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;display:flex;flex-direction:column">' +
+      '      <div style="padding:6px;display:flex;gap:4px;border-bottom:1px solid var(--panel-border)">' +
+      '        <strong style="flex:1;font-size:12px;align-self:center">템플릿 (' + _itState.templates.length + ')</strong>' +
+      '        <button class="btn" onclick="window.itNew()" title="신규" style="padding:2px 8px;font-size:11px">➕ 신규</button>' +
+      '      </div>' +
+      '      <div style="flex:1;overflow-y:auto">' + listHtml + '</div>' +
+      '    </div>' +
+      /* 우: 편집 */
+      '    <div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;display:flex;flex-direction:column">' +
+      '      <div style="display:flex;border-bottom:2px solid var(--panel-border)">' +
+      '        <button class="lot-tab-btn" data-tab="1" onclick="window.itSwitchTab(1)" style="padding:8px 16px;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;color:var(--fg);font-weight:600;font-size:13px">📌 기본정보</button>' +
+      '        <button class="lot-tab-btn" data-tab="2" onclick="window.itSwitchTab(2)" style="padding:8px 16px;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;color:var(--fg);font-weight:600;font-size:13px">🤖 Gemini 힌트</button>' +
+      '        <button class="lot-tab-btn" data-tab="3" onclick="window.itSwitchTab(3)" style="padding:8px 16px;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;color:var(--fg);font-weight:600;font-size:13px">📝 메모</button>' +
+      '      </div>' +
+      '      <div style="flex:1;overflow-y:auto;padding:12px">' +
+      '        <div class="lot-tab-pane" data-pane="1">' + tab1Html + '</div>' +
+      '        <div class="lot-tab-pane" data-pane="2" style="display:none">' + tab2Html + '</div>' +
+      '        <div class="lot-tab-pane" data-pane="3" style="display:none">' + tab3Html + '</div>' +
+      '      </div>' +
+      '    </div>' +
+      '  </div>' +
+      /* 액션 */
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
+      (sel ? '<button class="btn btn-danger" onclick="window.itDelete()">🗑️ 삭제</button>' : '') +
+      (_itState.mode === 'select' && sel ? '<button class="btn btn-primary" onclick="window.itApply()">✅ 적용</button>' : '') +
+      '    <button class="btn btn-primary" onclick="window.itSave()">💾 저장</button>' +
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+      '  </div>' +
+      '</div>';
+
+    document.getElementById('sqm-modal-content').innerHTML = html;
+    window.lotSwitchTab(_itState.currentTab);  /* 재사용 (같은 패턴) */
+  }
+
+  function _itEmptyForm() {
+    return '<div style="padding:30px;text-align:center;color:var(--text-muted)"><strong>📋 좌측에서 템플릿 선택</strong><br><br>또는 ➕ 신규 버튼으로 새 템플릿 만들기</div>';
+  }
+
+  function _itTab1Form(t) {
+    return '<div style="display:grid;grid-template-columns:130px 1fr;gap:8px 10px;align-items:center;font-size:13px">' +
+      '<label style="font-weight:600">템플릿 ID:</label>' +
+      '<input type="text" id="it-tid" value="' + escapeHtml(t.template_id || '') + '"' + (t.template_id ? ' readonly' : '') + ' style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-family:Consolas,monospace">' +
+      '<label style="font-weight:600">템플릿 이름 *:</label>' +
+      '<input type="text" id="it-name" value="' + escapeHtml(t.template_name || '') + '" placeholder="예: MAERSK 리튬카보네이트 500kg" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label style="font-weight:600">🚢 선사:</label>' +
+      '<select id="it-carrier" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+        ['UNKNOWN','MAERSK','MSC','CMA-CGM','EVERGREEN','HMM','ONE','HAPAG-LLOYD','COSCO'].map(function(c){
+          return '<option value="' + c + '"' + ((t.carrier_id || 'UNKNOWN') === c ? ' selected' : '') + '>' + c + '</option>';
+        }).join('') +
+      '</select>' +
+      '<label style="font-weight:600">톤백 단가(kg):</label>' +
+      '<select id="it-bagweight" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+        '<option value="500"' + (t.bag_weight_kg === 500 ? ' selected' : '') + '>500 kg</option>' +
+        '<option value="1000"' + (t.bag_weight_kg === 1000 ? ' selected' : '') + '>1000 kg</option>' +
+      '</select>' +
+      '<label style="font-weight:600">제품 힌트:</label>' +
+      '<input type="text" id="it-product" value="' + escapeHtml(t.product_hint || '') + '" placeholder="예: LITHIUM CARBONATE" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '<label style="font-weight:600">중량 형식:</label>' +
+      '<select id="it-wfmt" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+        '<option value="EURO"' + ((t.weight_format || 'EURO') === 'EURO' ? ' selected' : '') + '>EURO (1.234,56)</option>' +
+        '<option value="US"' + (t.weight_format === 'US' ? ' selected' : '') + '>US (1,234.56)</option>' +
+      '</select>' +
+      '<label style="font-weight:600">사용 중:</label>' +
+      '<label style="font-size:12px"><input type="checkbox" id="it-active"' + (t.is_active != 0 ? ' checked' : '') + '> 이 템플릿 활성화 (OneStop Inbound dropdown에 노출)</label>' +
+      '<label style="font-weight:600">BL 형식:</label>' +
+      '<input type="text" id="it-blfmt" value="' + escapeHtml(t.bl_format || '') + '" placeholder="예: 숫자9 / 영문3+숫자6" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+    '</div>';
+  }
+
+  function _itTab2Form(t) {
+    function ta(id, label, val) {
+      return '<div style="margin-bottom:10px">' +
+        '<label style="font-weight:600;font-size:12px;display:block;margin-bottom:4px">' + label + '</label>' +
+        '<textarea id="' + id + '" style="width:100%;min-height:60px;padding:6px;background:var(--bg-hover);color:var(--fg);border:1px solid var(--panel-border);border-radius:3px;font-family:Consolas,monospace;font-size:11px;resize:vertical">' + escapeHtml(val || '') + '</textarea>' +
+        '</div>';
+    }
+    return '<p style="font-size:11px;color:var(--text-muted);margin:0 0 10px 0">💡 Gemini AI 파싱 시 이 힌트 텍스트가 함께 전달됩니다. 선사별 특이사항이나 컬럼 위치 단서를 자유 형식으로 작성하세요.</p>' +
+      ta('it-hint-pl', '📦 Packing List 힌트', t.gemini_hint_packing) +
+      ta('it-hint-inv', '📄 Invoice 힌트', t.gemini_hint_invoice) +
+      ta('it-hint-bl', '🚢 BL 힌트', t.gemini_hint_bl);
+  }
+
+  function _itTab3Form(t) {
+    return '<label style="font-weight:600;font-size:12px;display:block;margin-bottom:6px">📝 담당자 메모</label>' +
+      '<textarea id="it-note" style="width:100%;min-height:240px;padding:8px;background:var(--bg-hover);color:var(--fg);border:1px solid var(--panel-border);border-radius:3px;font-size:12px;resize:vertical">' + escapeHtml(t.note || '') + '</textarea>' +
+      '<p style="font-size:11px;color:var(--text-muted);margin-top:6px">자유 형식 메모 — 협력사 연락처, 특이사항, 변경 이력 등</p>';
+  }
+
+  /* 핸들러 */
+  window.itSelect = function(tid) {
+    _itState.selectedId = tid;
+    _itRender();
+  };
+  window.itDoubleClick = function(tid) {
+    _itState.selectedId = tid;
+    if (_itState.mode === 'select') window.itApply();
+    else _itRender();
+  };
+  window.itSwitchTab = function(tab) {
+    _itState.currentTab = tab;
+    window.lotSwitchTab(tab);  /* CSS 동일 */
+  };
+  window.itNew = function() {
+    var newT = {
+      template_id:   'TPL_' + Date.now().toString(36).toUpperCase(),
+      template_name: '',
+      carrier_id:    'UNKNOWN',
+      bag_weight_kg: 500,
+      product_hint:  '',
+      weight_format: 'EURO',
+      is_active:     1,
+    };
+    /* 임시로 list 에 prepend */
+    _itState.templates.unshift(newT);
+    _itState.selectedId = newT.template_id;
+    _itRender();
+  };
+  window.itSave = function() {
+    var tid = (document.getElementById('it-tid') || {}).value || '';
+    var name = (document.getElementById('it-name') || {}).value || '';
+    if (!tid || !name.trim()) { showToast('error', 'ID 와 이름 필수'); return; }
+    var payload = {
+      template_id:         tid,
+      template_name:       name.trim(),
+      carrier_id:          (document.getElementById('it-carrier') || {}).value || 'UNKNOWN',
+      bag_weight_kg:       parseInt((document.getElementById('it-bagweight') || {}).value || 500, 10),
+      product_hint:        (document.getElementById('it-product') || {}).value || '',
+      weight_format:       (document.getElementById('it-wfmt') || {}).value || 'EURO',
+      bl_format:           (document.getElementById('it-blfmt') || {}).value || '',
+      is_active:           (document.getElementById('it-active') || {}).checked,
+      gemini_hint_packing: (document.getElementById('it-hint-pl') || {}).value || '',
+      gemini_hint_invoice: (document.getElementById('it-hint-inv') || {}).value || '',
+      gemini_hint_bl:      (document.getElementById('it-hint-bl') || {}).value || '',
+      note:                (document.getElementById('it-note') || {}).value || '',
+    };
+    /* 신규 vs 수정 — 서버에 같은 ID 가 있는지로 판단 */
+    var existing = _itState.templates.find(function(t){ return t.template_id === tid && !t._isNewLocal; });
+    /* 임시로 만든 것은 _isNewLocal 플래그 — 위 itNew 에서 처리 안 했으니 그냥 try POST → 409 면 PATCH */
+    apiPost('/api/inbound/templates', payload)
+      .then(function(res){
+        if (res && res.ok) {
+          showToast('success', '✅ 신규 저장: ' + payload.template_name);
+          showInboundTemplateModal({ mode: _itState.mode });
+        } else throw new Error((res && (res.detail || res.error)) || 'fail');
+      })
+      .catch(function(e){
+        if (String(e.message || '').indexOf('409') !== -1 || String(e.message || '').indexOf('중복') !== -1) {
+          /* PATCH */
+          fetch(API + '/api/inbound/templates/' + encodeURIComponent(tid), {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          }).then(function(r){ return r.json().then(function(b){ return { ok: r.ok, body: b }; }); })
+            .then(function(res){
+              if (res.ok && res.body.ok) {
+                showToast('success', '💾 수정 저장: ' + payload.template_name);
+                showInboundTemplateModal({ mode: _itState.mode });
+              } else {
+                showToast('error', '저장 실패: ' + JSON.stringify(res.body));
+              }
+            })
+            .catch(function(err){ showToast('error', '저장 오류: ' + err.message); });
+        } else {
+          showToast('error', '저장 실패: ' + e.message);
+        }
+      });
+  };
+  window.itDelete = function() {
+    var tid = _itState.selectedId;
+    if (!tid) return;
+    var t = _itState.templates.find(function(x){ return x.template_id === tid; });
+    if (!confirm('🗑️ 템플릿 삭제\n\n' + (t ? t.template_name : tid) + '\n계속하시겠습니까?')) return;
+    fetch(API + '/api/inbound/templates/' + encodeURIComponent(tid), { method: 'DELETE' })
+      .then(function(r){ return r.json().then(function(b){ return { ok: r.ok, body: b }; }); })
+      .then(function(res){
+        if (res.ok && res.body.ok) {
+          showToast('success', '삭제됨');
+          showInboundTemplateModal({ mode: _itState.mode });
+        } else {
+          showToast('error', '삭제 실패: ' + JSON.stringify(res.body));
+        }
+      })
+      .catch(function(e){ showToast('error', '삭제 오류: ' + e.message); });
+  };
+  window.itApply = function() {
+    var tid = _itState.selectedId;
+    if (!tid) return;
+    var t = _itState.templates.find(function(x){ return x.template_id === tid; });
+    if (!t) return;
+    document.getElementById('sqm-modal').style.display = 'none';
+    setTimeout(function(){
+      /* OneStop Inbound modal 안에 적용 */
+      _onestopState.template = t;
+      var sel = document.getElementById('onestop-template');
+      if (sel) {
+        sel.innerHTML = '<option>' + t.carrier_id + ' — ' + t.template_name + ' (' + t.bag_weight_kg + 'kg)</option>';
+      }
+      var carrierInp = document.getElementById('onestop-carrier');
+      if (carrierInp) carrierInp.value = t.carrier_id || '';
+      showToast('success', '📋 템플릿 적용: ' + t.template_name);
+    }, 100);
+  };
+
   /* ===================================================
      9. ALERTS + STATUSBAR
      =================================================== */
@@ -6752,6 +7008,8 @@
       if (conf.u === 'integrity-fix') { showIntegrityV760Modal(true); return; }
       /* [Sprint 2-C] 전역 검색 */
       if (conf.u === 'global-search') { showGlobalSearchModal(); return; }
+      /* [Sprint 2-A] Inbound Template */
+      if (conf.u === 'inbound-template') { showInboundTemplateModal(); return; }
       dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
       renderPage(conf.u);
       return;
