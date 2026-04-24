@@ -7393,6 +7393,217 @@
     showToast('success', '📥 ' + a.download);
   };
 
+  /* =====================================================================
+     [Sprint 2-B] Settings + Carrier Rules — v864-2 SettingsDialogMixin (869줄)
+     ===================================================================== */
+  var _settingsState = { tab: 'api', apiKeys: null, rules: [] };
+
+  function showSettingsModal(initialTab) {
+    _settingsState.tab = initialTab === 'carrier' ? 'carrier' : 'api';
+    showDataModal('', '<div style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 설정 로딩 중...</div>');
+    Promise.all([
+      apiGet('/api/settings/api-keys').catch(function(){ return null; }),
+      apiGet('/api/settings/carrier-rules').catch(function(){ return null; }),
+    ]).then(function(results){
+      _settingsState.apiKeys = (results[0] && results[0].data) || null;
+      _settingsState.rules = ((results[1] && results[1].data && results[1].data.items) || []);
+      _settingsRender();
+    });
+  }
+  window.showSettingsModal = showSettingsModal;
+
+  function _settingsRender() {
+    var t = _settingsState.tab;
+    var html =
+      '<div style="max-width:1000px">' +
+      '  <h2 style="margin:0 0 8px 0">⚙️ 설정 (Settings)</h2>' +
+      '  <div style="display:flex;border-bottom:2px solid var(--panel-border);margin-bottom:10px">' +
+      '    <button onclick="window.settingsTab(\'api\')" style="padding:8px 16px;background:none;border:none;border-bottom:3px solid ' + (t==='api'?'var(--accent)':'transparent') + ';cursor:pointer;color:' + (t==='api'?'var(--accent)':'var(--fg)') + ';font-weight:600;font-size:13px">🔐 API 키</button>' +
+      '    <button onclick="window.settingsTab(\'carrier\')" style="padding:8px 16px;background:none;border:none;border-bottom:3px solid ' + (t==='carrier'?'var(--accent)':'transparent') + ';cursor:pointer;color:' + (t==='carrier'?'var(--accent)':'var(--fg)') + ';font-weight:600;font-size:13px">🚢 선사 BL/DO 규칙</button>' +
+      '  </div>' +
+      '  <div style="max-height:500px;overflow-y:auto">' +
+      (t === 'api' ? _settingsRenderApiKeys() : _settingsRenderCarrierRules()) +
+      '  </div>' +
+      '  <div style="display:flex;justify-content:flex-end;margin-top:10px">' +
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+      '  </div>' +
+      '</div>';
+    document.getElementById('sqm-modal-content').innerHTML = html;
+  }
+
+  function _settingsRenderApiKeys() {
+    var d = _settingsState.apiKeys || {};
+    function row(svc, info, displayName) {
+      var src = info.source || (info.configured ? 'KEYRING' : '(없음)');
+      var srcColor = src === 'ENV' ? 'var(--success)' : src === 'KEYRING' ? 'var(--info, #42a5f5)' : src === 'INI' ? 'var(--warning)' : 'var(--text-muted)';
+      return '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:12px;margin-bottom:8px">' +
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">' +
+        '<strong style="font-size:14px">' + displayName + '</strong>' +
+        '<span style="font-size:11px;color:' + srcColor + ';font-weight:700">📍 ' + src + '</span>' +
+        '<span style="font-size:11px;color:var(--text-muted);font-family:Consolas,monospace">' + (info.masked || '-') + '</span>' +
+        '<span style="margin-left:auto;font-size:10px;color:var(--text-muted)">model: ' + (info.model || '-') + '</span>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;align-items:center">' +
+        '<input type="password" id="set-key-' + svc + '" placeholder="새 API 키 입력 (keyring에 안전 저장)" style="flex:1;padding:6px 8px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-size:12px;font-family:Consolas,monospace">' +
+        '<button class="btn" onclick="window.settingsSaveKey(\'' + svc + '\')">💾 저장</button>' +
+        (info.configured ? '<button class="btn btn-danger" onclick="window.settingsDeleteKey(\'' + svc + '\')">🗑️ 삭제</button>' : '') +
+        '</div>' +
+        '</div>';
+    }
+    return '<p style="font-size:11px;color:var(--text-muted)">💡 우선순위: 환경변수(ENV) > keyring > settings.ini. keyring 사용 권장 (OS 자격증명 보관소).</p>' +
+      row('gemini', d.gemini || {}, '🤖 Google Gemini') +
+      row('openai', d.openai || {}, '🔵 OpenAI') +
+      '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:12px;margin-bottom:8px">' +
+        '<strong>🔌 Anthropic Claude</strong> ' +
+        '<span style="font-size:11px;color:var(--text-muted)">(현재 미사용 — Phase 2 예정)</span>' +
+      '</div>';
+  }
+
+  function _settingsRenderCarrierRules() {
+    var rules = _settingsState.rules;
+    var byCarrier = {};
+    rules.forEach(function(r){
+      if (!byCarrier[r.carrier_id]) byCarrier[r.carrier_id] = [];
+      byCarrier[r.carrier_id].push(r);
+    });
+    var carriers = Object.keys(byCarrier).sort();
+
+    var groupsHtml = '';
+    if (carriers.length === 0) {
+      groupsHtml = '<div style="padding:30px;text-align:center;color:var(--text-muted)">📭 등록된 규칙 없음</div>';
+    } else {
+      groupsHtml = carriers.map(function(c){
+        var rs = byCarrier[c];
+        var rows = rs.map(function(r){
+          var dtColor = r.doc_type === 'BL' ? '#42a5f5' : r.doc_type === 'DO' ? '#66bb6a' : r.doc_type === 'PL' ? '#ffa726' : '#ec407a';
+          return '<tr' + (r.is_active ? '' : ' style="opacity:.5"') + '>' +
+            '<td><span class="tag" style="background:' + dtColor + ';color:#fff;font-size:10px">' + escapeHtml(r.doc_type) + '</span></td>' +
+            '<td><strong>' + escapeHtml(r.rule_name) + '</strong></td>' +
+            '<td class="mono-cell" style="font-size:10px">' + escapeHtml(r.pattern || '-') + '</td>' +
+            '<td style="font-size:10px;color:var(--text-muted)">' + escapeHtml(r.description || '-') + '</td>' +
+            '<td class="mono-cell" style="font-size:10px">' + escapeHtml(r.sample_value || '-') + '</td>' +
+            '<td style="text-align:center"><button class="btn" style="padding:2px 6px;font-size:10px" onclick="window.crEdit(' + r.id + ')">✏️</button> <button class="btn btn-danger" style="padding:2px 6px;font-size:10px" onclick="window.crDelete(' + r.id + ')">🗑️</button></td>' +
+            '</tr>';
+        }).join('');
+        return '<div style="margin-bottom:10px"><h3 style="font-size:13px;margin:0 0 4px 0">🚢 ' + escapeHtml(c) + ' (' + rs.length + ')</h3>' +
+          '<table class="data-table" style="font-size:11px"><thead><tr><th>Doc</th><th>이름</th><th>패턴</th><th>설명</th><th>예시</th><th>작업</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+      }).join('');
+    }
+
+    return '<div style="margin-bottom:10px"><button class="btn btn-primary" onclick="window.crNew()">➕ 규칙 추가</button></div>' + groupsHtml;
+  }
+
+  window.settingsTab = function(t) { _settingsState.tab = t; _settingsRender(); };
+  window.settingsSaveKey = function(svc) {
+    var inp = document.getElementById('set-key-' + svc);
+    if (!inp || !inp.value.trim()) { showToast('warn', 'API 키 입력하세요'); return; }
+    apiPost('/api/settings/api-keys', { service: svc, api_key: inp.value.trim() })
+      .then(function(){ showToast('success', svc + ' 키 저장됨 (keyring) — 앱 재시작 시 적용'); inp.value=''; showSettingsModal('api'); })
+      .catch(function(e){ showToast('error', '저장 실패: ' + (e.message||String(e))); });
+  };
+  window.settingsDeleteKey = function(svc) {
+    if (!confirm(svc + ' API 키 삭제?')) return;
+    fetch(API + '/api/settings/api-keys/' + svc, { method: 'DELETE' })
+      .then(function(r){ return r.json(); })
+      .then(function(res){ if (res.ok) { showToast('success', '삭제됨'); showSettingsModal('api'); } else showToast('error', '실패'); });
+  };
+  window.crNew = function() {
+    var carrier = prompt('선사 ID (예: MAERSK)'); if (!carrier) return;
+    var doc = prompt('Doc Type (BL/DO/PL/INVOICE)'); if (!doc) return;
+    var name = prompt('규칙 이름 (예: BL 번호 9자리)'); if (!name) return;
+    var pattern = prompt('패턴 (regex 또는 자유 텍스트, 선택)') || '';
+    var desc = prompt('설명 (선택)') || '';
+    var sample = prompt('예시 값 (선택)') || '';
+    apiPost('/api/settings/carrier-rules', {
+      carrier_id: carrier, doc_type: doc, rule_name: name,
+      pattern: pattern, description: desc, sample_value: sample,
+    })
+      .then(function(){ showToast('success', '규칙 생성됨'); showSettingsModal('carrier'); })
+      .catch(function(e){ showToast('error', '실패: ' + e.message); });
+  };
+  window.crEdit = function(id) {
+    var r = _settingsState.rules.find(function(x){ return x.id === id; });
+    if (!r) return;
+    var name = prompt('규칙 이름', r.rule_name); if (name === null) return;
+    var pattern = prompt('패턴', r.pattern || ''); if (pattern === null) return;
+    var desc = prompt('설명', r.description || ''); if (desc === null) return;
+    fetch(API + '/api/settings/carrier-rules/' + id, {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ rule_name: name, pattern: pattern, description: desc }),
+    }).then(function(rr){ return rr.json(); })
+      .then(function(res){ if (res.ok) { showToast('success', '수정됨'); showSettingsModal('carrier'); } else showToast('error', '실패'); });
+  };
+  window.crDelete = function(id) {
+    if (!confirm('이 규칙 삭제?')) return;
+    fetch(API + '/api/settings/carrier-rules/' + id, { method: 'DELETE' })
+      .then(function(r){ return r.json(); })
+      .then(function(res){ if (res.ok) { showToast('success', '삭제됨'); showSettingsModal('carrier'); } else showToast('error', '실패'); });
+  };
+
+  /* =====================================================================
+     [Sprint 2] Swap 리포트 — 출고 swap 이력 간단 조회
+     ===================================================================== */
+  function showSwapReportModal() {
+    showDataModal('', '<div style="padding:40px;text-align:center;color:var(--text-muted)">⏳ Swap 이력 조회 중...</div>');
+    apiGet('/api/q/audit-log?event_type=SWAP&limit=200').catch(function(){ return null; })
+      .then(function(res){
+        var items = ((res && res.data && res.data.items) || []);
+        var rows = items.length === 0
+          ? '<tr><td colspan="5" style="padding:30px;text-align:center;color:var(--text-muted)">📭 Swap 이력 없음</td></tr>'
+          : items.map(function(it){
+              return '<tr><td class="mono-cell" style="font-size:10px">' + escapeHtml((it.created_at || '').slice(0, 19)) + '</td>' +
+                '<td class="mono-cell">' + escapeHtml(it.tonbag_id || '-') + '</td>' +
+                '<td>' + escapeHtml(it.event_type || '-') + '</td>' +
+                '<td style="font-size:10px">' + escapeHtml(it.event_data || '-') + '</td>' +
+                '<td>' + escapeHtml(it.created_by || '-') + '</td></tr>';
+            }).join('');
+        document.getElementById('sqm-modal-content').innerHTML =
+          '<div style="max-width:900px"><h2>🔁 Swap 리포트</h2>' +
+          '<p style="font-size:11px;color:var(--text-muted)">audit_log 의 SWAP 이벤트 — Sprint 2 정식 SwapReport 다이얼로그는 향후 별도 구현 예정. 임시로 audit 기반 표시.</p>' +
+          '<table class="data-table" style="font-size:11px"><thead><tr><th>시간</th><th>Tonbag</th><th>이벤트</th><th>데이터</th><th>By</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+          '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
+          '<button class="btn" onclick="window.ooViewAuditLog()">📋 풀 감사 로그</button>' +
+          '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+          '</div></div>';
+      });
+  }
+  window.showSwapReportModal = showSwapReportModal;
+
+  /* =====================================================================
+     [Sprint 2] 재고 알림 조회 — 로우 스톡, 장기 재고, 유통 기한
+     ===================================================================== */
+  function showStockAlertsModal() {
+    showDataModal('', '<div style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 재고 알림 조회 중...</div>');
+    apiGet('/api/dashboard/alerts').catch(function(){ return null; })
+      .then(function(res){
+        var items = (res && (res.data || res.alerts)) || [];
+        if (!Array.isArray(items)) items = [];
+        var rows = items.length === 0
+          ? '<div style="padding:30px;text-align:center;color:var(--success);font-weight:700">✅ 알림 없음 — 재고 상태 정상</div>'
+          : '<ul style="margin:0;padding:0;list-style:none">' +
+            items.map(function(a){
+              var sev = (a.severity || 'info').toLowerCase();
+              var color = sev === 'error' ? 'var(--danger)' : sev === 'warning' ? 'var(--warning)' : 'var(--info, #42a5f5)';
+              return '<li style="padding:8px 12px;background:rgba(' + (sev==='error'?'244,67,54':sev==='warning'?'255,167,38':'66,165,245') + ',.1);border-left:3px solid ' + color + ';border-radius:4px;margin-bottom:6px;display:flex;gap:10px;align-items:center">' +
+                '<span style="font-size:18px">' + (a.icon ? '' : (sev==='error'?'🚫':sev==='warning'?'⚠️':'ℹ️')) + (a.icon || '') + '</span>' +
+                '<span style="flex:1;font-size:12px">' + escapeHtml(a.text || a.message || '') + '</span>' +
+                (a.link ? '<a href="' + escapeHtml(a.link) + '" style="color:' + color + ';font-size:11px;font-weight:700">Go →</a>' : '') +
+                '</li>';
+            }).join('') + '</ul>';
+        document.getElementById('sqm-modal-content').innerHTML =
+          '<div style="max-width:700px"><h2>🔔 재고 알림 조회</h2>' +
+          '<p style="font-size:11px;color:var(--text-muted)">로우 스톡 / 장기 재고 / 유통기한 / 정합성 이슈 등을 통합 표시.</p>' +
+          rows +
+          '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
+          '<button class="btn" onclick="window.showStockAlertsModal()">🔄 새로고침</button>' +
+          '<button class="btn" onclick="window.showIntegrityV760Modal()">🩺 정합성 검증</button>' +
+          '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
+          '</div></div>';
+      });
+  }
+  window.showStockAlertsModal = showStockAlertsModal;
+
   window.dnExportCsv = function() {
     var d = window._dnLastResult || {};
     var headers = ['type','lot_no','do_no','bl_no','sap_no','product','vessel','status','arrival_or_inbound','weight_kg'];
@@ -7649,8 +7860,13 @@
     'onSalesOrderUpload': {m:'JS', u:'sales-order-upload',                         lbl:'Sales Order 업로드'},
     /* [Sprint 2] Swap report — placeholder Sprint 2 다음 phase */
     'onSwapReportDialog': {m:'JS', u:'wip',                                        lbl:'Swap 리포트'},
-    'onReportTemplates': {m:'GET',  u:'/api/q/audit-log',                          lbl:'보고서 양식 관리'},
-    'onReportHistory':   {m:'GET',  u:'/api/q/audit-log',                          lbl:'보고서 이력 조회'},
+    /* [Sprint 2] 보고서 양식/이력 mis-wire 수정 — Sprint 1-3-D 감사 로그 sub-popup 재활용 */
+    'onReportTemplates': {m:'JS',   u:'audit-viewer',                              lbl:'보고서 양식 관리'},
+    'onReportHistory':   {m:'JS',   u:'audit-viewer',                              lbl:'보고서 이력 조회'},
+    'onAuditLog':        {m:'JS',   u:'audit-viewer',                              lbl:'감사 로그 조회'},
+    /* [Sprint 2] 작은 다이얼로그들 */
+    'onSwapReportDialog': {m:'JS',  u:'swap-report',                               lbl:'Swap 리포트'},
+    'onStockAlerts':     {m:'JS',   u:'stock-alerts',                              lbl:'재고 알림 조회'},
     'onLotAllocationAudit': {m:'JS', u:'lot-allocation-audit',                    lbl:'LOT Allocation 톤백 현황'},
     'onDocConvert':      {m:'JS',   u:'doc-convert',                               lbl:'문서 변환 (OCR/PDF)'},
     'onTestDbReset':     {m:'JS',   u:'test-db-reset',                             lbl:'테스트 DB 초기화'},
@@ -7659,9 +7875,14 @@
     'onProductLotLookup': {m:'JS',  u:'product-lot-lookup',                        lbl:'품목별 LOT 조회'},
     'onProductMovement': {m:'JS',   u:'product-movement',                          lbl:'품목별 입출고 현황'},
 
-    /* ── [Sprint 0-3b] v864-2 파일 메뉴 슬롯 복원 (placeholder — Sprint 2에서 실구현) ── */
-    'onBlCarrierRegister': {m:'JS', u:'wip',                                       lbl:'🚢 선사 BL 등록 도구'},
-    'onBlCarrierAnalyze':  {m:'JS', u:'wip',                                       lbl:'🔬 선사 패턴 분석'},
+    /* ── [Sprint 2-B] v864-2 SettingsDialogMixin + BL 도구 — 실구현 ── */
+    'onBlCarrierRegister': {m:'JS', u:'carrier-rules',                             lbl:'🚢 선사 BL 등록 도구'},
+    'onBlCarrierAnalyze':  {m:'JS', u:'carrier-rules',                             lbl:'🔬 선사 패턴 분석'},
+    'onSettings':          {m:'JS', u:'settings',                                  lbl:'⚙️ 설정 (API + BL 규칙)'},
+    'onGeminiToggle':      {m:'JS', u:'settings',                                  lbl:'🔀 Gemini AI 사용'},
+    'onGeminiApiSettings': {m:'JS', u:'settings',                                  lbl:'🔐 API 키 설정'},
+    'onGeminiApiTest':     {m:'JS', u:'settings',                                  lbl:'🧪 API 연결 테스트'},
+    'onAiChat':            {m:'JS', u:'wip',                                       lbl:'💬 AI 채팅 (Phase 2)'},
     'onGeminiToggle':      {m:'JS', u:'wip',                                       lbl:'🔀 Gemini AI 사용'},
     'onAiChat':            {m:'JS', u:'wip',                                       lbl:'💬 AI 채팅'},
     'onGeminiApiSettings': {m:'JS', u:'wip',                                       lbl:'🔐 Gemini API 설정'},
@@ -7844,6 +8065,14 @@
       if (conf.u === 'dn-cross-check') { showDnCrossCheckModal(); return; }
       /* [Sprint 2-P] Return Statistics */
       if (conf.u === 'return-stats') { showReturnStatsModal(); return; }
+      /* [Sprint 2-B] Settings + Carrier rules */
+      if (conf.u === 'settings') { showSettingsModal(); return; }
+      if (conf.u === 'carrier-rules') { showSettingsModal('carrier'); return; }
+      /* [Sprint 2] 보고서 양식/이력 mis-wire 수정 → audit viewer 재활용 */
+      if (conf.u === 'audit-viewer') { window.ooViewAuditLog(); return; }
+      /* [Sprint 2] 작은 모달들 */
+      if (conf.u === 'swap-report') { showSwapReportModal(); return; }
+      if (conf.u === 'stock-alerts') { showStockAlertsModal(); return; }
       dbgLog('🔀','Route → '+conf.u, conf.lbl,'#ab47bc');
       renderPage(conf.u);
       return;
