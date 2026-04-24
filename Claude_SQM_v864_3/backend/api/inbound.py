@@ -340,6 +340,224 @@ async def pdf_inbound_upload(file: UploadFile = File(...)):
     return pdf_inbound(req)
 
 
+# ────────────────────────────────────────────────────────────
+# [Sprint 1-2-B] OneStop 입고 — 4종 multipart + 크로스체크
+#
+# v864-2 source: gui_app_modular/dialogs/onestop_inbound.py
+# Input: 4 multipart PDFs (BL, PL required; Invoice, DO optional)
+# Flow:
+#   1. 각 PDF 임시 저장
+#   2. parsers.document_parser_modular.DocumentParserV3 로 4종 파싱
+#   3. parsers.cross_check_engine.cross_check_documents 로 교차 검증
+#   4. PL 결과만 기존 pdf_inbound 로직으로 DB 저장 (Sprint 1-2-C에서 4종 병합 저장)
+#   5. 응답: cross_check 요약 + 18열 preview_rows + 저장 결과
+# ────────────────────────────────────────────────────────────
+def _safe_attr(obj, *names, default=""):
+    """객체에서 첫 번째로 존재하고 truthy 한 속성값 반환."""
+    if not obj:
+        return default
+    for n in names:
+        v = getattr(obj, n, None)
+        if v:
+            return v
+    return default
+
+
+def _parse_one(parser, path, doc_type_method: str):
+    """파싱 함수 호출. 실패 시 None 반환 (4종 중 하나 실패해도 나머지 진행)."""
+    if not path:
+        return None
+    try:
+        fn = getattr(parser, doc_type_method)
+        return fn(path)
+    except Exception as e:
+        logger.warning(f"{doc_type_method} 파싱 실패: {e}", exc_info=True)
+        return None
+
+
+@router.post(
+    "/onestop-upload",
+    summary="📥 OneStop 입고 — 4종 PDF multipart + 크로스체크 (v864-2 OneStopInboundDialog)",
+)
+async def onestop_inbound_upload(
+    bl: "UploadFile | None" = File(None),
+    pl: UploadFile = File(...),
+    invoice: "UploadFile | None" = File(None),
+    do_file: "UploadFile | None" = File(None),
+):
+    """
+    4종 PDF 를 업로드하면 파싱 + 크로스체크 + PL DB 저장 수행.
+
+    - `pl`: Packing List (필수)
+    - `bl`: Bill of Lading (선택 — 크로스체크 용도)
+    - `invoice`: Invoice / FA (선택 — 크로스체크 용도)
+    - `do_file`: Delivery Order (선택 — 크로스체크 + 나중에 등록 가능)
+    """
+    # 1. 각 파일 임시 저장
+    inputs = [
+        ("pl", pl, True),
+        ("bl", bl, False),
+        ("invoice", invoice, False),
+        ("do", do_file, False),
+    ]
+    tmp_paths: "dict[str, str | None]" = {}
+    for key, uf, required in inputs:
+        if uf is None:
+            if required:
+                raise HTTPException(400, f"{key}: 파일이 없습니다 (필수)")
+            tmp_paths[key] = None
+            continue
+        if not uf.filename or not uf.filename.lower().endswith(".pdf"):
+            raise HTTPException(400, f"{key}: PDF 파일만 지원 (받음: {uf.filename})")
+        content = await uf.read()
+        if not content:
+            raise HTTPException(400, f"{key}: 빈 파일")
+        if content[:4] != b"%PDF":
+            raise HTTPException(400, f"{key}: 유효한 PDF 파일이 아닙니다")
+        tf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tf.write(content)
+        tf.close()
+        tmp_paths[key] = tf.name
+
+    try:
+        # 2. 파서 로드 + 4종 파싱
+        try:
+            from parsers.document_parser_modular.parser import DocumentParserV3
+            parser = DocumentParserV3()
+        except Exception as e:
+            logger.error(f"DocumentParserV3 로드 실패: {e}", exc_info=True)
+            raise HTTPException(500, f"파서 로드 실패: {e}")
+
+        parsed = {
+            "packing_list": _parse_one(parser, tmp_paths["pl"], "parse_packing_list"),
+            "bl":           _parse_one(parser, tmp_paths["bl"], "parse_bl"),
+            "invoice":      _parse_one(parser, tmp_paths["invoice"], "parse_invoice"),
+            "do":           _parse_one(parser, tmp_paths["do"], "parse_do"),
+        }
+
+        if parsed["packing_list"] is None:
+            raise HTTPException(422, "Packing List 파싱 실패 (최소 1종은 파싱되어야 합니다)")
+
+        # 3. 크로스체크
+        xc_items, xc_summary, xc_counts = [], "", {}
+        try:
+            from parsers.cross_check_engine import cross_check_documents
+            xc = cross_check_documents(
+                invoice=parsed["invoice"],
+                packing_list=parsed["packing_list"],
+                bl=parsed["bl"],
+                do=parsed["do"],
+            )
+            xc_summary = xc.summary
+            xc_counts = {
+                "critical": xc.critical_count,
+                "warning":  xc.warning_count,
+                "info":     xc.info_count,
+                "has_critical": xc.has_critical,
+            }
+            xc_items = [
+                {
+                    "field": it.field_name,
+                    "level": int(it.level),
+                    "icon": it.level_icon,
+                    "message": it.message,
+                    "sources": it.sources,
+                }
+                for it in xc.items
+            ]
+        except Exception as e:
+            logger.warning(f"cross_check_documents 실패 — 건너뜀: {e}", exc_info=True)
+            xc = None
+            xc_summary = "크로스체크 엔진 미실행"
+            xc_counts = {"critical": 0, "warning": 0, "info": 0, "has_critical": False}
+
+        # 4. 18열 preview_rows 조립 (v864-2 PREVIEW_COLUMNS 매칭)
+        preview_rows = []
+        pl_obj = parsed["packing_list"]
+        pl_rows = getattr(pl_obj, "rows", None) or getattr(pl_obj, "lots", None) or []
+        bl_no = _safe_attr(parsed["bl"], "bl_no", "bl_number")
+        inv_no = _safe_attr(parsed["invoice"], "invoice_no", "invoice_number")
+        ship_date = _safe_attr(parsed["bl"], "ship_date", "shipped_on_board")
+        arrival = _safe_attr(parsed["do"], "arrival_date", "eta")
+        con_return = _safe_attr(parsed["do"], "con_return", "container_return")
+        free_time = _safe_attr(parsed["do"], "free_time")
+        wh = _safe_attr(parsed["do"], "warehouse", "warehouse_name")
+
+        for idx, row in enumerate(pl_rows, start=1):
+            lot = str(_safe_attr(row, "lot_no", "lot")).strip()
+            xc_tag = xc.get_row_tag(lot) if xc and lot else None
+            preview_rows.append({
+                "no": idx,
+                "lot_no":      lot,
+                "sap_no":      str(_safe_attr(row, "sap_no")),
+                "bl_no":       str(bl_no),
+                "product":     str(_safe_attr(row, "product", "product_name")),
+                "status":      "NEW",
+                "container":   str(_safe_attr(row, "container_no", "container")),
+                "code":        str(_safe_attr(row, "product_code", "code")),
+                "lot_sqm":     str(_safe_attr(row, "lot_sqm")),
+                "mxbg":        str(_safe_attr(row, "mxbg_pallet", "maxibag")),
+                "net_kg":      str(_safe_attr(row, "net_weight", "net_kg")),
+                "gross_kg":    str(_safe_attr(row, "gross_weight", "gross_kg")),
+                "invoice_no":  str(inv_no),
+                "ship_date":   str(ship_date),
+                "arrival":     str(arrival),
+                "con_return":  str(con_return),
+                "free_time":   str(free_time),
+                "wh":          str(wh),
+                "xc_tag":      xc_tag,
+            })
+
+        # 5. PL 데이터 DB 저장 (기존 로직 재활용 — /pdf base64 호출)
+        saved_result = None
+        try:
+            with open(tmp_paths["pl"], "rb") as f:
+                pl_bytes = f.read()
+            import base64 as _b64
+            save_req = PdfInboundRequest(
+                pdf_base64=_b64.b64encode(pl_bytes).decode("ascii"),
+                filename=pl.filename,
+            )
+            saved_result = pdf_inbound(save_req)
+        except Exception as e:
+            logger.warning(f"PL DB 저장 실패 (파싱은 성공): {e}", exc_info=True)
+            saved_result = {"ok": False, "message": f"DB 저장 실패: {e}"}
+
+        # 6. 응답 조립
+        return {
+            "ok": True,
+            "message": (
+                f"4종 파싱 완료 — PL LOT {len(preview_rows)}개"
+                + (f" | {xc_summary}" if xc_summary else "")
+            ),
+            "data": {
+                "preview_rows": preview_rows,
+                "preview_count": len(preview_rows),
+                "cross_check": {
+                    "summary": xc_summary,
+                    **xc_counts,
+                    "items": xc_items,
+                },
+                "parsed_docs": {
+                    "bl_loaded":      parsed["bl"] is not None,
+                    "pl_loaded":      parsed["packing_list"] is not None,
+                    "invoice_loaded": parsed["invoice"] is not None,
+                    "do_loaded":      parsed["do"] is not None,
+                },
+                "saved_result": (saved_result.get("data") if isinstance(saved_result, dict) else None),
+                "bl_no":      str(bl_no),
+                "invoice_no": str(inv_no),
+            },
+        }
+    finally:
+        for p in tmp_paths.values():
+            if p and os.path.exists(p):
+                try:
+                    os.unlink(p)
+                except Exception:
+                    pass
+
+
 @router.post("/pdf")
 def pdf_inbound(req: PdfInboundRequest):
     """

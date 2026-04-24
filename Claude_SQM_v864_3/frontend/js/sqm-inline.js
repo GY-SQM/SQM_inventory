@@ -2413,37 +2413,78 @@
     });
   };
 
-  /* ── 파싱 실행 (Sprint 1-2-A: PL PDF 1건만 기존 pdf-upload 로 fallback) ── */
+  /* ── 파싱 실행 (Sprint 1-2-B: /api/inbound/onestop-upload 4종 multipart + 크로스체크) ── */
   window.onestopParseStart = function() {
-    var pl = _onestopState.files.PACKING_LIST;
-    if (!pl) { showToast('error', 'Packing List(PL) 먼저 선택하세요'); return; }
+    var s = _onestopState.files;
+    if (!s.PACKING_LIST) { showToast('error', 'Packing List(PL) 먼저 선택하세요'); return; }
 
     _onestopSetStep(2);
     var pb = document.getElementById('onestop-progress-body');
-    if (pb) pb.innerHTML = '<div style="padding:4px;color:var(--fg)">⏳ Packing List 파싱 중... <strong>' + escapeHtml(pl.name) + '</strong></div>';
+    if (pb) {
+      var filesSummary = [];
+      if (s.BL)           filesSummary.push('🚢 BL');
+      if (s.PACKING_LIST) filesSummary.push('📦 PL');
+      if (s.INVOICE)      filesSummary.push('📄 INV');
+      if (s.DO)           filesSummary.push('📋 DO');
+      pb.innerHTML = '<div style="padding:4px;color:var(--fg)">⏳ 파싱 + 크로스체크 진행 중... <strong>' + filesSummary.join(' · ') + '</strong></div>';
+    }
 
     var form = new FormData();
-    form.append('file', pl, pl.name);
+    /* FastAPI: pl 필수, bl/invoice/do_file 선택 */
+    form.append('pl', s.PACKING_LIST, s.PACKING_LIST.name);
+    if (s.BL)      form.append('bl',      s.BL,      s.BL.name);
+    if (s.INVOICE) form.append('invoice', s.INVOICE, s.INVOICE.name);
+    if (s.DO)      form.append('do_file', s.DO,      s.DO.name);
+
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', API + '/api/inbound/pdf-upload');
+    xhr.open('POST', API + '/api/inbound/onestop-upload');
     xhr.onload = function(){
       var body; try { body = JSON.parse(xhr.responseText); } catch(e){ body = null; }
       if (xhr.status >= 200 && xhr.status < 300 && body && body.ok) {
         var d = body.data || {};
-        _onestopSetStep(3);
+        var xc = d.cross_check || {};
+        var docs = d.parsed_docs || {};
+
+        /* 진행 상태 패널 업데이트 */
+        var xcColor = xc.has_critical ? 'var(--danger)' : (xc.warning > 0 ? 'var(--warning)' : 'var(--success)');
+        var xcIcon = xc.has_critical ? '🚫' : (xc.warning > 0 ? '⚠️' : '✅');
+        var docsBadges = [
+          (docs.bl_loaded      ? '🚢 BL ✓'  : '🚢 BL ✗'),
+          (docs.pl_loaded      ? '📦 PL ✓'  : '📦 PL ✗'),
+          (docs.invoice_loaded ? '📄 INV ✓' : '📄 INV ✗'),
+          (docs.do_loaded      ? '📋 DO ✓'  : '📋 DO ✗'),
+        ].join('  ');
+
+        var xcItemsHtml = '';
+        if (xc.items && xc.items.length) {
+          xcItemsHtml = '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:12px;color:var(--text-muted)">⚠️ ' + xc.items.length + '건 상세</summary>' +
+            '<ul style="font-size:11px;margin:6px 0 0 20px;padding:0">' +
+            xc.items.map(function(it){
+              var lc = it.level === 3 ? 'var(--danger)' : (it.level === 2 ? 'var(--warning)' : 'var(--text-muted)');
+              return '<li style="color:' + lc + ';margin-bottom:2px">' + escapeHtml(it.icon) + ' <strong>[' + escapeHtml(it.field) + ']</strong> ' + escapeHtml(it.message) + '</li>';
+            }).join('') +
+            '</ul></details>';
+        }
+
         if (pb) pb.innerHTML =
           '<div style="color:var(--success);font-weight:700">✅ ' + escapeHtml(body.message || '파싱 완료') + '</div>' +
-          '<div style="color:var(--text-muted);font-size:12px;margin-top:4px">' +
-          '파일: ' + escapeHtml(d.filename || '-') + ' · Folio: ' + escapeHtml(d.folio || '-') +
-          ' · 제품: ' + escapeHtml(d.product || '-') + ' · LOT ' + (d.lots_total || 0) + '개' +
-          ' · 저장 ' + (d.saved_count || 0) + '건</div>' +
-          '<div style="color:var(--warning);font-size:11px;margin-top:6px">⚠️ Sprint 1-2-A: PL 단일 파일만 처리. BL/Invoice/DO 크로스체크 및 18열 미리보기는 Sprint 1-2-B에서 추가됩니다.</div>';
-        _onestopSetStep(4);
-        var saveBtn = document.getElementById('onestop-save-btn');
-        if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '✅ 완료 (이미 DB 저장됨)'; }
-        showToast('success', '입고 등록 완료: ' + (d.saved_count || 0) + '건');
-        if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
-        if (typeof loadKpi === 'function') loadKpi();
+          '<div style="color:var(--text-muted);font-size:12px;margin-top:6px">📑 서류: ' + docsBadges + '</div>' +
+          '<div style="color:' + xcColor + ';font-size:13px;font-weight:600;margin-top:6px">' + xcIcon + ' ' + escapeHtml(xc.summary || '') + '</div>' +
+          xcItemsHtml +
+          (xc.has_critical ? '<div style="color:var(--danger);font-size:11px;margin-top:6px;font-weight:600">🚫 심각 불일치 감지 — 파일 확인 후 다시 파싱 권장</div>' : '');
+
+        /* 18열 미리보기 테이블 채우기 */
+        _onestopRenderPreview(d.preview_rows || []);
+
+        _onestopSetStep(3);
+        if (d.saved_result && (d.saved_result.saved_count != null)) {
+          _onestopSetStep(4);
+          var saveBtn = document.getElementById('onestop-save-btn');
+          if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '✅ 완료 (이미 DB 저장됨 ' + d.saved_result.saved_count + '건)'; }
+          showToast('success', '입고 등록: ' + d.saved_result.saved_count + '건');
+          if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+          if (typeof loadKpi === 'function') loadKpi();
+        }
       } else {
         var errMsg = (body && (body.detail || body.error || body.message)) || ('HTTP ' + xhr.status);
         if (typeof errMsg === 'object') errMsg = JSON.stringify(errMsg);
@@ -2462,6 +2503,46 @@
     var reparseBtn = document.getElementById('onestop-reparse-btn');
     if (reparseBtn) reparseBtn.disabled = false;
   };
+
+  /* 18열 미리보기 렌더 — preview_rows (백엔드 응답) → Table body */
+  function _onestopRenderPreview(rows) {
+    var tbody = document.getElementById('onestop-preview-body');
+    if (!tbody) return;
+    if (!rows || !rows.length) {
+      tbody.innerHTML = '<tr><td colspan="' + ONESTOP_PREVIEW_COLS.length + '" class="onestop-preview-empty">📭 파싱 결과 0행</td></tr>';
+      return;
+    }
+    /* xc_tag 에 따른 행 색상 */
+    function tagColor(tag) {
+      if (tag === 'xc_critical') return 'background:rgba(244,67,54,.15)';
+      if (tag === 'xc_warning')  return 'background:rgba(255,167,38,.12)';
+      if (tag === 'xc_info')     return 'background:rgba(66,165,245,.08)';
+      return '';
+    }
+    tbody.innerHTML = rows.map(function(r){
+      var style = tagColor(r.xc_tag);
+      return '<tr' + (style ? ' style="' + style + '"' : '') + '>' +
+        '<td class="mono-cell" style="text-align:right">' + (r.no != null ? r.no : '') + '</td>' +
+        '<td class="mono-cell" style="color:var(--accent);font-weight:600">' + escapeHtml(r.lot_no || '') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.sap_no || '') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.bl_no || '') + '</td>' +
+        '<td>' + escapeHtml(r.product || '') + '</td>' +
+        '<td><span class="tag">' + escapeHtml(r.status || '') + '</span></td>' +
+        '<td class="mono-cell">' + escapeHtml(r.container || '') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.code || '') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.lot_sqm || '') + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + escapeHtml(r.mxbg || '') + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + escapeHtml(r.net_kg || '') + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + escapeHtml(r.gross_kg || '') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.invoice_no || '') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.ship_date || '') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.arrival || '') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.con_return || '') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.free_time || '') + '</td>' +
+        '<td>' + escapeHtml(r.wh || '') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
   window.onestopParseRedo = function() {
     _onestopState.step = 1;
     _onestopSetStep(1);
