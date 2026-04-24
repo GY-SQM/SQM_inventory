@@ -148,6 +148,72 @@ html[data-theme="dark"] {
   color: var(--text-muted, #888); text-transform: uppercase; pointer-events: none;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   [Sprint 0-3b-FIX2] Cascading submenu (v864-2 파일 메뉴 매칭)
+   ──────────────────────────────────────────────────────────────────────
+   파일 메뉴의 "내보내기 / 백업 / BL 선사 도구 / Gemini AI"는 v864-2 에서
+   hover 시 옆으로 펼쳐지는 서브메뉴 구조입니다. flat list로 쌓이면
+   항목 22개가 한 번에 보여 피로감을 주므로, 1차 6개 → 호버 시 세부 확장
+   구조로 전환합니다.
+   ══════════════════════════════════════════════════════════════════════ */
+.menu-dropdown .submenu-parent {
+  position: relative;
+}
+.menu-dropdown .submenu-parent-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font-size: 13px;
+  cursor: default;
+  text-align: left;
+}
+.menu-dropdown .submenu-parent-btn:hover,
+.menu-dropdown .submenu-parent:focus-within > .submenu-parent-btn {
+  background: var(--btn-hover);
+}
+.menu-dropdown .submenu-parent-btn::after {
+  content: '▶';
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 12px;
+}
+.menu-dropdown .submenu-dropdown {
+  display: none;
+  position: absolute;
+  top: -5px;
+  left: 100%;
+  min-width: 200px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 10000;
+  padding: 4px 0;
+  border-radius: 6px;
+}
+.menu-dropdown .submenu-parent:hover > .submenu-dropdown,
+.menu-dropdown .submenu-parent:focus-within > .submenu-dropdown {
+  display: block;
+}
+.menu-dropdown .submenu-dropdown button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  color: var(--fg);
+  font-size: 13px;
+  cursor: pointer;
+}
+.menu-dropdown .submenu-dropdown button:hover {
+  background: var(--btn-hover);
+}
+
 .menubar-spacer { flex: 1; }
 
 .topbar-btn {
@@ -551,15 +617,51 @@ footer.statusbar .status-sep,
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   [Sprint 0-3b] v864-2 레이아웃 매칭 — 사이드바 숨김
+   [Sprint 0-3b-FIX] 사이드바 복구
    ──────────────────────────────────────────────────────────────────────
-   v864-2는 사이드바가 없고 상단 탭/툴바로 내비게이션합니다. v864-3의
-   왼쪽 9탭 사이드바를 숨기고 .main-wrapper 가 flex:1 로 전체 너비를
-   차지하게 합니다. HTML 은 보존 — [data-route] JS 핸들러 및 active 클래스
-   토글 코드는 숨겨진 요소 위에서도 안전하게 동작합니다.
-   내비게이션 대체 경로: 상단 👁️ View 메뉴 (onGoInventoryTab 등 9개).
+   이전 Sprint 0-3b ①에서 사이드바를 display:none 으로 숨겼던 것을
+   되돌립니다. 사용자 보고서/스크린샷 재검토 결과 v864-2 에도 동일한
+   좌측 9탭 사이드바가 있음이 확인됨. Phase 1A 추출 오류로 인한 실수.
    ══════════════════════════════════════════════════════════════════════ */
-.sidebar {
-  display: none !important;
+
+/* ══════════════════════════════════════════════════════════════════════
+   [Sprint 1-1] Allocation 탭 스타일 (v864-2 AllocationDialog 매칭)
+   ══════════════════════════════════════════════════════════════════════ */
+.alloc-filter-btn {
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  cursor: pointer;
 }
+.alloc-filter-btn:hover { background: var(--btn-hover); }
+.alloc-filter-btn.active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-fg);
+  border-color: var(--sidebar-active-bg);
+}
+
+.btn-wip {
+  opacity: 0.6;
+  font-style: italic;
+  cursor: help;
+}
+.btn-wip:hover { opacity: 0.85; }
+
+.btn-danger {
+  background: #d32f2f;
+  color: #fff;
+  border-color: #b71c1c;
+}
+.btn-danger:hover { background: #e53935; }
+
+.alloc-summary-row .alloc-expand-icon {
+  display: inline-block;
+  width: 12px;
+  transition: transform 0.15s;
+}
+.alloc-summary-row.expanded .alloc-expand-icon { transform: rotate(90deg); }
 

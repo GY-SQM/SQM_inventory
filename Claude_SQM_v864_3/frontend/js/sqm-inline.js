@@ -643,25 +643,86 @@
      상단: LOT 단위 집계 (클릭 시 하단 확장)
      하단: 해당 LOT의 톤백 상세 목록
      =================================================== */
+  /* ===================================================================
+     [Sprint 1-1] Allocation 탭 — v864-2 AllocationDialog (1616줄) 포팅
+     ──────────────────────────────────────────────────────────────────
+     v864-2 source: gui_app_modular/dialogs/allocation_dialog.py
+     v864-3 target: 이 함수 (탭 페이지) + 3개 기존 모달 재활용
+
+     이 Phase(1-B+1-C)에서 구현:
+       ✅ 9열 테이블 (ALLOC_PREVIEW_COLUMNS 매칭)
+       ✅ 상단 액션 툴바 (4개 작동 + 3개 placeholder)
+       ✅ 상태 필터 (전체/RESERVED/PICKED/SOLD)
+       ✅ 다중 선택 체크박스 + 일괄 취소
+       ✅ 합계 푸터 (qty_mt, 4 decimals)
+       ✅ LOT 확장/축소 (기존 패턴 유지)
+
+     다음 Phase(1-1-D~E)에서 추가:
+       🟡 인라인 편집 (PATCH API 필요)
+       🟡 PICKED/SOLD 상태 전환 (백엔드 엔드포인트 필요)
+       🟡 LOT 예약 초기화 (백엔드 엔드포인트 필요)
+       🟡 우클릭 컨텍스트 메뉴 (행 삭제/복사)
+     =================================================================== */
+  var _allocState = { currentFilter: 'all', rows: [], selectedLots: new Set() };
+
   function loadAllocationPage() {
     var route = _currentRoute;
     var c = document.getElementById('page-container');
     if (!c) return;
+    _allocState.selectedLots.clear();
     c.innerHTML = [
       '<section class="page" data-page="allocation">',
-      '<div style="display:flex;align-items:center;gap:12px;padding:8px 0 12px">',
-      '  <h2 style="margin:0">📋 Allocation - 판매 배정 (RESERVED)</h2>',
+      /* ── 헤더 ── */
+      '<div class="alloc-header" style="display:flex;align-items:center;gap:12px;padding:8px 0 8px">',
+      '  <h2 style="margin:0">📋 판매 배정 (Allocation)</h2>',
+      '  <span id="alloc-summary-label" style="color:var(--text-muted);font-size:.9rem"></span>',
       '  <button class="btn btn-secondary" onclick="renderPage(\'allocation\')" style="margin-left:auto">🔁 새로고침</button>',
       '</div>',
+      /* ── 액션 툴바 (v864-2 AllocationDialog primary_buttons 매핑) ── */
+      '<div class="alloc-toolbar" style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;margin-bottom:8px">',
+      '  <button class="btn btn-primary" onclick="window.allocUploadExcel()">📂 Excel 업로드</button>',
+      '  <button class="btn" onclick="window.allocApplyApproved()">📌 승인분 반영</button>',
+      '  <button class="btn" onclick="window.allocShowApprovalQueue()">✅ 승인 대기</button>',
+      '  <span style="width:1px;height:22px;background:var(--panel-border);margin:0 4px"></span>',
+      '  <button class="btn btn-danger" onclick="window.allocCancelSelected()">❌ 선택 배정 취소</button>',
+      '  <span style="width:1px;height:22px;background:var(--panel-border);margin:0 4px"></span>',
+      /* 백엔드 엔드포인트 미구현 — Sprint 1-1-E에서 연결 */
+      '  <button class="btn btn-wip" onclick="window.allocWipToast(\'출고 실행\')" title="Sprint 1-1-E 예정">📦 출고 실행 (PICKED) [준비 중]</button>',
+      '  <button class="btn btn-wip" onclick="window.allocWipToast(\'출고 확정\')" title="Sprint 1-1-E 예정">🔒 출고 확정 (SOLD) [준비 중]</button>',
+      '  <button class="btn btn-wip" onclick="window.allocWipToast(\'LOT 예약 초기화\')" title="Sprint 1-1-E 예정">🧹 LOT 초기화 [준비 중]</button>',
+      '</div>',
+      /* ── 상태 필터 ── */
+      '<div class="alloc-filter" style="display:flex;gap:4px;margin-bottom:8px">',
+      '  <button class="alloc-filter-btn active" data-filter="all" onclick="window.allocFilterBy(\'all\')">전체</button>',
+      '  <button class="alloc-filter-btn" data-filter="RESERVED" onclick="window.allocFilterBy(\'RESERVED\')">RESERVED</button>',
+      '  <button class="alloc-filter-btn" data-filter="PICKED" onclick="window.allocFilterBy(\'PICKED\')">PICKED</button>',
+      '  <button class="alloc-filter-btn" data-filter="SOLD" onclick="window.allocFilterBy(\'SOLD\')">SOLD</button>',
+      '</div>',
+      /* ── 로딩 / 빈 상태 ── */
       '<div id="alloc-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
+      '<div class="empty" id="alloc-empty" style="display:none;padding:60px;text-align:center">📭 배정 데이터 없음</div>',
+      /* ── 테이블 (v864-2 ALLOC_PREVIEW_COLUMNS: LOT/SAP/PRODUCT/QTY/CUSTOMER/SALE REF/OUTBOUND DATE/WH/STATUS) ── */
       '<div style="overflow-x:auto">',
-      '  <table class="data-table" id="alloc-summary-table" style="display:none">',
-      '  <thead><tr><th></th><th>LOT No</th><th>제품</th><th>고객사</th><th>Sale Ref</th><th>배정량(MT)</th><th>톤백수</th><th>출고예정일</th><th>상태</th></tr></thead>',
+      '  <table class="data-table" id="alloc-summary-table" style="display:none;width:100%">',
+      '  <thead><tr>',
+      '    <th style="width:32px"><input type="checkbox" id="alloc-select-all" onclick="window.allocToggleAll(this.checked)"></th>',
+      '    <th style="width:40px">No.</th>',
+      '    <th>LOT NO</th>',
+      '    <th>SAP NO</th>',
+      '    <th>PRODUCT</th>',
+      '    <th style="text-align:right">QTY (MT)</th>',
+      '    <th>CUSTOMER</th>',
+      '    <th>SALE REF</th>',
+      '    <th>OUTBOUND DATE</th>',
+      '    <th>WH</th>',
+      '    <th>STATUS</th>',
+      '  </tr></thead>',
       '  <tbody id="alloc-summary-tbody"></tbody>',
+      '  <tfoot id="alloc-summary-tfoot"></tfoot>',
       '  </table>',
       '</div>',
-      '<div class="empty" id="alloc-empty" style="display:none;padding:60px;text-align:center">📭 배정 데이터 없음</div>',
-      '<div id="alloc-detail-panel" style="display:none;margin-top:16px;border-top:2px solid var(--border);padding-top:16px">',
+      /* ── 상세 패널 (기존 기능 유지) ── */
+      '<div id="alloc-detail-panel" style="display:none;margin-top:16px;border-top:2px solid var(--panel-border);padding-top:16px">',
       '  <h3 id="alloc-detail-title" style="margin:0 0 12px 0">톤백 상세</h3>',
       '  <div id="alloc-detail-content"></div>',
       '</div>',
@@ -670,32 +731,135 @@
 
     apiGet('/api/q/allocation-summary').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = extractRows(res);
+      _allocState.rows = extractRows(res);
       document.getElementById('alloc-loading').style.display = 'none';
-      if (!rows.length) { document.getElementById('alloc-empty').style.display='block'; return; }
-      var tbody = document.getElementById('alloc-summary-tbody');
-      if (tbody) tbody.innerHTML = rows.map(function(r){
-        var lot = escapeHtml(r.lot_no||'');
-        return '<tr class="alloc-summary-row" data-lot="'+lot+'" style="cursor:pointer" onclick="window.toggleAllocDetail(\''+lot+'\')">' +
-          '<td style="width:24px;text-align:center"><span class="alloc-expand-icon">▶</span></td>' +
-          '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+lot+'</td>' +
-          '<td><span class="tag">'+escapeHtml(r.product||'')+'</span></td>' +
-          '<td>'+escapeHtml(r.customer||r.sold_to||'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.sale_ref||'-')+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+(r.total_mt!=null?Number(r.total_mt).toFixed(3):(r.qty_mt!=null?Number(r.qty_mt).toFixed(3):'-'))+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+(r.tonbag_count||r.plan_count||'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.outbound_date||r.ship_date||'-')+'</td>' +
-          '<td><span class="tag" style="background:var(--warning);color:#000">RESERVED</span></td>' +
-          '</tr>';
-      }).join('');
-      document.getElementById('alloc-summary-table').style.display = '';
+      if (!_allocState.rows.length) {
+        document.getElementById('alloc-empty').style.display = 'block';
+        var lbl = document.getElementById('alloc-summary-label');
+        if (lbl) lbl.textContent = '(0건)';
+        return;
+      }
+      _renderAllocTable();
     }).catch(function(e){
       if (_currentRoute !== route) return;
       document.getElementById('alloc-loading').style.display = 'none';
-      document.getElementById('alloc-empty').textContent = 'Load failed: '+(e.message||'');
+      document.getElementById('alloc-empty').textContent = 'Load failed: ' + (e.message||'');
       document.getElementById('alloc-empty').style.display = 'block';
     });
   }
+
+  /* ── 테이블 렌더 (필터 적용) ────────────────────────────────────── */
+  function _renderAllocTable() {
+    var filter = _allocState.currentFilter;
+    var rows = _allocState.rows.filter(function(r){
+      if (filter === 'all') return true;
+      return (r.status || 'RESERVED').toUpperCase() === filter;
+    });
+    var tbody = document.getElementById('alloc-summary-tbody');
+    var tfoot = document.getElementById('alloc-summary-tfoot');
+    var table = document.getElementById('alloc-summary-table');
+    var empty = document.getElementById('alloc-empty');
+    var lbl = document.getElementById('alloc-summary-label');
+
+    if (!rows.length) {
+      if (tbody) tbody.innerHTML = '';
+      if (tfoot) tfoot.innerHTML = '';
+      if (table) table.style.display = 'none';
+      if (empty) { empty.textContent = '📭 (' + filter + ') 배정 데이터 없음'; empty.style.display = 'block'; }
+      if (lbl) lbl.textContent = '(0/' + _allocState.rows.length + '건)';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    if (table) table.style.display = '';
+    if (lbl) lbl.textContent = '(' + rows.length + '/' + _allocState.rows.length + '건)';
+
+    var totalMt = 0;
+    tbody.innerHTML = rows.map(function(r, i){
+      var lot = escapeHtml(r.lot_no || '');
+      var qtyMt = (r.total_mt != null) ? Number(r.total_mt) : (r.qty_mt != null ? Number(r.qty_mt) : 0);
+      if (!isNaN(qtyMt)) totalMt += qtyMt;
+      var status = (r.status || 'RESERVED').toUpperCase();
+      var statusColor = status === 'SOLD' ? '#66bb6a' : status === 'PICKED' ? '#42a5f5' : 'var(--warning)';
+      var statusFg = status === 'RESERVED' ? '#000' : '#fff';
+      var checked = _allocState.selectedLots.has(lot) ? 'checked' : '';
+      return '<tr class="alloc-summary-row" data-lot="' + lot + '" data-status="' + status + '">' +
+        '<td style="text-align:center"><input type="checkbox" ' + checked + ' onclick="event.stopPropagation();window.allocToggleRow(\'' + lot + '\',this.checked)"></td>' +
+        '<td class="mono-cell" style="text-align:right">' + (i + 1) + '</td>' +
+        '<td class="mono-cell" style="color:var(--accent);font-weight:600;cursor:pointer" onclick="window.toggleAllocDetail(\'' + lot + '\')">' +
+          '<span class="alloc-expand-icon">▶</span> ' + lot + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.sap_no || '-') + '</td>' +
+        '<td>' + escapeHtml(r.product || '-') + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + (qtyMt ? qtyMt.toFixed(4) : '-') + '</td>' +
+        '<td>' + escapeHtml(r.customer || r.sold_to || '-') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.sale_ref || '-') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.outbound_date || r.ship_date || '-') + '</td>' +
+        '<td>' + escapeHtml(r.warehouse || r.wh || '-') + '</td>' +
+        '<td><span class="tag" style="background:' + statusColor + ';color:' + statusFg + '">' + status + '</span></td>' +
+        '</tr>';
+    }).join('');
+
+    /* Footer 합계 (v864-2 TreeviewTotalFooter 매칭) */
+    tfoot.innerHTML =
+      '<tr style="background:var(--panel);font-weight:700">' +
+      '<td colspan="5" style="text-align:right">합계:</td>' +
+      '<td class="mono-cell" style="text-align:right">' + totalMt.toFixed(4) + ' MT</td>' +
+      '<td colspan="5"></td>' +
+      '</tr>';
+  }
+
+  /* ── 버튼 핸들러 ─────────────────────────────────────────────────── */
+  window.allocUploadExcel = function() {
+    if (typeof showAllocationUploadModal === 'function') { showAllocationUploadModal(); }
+    else { showToast('error', 'Upload modal 미초기화'); }
+  };
+  window.allocApplyApproved = function() {
+    if (typeof showApplyApprovedAllocationModal === 'function') { showApplyApprovedAllocationModal(); }
+    else { showToast('error', 'Apply modal 미초기화'); }
+  };
+  window.allocShowApprovalQueue = function() {
+    if (typeof showApprovalQueueModal === 'function') { showApprovalQueueModal(); }
+    else { showToast('error', 'Approval queue 미초기화'); }
+  };
+  window.allocWipToast = function(featureName) {
+    showToast('info', featureName + ': 준비 중 (Sprint 1-1-E 예정 — 백엔드 엔드포인트 구현 후 연결)');
+  };
+  window.allocFilterBy = function(filter) {
+    _allocState.currentFilter = filter;
+    document.querySelectorAll('.alloc-filter-btn').forEach(function(b){
+      b.classList.toggle('active', b.dataset.filter === filter);
+    });
+    _renderAllocTable();
+  };
+  window.allocToggleAll = function(checked) {
+    var visibleFilter = _allocState.currentFilter;
+    _allocState.rows.forEach(function(r){
+      var status = (r.status || 'RESERVED').toUpperCase();
+      if (visibleFilter !== 'all' && status !== visibleFilter) return;
+      var lot = r.lot_no || '';
+      if (checked) _allocState.selectedLots.add(lot);
+      else _allocState.selectedLots.delete(lot);
+    });
+    _renderAllocTable();
+  };
+  window.allocToggleRow = function(lot, checked) {
+    if (checked) _allocState.selectedLots.add(lot);
+    else _allocState.selectedLots.delete(lot);
+  };
+  window.allocCancelSelected = function() {
+    var selected = Array.from(_allocState.selectedLots);
+    if (!selected.length) { showToast('warn', '취소할 배정을 먼저 선택하세요'); return; }
+    if (!confirm(selected.length + '건 배정 취소?\n' + selected.slice(0, 5).join(', ') + (selected.length > 5 ? ' …외 '+(selected.length-5)+'건' : ''))) return;
+    var okCount = 0, errCount = 0;
+    var promises = selected.map(function(lot){
+      return apiPost('/api/allocation/' + encodeURIComponent(lot) + '/cancel', {})
+        .then(function(){ okCount++; })
+        .catch(function(){ errCount++; });
+    });
+    Promise.all(promises).then(function(){
+      showToast(errCount ? 'warn' : 'success', '성공 ' + okCount + '건 / 실패 ' + errCount + '건');
+      loadAllocationPage();
+    });
+  };
 
   var _allocExpandedLot = null;
   window.toggleAllocDetail = function(lotNo) {
