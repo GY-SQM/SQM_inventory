@@ -192,27 +192,43 @@ Claude_SQM_v864_3/
 | Phase 1 | UI Manifest + 85 기능 매핑 | ✅ 완료 |
 | Phase 1c | UI 요소 복구 (메뉴/툴바/사이드바) | ✅ 완료 |
 | Phase 2 | TOP 3 엔드포인트 + 런타임 검증 (Step 1~3) | ✅ 완료 |
-| **Phase 3** | **Dashboard KPI 실데이터 + 건강성 가시화** | 🟡 **다음** |
-| Phase 4 | 나머지 82개 기능 점진 활성화 (NotReady → 실구현) | ⏳ 대기 |
-| Phase 5 | 회귀 테스트 자동화 (v864.2 ↔ v864.3 비교) | ⏳ 대기 |
+| Phase 3 | Dashboard KPI 실데이터 + 건강성 가시화 | ✅ 완료 |
+| **Phase 4** | **사이드바 9탭 + 메뉴 60개 + PDF 입고 배선** | ✅ **완료** |
+| **Phase 5** | **회귀 테스트 자동화 (v864.2 ↔ v864.3 비교)** | 🟡 **다음** |
 | Phase 6 | EXE 빌드 + 배포 (PyInstaller 단일 실행파일) | ⏳ 대기 |
 | Phase 7 | 사장님 실사용 1주 + 버그 수집 | ⏳ 대기 |
 | Phase 8 | 🏆 v864.3 공식 릴리스 (GY Logis 전환) | 🎯 최종 |
 
-**전체 진행률 (2026-04-21 기준):** 약 35% (Phase 0~2 완료, Phase 3 진입 직전)
+**전체 진행률 (2026-04-22 기준):** 약 70% (Phase 0~4 완료, 전수 수정 포함)
 **예상 최종 릴리스일:** 2026-05-09 (이상) ~ 2026-05-25 (현실, 본업 병행 감안)
 
 ---
 
-## 🚀 Phase 3 Next Target (2026-04-21 추가)
+## 🚀 Phase 4 완료 현황 (2026-04-22 최종)
 
-- **상태:** 🟡 READY TO START (Phase 2 Step 3 완전 종료 + /health 8/8 모듈 검증 완료)
-- **계획서:** `REPORTS/PHASE3_PLAN.md` (Q1+Q2+Q3 상세)
-- **Q1 (P0):** Dashboard KPI 4개 카드 실데이터 바인딩 — 60분
-- **Q2 (P1):** 상태바 `🟢 Engine 8/8` 상시 표시 — 15분
-- **Q3 (P2):** `docs/health_check_guide.md` + /health Preview 가이드 — 5분
+### Phase 4 핵심 산출물
+- **sqm-inline.js:** 56 KB 단일 IIFE — ENDPOINTS 67개 (HTML data-action 1:1 매핑), 9탭 라우터, 캐시버스팅 `?v=864.3.3`
+- **backend/api/inventory_api.py:** 신규 (307 lines) — `/api/inventory`, `/api/allocation`, `/api/tonbags`, `/api/scan/process`, `/api/health`
+- **backend/api/inbound.py:** POST `/api/inbound/pdf` (base64 → PyMuPDF → DB)
+- **backend/api/dashboard.py:** GET `/api/dashboard/stats`, GET `/api/dashboard/alerts`
+- **backend/api/menubar.py:** POST `/api/menu/-on-settings`
+- **backend/api/__init__.py:** 총 17개 라우터 등록
+- **index.html:** 완전한 HTML + 캐시버스팅
+- **실행.bat:** PyWebView 정상종료 오탐(exit code 1) 수정 → `errorlevel 2`
+- **보고서:** `REPORTS/PHASE4_COMPLETE.md`, `REPORTS/PHASE4_FINAL_FIX.md`
 
-**새 세션에서 시작하는 방법:** `HANDOFF_PROMPT_PHASE3.md` 복붙.
+### Phase 4 검증 현황
+- ✅ JS syntax (node --check): PASS
+- ✅ Python syntax (5개 파일): ALL PASS
+- ✅ HTML data-action coverage: 68/68 (0 missing)
+- ✅ Backend routers: 17개 등록
+- ✅ bash `\!` 오염: 0건
+
+## 🎯 Phase 5 Next Target
+
+- **목표:** 자동 회귀 테스트 — v864.2 vs v864.3 동일 입력 → 동일 출력 검증
+- **범위:** 85개 기능 체크리스트 점검, API 응답 비교, 실사용 시나리오 테스트
+- **새 세션 시작:** CLAUDE.md + REPORTS/PHASE4_FINAL_FIX.md 읽고 Phase 5 진입
 
 ---
 

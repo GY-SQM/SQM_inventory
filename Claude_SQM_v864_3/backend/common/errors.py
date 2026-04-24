@@ -66,78 +66,48 @@ def wrap_engine_call(fn: Callable, *args, **kwargs) -> dict:
     - NotImplementedError -> HTTP 200 + body.ok=false (soft-fail)
     - FileNotFoundError -> HTTP 404
     - PermissionError -> HTTP 403
-    - ValueError/KeyError -> HTTP 400
-    - ApiError code==200 -> soft-fail body
-    - 그 외 -> HTTP 500
-    """
+    - ValueError / TypeError -> HTTP 400
+    - Exception -> HTTP 500
+        """
     try:
         result = fn(*args, **kwargs)
         return ok_response(data=result)
-    except NotImplementedError as e:
-        return err_response(
-            f"NotReady: {e}",
-            detail={"code": "NOT_READY", "reason": str(e)},
-        )
+    except NotImplementedError:
+        return err_response("기능 준비 중", code="NOT_READY")
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=f"FileNotFound: {e}") from e
+        raise HTTPException(404, str(e))
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=f"PermissionDenied: {e}") from e
-    except (ValueError, KeyError) as e:
-        raise HTTPException(status_code=400, detail=f"BadRequest: {e}") from e
-    except ApiError as e:
-        if e.code == 200:
-            return err_response(e.message, detail=e.detail)
-        raise HTTPException(status_code=e.code, detail=e.message) from e
+        raise HTTPException(403, str(e))
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
     except Exception as e:
-        log.exception("engine call failed")
-        raise HTTPException(
-            status_code=500,
-            detail=f"EngineError: {type(e).__name__}: {e}",
-        ) from e
+        raise HTTPException(500, str(e))
 
 
-async def wrap_engine_call_async(fn: Callable, *args, **kwargs) -> dict:
-    """비동기 버전 - async def 함수용"""
-    try:
-        result = await fn(*args, **kwargs)
-        return ok_response(data=result)
-    except NotImplementedError as e:
-        raise HTTPException(status_code=501, detail=f"NotReady: {e}") from e
-    except Exception as e:
-        log.exception("async engine call failed")
-        raise HTTPException(status_code=500, detail=str(e)) from e
-
-
-# ========== App-level Handler Install ==========
+# ========== App-Level Exception Handlers ==========
 def install_exception_handlers(app: FastAPI) -> None:
-    """FastAPI 앱에 전역 예외 핸들러 설치"""
+    """
+    FastAPI 앱에 표준 예외 핸들러 등록.
+    ApiError / NotReadyError → JSON 응답으로 변환.
+    """
 
     @app.exception_handler(ApiError)
-    async def handle_api_error(request: Request, exc: ApiError):
+    async def api_error_handler(request: Request, exc: ApiError):
+        # NotReadyError (code=200) → ok=false body
+        if exc.code == 200:
+            return JSONResponse(
+                status_code=200,
+                content={"ok": False, "data": None, "error": exc.message, "detail": exc.detail},
+            )
         return JSONResponse(
             status_code=exc.code,
-            content=err_response(exc.message, detail=exc.detail),
+            content={"ok": False, "data": None, "error": exc.message, "detail": exc.detail},
         )
 
     @app.exception_handler(Exception)
-    async def handle_generic(request: Request, exc: Exception):
-        log.error("unhandled exception at %s", request.url)
-        log.error(traceback.format_exc())
+    async def generic_error_handler(request: Request, exc: Exception):
+        log.error("Unhandled exception: %s", exc, exc_info=True)
         return JSONResponse(
             status_code=500,
-            content=err_response(
-                "ServerError",
-                detail={"type": type(exc).__name__, "message": str(exc)},
-            ),
+            content={"ok": False, "data": None, "error": str(exc), "detail": None},
         )
-
-
-__all__ = [
-    "ApiError",
-    "NotReadyError",
-    "wrap_engine_call",
-    "wrap_engine_call_async",
-    "install_exception_handlers",
-    "ok_response",
-    "err_response",
-]

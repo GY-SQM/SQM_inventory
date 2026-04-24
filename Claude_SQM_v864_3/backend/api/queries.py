@@ -438,3 +438,78 @@ def get_product_inventory():
     except Exception as e:
         logger.error("product-inventory error: %s", e)
         return err_response(str(e))
+
+
+# ── Allocation Summary: LOT별 요약 (2단 구조 상단) ─────────────────
+@router.get("/allocation-summary", summary="📋 배정 LOT 요약 (Allocation 2단 구조)")
+def get_allocation_summary():
+    """allocation_plan GROUP BY lot_no — LOT별 요약 (v864.2 동일 2단 구조)"""
+    try:
+        con = _db()
+        rows = con.execute("""
+            SELECT ap.lot_no,
+                   ap.customer,
+                   SUM(COALESCE(ap.qty_mt, 0))                    AS total_mt,
+                   COUNT(*)                                        AS tonbag_count,
+                   COALESCE(date(ap.outbound_date), '0000-00-00')  AS plan_date
+            FROM allocation_plan ap
+            WHERE ap.status = 'RESERVED'
+            GROUP BY ap.lot_no, COALESCE(date(ap.outbound_date), '0000-00-00')
+            ORDER BY ap.lot_no, plan_date
+        """).fetchall()
+        con.close()
+        return ok_response(data={
+            "items": _rows_to_list(rows),
+            "total": len(rows),
+            "columns": ["lot_no", "customer", "total_mt", "tonbag_count", "plan_date"]
+        })
+    except Exception as e:
+        logger.error("allocation-summary error: %s", e)
+        return err_response(str(e))
+
+
+# ── Allocation Detail: 특정 LOT의 톤백 상세 (2단 구조 하단) ────────
+@router.get("/allocation-detail/{lot_no}", summary="📋 배정 LOT 상세 톤백 목록")
+def get_allocation_detail(lot_no: str, plan_date: str = ""):
+    """allocation_plan WHERE lot_no — 개별 톤백 상세 (펼침 영역)"""
+    try:
+        con = _db()
+        if plan_date and plan_date != "0000-00-00":
+            rows = con.execute("""
+                SELECT ap.lot_no,
+                       ap.tonbag_no,
+                       ap.customer,
+                       COALESCE(ap.qty_mt, 0)                         AS qty_mt,
+                       ap.sale_ref,
+                       ap.status,
+                       ap.created_at
+                FROM allocation_plan ap
+                WHERE ap.lot_no = ?
+                  AND ap.status = 'RESERVED'
+                  AND COALESCE(date(ap.outbound_date), '0000-00-00') = ?
+                ORDER BY ap.tonbag_no
+            """, (lot_no, plan_date)).fetchall()
+        else:
+            rows = con.execute("""
+                SELECT ap.lot_no,
+                       ap.tonbag_no,
+                       ap.customer,
+                       COALESCE(ap.qty_mt, 0)                         AS qty_mt,
+                       ap.sale_ref,
+                       ap.status,
+                       ap.created_at
+                FROM allocation_plan ap
+                WHERE ap.lot_no = ?
+                  AND ap.status = 'RESERVED'
+                ORDER BY ap.tonbag_no
+            """, (lot_no,)).fetchall()
+        con.close()
+        return ok_response(data={
+            "items": _rows_to_list(rows),
+            "total": len(rows),
+            "columns": ["lot_no", "tonbag_no", "customer", "qty_mt",
+                         "sale_ref", "status", "created_at"]
+        })
+    except Exception as e:
+        logger.error("allocation-detail error: %s", e)
+        return err_response(str(e))

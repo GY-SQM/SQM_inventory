@@ -306,6 +306,5 @@ def validate_location_format(location: str) -> Tuple[bool, str]:
     # 4파트 시 칸(베이): 숫자
     if len(parts) == 4:
         if not parts[3].isdigit():
-            return False, "칸(4번째)은 숫자여야 합니다 (예: A-01-01-10)"
-
-    return True, "OK"
+            return False, "칸(베이)은 숫자여야 합니다 (예: 10)"
+    return True, "유효한 위치"
