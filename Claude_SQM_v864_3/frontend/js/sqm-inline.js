@@ -2341,14 +2341,28 @@
       '        </div>',
       '      </div>',
       '    </div>',
-      /* --- Tab 4: 완료 (Phase D placeholder) --- */
+      /* --- Tab 4: 완료 (Sprint 1-3-D 실구현) --- */
       '    <div class="oo-tab-pane" data-pane="4">',
-      '      <div class="oo-tab-placeholder">',
-      '        <div class="icon">✅</div>',
-      '        <div style="font-weight:700;margin-top:12px">④ 완료</div>',
-      '        <div style="margin-top:6px">Tab 3 검증 통과 후 활성화됩니다.</div>',
-      '        <div class="phase">Sprint 1-3 Phase D 예정</div>',
-      '        <div style="margin-top:16px;font-size:11px">예정 기능: 📦 확정건 출고 완료 ▶ · ✅ 승인 → FINALIZED · 완료 이력 Treeview · 📋 감사 로그 sub-popup (CSV export)</div>',
+      /* 완료 요약 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">📊 완료 요약</div>',
+      '        <div id="oo-t4-stats" style="font-size:13px;color:var(--text-muted)">FINALIZED 상태 대기 중 — Tab 3 검증 통과 후 진입</div>',
+      '      </div>',
+      /* 액션 */
+      '      <div class="oo-section">',
+      '        <div style="display:flex;gap:6px;flex-wrap:wrap">',
+      '          <button class="btn btn-primary" id="oo-confirm-btn" onclick="window.ooConfirmOutbound()" disabled title="선택된 톤백 → 출고 처리 (PICKED → OUTBOUND)">📦 확정건 출고 완료 ▶</button>',
+      '          <button class="btn" onclick="window.ooViewAuditLog()" title="감사 로그 sub-popup (CSV export)">📋 감사 로그 보기</button>',
+      '          <button class="btn" onclick="window.ooStartNew()" style="margin-left:auto" title="모든 상태 초기화 후 새 출고 시작">📋 새 출고 시작</button>',
+      '          <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">❌ 닫기</button>',
+      '        </div>',
+      '      </div>',
+      /* 완료 이력 */
+      '      <div class="oo-section">',
+      '        <div class="oo-section-title">📋 완료 이력</div>',
+      '        <div id="oo-t4-history" style="max-height:240px;overflow-y:auto">',
+      '          <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">아직 완료된 항목이 없습니다</div>',
+      '        </div>',
       '      </div>',
       '    </div>',
       '  </div>',  /* /oo-tab-body */
@@ -3011,9 +3025,318 @@
               'Tab 4 에서 출고 확정합니다. 계속하시겠습니까?';
     if (!confirm(msg)) return;
     _ooSetState('FINALIZED');
+    _ooUpdateT4Stats();
+    var confirmBtn = document.getElementById('oo-confirm-btn');
+    if (confirmBtn) confirmBtn.disabled = false;
     setTimeout(function(){ window.ooSwitchTab(4); }, 300);
-    showToast('success', 'FINALIZED 진입 — Tab 4 에서 출고 확정 (Sprint 1-3-D 예정)');
+    showToast('success', 'FINALIZED 진입 — Tab 4 에서 출고 확정');
   };
+
+  /* =====================================================================
+     [Sprint 1-3-D] Tab 4 — 완료 + 감사 로그 sub-popup
+     ===================================================================== */
+  function _ooUpdateT4Stats() {
+    var el = document.getElementById('oo-t4-stats');
+    if (!el) return;
+    var selCount = _ooState.selectedTonbags.size;
+    var selKg = 0;
+    Object.keys(_ooState.lotsWithTonbags).forEach(function(lot){
+      (_ooState.lotsWithTonbags[lot] || []).forEach(function(t){
+        var key = lot + '.' + (t.sub_lt || t.tonbag_id);
+        if (_ooState.selectedTonbags.has(key)) selKg += Number(t.weight) || 0;
+      });
+    });
+    var doneCount = _ooState.completedItems.length;
+    el.innerHTML =
+      '<div>✅ FINALIZED 진입 — <strong>' + selCount + '개 톤백</strong> (' + (selKg / 1000).toFixed(3) + ' MT)</div>' +
+      '<div style="margin-top:4px">📦 출고 완료: <strong style="color:' + (doneCount > 0 ? 'var(--success)' : 'var(--text-muted)') + '">' + doneCount + '건</strong> · 대기: ' + (selCount - doneCount) + '건</div>';
+  }
+
+  /* 📦 확정건 출고 완료 — 선택된 톤백을 PICKED → OUTBOUND 전환 */
+  window.ooConfirmOutbound = function() {
+    if (_ooState.state !== 'FINALIZED') {
+      showToast('warn', 'FINALIZED 상태가 아닙니다 — Tab 3 검증 후 ▶ 진행');
+      return;
+    }
+    if (_ooState.selectedTonbags.size === 0) {
+      showToast('error', '확정할 톤백 없음');
+      return;
+    }
+    /* LOT별 카운트 집계 */
+    var lotCounts = {};
+    _ooState.selectedTonbags.forEach(function(key){
+      var lot = key.split('.')[0];
+      lotCounts[lot] = (lotCounts[lot] || 0) + 1;
+    });
+    var summary = Object.keys(lotCounts).map(function(lot){
+      return lot + ' (' + lotCounts[lot] + '개)';
+    }).join(', ');
+    if (!confirm('📦 출고 확정\n\n총 ' + _ooState.selectedTonbags.size + '개 톤백을 OUTBOUND 처리합니다.\n' + summary + '\n\n계속하시겠습니까?')) return;
+
+    var btn = document.getElementById('oo-confirm-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ 처리 중...'; }
+
+    /* LOT별로 /api/outbound/confirm 호출 (count 단위) */
+    var promises = Object.keys(lotCounts).map(function(lot){
+      return apiPost('/api/outbound/confirm', {
+        lot_no:   lot,
+        count:    lotCounts[lot],
+        customer: _ooState.customer || (_ooState.parsedItems[0] || {}).customer || '',
+        sale_ref: _ooState.saleRef  || (_ooState.parsedItems[0] || {}).sale_ref || '',
+        operator: 'onestop_outbound',
+      })
+        .then(function(res){
+          var ok = res && (res.ok !== false) && !(res.detail && res.detail.code === 'CONFIRM_FAILED');
+          var data = (res && res.data) || {};
+          return {
+            lot:       lot,
+            ok:        ok,
+            confirmed: data.confirmed || 0,
+            count:     lotCounts[lot],
+            message:   res.message || (ok ? '확정' : '실패'),
+          };
+        })
+        .catch(function(e){
+          return { lot: lot, ok: false, confirmed: 0, count: lotCounts[lot], message: (e && e.message) || String(e) };
+        });
+    });
+
+    Promise.all(promises).then(function(results){
+      var totalOk = results.reduce(function(s, r){ return s + (r.ok ? r.confirmed : 0); }, 0);
+      var totalFail = results.filter(function(r){ return !r.ok; }).length;
+      _ooState.completedItems.push({
+        timestamp: new Date().toISOString(),
+        results:   results,
+        total_ok:  totalOk,
+        total_fail: totalFail,
+        customer:  _ooState.customer,
+        sale_ref:  _ooState.saleRef,
+      });
+      _ooUpdateT4Stats();
+      _ooRenderT4History();
+      if (btn) {
+        btn.textContent = totalFail === 0 ? '✅ 출고 완료 (' + totalOk + '개)' : '⚠️ 부분 실패 (' + totalOk + '/' + (totalOk + totalFail) + ')';
+      }
+      if (totalFail === 0) {
+        showToast('success', '✅ 출고 확정: ' + totalOk + '개 OUTBOUND 처리됨');
+        if (typeof loadKpi === 'function') loadKpi();
+      } else {
+        showToast('warn', '⚠️ 부분 실패: ' + totalFail + '건 — 이력 확인');
+        if (btn) btn.disabled = false;
+      }
+    });
+  };
+
+  function _ooRenderT4History() {
+    var el = document.getElementById('oo-t4-history');
+    if (!el) return;
+    var items = _ooState.completedItems;
+    if (!items.length) {
+      el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">아직 완료된 항목이 없습니다</div>';
+      return;
+    }
+    var rows = items.map(function(item, i){
+      var t = new Date(item.timestamp);
+      var timeStr = [t.getHours(), t.getMinutes(), t.getSeconds()].map(function(n){ return String(n).padStart(2, '0'); }).join(':');
+      var lotsSummary = item.results.map(function(r){
+        return '<span style="color:' + (r.ok ? 'var(--success)' : 'var(--danger)') + '">' + escapeHtml(r.lot) + '×' + r.count + (r.ok ? '' : ' ❌') + '</span>';
+      }).join(', ');
+      return '<tr>' +
+        '<td style="text-align:right">' + (i+1) + '</td>' +
+        '<td class="mono-cell">' + timeStr + '</td>' +
+        '<td>' + lotsSummary + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + (item.total_ok + item.total_fail) + '</td>' +
+        '<td>' + escapeHtml(item.customer || '-') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(item.sale_ref || '-') + '</td>' +
+        '<td>' + (item.total_fail === 0 ? '<span style="color:var(--success)">✅ OK</span>' : '<span style="color:var(--warning)">⚠️ ' + item.total_fail + ' 실패</span>') + '</td>' +
+        '</tr>';
+    }).join('');
+    el.innerHTML =
+      '<table class="data-table" style="font-size:11px"><thead><tr>' +
+      '<th>#</th><th>시간</th><th>LOT (개수)</th><th style="text-align:right">총수</th><th>고객</th><th>Sale Ref</th><th>상태</th>' +
+      '</tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  /* 📋 감사 로그 보기 — sub-popup (메인 모달 위에 z-index 10001) */
+  window.ooViewAuditLog = function() {
+    /* 기존 sub-popup 제거 */
+    var old = document.getElementById('oo-audit-popup');
+    if (old) old.remove();
+
+    var html =
+      '<div id="oo-audit-popup-inner" style="background:var(--bg-card);border-radius:8px;width:90%;max-width:900px;max-height:80vh;display:flex;flex-direction:column;padding:20px;position:relative">' +
+      '<button onclick="document.getElementById(\'oo-audit-popup\').remove()" style="position:absolute;top:10px;right:14px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-muted)">&times;</button>' +
+      '<h3 style="margin:0 0 12px 0">📋 감사 로그 (audit_log)</h3>' +
+      /* 필터 */
+      '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;margin-bottom:8px;font-size:12px">' +
+      '  <label>이벤트:</label><select id="oo-audit-event" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px"><option value="">전체</option></select>' +
+      '  <label>From:</label><input type="date" id="oo-audit-from" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '  <label>To:</label><input type="date" id="oo-audit-to" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+      '  <label>LOT:</label><input type="text" id="oo-audit-lot" placeholder="LOT NO" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;width:120px;font-family:Consolas,monospace">' +
+      '  <button class="btn" onclick="window.ooLoadAuditLog()">🔄 조회</button>' +
+      '  <button class="btn" onclick="window.ooExportAuditCsv()" style="margin-left:auto">📥 CSV 내보내기</button>' +
+      '</div>' +
+      /* 테이블 */
+      '<div id="oo-audit-body" style="flex:1;overflow-y:auto;border:1px solid var(--panel-border);border-radius:6px;padding:8px">' +
+      '<div style="padding:30px;text-align:center;color:var(--text-muted)">⏳ 로딩 중...</div>' +
+      '</div>' +
+      '</div>';
+
+    var popup = document.createElement('div');
+    popup.id = 'oo-audit-popup';
+    popup.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10001;display:flex;align-items:center;justify-content:center;padding:20px';
+    popup.innerHTML = html;
+    /* 외부 클릭으로 닫기 */
+    popup.addEventListener('click', function(e){ if (e.target === popup) popup.remove(); });
+    document.body.appendChild(popup);
+
+    /* 기본 7일 범위 */
+    var today = new Date();
+    var weekAgo = new Date(today.getTime() - 7 * 86400000);
+    var fmt = function(d){ return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+    document.getElementById('oo-audit-from').value = fmt(weekAgo);
+    document.getElementById('oo-audit-to').value = fmt(today);
+
+    window.ooLoadAuditLog();
+  };
+
+  /* 감사 로그 조회 */
+  window._ooLastAuditRows = [];
+  window.ooLoadAuditLog = function() {
+    var ev   = (document.getElementById('oo-audit-event') || {}).value || '';
+    var from = (document.getElementById('oo-audit-from')  || {}).value || '';
+    var to   = (document.getElementById('oo-audit-to')    || {}).value || '';
+    var lot  = (document.getElementById('oo-audit-lot')   || {}).value || '';
+    var qs = ['limit=500'];
+    if (ev)   qs.push('event_type=' + encodeURIComponent(ev));
+    if (from) qs.push('from_date='  + encodeURIComponent(from));
+    if (to)   qs.push('to_date='    + encodeURIComponent(to));
+    if (lot)  qs.push('lot_no='     + encodeURIComponent(lot));
+
+    var body = document.getElementById('oo-audit-body');
+    if (body) body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted)">⏳ 조회 중...</div>';
+
+    apiGet('/api/q/audit-log?' + qs.join('&'))
+      .then(function(res){
+        var d = (res && res.data) || {};
+        var rows = d.items || [];
+        window._ooLastAuditRows = rows;
+
+        /* 이벤트 타입 드롭다운 채우기 */
+        var sel = document.getElementById('oo-audit-event');
+        if (sel && d.available_event_types) {
+          var current = sel.value;
+          var opts = '<option value="">전체</option>' +
+            d.available_event_types.map(function(et){
+              return '<option value="' + escapeHtml(et) + '"' + (et === current ? ' selected' : '') + '>' + escapeHtml(et) + '</option>';
+            }).join('');
+          sel.innerHTML = opts;
+        }
+
+        if (!body) return;
+        if (!rows.length) {
+          body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted)">📭 조건에 맞는 로그 없음</div>';
+          return;
+        }
+        var trs = rows.map(function(r){
+          var t = r.created_at ? new Date(r.created_at).toLocaleString('ko-KR') : '';
+          return '<tr>' +
+            '<td class="mono-cell" style="font-size:10px">' + escapeHtml(String(r.id)) + '</td>' +
+            '<td><span class="tag" style="font-size:10px">' + escapeHtml(r.event_type || '-') + '</span></td>' +
+            '<td class="mono-cell" style="font-size:10px">' + escapeHtml(t) + '</td>' +
+            '<td class="mono-cell" style="font-size:10px">' + escapeHtml(r.batch_id || '-') + '</td>' +
+            '<td class="mono-cell" style="font-size:10px">' + escapeHtml(r.tonbag_id || '-') + '</td>' +
+            '<td style="font-size:10px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(r.event_data || '') + '">' + escapeHtml(r.event_data || '-') + '</td>' +
+            '<td class="mono-cell" style="font-size:10px">' + escapeHtml(r.created_by || '-') + '</td>' +
+            '</tr>';
+        }).join('');
+        body.innerHTML =
+          '<table class="data-table" style="font-size:11px"><thead><tr>' +
+          '<th>ID</th><th>이벤트</th><th>시간</th><th>Batch</th><th>Tonbag</th><th>상세 데이터</th><th>By</th>' +
+          '</tr></thead><tbody>' + trs + '</tbody></table>' +
+          '<div style="text-align:right;margin-top:6px;font-size:11px;color:var(--text-muted)">총 ' + rows.length + '건</div>';
+      })
+      .catch(function(e){
+        if (body) body.innerHTML = '<div style="padding:30px;color:var(--danger);text-align:center">조회 실패: ' + escapeHtml(e.message || String(e)) + '</div>';
+      });
+  };
+
+  /* CSV 내보내기 */
+  window.ooExportAuditCsv = function() {
+    var rows = window._ooLastAuditRows || [];
+    if (!rows.length) { showToast('warn', '내보낼 로그 없음 — 먼저 조회하세요'); return; }
+    var headers = ['id', 'event_type', 'created_at', 'batch_id', 'tonbag_id', 'event_data', 'user_note', 'created_by'];
+    var csvLines = [headers.join(',')];
+    rows.forEach(function(r){
+      var line = headers.map(function(h){
+        var v = r[h] == null ? '' : String(r[h]);
+        /* CSV 이스케이프: 쉼표/줄바꿈/따옴표 포함 시 따옴표 감싸기 */
+        if (/[,"\n]/.test(v)) v = '"' + v.replace(/"/g, '""') + '"';
+        return v;
+      }).join(',');
+      csvLines.push(line);
+    });
+    var csv = csvLines.join('\n');
+    /* BOM 포함 (Excel 한글 호환) */
+    var blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    var ts = new Date();
+    var name = 'audit_log_' + ts.getFullYear() + String(ts.getMonth()+1).padStart(2,'0') + String(ts.getDate()).padStart(2,'0') + '_' + String(ts.getHours()).padStart(2,'0') + String(ts.getMinutes()).padStart(2,'0') + '.csv';
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('success', '📥 ' + name + ' 다운로드됨 (' + rows.length + '건)');
+  };
+
+  /* 📋 새 출고 시작 */
+  window.ooStartNew = function() {
+    if (!confirm('📋 새 출고 시작\n\n현재 진행 상태(파싱/선택/검증/완료 이력)가 모두 초기화됩니다.\n계속하시겠습니까?')) return;
+    _ooReset();
+    /* UI 초기화 */
+    var resetIds = ['oo-customer', 'oo-sale-ref', 'oo-lot', 'oo-paste',
+                    'oo-manual-lot', 'oo-manual-actual',
+                    'oo-scan-uid', 'oo-scan-actual'];
+    resetIds.forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    var fnEl = document.getElementById('oo-scan-filename');
+    if (fnEl) fnEl.textContent = '선택된 파일 없음';
+    var manList = document.getElementById('oo-manual-list');
+    if (manList) manList.textContent = '';
+    var proofEl = document.getElementById('oo-proof-files');
+    if (proofEl) proofEl.innerHTML = '';
+    var draftRes = document.getElementById('oo-draft-result');
+    if (draftRes) draftRes.innerHTML = '';
+    var tonbagBody = document.getElementById('oo-tonbags-body');
+    if (tonbagBody) tonbagBody.innerHTML = '<div style="padding:30px;text-align:center;color:var(--text-muted);font-size:12px">⏳ DRAFT 진입 시 자동 로드됩니다</div>';
+    var validRes = document.getElementById('oo-validation-results');
+    if (validRes) validRes.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">⚡ "전체 검증 실행" 버튼을 눌러 결과를 확인하세요</div>';
+    var historyEl = document.getElementById('oo-t4-history');
+    if (historyEl) historyEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:12px">아직 완료된 항목이 없습니다</div>';
+    var confirmBtn = document.getElementById('oo-confirm-btn');
+    if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = '📦 확정건 출고 완료 ▶'; }
+    /* 상태 초기화 + Tab 1로 */
+    _ooSetState('DRAFT');
+    _ooUpdateT2Stats();
+    _ooUpdateT3Stats();
+    _ooUpdateT4Stats();
+    window.ooSwitchTab(1);
+    /* 출고일 다시 오늘 */
+    var dateInput = document.getElementById('oo-date');
+    if (dateInput) {
+      var d = new Date();
+      dateInput.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+    showToast('info', '📋 새 출고 시작 — Tab 1로 이동');
+  };
+
+  /* ooFinalize 는 이전에 placeholder. 이제 ooConfirmOutbound 로 대체됨 — 호환성 위해 유지 */
+  window.ooFinalize = function() { window.ooConfirmOutbound(); };
 
   /* ─── 플레이스홀더 ──────────────────────────────────────────────────── */
   window.ooFinalize = function() {

@@ -172,24 +172,59 @@ def get_backup_list():
 
 
 # ── F034: 감사 로그 조회 ─────────────────────────────────────────
+# [Sprint 1-3-D] 필터 파라미터 추가 (event_type, from_date, to_date, lot_no)
 @router.get("/audit-log", summary="📋 감사 로그 조회 (F034)")
-def get_audit_log(limit: int = 200):
-    """audit_log 테이블 — 최신순"""
+def get_audit_log(
+    limit: int = 200,
+    event_type: "str | None" = None,
+    from_date: "str | None" = None,
+    to_date: "str | None" = None,
+    lot_no: "str | None" = None,
+):
+    """audit_log 테이블 — 최신순. 모든 필터는 선택적."""
     try:
         con = _db()
-        rows = con.execute("""
+        sql = """
             SELECT id, event_type, event_data, batch_id,
                    tonbag_id, user_note, created_by, created_at
             FROM audit_log
-            ORDER BY created_at DESC
-            LIMIT ?
-        """, (limit,)).fetchall()
+            WHERE 1=1
+        """
+        params = []
+        if event_type:
+            sql += " AND event_type = ?"
+            params.append(event_type)
+        if from_date:
+            sql += " AND DATE(created_at) >= DATE(?)"
+            params.append(from_date)
+        if to_date:
+            sql += " AND DATE(created_at) <= DATE(?)"
+            params.append(to_date)
+        if lot_no:
+            # event_data 가 JSON 텍스트일 가능성 — LIKE 로 매칭
+            sql += " AND (event_data LIKE ? OR tonbag_id LIKE ? OR user_note LIKE ?)"
+            wild = f"%{lot_no}%"
+            params.extend([wild, wild, wild])
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+        rows = con.execute(sql, params).fetchall()
+        # 이벤트 타입 목록 (필터용)
+        event_types_rows = con.execute(
+            "SELECT DISTINCT event_type FROM audit_log ORDER BY event_type"
+        ).fetchall()
         con.close()
         return ok_response(data={
             "items": _rows_to_list(rows),
             "total": len(rows),
             "columns": ["id", "event_type", "event_data", "batch_id",
-                        "tonbag_id", "user_note", "created_by", "created_at"]
+                        "tonbag_id", "user_note", "created_by", "created_at"],
+            "available_event_types": [r[0] for r in event_types_rows if r[0]],
+            "filters": {
+                "event_type": event_type,
+                "from_date":  from_date,
+                "to_date":    to_date,
+                "lot_no":     lot_no,
+            },
         })
     except Exception as e:
         logger.error("audit-log error: %s", e)
