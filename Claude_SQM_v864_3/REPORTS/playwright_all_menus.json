@@ -1,0 +1,584 @@
+{
+  "summary": {
+    "total": 99,
+    "pass": 99,
+    "fail": 0
+  },
+  "errors": [],
+  "results": [
+    {
+      "test": "top_menu_count",
+      "expected": 7,
+      "actual": 7,
+      "pass": true,
+      "detail": [
+        "출고",
+        "파일",
+        "보고서",
+        "도구",
+        "View",
+        "도움말",
+        "품목"
+      ]
+    },
+    {
+      "test": "sidebar_count",
+      "expected": 9,
+      "actual": 9,
+      "pass": true
+    },
+    {
+      "test": "toolbar_count",
+      "expected": 7,
+      "actual": 7,
+      "pass": true
+    },
+    {
+      "test": "sidebar_inventory",
+      "pass": true
+    },
+    {
+      "test": "sidebar_allocation",
+      "pass": true
+    },
+    {
+      "test": "sidebar_picked",
+      "pass": true
+    },
+    {
+      "test": "sidebar_outbound",
+      "pass": true
+    },
+    {
+      "test": "sidebar_return",
+      "pass": true
+    },
+    {
+      "test": "sidebar_move",
+      "pass": true
+    },
+    {
+      "test": "sidebar_dashboard",
+      "pass": true
+    },
+    {
+      "test": "sidebar_log",
+      "pass": true
+    },
+    {
+      "test": "sidebar_scan",
+      "pass": true
+    },
+    {
+      "test": "menu_onOnQuickOutbound",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onQuickOutboundPaste",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onPickingListUpload",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onBarcodeScanUpload",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onGoScanTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onInventoryAllocation",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onApprovalQueue",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onApplyApproved",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onApprovalHistory",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onGoAllocationTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onOutboundStatus",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onOutboundConfirm",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onPickingTemplateManage",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onOnPdfInbound",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onInboundManual",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onDoUpdate",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onInventoryMove",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onMoveApprovalQueue",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReturnDialog",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReturnInboundUpload",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReturnStatistics",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onInboundList",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onInboundTemplateManage",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onProductMaster",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onEmailConfig",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onIntegrityReport",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onFixLotIntegrity",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onExportCustoms",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onExportRubyli",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onExportTonbag",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onExportIntegrated",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onOnBackup",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onRestore",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onBackupList",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onAutoBackupSettings",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onRecentFiles",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onExit",
+      "pass": true,
+      "skipped": true
+    },
+    {
+      "test": "menu_onInvoiceGenerate",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onDetailOfOutbound",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onSalesOrderDN",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onDnCrossCheck",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReportCustom",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReportTemplates",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReportHistory",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onInventoryReport",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onMovementHistory",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReportMonthly",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReportDaily",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onLotDetailPdf",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onProductMaster",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onProductInventoryReport",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onLotAllocationAudit",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onDoUpdate",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onDocConvert",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onIntegrityCheck",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onOptimizeDb",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onCleanupLogs",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onDbInfo",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onTestDbReset",
+      "pass": true,
+      "skipped": true
+    },
+    {
+      "test": "menu_refresh-all",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onGoInventoryTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onGoAllocationTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onGoPickedTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onGoOutboundTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onGoReturnTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onGoMoveTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onGoDashboardTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onGoLogTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onGoScanTab",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onToggleTheme",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onHelp",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onShortcuts",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onStatusGuide",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onBackupGuide",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onSystemInfo",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onAbout",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onProductSummary",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onProductLotLookup",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onProductMovement",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "toolbar_tb-pdf-inbound",
+      "pass": true,
+      "modal": true
+    },
+    {
+      "test": "toolbar_tb-quick-outbound",
+      "pass": true,
+      "modal": true
+    },
+    {
+      "test": "toolbar_tb-return",
+      "pass": true,
+      "modal": false
+    },
+    {
+      "test": "toolbar_tb-inventory",
+      "pass": true,
+      "modal": false
+    },
+    {
+      "test": "toolbar_tb-integrity",
+      "pass": true,
+      "modal": true
+    },
+    {
+      "test": "toolbar_tb-backup",
+      "pass": true,
+      "modal": false
+    },
+    {
+      "test": "toolbar_tb-settings",
+      "pass": true,
+      "modal": false
+    },
+    {
+      "test": "statusbar",
+      "pass": true
+    }
+  ]
+}

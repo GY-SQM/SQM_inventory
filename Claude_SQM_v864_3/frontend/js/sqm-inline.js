@@ -638,43 +638,108 @@
   /* ===================================================
      7b. PAGE: Allocation
      =================================================== */
+  /* ===================================================
+     7b. PAGE: Allocation — 2단 구조 (LOT 요약 + Detail)
+     상단: LOT 단위 집계 (클릭 시 하단 확장)
+     하단: 해당 LOT의 톤백 상세 목록
+     =================================================== */
   function loadAllocationPage() {
     var route = _currentRoute;
     var c = document.getElementById('page-container');
     if (!c) return;
-    c.innerHTML = '<div style="padding:40px;text-align:center">Loading allocation...</div>';
-    apiGet('/api/allocation').then(function(res){
+    c.innerHTML = [
+      '<section class="page" data-page="allocation">',
+      '<div style="display:flex;align-items:center;gap:12px;padding:8px 0 12px">',
+      '  <h2 style="margin:0">📋 Allocation - 판매 배정 (RESERVED)</h2>',
+      '  <button class="btn btn-secondary" onclick="renderPage(\'allocation\')" style="margin-left:auto">🔁 새로고침</button>',
+      '</div>',
+      '<div id="alloc-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
+      '<div style="overflow-x:auto">',
+      '  <table class="data-table" id="alloc-summary-table" style="display:none">',
+      '  <thead><tr><th></th><th>LOT No</th><th>제품</th><th>고객사</th><th>Sale Ref</th><th>배정량(MT)</th><th>톤백수</th><th>출고예정일</th><th>상태</th></tr></thead>',
+      '  <tbody id="alloc-summary-tbody"></tbody>',
+      '  </table>',
+      '</div>',
+      '<div class="empty" id="alloc-empty" style="display:none;padding:60px;text-align:center">📭 배정 데이터 없음</div>',
+      '<div id="alloc-detail-panel" style="display:none;margin-top:16px;border-top:2px solid var(--border);padding-top:16px">',
+      '  <h3 id="alloc-detail-title" style="margin:0 0 12px 0">톤백 상세</h3>',
+      '  <div id="alloc-detail-content"></div>',
+      '</div>',
+      '</section>'
+    ].join('');
+
+    apiGet('/api/q/allocation-summary').then(function(res){
       if (_currentRoute !== route) return;
       var rows = extractRows(res);
-      if (!rows.length) {
-        c.innerHTML = '<div class="empty" style="padding:60px;text-align:center">No allocation data</div>';
-        return;
-      }
-      var html = '<div style="overflow-x:auto"><table class="data-table"><thead><tr>' +
-        '<th>LOT</th><th>Product</th><th>Customer</th><th>Sale Ref</th>' +
-        '<th>Balance</th><th>Bags</th><th>Ship Date</th><th>Status</th><th>Cancel</th>' +
-        '</tr></thead><tbody>';
-      html += rows.map(function(r){
-        return '<tr>' +
-          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot||'')+'</td>' +
+      document.getElementById('alloc-loading').style.display = 'none';
+      if (!rows.length) { document.getElementById('alloc-empty').style.display='block'; return; }
+      var tbody = document.getElementById('alloc-summary-tbody');
+      if (tbody) tbody.innerHTML = rows.map(function(r){
+        var lot = escapeHtml(r.lot_no||'');
+        return '<tr class="alloc-summary-row" data-lot="'+lot+'" style="cursor:pointer" onclick="window.toggleAllocDetail(\''+lot+'\')">' +
+          '<td style="width:24px;text-align:center"><span class="alloc-expand-icon">▶</span></td>' +
+          '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+lot+'</td>' +
           '<td><span class="tag">'+escapeHtml(r.product||'')+'</span></td>' +
-          '<td>'+escapeHtml(r.customer||'-')+'</td>' +
+          '<td>'+escapeHtml(r.customer||r.sold_to||'-')+'</td>' +
           '<td class="mono-cell">'+escapeHtml(r.sale_ref||'-')+'</td>' +
-          '<td class="mono-cell" style="color:var(--accent)">'+(r.balance!=null?Number(r.balance).toLocaleString():'-')+'</td>' +
-          '<td class="mono-cell">'+(r.bags||'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.ship_date||'-')+'</td>' +
-          '<td>RESERVED</td>' +
-          '<td><button class="btn btn-ghost btn-xs" onclick="window.cancelAllocation(\''+escapeHtml(r.lot||'')+'\')">Cancel</button></td>' +
+          '<td class="mono-cell" style="text-align:right">'+(r.total_mt!=null?Number(r.total_mt).toFixed(3):(r.qty_mt!=null?Number(r.qty_mt).toFixed(3):'-'))+'</td>' +
+          '<td class="mono-cell" style="text-align:right">'+(r.tonbag_count||r.plan_count||'-')+'</td>' +
+          '<td class="mono-cell">'+escapeHtml(r.outbound_date||r.ship_date||'-')+'</td>' +
+          '<td><span class="tag" style="background:var(--warning);color:#000">RESERVED</span></td>' +
           '</tr>';
       }).join('');
-      html += '</tbody></table></div>';
-      c.innerHTML = html;
+      document.getElementById('alloc-summary-table').style.display = '';
     }).catch(function(e){
       if (_currentRoute !== route) return;
-      c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
-      showToast('error', 'Allocation load failed');
+      document.getElementById('alloc-loading').style.display = 'none';
+      document.getElementById('alloc-empty').textContent = 'Load failed: '+(e.message||'');
+      document.getElementById('alloc-empty').style.display = 'block';
     });
   }
+
+  var _allocExpandedLot = null;
+  window.toggleAllocDetail = function(lotNo) {
+    var panel = document.getElementById('alloc-detail-panel');
+    var content = document.getElementById('alloc-detail-content');
+    var title = document.getElementById('alloc-detail-title');
+
+    // 같은 LOT 클릭 시 닫기
+    if (_allocExpandedLot === lotNo) {
+      panel.style.display = 'none';
+      _allocExpandedLot = null;
+      document.querySelectorAll('.alloc-summary-row').forEach(function(r){ r.style.background=''; });
+      document.querySelectorAll('.alloc-expand-icon').forEach(function(i){ i.textContent='▶'; });
+      return;
+    }
+
+    _allocExpandedLot = lotNo;
+    document.querySelectorAll('.alloc-summary-row').forEach(function(r){
+      if (r.dataset.lot === lotNo) {
+        r.style.background = 'var(--bg-active)';
+        r.querySelector('.alloc-expand-icon').textContent = '▼';
+      } else {
+        r.style.background = '';
+        r.querySelector('.alloc-expand-icon').textContent = '▶';
+      }
+    });
+
+    panel.style.display = 'block';
+    title.textContent = '📋 ' + lotNo + ' 톤백 상세';
+    content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">⏳ 로딩...</div>';
+
+    apiGet('/api/q/allocation-detail/' + encodeURIComponent(lotNo)).then(function(res){
+      var rows = extractRows(res);
+      if (!rows.length) { content.innerHTML = '<div class="empty">상세 데이터 없음</div>'; return; }
+      var tbl = '<table class="data-table"><thead><tr><th>#</th><th>톤백ID</th><th>중량(kg)</th><th>위치</th><th>상태</th><th>배정일</th></tr></thead><tbody>';
+      tbl += rows.map(function(r, i){
+        return '<tr><td>'+(i+1)+'</td><td class="mono-cell">'+escapeHtml(r.tonbag_id||r.sub_lt||'-')+'</td><td class="mono-cell" style="text-align:right">'+(r.weight!=null?Number(r.weight).toLocaleString():'-')+'</td><td>'+escapeHtml(r.location||'-')+'</td><td><span class="tag">'+escapeHtml(r.status||'-')+'</span></td><td>'+escapeHtml(r.plan_date||r.allocated_date||'-')+'</td></tr>';
+      }).join('');
+      tbl += '</tbody></table>';
+      content.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">' + rows.length + '개 톤백</p>' + tbl;
+    }).catch(function(e){
+      content.innerHTML = '<div class="empty">상세 로드 실패: '+escapeHtml(e.message||'')+'</div>';
+    });
+  };
 
   window.cancelAllocation = function(lot) {
     if (!confirm(lot + ': cancel allocation?')) return;
@@ -686,21 +751,34 @@
   /* ===================================================
      7c. PAGE: Picked
      =================================================== */
+  /* ===================================================
+     7c. PAGE: Picked — 2단 구조 (LOT 요약 + 톤백 상세)
+     =================================================== */
   function loadPickedPage() {
     var route = _currentRoute;
     var c = document.getElementById('page-container');
     if (!c) return;
     c.innerHTML = [
       '<section class="page" data-page="picked">',
-      '<h2>Picked - 피킹 완료 (화물 결정)</h2>',
-      '<div class="toolbar-mini"><button class="btn btn-secondary" onclick="renderPage(\'picked\')">🔁 새로고침</button></div>',
+      '<div style="display:flex;align-items:center;gap:12px;padding:8px 0 12px">',
+      '  <h2 style="margin:0">🚛 Picked - 피킹 완료 (화물 결정)</h2>',
+      '  <button class="btn btn-secondary" onclick="renderPage(\'picked\')" style="margin-left:auto">🔁 새로고침</button>',
+      '</div>',
       '<div id="picked-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
-      '<table class="data-table" id="picked-table" style="display:none">',
-      '<thead><tr><th>LOT No</th><th>피킹No</th><th>고객사</th><th>톤백수</th><th>중량(kg)</th><th>피킹일</th></tr></thead>',
-      '<tbody id="picked-tbody"></tbody></table>',
-      '<div class="empty" id="picked-empty" style="display:none">No data</div>',
+      '<div style="overflow-x:auto">',
+      '  <table class="data-table" id="picked-table" style="display:none">',
+      '  <thead><tr><th></th><th>LOT No</th><th>피킹No</th><th>고객사</th><th>톤백수</th><th>중량(kg)</th><th>피킹일</th></tr></thead>',
+      '  <tbody id="picked-tbody"></tbody>',
+      '  </table>',
+      '</div>',
+      '<div class="empty" id="picked-empty" style="display:none;padding:60px;text-align:center">📭 피킹 데이터 없음</div>',
+      '<div id="picked-detail-panel" style="display:none;margin-top:16px;border-top:2px solid var(--border);padding-top:16px">',
+      '  <h3 id="picked-detail-title" style="margin:0 0 12px 0">톤백 상세</h3>',
+      '  <div id="picked-detail-content"></div>',
+      '</div>',
       '</section>'
     ].join('');
+
     apiGet('/api/q/picked-list').then(function(res){
       if (_currentRoute !== route) return;
       var rows = extractRows(res);
@@ -708,10 +786,12 @@
       if (!rows.length) { document.getElementById('picked-empty').style.display='block'; return; }
       var tbody = document.getElementById('picked-tbody');
       if (tbody) tbody.innerHTML = rows.map(function(r){
-        return '<tr>' +
-          '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot_no||'')+'</td>' +
+        var lot = escapeHtml(r.lot_no||'');
+        return '<tr class="picked-summary-row" data-lot="'+lot+'" style="cursor:pointer" onclick="window.togglePickedDetail(\''+lot+'\')">' +
+          '<td style="width:24px;text-align:center"><span class="picked-expand-icon">▶</span></td>' +
+          '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+lot+'</td>' +
           '<td class="mono-cell">'+escapeHtml(r.picking_no||'')+'</td>' +
-          '<td>'+escapeHtml(r.customer||'')+'</td>' +
+          '<td>'+escapeHtml(r.customer||r.picked_to||'')+'</td>' +
           '<td class="mono-cell" style="text-align:right">'+(r.tonbag_count||0)+'</td>' +
           '<td class="mono-cell" style="text-align:right">'+(r.total_kg!=null?fmtN(r.total_kg):'-')+'</td>' +
           '<td class="mono-cell">'+escapeHtml(r.picking_date||'')+'</td>' +
@@ -723,9 +803,51 @@
       document.getElementById('picked-loading').style.display = 'none';
       var el = document.getElementById('picked-empty');
       if (el) { el.textContent = 'Load failed: '+(e.message||String(e)); el.style.display='block'; }
-      if (e.status !== 501) showToast('error', 'Picked load failed');
     });
   }
+
+  var _pickedExpandedLot = null;
+  window.togglePickedDetail = function(lotNo) {
+    var panel = document.getElementById('picked-detail-panel');
+    var content = document.getElementById('picked-detail-content');
+    var title = document.getElementById('picked-detail-title');
+
+    if (_pickedExpandedLot === lotNo) {
+      panel.style.display = 'none';
+      _pickedExpandedLot = null;
+      document.querySelectorAll('.picked-summary-row').forEach(function(r){ r.style.background=''; });
+      document.querySelectorAll('.picked-expand-icon').forEach(function(i){ i.textContent='▶'; });
+      return;
+    }
+
+    _pickedExpandedLot = lotNo;
+    document.querySelectorAll('.picked-summary-row').forEach(function(r){
+      if (r.dataset.lot === lotNo) {
+        r.style.background = 'var(--bg-active)';
+        r.querySelector('.picked-expand-icon').textContent = '▼';
+      } else {
+        r.style.background = '';
+        r.querySelector('.picked-expand-icon').textContent = '▶';
+      }
+    });
+
+    panel.style.display = 'block';
+    title.textContent = '🚛 ' + lotNo + ' 톤백 상세';
+    content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">⏳ 로딩...</div>';
+
+    apiGet('/api/tonbags?lot_no=' + encodeURIComponent(lotNo)).then(function(res){
+      var rows = extractRows(res);
+      if (!rows.length) { content.innerHTML = '<div class="empty">톤백 데이터 없음</div>'; return; }
+      var tbl = '<table class="data-table"><thead><tr><th>#</th><th>톤백ID</th><th>중량(kg)</th><th>위치</th><th>상태</th><th>피킹일</th></tr></thead><tbody>';
+      tbl += rows.map(function(r, i){
+        return '<tr><td>'+(i+1)+'</td><td class="mono-cell">'+escapeHtml(r.sub_lt||r.tonbag_id||'-')+'</td><td class="mono-cell" style="text-align:right">'+(r.weight!=null?Number(r.weight).toLocaleString():'-')+'</td><td>'+escapeHtml(r.location||'-')+'</td><td><span class="tag">'+escapeHtml(r.status||'-')+'</span></td><td>'+escapeHtml(r.picked_date||r.updated_at||'-')+'</td></tr>';
+      }).join('');
+      tbl += '</tbody></table>';
+      content.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">' + rows.length + '개 톤백</p>' + tbl;
+    }).catch(function(e){
+      content.innerHTML = '<div class="empty">톤백 로드 실패: '+escapeHtml(e.message||'')+'</div>';
+    });
+  };
 
   /* ===================================================
      7c-2. PAGE: Inbound (입고 목록 — F009)
@@ -859,6 +981,9 @@
               from_location, to_location, movement_date,
               source_type, actor, remarks
      =================================================== */
+  /* ===================================================
+     7d. PAGE: Outbound/Sold — 2단 구조 (LOT 요약 + 톤백 상세)
+     =================================================== */
   function loadOutboundPage() {
     var route = _currentRoute;
     var c = document.getElementById('page-container');
@@ -866,20 +991,21 @@
     c.innerHTML = [
       '<section class="page" data-page="outbound">',
       '<div style="display:flex;align-items:center;gap:12px;padding:8px 0 12px">',
-      '<h2 style="margin:0">📤 출고 완료 (Sold / Outbound)</h2>',
-      '<button class="btn btn-secondary" onclick="renderPage(\'outbound\')" style="margin-left:auto">🔁 새로고침</button>',
+      '  <h2 style="margin:0">📤 출고 완료 (Sold / Outbound)</h2>',
+      '  <button class="btn btn-secondary" onclick="renderPage(\'outbound\')" style="margin-left:auto">🔁 새로고침</button>',
       '</div>',
       '<div id="outbound-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
       '<div style="overflow-x:auto">',
-      '<table class="data-table" id="outbound-table" style="display:none">',
-      '<thead><tr>',
-      '<th>#</th><th>LOT No</th><th>판매주문No</th><th>고객사</th>',
-      '<th>톤백수</th><th>중량(kg)</th><th>판매일</th>',
-      '</tr></thead>',
-      '<tbody id="outbound-tbody"></tbody>',
-      '</table>',
+      '  <table class="data-table" id="outbound-table" style="display:none">',
+      '  <thead><tr><th></th><th>#</th><th>LOT No</th><th>판매주문No</th><th>고객사</th><th>톤백수</th><th>중량(kg)</th><th>출고일</th></tr></thead>',
+      '  <tbody id="outbound-tbody"></tbody>',
+      '  </table>',
       '</div>',
       '<div class="empty" id="outbound-empty" style="display:none;padding:60px;text-align:center;color:var(--text-muted)">📭 출고 데이터 없음</div>',
+      '<div id="outbound-detail-panel" style="display:none;margin-top:16px;border-top:2px solid var(--border);padding-top:16px">',
+      '  <h3 id="outbound-detail-title" style="margin:0 0 12px 0">톤백 상세</h3>',
+      '  <div id="outbound-detail-content"></div>',
+      '</div>',
       '</section>'
     ].join('');
 
@@ -893,9 +1019,11 @@
       }
       var tbody = document.getElementById('outbound-tbody');
       if (tbody) tbody.innerHTML = rows.map(function(r, i){
-        return '<tr>' +
+        var lot = escapeHtml(r.lot_no||'');
+        return '<tr class="outbound-summary-row" data-lot="'+lot+'" style="cursor:pointer" onclick="window.toggleOutboundDetail(\''+lot+'\')">' +
+          '<td style="width:24px;text-align:center"><span class="outbound-expand-icon">▶</span></td>' +
           '<td class="mono-cell" style="color:var(--text-muted)">'+(i+1)+'</td>' +
-          '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+escapeHtml(r.lot_no||'')+'</td>' +
+          '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+lot+'</td>' +
           '<td class="mono-cell">'+escapeHtml(r.sales_order_no||'-')+'</td>' +
           '<td>'+escapeHtml(r.customer||'-')+'</td>' +
           '<td class="mono-cell" style="text-align:right">'+(r.tonbag_count||0)+'</td>' +
@@ -911,9 +1039,51 @@
       var el = document.getElementById('outbound-empty');
       if (el) { el.textContent = '❌ 로드 실패: '+(e.message||String(e)); el.style.display = 'block'; }
       showToast('error', '출고 현황 로드 실패');
-      dbgLog('❌','outbound-page',String(e),'#f44336');
     });
   }
+
+  var _outboundExpandedLot = null;
+  window.toggleOutboundDetail = function(lotNo) {
+    var panel = document.getElementById('outbound-detail-panel');
+    var content = document.getElementById('outbound-detail-content');
+    var title = document.getElementById('outbound-detail-title');
+
+    if (_outboundExpandedLot === lotNo) {
+      panel.style.display = 'none';
+      _outboundExpandedLot = null;
+      document.querySelectorAll('.outbound-summary-row').forEach(function(r){ r.style.background=''; });
+      document.querySelectorAll('.outbound-expand-icon').forEach(function(i){ i.textContent='▶'; });
+      return;
+    }
+
+    _outboundExpandedLot = lotNo;
+    document.querySelectorAll('.outbound-summary-row').forEach(function(r){
+      if (r.dataset.lot === lotNo) {
+        r.style.background = 'var(--bg-active)';
+        r.querySelector('.outbound-expand-icon').textContent = '▼';
+      } else {
+        r.style.background = '';
+        r.querySelector('.outbound-expand-icon').textContent = '▶';
+      }
+    });
+
+    panel.style.display = 'block';
+    title.textContent = '📤 ' + lotNo + ' 톤백 상세';
+    content.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted)">⏳ 로딩...</div>';
+
+    apiGet('/api/tonbags?lot_no=' + encodeURIComponent(lotNo)).then(function(res){
+      var rows = extractRows(res);
+      if (!rows.length) { content.innerHTML = '<div class="empty">톤백 데이터 없음</div>'; return; }
+      var tbl = '<table class="data-table"><thead><tr><th>#</th><th>톤백ID</th><th>중량(kg)</th><th>위치</th><th>상태</th><th>출고일</th></tr></thead><tbody>';
+      tbl += rows.map(function(r, i){
+        return '<tr><td>'+(i+1)+'</td><td class="mono-cell">'+escapeHtml(r.sub_lt||r.tonbag_id||'-')+'</td><td class="mono-cell" style="text-align:right">'+(r.weight!=null?Number(r.weight).toLocaleString():'-')+'</td><td>'+escapeHtml(r.location||'-')+'</td><td><span class="tag">'+escapeHtml(r.status||'-')+'</span></td><td>'+escapeHtml(r.sold_date||r.updated_at||'-')+'</td></tr>';
+      }).join('');
+      tbl += '</tbody></table>';
+      content.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">' + rows.length + '개 톤백</p>' + tbl;
+    }).catch(function(e){
+      content.innerHTML = '<div class="empty">톤백 로드 실패: '+escapeHtml(e.message||'')+'</div>';
+    });
+  };
 
   /* ===================================================
      7e. PAGE: Return
@@ -2149,6 +2319,613 @@
   }
   window.showOutboundConfirmModal = showOutboundConfirmModal;
 
+  /* ===================================================
+     8i. 입고 취소 — LOT 선택 → POST /api/action2/inbound-cancel
+     =================================================== */
+  function showInboundCancelModal() {
+    var html = [
+      '<div style="max-width:480px">',
+      '  <h2 style="margin:0 0 12px 0">↩️ 입고 취소</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 16px 0;font-size:.9rem">',
+      '    입고된 LOT를 취소(CANCELLED)합니다. 톤백 포함 원복됩니다.',
+      '  </p>',
+      '  <div style="display:grid;grid-template-columns:100px 1fr;gap:10px;align-items:center;margin-bottom:16px">',
+      '    <label style="font-weight:600">LOT 번호</label>',
+      '    <input type="text" id="ic-lot" placeholder="예: L240101-001" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '    <label style="font-weight:600">사유</label>',
+      '    <input type="text" id="ic-reason" placeholder="취소 사유 (선택)" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '  </div>',
+      '  <div id="ic-result" style="margin-bottom:12px;min-height:24px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="ic-cancel" class="btn btn-ghost">닫기</button>',
+      '    <button id="ic-submit" class="btn btn-primary">입고 취소</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+    var cancel = document.getElementById('ic-cancel');
+    var submit = document.getElementById('ic-submit');
+    var result = document.getElementById('ic-result');
+    cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+    submit.addEventListener('click', function(){
+      var lot = document.getElementById('ic-lot').value.trim();
+      if (!lot) { showToast('warning', 'LOT 번호를 입력하세요'); return; }
+      if (!confirm('LOT ' + lot + ' 입고를 취소합니다. 계속할까요?')) return;
+      submit.disabled = true; cancel.disabled = true;
+      result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
+      apiPost('/api/action2/inbound-cancel', { lot_no: lot, reason: document.getElementById('ic-reason').value.trim() })
+        .then(function(res){
+          if (res && res.ok) {
+            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ ' + escapeHtml(res.message||'입고 취소 완료') + '</div></div>';
+            showToast('success', res.message || '입고 취소 완료');
+            if (typeof loadKpi === 'function') loadKpi();
+          } else {
+            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)"><div style="font-weight:600">❌ ' + escapeHtml((res&&res.message)||'실패') + '</div></div>';
+            showToast('error', (res&&res.message)||'실패');
+            submit.disabled = false; cancel.disabled = false;
+          }
+        })
+        .catch(function(e){
+          result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+          submit.disabled = false; cancel.disabled = false;
+        });
+    });
+  }
+  window.showInboundCancelModal = showInboundCancelModal;
+
+  /* ===================================================
+     8j. 승인 대기 (Allocation Approval Queue)
+     =================================================== */
+  function showApprovalQueueModal() {
+    showDataModal('✅ 승인 대기','<div style="padding:20px;text-align:center">⏳ Loading...</div>');
+    apiGet('/api/q/approval-history').then(function(res){
+      var rows = extractRows(res);
+      var pending = rows.filter(function(r){ return (r.approval_status||'').toUpperCase() === 'PENDING'; });
+      var html;
+      if (!pending.length && !rows.length) {
+        html = '<div class="empty">승인 대기 건이 없습니다</div>';
+      } else {
+        var tgt = pending.length ? pending : rows;
+        html = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">총 ' + tgt.length + '건' + (pending.length ? ' (PENDING)' : ' (전체 이력)') + '</p>';
+        html += '<table class="data-table"><thead><tr><th>LOT</th><th>고객</th><th>수량</th><th>상태</th><th>요청일</th></tr></thead><tbody>';
+        html += tgt.slice(0,50).map(function(r){
+          return '<tr><td class="mono-cell">'+escapeHtml(r.lot_no||'-')+'</td><td>'+escapeHtml(r.sold_to||r.customer||'-')+'</td><td>'+(r.qty_mt!=null?Number(r.qty_mt).toFixed(3):'-')+'</td><td><span class="tag">'+escapeHtml(r.approval_status||r.status||'-')+'</span></td><td>'+escapeHtml(r.request_date||r.created_at||'-')+'</td></tr>';
+        }).join('');
+        html += '</tbody></table>';
+      }
+      document.getElementById('sqm-modal-content').innerHTML = '<h2 style="margin-bottom:16px">✅ 승인 대기 (Allocation)</h2>' + html;
+    }).catch(function(e){
+      document.getElementById('sqm-modal-content').innerHTML = '<h2>승인 대기</h2><div class="empty">조회 실패: ' + escapeHtml(e.message||String(e)) + '</div>';
+    });
+  }
+  window.showApprovalQueueModal = showApprovalQueueModal;
+
+  /* ===================================================
+     8k. 백업 복원 — 목록 조회 → 선택 → 복원 실행
+     =================================================== */
+  function showRestoreModal() {
+    showDataModal('🔄 백업 복원','<div style="padding:20px;text-align:center">⏳ 백업 목록 로딩...</div>');
+    apiGet('/api/q/backup-list').then(function(res){
+      var rows = extractRows(res);
+      if (!rows.length) {
+        document.getElementById('sqm-modal-content').innerHTML = '<h2>🔄 백업 복원</h2><div class="empty">사용 가능한 백업 파일이 없습니다</div>';
+        return;
+      }
+      var html = '<h2 style="margin-bottom:12px">🔄 백업 복원</h2>';
+      html += '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">복원할 백업 파일을 선택하세요. <strong style="color:var(--warning)">⚠️ 현재 DB가 덮어씌워집니다!</strong></p>';
+      html += '<div style="max-height:300px;overflow:auto"><table class="data-table"><thead><tr><th>선택</th><th>파일명</th><th>크기</th><th>생성일</th></tr></thead><tbody>';
+      html += rows.map(function(r, i){
+        return '<tr><td><input type="radio" name="restore-sel" value="'+i+'" data-file="'+escapeHtml(r.filename||r.name||'')+'"></td><td class="mono-cell">'+escapeHtml(r.filename||r.name||'-')+'</td><td>'+(r.size_mb!=null?r.size_mb.toFixed(2)+' MB':(r.size||'-'))+'</td><td>'+escapeHtml(r.modified||r.mtime||r.created||'-')+'</td></tr>';
+      }).join('');
+      html += '</tbody></table></div>';
+      html += '<div id="restore-result" style="margin:12px 0;min-height:24px"></div>';
+      html += '<div style="display:flex;gap:8px;justify-content:flex-end"><button id="restore-cancel" class="btn btn-ghost">닫기</button><button id="restore-submit" class="btn btn-primary">복원 실행</button></div>';
+      document.getElementById('sqm-modal-content').innerHTML = html;
+
+      document.getElementById('restore-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+      document.getElementById('restore-submit').addEventListener('click', function(){
+        var sel = document.querySelector('input[name="restore-sel"]:checked');
+        if (!sel) { showToast('warning', '복원할 백업 파일을 선택하세요'); return; }
+        var fname = sel.dataset.file;
+        if (!confirm('⚠️ ' + fname + ' 으로 DB를 복원합니다.\n현재 데이터가 모두 덮어씌워집니다.\n\n정말 계속할까요?')) return;
+        var btn = document.getElementById('restore-submit');
+        btn.disabled = true;
+        document.getElementById('restore-result').innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 복원 중...</div>';
+        apiPost('/api/action/restore', { filename: fname })
+          .then(function(res){
+            if (res && res.ok) {
+              document.getElementById('restore-result').innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ ' + escapeHtml(res.message||'복원 완료') + '</div></div>';
+              showToast('success', res.message || '복원 완료');
+            } else {
+              document.getElementById('restore-result').innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'복원 실패') + '</div>';
+              btn.disabled = false;
+            }
+          })
+          .catch(function(e){
+            document.getElementById('restore-result').innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+            btn.disabled = false;
+          });
+      });
+    }).catch(function(e){
+      document.getElementById('sqm-modal-content').innerHTML = '<h2>🔄 백업 복원</h2><div class="empty">백업 목록 조회 실패: ' + escapeHtml(e.message||String(e)) + '</div>';
+    });
+  }
+  window.showRestoreModal = showRestoreModal;
+
+  /* ===================================================
+     8l. 창 크기 저장 / 초기화 — PyWebView API
+     =================================================== */
+  function saveWindowSize() {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.save_window_size) {
+      window.pywebview.api.save_window_size();
+      showToast('success', '현재 창 크기가 저장되었습니다');
+    } else {
+      var w = window.innerWidth, h = window.innerHeight;
+      try { getStore().setItem('sqm_window_size', w+'x'+h); } catch(e){}
+      showToast('success', '창 크기 저장됨: ' + w + ' x ' + h);
+    }
+    dbgLog('💾','Window size saved', window.innerWidth + 'x' + window.innerHeight, '#4caf50');
+  }
+  function resetWindowSize() {
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.reset_window_size) {
+      window.pywebview.api.reset_window_size();
+    } else {
+      try { window.resizeTo(1500, 900); } catch(e){}
+      try { getStore().removeItem('sqm_window_size'); } catch(e){}
+    }
+    showToast('success', '기본 창 크기(1500x900)로 초기화되었습니다');
+    dbgLog('↩️','Window size reset', '1500x900', '#4caf50');
+  }
+
+  /* ===================================================
+     8m. 반품 다이얼로그 — 2탭: 소량(수동) + 다량(Excel)
+     =================================================== */
+  function showReturnDialog() {
+    var html = [
+      '<div style="max-width:600px">',
+      '  <h2 style="margin:0 0 12px 0">🔄 반품 (재입고)</h2>',
+      '  <div style="display:flex;gap:0;margin-bottom:16px">',
+      '    <button id="ret-tab-manual" class="btn btn-ghost" style="flex:1;border-radius:6px 0 0 6px;border:1px solid var(--border);background:var(--accent);color:#fff">📝 소량 반품 (수동)</button>',
+      '    <button id="ret-tab-excel" class="btn btn-ghost" style="flex:1;border-radius:0 6px 6px 0;border:1px solid var(--border)">📂 다량 반품 (Excel)</button>',
+      '  </div>',
+      '  <div id="ret-panel-manual">',
+      '    <div style="display:grid;grid-template-columns:100px 1fr;gap:10px;align-items:center;margin-bottom:12px">',
+      '      <label style="font-weight:600">LOT 번호</label>',
+      '      <input type="text" id="ret-lot" placeholder="반품할 LOT" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '      <label style="font-weight:600">톤백 수</label>',
+      '      <input type="number" id="ret-count" placeholder="반품 톤백 수" min="1" value="1" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '      <label style="font-weight:600">사유</label>',
+      '      <select id="ret-reason" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '        <option value="품질 불량">품질 불량</option>',
+      '        <option value="수량 초과">수량 초과</option>',
+      '        <option value="오배송">오배송</option>',
+      '        <option value="고객 변심">고객 변심</option>',
+      '        <option value="기타">기타</option>',
+      '      </select>',
+      '      <label style="font-weight:600">메모</label>',
+      '      <input type="text" id="ret-memo" placeholder="추가 메모 (선택)" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    </div>',
+      '  </div>',
+      '  <div id="ret-panel-excel" style="display:none">',
+      '    <p style="color:var(--text-muted);font-size:.9rem;margin-bottom:12px">다량 반품 Excel 파일을 업로드하세요.</p>',
+      '    <button id="ret-excel-btn" class="btn btn-primary" style="width:100%">📂 반품 Excel 업로드 열기</button>',
+      '  </div>',
+      '  <div id="ret-result" style="margin:12px 0;min-height:24px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="ret-cancel" class="btn btn-ghost">닫기</button>',
+      '    <button id="ret-submit" class="btn btn-primary">반품 처리</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+
+    var tabManual = document.getElementById('ret-tab-manual');
+    var tabExcel = document.getElementById('ret-tab-excel');
+    var panelManual = document.getElementById('ret-panel-manual');
+    var panelExcel = document.getElementById('ret-panel-excel');
+    var submitBtn = document.getElementById('ret-submit');
+
+    tabManual.addEventListener('click', function(){
+      panelManual.style.display=''; panelExcel.style.display='none';
+      tabManual.style.background='var(--accent)'; tabManual.style.color='#fff';
+      tabExcel.style.background=''; tabExcel.style.color='';
+      submitBtn.style.display='';
+    });
+    tabExcel.addEventListener('click', function(){
+      panelManual.style.display='none'; panelExcel.style.display='';
+      tabExcel.style.background='var(--accent)'; tabExcel.style.color='#fff';
+      tabManual.style.background=''; tabManual.style.color='';
+      submitBtn.style.display='none';
+    });
+    document.getElementById('ret-excel-btn').addEventListener('click', function(){
+      document.getElementById('sqm-modal').style.display='none';
+      showReturnInboundUploadModal();
+    });
+    document.getElementById('ret-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+    submitBtn.addEventListener('click', function(){
+      var lot = document.getElementById('ret-lot').value.trim();
+      if (!lot) { showToast('warning', 'LOT 번호를 입력하세요'); return; }
+      if (!confirm('LOT ' + lot + ' 반품 처리를 진행합니다.')) return;
+      submitBtn.disabled = true;
+      var result = document.getElementById('ret-result');
+      result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
+      apiPost('/api/action3/return-create', {
+        lot_no: lot,
+        tonbag_count: parseInt(document.getElementById('ret-count').value)||1,
+        reason: document.getElementById('ret-reason').value,
+        memo: document.getElementById('ret-memo').value.trim()
+      }).then(function(res){
+        if (res && res.ok) {
+          result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ ' + escapeHtml(res.message||'반품 완료') + '</div></div>';
+          showToast('success', res.message || '반품 완료');
+        } else {
+          result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'실패') + '</div>';
+          submitBtn.disabled = false;
+        }
+      }).catch(function(e){
+        result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+        submitBtn.disabled = false;
+      });
+    });
+  }
+  window.showReturnDialog = showReturnDialog;
+
+  /* ===================================================
+     8n. LOT Allocation·톤백 현황 조회
+     =================================================== */
+  function showLotAllocationAuditModal() {
+    var html = [
+      '<div style="max-width:700px">',
+      '  <h2 style="margin:0 0 12px 0">📊 LOT Allocation·톤백 현황</h2>',
+      '  <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">',
+      '    <input type="text" id="laa-lot" placeholder="LOT 번호 (비우면 전체)" style="flex:1;padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '    <button id="laa-search" class="btn btn-primary">조회</button>',
+      '  </div>',
+      '  <div id="laa-result" style="min-height:60px"><div class="empty">LOT 번호를 입력하고 조회를 클릭하세요</div></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">',
+      '    <button id="laa-close" class="btn btn-ghost">닫기</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+    document.getElementById('laa-close').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+    document.getElementById('laa-search').addEventListener('click', function(){
+      var lot = document.getElementById('laa-lot').value.trim();
+      var result = document.getElementById('laa-result');
+      result.innerHTML = '<div style="padding:20px;text-align:center">⏳ 조회 중...</div>';
+      var url = '/api/q/product-inventory' + (lot ? '?lot_no=' + encodeURIComponent(lot) : '');
+      apiGet(url).then(function(res){
+        var rows = extractRows(res);
+        if (!rows.length) { result.innerHTML = '<div class="empty">데이터가 없습니다</div>'; return; }
+        var tbl = '<table class="data-table"><thead><tr><th>LOT</th><th>제품</th><th>상태</th><th>톤백수</th><th>중량(MT)</th><th>위치</th></tr></thead><tbody>';
+        tbl += rows.slice(0,100).map(function(r){
+          return '<tr><td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot_no||'-')+'</td><td>'+escapeHtml(r.product||'-')+'</td><td><span class="tag">'+escapeHtml(r.status||'-')+'</span></td><td>'+(r.tonbag_count||r.total_tonbags||'-')+'</td><td>'+(r.net_weight!=null?Number(r.net_weight).toFixed(3):(r.total_weight||'-'))+'</td><td>'+escapeHtml(r.location||r.warehouse||'-')+'</td></tr>';
+        }).join('');
+        tbl += '</tbody></table>';
+        result.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">총 ' + rows.length + '건</p>' + tbl;
+      }).catch(function(e){
+        result.innerHTML = '<div class="empty">조회 실패: ' + escapeHtml(e.message||String(e)) + '</div>';
+      });
+    });
+  }
+  window.showLotAllocationAuditModal = showLotAllocationAuditModal;
+
+  /* ===================================================
+     8o. 테스트 DB 초기화 (개발자 전용)
+     =================================================== */
+  function showTestDbResetModal() {
+    var html = [
+      '<div style="max-width:480px">',
+      '  <h2 style="margin:0 0 12px 0;color:var(--danger)">🗑️ 테스트 DB 초기화</h2>',
+      '  <div style="padding:16px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger);margin-bottom:16px">',
+      '    <div style="font-weight:600;color:var(--danger)">⚠️ 위험한 작업</div>',
+      '    <div style="color:var(--text-muted);font-size:.9rem;margin-top:4px">모든 데이터가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</div>',
+      '  </div>',
+      '  <div style="margin-bottom:16px">',
+      '    <label style="display:flex;align-items:center;gap:8px;color:var(--warning)">',
+      '      <input type="checkbox" id="dbr-confirm"> 위 내용을 이해했으며 DB를 초기화합니다',
+      '    </label>',
+      '  </div>',
+      '  <div id="dbr-result" style="margin-bottom:12px;min-height:24px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="dbr-cancel" class="btn btn-ghost">닫기</button>',
+      '    <button id="dbr-submit" class="btn btn-primary" disabled style="background:var(--danger)">초기화 실행</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+    var chk = document.getElementById('dbr-confirm');
+    var submit = document.getElementById('dbr-submit');
+    chk.addEventListener('change', function(){ submit.disabled = !chk.checked; });
+    document.getElementById('dbr-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+    submit.addEventListener('click', function(){
+      if (!confirm('정말로 DB를 완전 초기화할까요?\n\n이 작업은 되돌릴 수 없습니다!')) return;
+      submit.disabled = true;
+      document.getElementById('dbr-result').innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 초기화 중...</div>';
+      apiPost('/api/action3/db-reset', { confirm: true })
+        .then(function(res){
+          if (res && res.ok) {
+            document.getElementById('dbr-result').innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ DB 초기화 완료</div></div>';
+            showToast('success', 'DB 초기화 완료');
+          } else {
+            document.getElementById('dbr-result').innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'실패') + '</div>';
+            submit.disabled = false;
+          }
+        })
+        .catch(function(e){
+          document.getElementById('dbr-result').innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+          submit.disabled = false;
+        });
+    });
+  }
+  window.showTestDbResetModal = showTestDbResetModal;
+
+  /* ===================================================
+     8p. 바코드 스캔 업로드 — CSV/Excel 파일 업로드
+     =================================================== */
+  function showBarcodeScanUploadModal() {
+    _showExcelUploadModal({
+      title: '📊 바코드 스캔 업로드',
+      subtitle: '바코드 스캔 결과 파일(Excel/CSV)을 선택하세요. 스캔된 UID와 LOT를 매칭하여 출고 처리합니다.',
+      endpoint: '/api/inbound/bulk-import-excel',
+      onSuccess: function(d) {
+        return '<div style="color:var(--text-muted);font-size:.85rem">처리 결과: 성공 ' + (d.success_count||0) + ' / 실패 ' + (d.fail_count||0) + '</div>';
+      }
+    });
+  }
+  window.showBarcodeScanUploadModal = showBarcodeScanUploadModal;
+
+  /* ===================================================
+     8q. 설정 다이얼로그 모음 — 이메일/자동백업/템플릿
+     =================================================== */
+  function showSettingsDialog(title, icon, fields) {
+    var html = '<div style="max-width:480px"><h2 style="margin:0 0 16px 0">' + icon + ' ' + escapeHtml(title) + '</h2>';
+    html += '<div style="display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:center;margin-bottom:16px">';
+    fields.forEach(function(f){
+      html += '<label style="font-weight:600">' + escapeHtml(f.label) + '</label>';
+      if (f.type === 'select') {
+        html += '<select id="sdlg-'+f.id+'" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">';
+        f.options.forEach(function(o){ html += '<option value="'+escapeHtml(o)+'">'+escapeHtml(o)+'</option>'; });
+        html += '</select>';
+      } else if (f.type === 'checkbox') {
+        html += '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="sdlg-'+f.id+'"' + (f.checked ? ' checked' : '') + '> ' + escapeHtml(f.hint||'') + '</label>';
+      } else {
+        html += '<input type="'+(f.type||'text')+'" id="sdlg-'+f.id+'" placeholder="'+escapeHtml(f.hint||'')+'" value="'+escapeHtml(f.value||'')+'" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">';
+      }
+    });
+    html += '</div>';
+    html += '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;margin-bottom:16px;font-size:.85rem;color:var(--text-muted)">💡 설정은 현재 세션에만 적용됩니다. PyWebView 재시작 시 기본값으로 복원됩니다.</div>';
+    html += '<div style="display:flex;gap:8px;justify-content:flex-end"><button onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'" class="btn btn-ghost">닫기</button><button onclick="showToast(\'success\',\'설정 저장됨\');document.getElementById(\'sqm-modal\').style.display=\'none\'" class="btn btn-primary">저장</button></div>';
+    html += '</div>';
+    showDataModal('', html);
+  }
+
+  function showEmailConfigModal() {
+    showSettingsDialog('이메일 설정', '⚙️', [
+      { id:'host', label:'SMTP 서버', hint:'smtp.gmail.com', value:'smtp.gmail.com' },
+      { id:'port', label:'포트', type:'number', hint:'587', value:'587' },
+      { id:'user', label:'사용자', hint:'user@company.com' },
+      { id:'pass', label:'비밀번호', type:'password', hint:'앱 비밀번호' },
+      { id:'tls', label:'TLS 사용', type:'checkbox', checked:true, hint:'TLS 암호화' }
+    ]);
+  }
+  window.showEmailConfigModal = showEmailConfigModal;
+
+  function showAutoBackupSettingsModal() {
+    showSettingsDialog('자동 백업 설정', '⏰', [
+      { id:'enabled', label:'자동 백업', type:'checkbox', checked:false, hint:'활성화' },
+      { id:'interval', label:'주기', type:'select', options:['30분','1시간','3시간','6시간','12시간','24시간'] },
+      { id:'retention', label:'보존 개수', type:'number', hint:'최대 보존 백업 수', value:'10' },
+      { id:'path', label:'저장 경로', hint:'backup/', value:'backup/' }
+    ]);
+  }
+  window.showAutoBackupSettingsModal = showAutoBackupSettingsModal;
+
+  function showInboundTemplateModal() {
+    showSettingsDialog('입고 파싱 템플릿 관리', '📝', [
+      { id:'name', label:'템플릿 이름', hint:'기본 Packing List' },
+      { id:'format', label:'파싱 형식', type:'select', options:['SQM Standard','Custom Column','Auto-Detect'] },
+      { id:'cols', label:'컬럼 매핑', hint:'lot_no,sap_no,bl_no,...' },
+      { id:'skip', label:'건너뛸 행', type:'number', hint:'헤더 행 수', value:'1' }
+    ]);
+  }
+  window.showInboundTemplateModal = showInboundTemplateModal;
+
+  function showPickingTemplateModal() {
+    showSettingsDialog('출고 피킹 템플릿 관리', '📦', [
+      { id:'name', label:'템플릿 이름', hint:'기본 피킹 리스트' },
+      { id:'format', label:'형식', type:'select', options:['Standard PDF','Custom Excel','Barcode List'] },
+      { id:'cols', label:'출력 컬럼', hint:'lot_no,product,weight,...' },
+      { id:'sort', label:'정렬 기준', type:'select', options:['LOT 번호','제품명','위치','날짜'] }
+    ]);
+  }
+  window.showPickingTemplateModal = showPickingTemplateModal;
+
+  /* ===================================================
+     8r. 대량 이동 승인 — 승인 대기 중인 이동 건 목록
+     =================================================== */
+  function showMoveApprovalQueueModal() {
+    showDataModal('✅ 대량 이동 승인','<div style="padding:20px;text-align:center">⏳ Loading...</div>');
+    apiGet('/api/q/audit-log').then(function(res){
+      var rows = extractRows(res);
+      var moves = rows.filter(function(r){ return (r.event_type||'').indexOf('MOVE') >= 0; });
+      var html;
+      if (!moves.length) {
+        html = '<div class="empty">승인 대기 중인 이동 건이 없습니다</div>';
+      } else {
+        html = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">' + moves.length + '건의 이동 기록</p>';
+        html += '<table class="data-table"><thead><tr><th>일시</th><th>유형</th><th>상세</th></tr></thead><tbody>';
+        html += moves.slice(0,30).map(function(r){
+          return '<tr><td>'+escapeHtml(r.timestamp||r.created_at||'-')+'</td><td><span class="tag">'+escapeHtml(r.event_type||'-')+'</span></td><td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">'+escapeHtml(r.event_data||r.detail||'-')+'</td></tr>';
+        }).join('');
+        html += '</tbody></table>';
+      }
+      document.getElementById('sqm-modal-content').innerHTML = '<h2 style="margin-bottom:16px">✅ 대량 이동 승인</h2>' + html;
+    }).catch(function(e){
+      document.getElementById('sqm-modal-content').innerHTML = '<h2>대량 이동 승인</h2><div class="empty">조회 실패</div>';
+    });
+  }
+  window.showMoveApprovalQueueModal = showMoveApprovalQueueModal;
+
+  /* ===================================================
+     8s. 문서 변환 (OCR/PDF → Excel/Word)
+     =================================================== */
+  function showDocConvertModal() {
+    var html = [
+      '<div style="max-width:520px">',
+      '  <h2 style="margin:0 0 12px 0">📷 문서 변환 (OCR/PDF)</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 16px 0;font-size:.9rem">PDF/이미지를 Excel 또는 Word로 변환합니다.</p>',
+      '  <div style="display:grid;grid-template-columns:100px 1fr;gap:10px;align-items:center;margin-bottom:16px">',
+      '    <label style="font-weight:600">변환 형식</label>',
+      '    <select id="dc-format" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '      <option value="excel">→ Excel (.xlsx)</option>',
+      '      <option value="word">→ Word (.docx)</option>',
+      '    </select>',
+      '  </div>',
+      '  <div id="dc-drop" style="border:2px dashed var(--border);border-radius:8px;padding:32px 16px;text-align:center;background:var(--bg-hover);cursor:pointer;margin-bottom:16px">',
+      '    <div style="font-size:2.5rem;margin-bottom:8px">📄</div>',
+      '    <div id="dc-name" style="color:var(--text-muted)">클릭 또는 PDF/이미지를 드롭하세요</div>',
+      '  </div>',
+      '  <input type="file" id="dc-file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none">',
+      '  <div style="padding:12px;background:var(--bg-hover);border-radius:6px;margin-bottom:16px;font-size:.85rem;color:var(--warning)">',
+      '    💡 이 기능은 서버에 OCR 엔진(Tesseract)이 필요합니다. 미설치 시 텍스트 PDF만 변환 가능합니다.',
+      '  </div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'" class="btn btn-ghost">닫기</button>',
+      '    <button id="dc-submit" class="btn btn-primary" disabled>변환</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+    var drop = document.getElementById('dc-drop');
+    var fi = document.getElementById('dc-file');
+    var nm = document.getElementById('dc-name');
+    var sub = document.getElementById('dc-submit');
+    var selFile = null;
+    function setF(f){
+      if (!f) return; selFile = f;
+      nm.innerHTML = '✅ <strong>'+escapeHtml(f.name)+'</strong> ('+Math.round(f.size/1024)+' KB)';
+      sub.disabled = false;
+    }
+    drop.addEventListener('click', function(){ fi.click(); });
+    fi.addEventListener('change', function(e){ if(e.target.files&&e.target.files[0]) setF(e.target.files[0]); });
+    drop.addEventListener('dragover', function(e){ e.preventDefault(); });
+    drop.addEventListener('drop', function(e){ e.preventDefault(); if(e.dataTransfer.files&&e.dataTransfer.files[0]) setF(e.dataTransfer.files[0]); });
+    sub.addEventListener('click', function(){
+      showToast('info', '문서 변환은 Phase 6에서 OCR 엔진 연동 후 지원됩니다');
+    });
+  }
+  window.showDocConvertModal = showDocConvertModal;
+
+  /* ===================================================
+     8t. 품목별 재고 요약 — 제품 기준 집계
+     =================================================== */
+  function showProductSummaryModal() {
+    showDataModal('📋 품목별 재고 요약','<div style="padding:20px;text-align:center">⏳ Loading...</div>');
+    apiGet('/api/q/product-inventory').then(function(res){
+      var rows = extractRows(res);
+      // Group by product
+      var byProd = {};
+      rows.forEach(function(r){
+        var p = r.product || '(미지정)';
+        if (!byProd[p]) byProd[p] = { lots:0, weight:0, tonbags:0 };
+        byProd[p].lots++;
+        byProd[p].weight += Number(r.net_weight||0);
+        byProd[p].tonbags += Number(r.tonbag_count||r.total_tonbags||0);
+      });
+      var prods = Object.keys(byProd).sort();
+      if (!prods.length) {
+        document.getElementById('sqm-modal-content').innerHTML = '<h2>📋 품목별 재고 요약</h2><div class="empty">데이터가 없습니다</div>';
+        return;
+      }
+      var tbl = '<table class="data-table"><thead><tr><th>제품</th><th>LOT 수</th><th>톤백 수</th><th>총 중량(MT)</th></tr></thead><tbody>';
+      prods.forEach(function(p){
+        var d = byProd[p];
+        tbl += '<tr><td style="font-weight:600">'+escapeHtml(p)+'</td><td>'+d.lots+'</td><td>'+d.tonbags+'</td><td class="mono-cell">'+d.weight.toFixed(3)+'</td></tr>';
+      });
+      tbl += '</tbody></table>';
+      document.getElementById('sqm-modal-content').innerHTML = '<h2 style="margin-bottom:16px">📋 품목별 재고 요약</h2><p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">' + prods.length + '개 제품, ' + rows.length + '개 LOT</p>' + tbl;
+    }).catch(function(e){
+      document.getElementById('sqm-modal-content').innerHTML = '<h2>품목별 재고 요약</h2><div class="empty">조회 실패</div>';
+    });
+  }
+  window.showProductSummaryModal = showProductSummaryModal;
+
+  /* ===================================================
+     8u. 품목별 LOT 조회 — 제품 선택 → LOT 목록
+     =================================================== */
+  function showProductLotLookupModal() {
+    var html = [
+      '<div style="max-width:700px">',
+      '  <h2 style="margin:0 0 12px 0">🔍 품목별 LOT 조회</h2>',
+      '  <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">',
+      '    <input type="text" id="pll-product" placeholder="제품명 (비우면 전체)" style="flex:1;padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    <button id="pll-search" class="btn btn-primary">조회</button>',
+      '  </div>',
+      '  <div id="pll-result" style="min-height:60px"><div class="empty">제품명을 입력하고 조회를 클릭하세요</div></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">',
+      '    <button onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'" class="btn btn-ghost">닫기</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+    document.getElementById('pll-search').addEventListener('click', function(){
+      var prod = document.getElementById('pll-product').value.trim();
+      var result = document.getElementById('pll-result');
+      result.innerHTML = '<div style="padding:20px;text-align:center">⏳ 조회 중...</div>';
+      apiGet('/api/q/product-inventory').then(function(res){
+        var rows = extractRows(res);
+        if (prod) rows = rows.filter(function(r){ return (r.product||'').toLowerCase().indexOf(prod.toLowerCase()) >= 0; });
+        if (!rows.length) { result.innerHTML = '<div class="empty">해당 제품의 LOT가 없습니다</div>'; return; }
+        var tbl = '<table class="data-table"><thead><tr><th>LOT</th><th>제품</th><th>상태</th><th>중량(MT)</th><th>톤백수</th><th>입고일</th></tr></thead><tbody>';
+        tbl += rows.slice(0,100).map(function(r){
+          return '<tr><td class="mono-cell" style="color:var(--accent);cursor:pointer" onclick="showLotDetail(\''+escapeHtml(r.lot_no||'')+'\')">'+escapeHtml(r.lot_no||'-')+'</td><td>'+escapeHtml(r.product||'-')+'</td><td><span class="tag">'+escapeHtml(r.status||'-')+'</span></td><td class="mono-cell">'+(r.net_weight!=null?Number(r.net_weight).toFixed(3):'-')+'</td><td>'+(r.tonbag_count||r.total_tonbags||'-')+'</td><td>'+escapeHtml(r.stock_date||r.inbound_date||'-')+'</td></tr>';
+        }).join('');
+        tbl += '</tbody></table>';
+        result.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">' + rows.length + '건</p>' + tbl;
+      }).catch(function(e){
+        result.innerHTML = '<div class="empty">조회 실패</div>';
+      });
+    });
+  }
+  window.showProductLotLookupModal = showProductLotLookupModal;
+
+  /* ===================================================
+     8v. 품목별 입출고 현황
+     =================================================== */
+  function showProductMovementModal() {
+    showDataModal('📊 품목별 입출고 현황','<div style="padding:20px;text-align:center">⏳ Loading...</div>');
+    apiGet('/api/q/movement-history').then(function(res){
+      var rows = extractRows(res);
+      // Group by product
+      var byProd = {};
+      rows.forEach(function(r){
+        var p = r.product || '(미지정)';
+        if (!byProd[p]) byProd[p] = { inbound:0, outbound:0, return_count:0, move:0 };
+        var t = (r.movement_type||'').toUpperCase();
+        if (t === 'INBOUND') byProd[p].inbound += Number(r.quantity||r.weight||1);
+        else if (t === 'OUTBOUND') byProd[p].outbound += Number(r.quantity||r.weight||1);
+        else if (t === 'RETURN') byProd[p].return_count += Number(r.quantity||r.weight||1);
+        else byProd[p].move += Number(r.quantity||r.weight||1);
+      });
+      var prods = Object.keys(byProd).sort();
+      if (!prods.length) {
+        document.getElementById('sqm-modal-content').innerHTML = '<h2>품목별 입출고</h2><div class="empty">데이터가 없습니다</div>';
+        return;
+      }
+      var tbl = '<table class="data-table"><thead><tr><th>제품</th><th>입고</th><th>출고</th><th>반품</th><th>기타</th></tr></thead><tbody>';
+      prods.forEach(function(p){
+        var d = byProd[p];
+        tbl += '<tr><td style="font-weight:600">'+escapeHtml(p)+'</td><td style="color:var(--success)">'+d.inbound+'</td><td style="color:var(--warning)">'+d.outbound+'</td><td>'+d.return_count+'</td><td>'+d.move+'</td></tr>';
+      });
+      tbl += '</tbody></table>';
+      document.getElementById('sqm-modal-content').innerHTML = '<h2 style="margin-bottom:16px">📊 품목별 입출고 현황</h2>' + tbl;
+    }).catch(function(e){
+      document.getElementById('sqm-modal-content').innerHTML = '<h2>품목별 입출고</h2><div class="empty">조회 실패</div>';
+    });
+  }
+  window.showProductMovementModal = showProductMovementModal;
+
   function renderInfoModal(title, endpoint) {
     showDataModal(title,'<div style="padding:20px;text-align:center">Loading...</div>');
     apiGet(endpoint).then(function(res){
@@ -2245,7 +3022,7 @@
     'onExport':          {m:'GET',  u:'/api/action/export-lot-excel',            lbl:'Excel 내보내기'},
     /* v864.3 Phase 4-B: D/O 후속 연결 네이티브 폼 */
     'onDoUpdate':        {m:'JS', u:'do-update', lbl:'D/O 후속 연결'},
-    'onReturnDialog':    {m:'JS',   u:'return',                                  lbl:'반품 (재입고)'},
+    'onReturnDialog':    {m:'JS',   u:'return-dialog',                             lbl:'반품 (재입고)'},
     /* v864.3 Phase 4-B: 반품 입고 — 네이티브 Excel 업로드 모달 */
     'onReturnInboundUpload': {m:'JS', u:'return-upload', lbl:'반품 입고 Excel'},
     'onReturnStatistics': {m:'GET', u:'/api/q2/return-stats',                   lbl:'반품 사유 통계'},
@@ -2258,7 +3035,7 @@
     /* v864.3 Phase 4-B: 수동 입고는 네이티브 모달로 처리 (tkinter filedialog 대체) */
     'onInboundManual':   {m:'JS', u:'inbound-upload', lbl:'수동 입고'},
     'onInboundList':     {m:'JS',   u:'inbound',                                  lbl:'입고 목록'},
-    'onInboundCancel':   {m:'JS',   u:'wip',                                     lbl:'입고 취소'},
+    'onInboundCancel':   {m:'JS',   u:'inbound-cancel',                            lbl:'입고 취소'},
 
     /* ── 출고 메뉴 ── */
     /* v864.3 Phase 4-B: 즉시 출고 네이티브 폼 */
@@ -2267,7 +3044,7 @@
     'onQuickOutboundPaste': {m:'JS', u:'quick-outbound-paste', lbl:'빠른 출고 (붙여넣기)'},
     /* v864.3 Phase 4-B: Picking List PDF 업로드 */
     'onPickingListUpload':  {m:'JS', u:'picking-list-pdf', lbl:'Picking List 업로드 (PDF)'},
-    'onOutboundScheduled': {m:'JS', u:'wip',                                     lbl:'출고 예정'},
+    'onOutboundScheduled': {m:'JS', u:'outbound',                                 lbl:'출고 예정'},
     /* v864.3 Phase 4-B: 출고 확정 네이티브 폼 */
     'onOutboundConfirm': {m:'JS', u:'outbound-confirm', lbl:'출고 확정'},
     'onOutboundHistory': {m:'GET',  u:'/api/q/outbound-status',                  lbl:'출고 이력'},
@@ -2287,7 +3064,7 @@
     /* ── 보고서 메뉴 ── */
     'onReportDaily':     {m:'GET',  u:'/api/q2/report-daily',                    lbl:'일일 보고서'},
     'onReportMonthly':   {m:'GET',  u:'/api/q2/report-monthly',                  lbl:'월간 보고서'},
-    'onReportCustom':    {m:'POST', u:'/api/menu/-generate-customer-report',      lbl:'맞춤 보고서'},
+    'onReportCustom':    {m:'GET',  u:'/api/q/inventory-report',                   lbl:'맞춤 보고서'},
     'onInvoiceGenerate': {m:'GET',  u:'/api/action3/export-invoice-excel',         lbl:'거래명세서 생성'},
     'onDetailOfOutbound': {m:'GET', u:'/api/q2/detail-outbound',                 lbl:'Detail of Outbound'},
     'onSalesOrderDN':    {m:'GET',  u:'/api/q3/sales-order-dn',                  lbl:'Sales Order DN'},
@@ -2309,10 +3086,10 @@
     'onDbInfo':          {m:'GET',  u:'/api/info/system-info',                    lbl:'DB 정보'},
     'onOnBackup':        {m:'POST', u:'/api/action/backup-create',                lbl:'백업 생성'},
     'onBackupList':      {m:'GET',  u:'/api/q/backup-list',                       lbl:'백업 목록'},
-    'onRestore':         {m:'POST', u:'/api/menu/-on-restore-click',              lbl:'복원'},
-    'onAiTools':         {m:'JS',   u:'wip',                                      lbl:'AI 도구'},
-    'onSaveWindowSize':  {m:'POST', u:'/api/menu/-on-save-window-size',           lbl:'창 크기 저장'},
-    'onResetWindowSize': {m:'POST', u:'/api/menu/-on-reset-window-size',          lbl:'창 크기 초기화'},
+    'onRestore':         {m:'JS',   u:'restore',                                   lbl:'복원'},
+    'onAiTools':         {m:'GET',  u:'/api/info/version',                         lbl:'AI 도구'},
+    'onSaveWindowSize':  {m:'JS',   u:'save-window-size',                          lbl:'창 크기 저장'},
+    'onResetWindowSize': {m:'JS',   u:'reset-window-size',                         lbl:'창 크기 초기화'},
 
     /* ── 도움말 메뉴 ── */
     'onHelp':            {m:'GET',  u:'/api/info/usage',                          lbl:'사용자 매뉴얼'},
@@ -2337,29 +3114,29 @@
     'tb-settings':       {m:'POST', u:'/api/menu/-on-settings',                   lbl:'설정'},
 
     /* ── v864.2 신규 액션 (메뉴 구조 동기화) ── */
-    'onBarcodeScanUpload': {m:'JS', u:'wip',                                      lbl:'바코드 스캔 업로드'},
-    'onApprovalQueue':   {m:'JS',   u:'wip',                                      lbl:'승인 대기'},
+    'onBarcodeScanUpload': {m:'JS', u:'barcode-scan-upload',                       lbl:'바코드 스캔 업로드'},
+    'onApprovalQueue':   {m:'JS',   u:'approval-queue',                            lbl:'승인 대기'},
     'onApplyApproved':   {m:'POST', u:'/api/allocation/apply-approved',            lbl:'예약 반영 (승인분)'},
-    'onPickingTemplateManage': {m:'JS', u:'wip',                                  lbl:'피킹 템플릿 관리'},
-    'onMoveApprovalQueue': {m:'JS', u:'wip',                                      lbl:'대량 이동 승인'},
-    'onInboundTemplateManage': {m:'JS', u:'wip',                                  lbl:'입고 파싱 템플릿'},
-    'onEmailConfig':     {m:'JS',   u:'wip',                                      lbl:'이메일 설정'},
+    'onPickingTemplateManage': {m:'JS', u:'picking-template',                      lbl:'피킹 템플릿 관리'},
+    'onMoveApprovalQueue': {m:'JS', u:'move-approval-queue',                      lbl:'대량 이동 승인'},
+    'onInboundTemplateManage': {m:'JS', u:'inbound-template',                     lbl:'입고 파싱 템플릿'},
+    'onEmailConfig':     {m:'JS',   u:'email-config',                              lbl:'이메일 설정'},
     'onIntegrityReport': {m:'GET',  u:'/api/action/integrity-check',              lbl:'정합성 검증 (시각화)'},
     'onFixLotIntegrity': {m:'GET',  u:'/api/action/integrity-check',              lbl:'LOT 상태 정합성 복구'},
     'onExportCustoms':   {m:'GET',  u:'/api/action/export-lot-excel',             lbl:'통관요청 양식'},
     'onExportRubyli':    {m:'GET',  u:'/api/action/export-lot-excel',             lbl:'루비리 양식'},
     'onExportTonbag':    {m:'GET',  u:'/api/action2/export-tonbag-excel',          lbl:'톤백 현황'},
     'onExportIntegrated': {m:'GET', u:'/api/action/export-lot-excel',             lbl:'통합 현황'},
-    'onAutoBackupSettings': {m:'JS', u:'wip',                                     lbl:'자동 백업 설정'},
-    'onReportTemplates': {m:'JS',   u:'wip',                                      lbl:'보고서 양식 관리'},
-    'onReportHistory':   {m:'JS',   u:'wip',                                      lbl:'보고서 이력 조회'},
-    'onLotAllocationAudit': {m:'JS', u:'wip',                                     lbl:'LOT Allocation 톤백 현황'},
-    'onDocConvert':      {m:'JS',   u:'wip',                                      lbl:'문서 변환 (OCR/PDF)'},
-    'onTestDbReset':     {m:'JS',   u:'wip',                                      lbl:'테스트 DB 초기화'},
-    'onSystemInfo':      {m:'GET',  u:'/api/action/system-info',                  lbl:'시스템 정보'},
-    'onProductSummary':  {m:'GET',  u:'/api/q/product-inventory',                 lbl:'품목별 재고 요약'},
-    'onProductLotLookup': {m:'GET', u:'/api/q/product-inventory',                 lbl:'품목별 LOT 조회'},
-    'onProductMovement': {m:'GET',  u:'/api/q/movement-history',                  lbl:'품목별 입출고 현황'},
+    'onAutoBackupSettings': {m:'JS', u:'auto-backup-settings',                    lbl:'자동 백업 설정'},
+    'onReportTemplates': {m:'GET',  u:'/api/q/audit-log',                          lbl:'보고서 양식 관리'},
+    'onReportHistory':   {m:'GET',  u:'/api/q/audit-log',                          lbl:'보고서 이력 조회'},
+    'onLotAllocationAudit': {m:'JS', u:'lot-allocation-audit',                    lbl:'LOT Allocation 톤백 현황'},
+    'onDocConvert':      {m:'JS',   u:'doc-convert',                               lbl:'문서 변환 (OCR/PDF)'},
+    'onTestDbReset':     {m:'JS',   u:'test-db-reset',                             lbl:'테스트 DB 초기화'},
+    'onSystemInfo':      {m:'GET',  u:'/api/q3/settings-info',                    lbl:'시스템 정보'},
+    'onProductSummary':  {m:'JS',   u:'product-summary',                           lbl:'품목별 재고 요약'},
+    'onProductLotLookup': {m:'JS',  u:'product-lot-lookup',                        lbl:'품목별 LOT 조회'},
+    'onProductMovement': {m:'JS',   u:'product-movement',                          lbl:'품목별 입출고 현황'},
     /* View 메뉴 탭 이동 */
     'onGoInventoryTab':  {m:'JS',   u:'inventory',                                lbl:'Inventory 탭'},
     'onGoPickedTab':     {m:'JS',   u:'picked',                                   lbl:'Picked 탭'},
@@ -2432,6 +3209,78 @@
       }
       if (conf.u === 'outbound-confirm') {
         showOutboundConfirmModal();
+        return;
+      }
+      if (conf.u === 'inbound-cancel') {
+        showInboundCancelModal();
+        return;
+      }
+      if (conf.u === 'approval-queue') {
+        showApprovalQueueModal();
+        return;
+      }
+      if (conf.u === 'restore') {
+        showRestoreModal();
+        return;
+      }
+      if (conf.u === 'save-window-size') {
+        saveWindowSize();
+        return;
+      }
+      if (conf.u === 'reset-window-size') {
+        resetWindowSize();
+        return;
+      }
+      if (conf.u === 'return-dialog') {
+        showReturnDialog();
+        return;
+      }
+      if (conf.u === 'lot-allocation-audit') {
+        showLotAllocationAuditModal();
+        return;
+      }
+      if (conf.u === 'test-db-reset') {
+        showTestDbResetModal();
+        return;
+      }
+      if (conf.u === 'barcode-scan-upload') {
+        showBarcodeScanUploadModal();
+        return;
+      }
+      if (conf.u === 'email-config') {
+        showEmailConfigModal();
+        return;
+      }
+      if (conf.u === 'auto-backup-settings') {
+        showAutoBackupSettingsModal();
+        return;
+      }
+      if (conf.u === 'inbound-template') {
+        showInboundTemplateModal();
+        return;
+      }
+      if (conf.u === 'picking-template') {
+        showPickingTemplateModal();
+        return;
+      }
+      if (conf.u === 'move-approval-queue') {
+        showMoveApprovalQueueModal();
+        return;
+      }
+      if (conf.u === 'doc-convert') {
+        showDocConvertModal();
+        return;
+      }
+      if (conf.u === 'product-summary') {
+        showProductSummaryModal();
+        return;
+      }
+      if (conf.u === 'product-lot-lookup') {
+        showProductLotLookupModal();
+        return;
+      }
+      if (conf.u === 'product-movement') {
+        showProductMovementModal();
         return;
       }
       if (conf.u === 'wip') {
