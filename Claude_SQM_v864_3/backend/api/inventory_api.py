@@ -418,6 +418,131 @@ _SCAN_TRANSITIONS = {
 }
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# [Sprint 2-D] LOT 단위 일괄 상태 전환 (Picked/Outbound 탭용)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@alloc_router.post("/{lot_no}/confirm-outbound")
+def picked_confirm_outbound(lot_no: str):
+    """LOT 의 모든 PICKED 톤백 → OUTBOUND. 출고 확정 일괄."""
+    try:
+        db = _db()
+        cur = db.execute(
+            """UPDATE inventory_tonbag
+               SET status='OUTBOUND', outbound_date=date('now')
+               WHERE lot_no=? AND status='PICKED'""",
+            (lot_no,),
+        )
+        affected = cur.rowcount
+        # inventory.status 도 동기화 (모두 OUTBOUND/SOLD 면 LOT 도 SOLD)
+        remaining = db.execute(
+            "SELECT COUNT(*) FROM inventory_tonbag WHERE lot_no=? AND status NOT IN ('OUTBOUND','SOLD','RETURN')",
+            (lot_no,),
+        ).fetchone()[0]
+        if remaining == 0:
+            db.execute("UPDATE inventory SET status='SOLD' WHERE lot_no=?", (lot_no,))
+        # audit
+        try:
+            db.execute(
+                "INSERT INTO audit_log (event_type, event_data, user_note, created_by, created_at) "
+                "VALUES (?, ?, ?, ?, datetime('now'))",
+                ("PICKED_CONFIRM", f"PICKED→OUTBOUND ×{affected}", lot_no, "bulk_action"),
+            )
+        except Exception:
+            pass
+        db.commit(); db.close()
+        if affected == 0:
+            raise HTTPException(404, f"{lot_no}: PICKED 상태 톤백 없음")
+        return {"success": True, "lot_no": lot_no, "affected": affected, "message": f"{lot_no}: {affected}건 OUTBOUND"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@alloc_router.post("/{lot_no}/revert-picked")
+def picked_revert_to_reserved(lot_no: str):
+    """LOT 의 PICKED 톤백 → RESERVED 되돌림."""
+    try:
+        db = _db()
+        cur = db.execute(
+            "UPDATE inventory_tonbag SET status='RESERVED', picked_date=NULL WHERE lot_no=? AND status='PICKED'",
+            (lot_no,),
+        )
+        affected = cur.rowcount
+        try:
+            db.execute(
+                "INSERT INTO audit_log (event_type, event_data, user_note, created_by, created_at) "
+                "VALUES (?, ?, ?, ?, datetime('now'))",
+                ("PICKED_REVERT", f"PICKED→RESERVED ×{affected}", lot_no, "bulk_action"),
+            )
+        except Exception:
+            pass
+        db.commit(); db.close()
+        if affected == 0:
+            raise HTTPException(404, f"{lot_no}: PICKED 상태 톤백 없음")
+        return {"success": True, "lot_no": lot_no, "affected": affected}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@alloc_router.post("/{lot_no}/return-outbound")
+def outbound_to_return(lot_no: str):
+    """LOT 의 OUTBOUND 톤백 → RETURN (반품 확정 일괄)."""
+    try:
+        db = _db()
+        cur = db.execute(
+            "UPDATE inventory_tonbag SET status='RETURN' WHERE lot_no=? AND status='OUTBOUND'",
+            (lot_no,),
+        )
+        affected = cur.rowcount
+        try:
+            db.execute(
+                "INSERT INTO audit_log (event_type, event_data, user_note, created_by, created_at) "
+                "VALUES (?, ?, ?, ?, datetime('now'))",
+                ("OUTBOUND_RETURN", f"OUTBOUND→RETURN ×{affected}", lot_no, "bulk_action"),
+            )
+        except Exception:
+            pass
+        db.commit(); db.close()
+        if affected == 0:
+            raise HTTPException(404, f"{lot_no}: OUTBOUND 상태 톤백 없음")
+        return {"success": True, "lot_no": lot_no, "affected": affected}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@alloc_router.post("/{lot_no}/revert-outbound")
+def outbound_revert_to_picked(lot_no: str):
+    """LOT 의 OUTBOUND 톤백 → PICKED 되돌림."""
+    try:
+        db = _db()
+        cur = db.execute(
+            "UPDATE inventory_tonbag SET status='PICKED', outbound_date=NULL WHERE lot_no=? AND status='OUTBOUND'",
+            (lot_no,),
+        )
+        affected = cur.rowcount
+        try:
+            db.execute(
+                "INSERT INTO audit_log (event_type, event_data, user_note, created_by, created_at) "
+                "VALUES (?, ?, ?, ?, datetime('now'))",
+                ("OUTBOUND_REVERT", f"OUTBOUND→PICKED ×{affected}", lot_no, "bulk_action"),
+            )
+        except Exception:
+            pass
+        db.commit(); db.close()
+        if affected == 0:
+            raise HTTPException(404, f"{lot_no}: OUTBOUND 상태 톤백 없음")
+        return {"success": True, "lot_no": lot_no, "affected": affected}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 @scan_router.post("/process")
 def scan_process(payload: dict):
     barcode = (payload.get("barcode") or "").strip()

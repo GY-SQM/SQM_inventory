@@ -1549,25 +1549,45 @@
   /* ===================================================
      7c. PAGE: Picked — 2단 구조 (LOT 요약 + 톤백 상세)
      =================================================== */
+  /* [Sprint 2-D] Picked 탭 풀 — 체크박스 다중선택 + 6 버튼 액션 */
+  var _pickedState = { rows: [], selectedLots: null };
+
   function loadPickedPage() {
     var route = _currentRoute;
     var c = document.getElementById('page-container');
     if (!c) return;
+    if (!_pickedState.selectedLots) _pickedState.selectedLots = new Set();
+    _pickedState.selectedLots.clear();
+
     c.innerHTML = [
       '<section class="page" data-page="picked">',
-      '<div style="display:flex;align-items:center;gap:12px;padding:8px 0 12px">',
-      '  <h2 style="margin:0">🚛 Picked - 피킹 완료 (화물 결정)</h2>',
+      '<div style="display:flex;align-items:center;gap:12px;padding:4px 0 8px">',
+      '  <h2 style="margin:0">🚛 Picked — 피킹 완료 (화물 결정)</h2>',
+      '  <span id="picked-count" style="font-size:12px;color:var(--text-muted)"></span>',
       '  <button class="btn btn-secondary" onclick="renderPage(\'picked\')" style="margin-left:auto">🔁 새로고침</button>',
+      '</div>',
+      /* 액션 툴바 */
+      '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;margin-bottom:8px">',
+      '  <button class="btn btn-primary" onclick="window.pickedConfirmSelected()" title="PICKED → OUTBOUND">✅ 출고 확정</button>',
+      '  <button class="btn" onclick="window.pickedRevertSelected()" title="PICKED → RESERVED 되돌림">↩️ Reserved 되돌림</button>',
+      '  <span style="width:1px;height:20px;background:var(--panel-border);margin:0 4px"></span>',
+      '  <button class="btn" onclick="window.pickedExportCsv()">📥 Excel 내보내기</button>',
+      '  <button class="btn" onclick="window.pickedSelectAll(true)">☑ 전체 선택</button>',
+      '  <button class="btn" onclick="window.pickedSelectAll(false)">☐ 해제</button>',
+      '  <button class="btn" onclick="renderPage(\'inventory\')" style="margin-left:auto">📋 LOT 리스트로</button>',
       '</div>',
       '<div id="picked-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
       '<div style="overflow-x:auto">',
       '  <table class="data-table" id="picked-table" style="display:none">',
-      '  <thead><tr><th></th><th>LOT No</th><th>피킹No</th><th>고객사</th><th>톤백수</th><th>중량(kg)</th><th>피킹일</th></tr></thead>',
+      '  <thead><tr>',
+      '    <th style="width:32px"><input type="checkbox" id="picked-select-all" onclick="window.pickedSelectAll(this.checked)"></th>',
+      '    <th></th><th>LOT No</th><th>피킹No</th><th>고객사</th><th style="text-align:right">톤백수</th><th style="text-align:right">중량(kg)</th><th>피킹일</th>',
+      '  </tr></thead>',
       '  <tbody id="picked-tbody"></tbody>',
       '  </table>',
       '</div>',
       '<div class="empty" id="picked-empty" style="display:none;padding:60px;text-align:center">📭 피킹 데이터 없음</div>',
-      '<div id="picked-detail-panel" style="display:none;margin-top:16px;border-top:2px solid var(--border);padding-top:16px">',
+      '<div id="picked-detail-panel" style="display:none;margin-top:16px;border-top:2px solid var(--panel-border);padding-top:16px">',
       '  <h3 id="picked-detail-title" style="margin:0 0 12px 0">톤백 상세</h3>',
       '  <div id="picked-detail-content"></div>',
       '</div>',
@@ -1576,23 +1596,10 @@
 
     apiGet('/api/q/picked-list').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = extractRows(res);
+      _pickedState.rows = extractRows(res);
       document.getElementById('picked-loading').style.display = 'none';
-      if (!rows.length) { document.getElementById('picked-empty').style.display='block'; return; }
-      var tbody = document.getElementById('picked-tbody');
-      if (tbody) tbody.innerHTML = rows.map(function(r){
-        var lot = escapeHtml(r.lot_no||'');
-        return '<tr class="picked-summary-row" data-lot="'+lot+'" style="cursor:pointer" onclick="window.togglePickedDetail(\''+lot+'\')">' +
-          '<td style="width:24px;text-align:center"><span class="picked-expand-icon">▶</span></td>' +
-          '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+lot+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.picking_no||'')+'</td>' +
-          '<td>'+escapeHtml(r.customer||r.picked_to||'')+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+(r.tonbag_count||0)+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+(r.total_kg!=null?fmtN(r.total_kg):'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.picking_date||'')+'</td>' +
-          '</tr>';
-      }).join('');
-      document.getElementById('picked-table').style.display = '';
+      if (!_pickedState.rows.length) { document.getElementById('picked-empty').style.display='block'; return; }
+      _renderPickedTable();
     }).catch(function(e){
       if (_currentRoute !== route) return;
       document.getElementById('picked-loading').style.display = 'none';
@@ -1600,6 +1607,86 @@
       if (el) { el.textContent = 'Load failed: '+(e.message||String(e)); el.style.display='block'; }
     });
   }
+
+  /* [Sprint 2-D] Picked 테이블 렌더 + 핸들러 */
+  function _renderPickedTable() {
+    var tbody = document.getElementById('picked-tbody');
+    var tbl = document.getElementById('picked-table');
+    var cnt = document.getElementById('picked-count');
+    var rows = _pickedState.rows;
+    if (cnt) cnt.textContent = '(' + rows.length + ' LOTs)';
+    if (!tbody || !tbl) return;
+    tbl.style.display = '';
+    tbody.innerHTML = rows.map(function(r){
+      var lot = String(r.lot_no || '');
+      var checked = _pickedState.selectedLots.has(lot) ? 'checked' : '';
+      return '<tr class="picked-summary-row" data-lot="' + escapeHtml(lot) + '">' +
+        '<td style="text-align:center"><input type="checkbox" ' + checked + ' onclick="event.stopPropagation();window.pickedToggleRow(\'' + escapeHtml(lot) + '\',this.checked)"></td>' +
+        '<td style="width:24px;text-align:center;cursor:pointer" onclick="window.togglePickedDetail(\'' + escapeHtml(lot) + '\')"><span class="picked-expand-icon">▶</span></td>' +
+        '<td class="mono-cell" style="color:var(--accent);font-weight:600;cursor:pointer" onclick="window.togglePickedDetail(\'' + escapeHtml(lot) + '\')">' + escapeHtml(lot) + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.picking_no || '') + '</td>' +
+        '<td>' + escapeHtml(r.customer || r.picked_to || '') + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + (r.tonbag_count || 0) + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + (r.total_kg != null ? fmtN(r.total_kg) : '-') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.picking_date || '') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  window.pickedToggleRow = function(lot, checked) {
+    if (checked) _pickedState.selectedLots.add(lot);
+    else _pickedState.selectedLots.delete(lot);
+  };
+  window.pickedSelectAll = function(checked) {
+    _pickedState.rows.forEach(function(r){
+      var lot = String(r.lot_no || '');
+      if (checked) _pickedState.selectedLots.add(lot);
+      else _pickedState.selectedLots.delete(lot);
+    });
+    _renderPickedTable();
+    var hdr = document.getElementById('picked-select-all');
+    if (hdr) hdr.checked = checked;
+  };
+  function _pickedBulkAction(opts) {
+    var lots = Array.from(_pickedState.selectedLots);
+    if (!lots.length) { showToast('warn', opts.label + ': 선택된 LOT 없음'); return; }
+    var preview = lots.slice(0, 5).join(', ') + (lots.length > 5 ? ' …외 ' + (lots.length - 5) : '');
+    if (!confirm(opts.icon + ' ' + opts.label + '\n\n' + lots.length + '건 처리?\n' + preview)) return;
+    var ok = 0, errs = [];
+    Promise.all(lots.map(function(lot){
+      return apiPost('/api/allocation/' + encodeURIComponent(lot) + opts.suffix, {})
+        .then(function(res){ if (res && res.success) ok++; else errs.push({lot:lot, reason: res.message}); })
+        .catch(function(e){ errs.push({lot:lot, reason: e.message || String(e)}); });
+    })).then(function(){
+      showToast(errs.length ? 'warn' : 'success', opts.label + ': ' + ok + '건 성공' + (errs.length ? ', ' + errs.length + '건 실패' : ''));
+      _pickedState.selectedLots.clear();
+      loadPickedPage();
+    });
+  }
+  window.pickedConfirmSelected = function() {
+    _pickedBulkAction({ icon: '✅', label: '출고 확정', suffix: '/confirm-outbound' });
+  };
+  window.pickedRevertSelected = function() {
+    _pickedBulkAction({ icon: '↩️', label: 'Reserved 되돌림', suffix: '/revert-picked' });
+  };
+  window.pickedExportCsv = function() {
+    var rows = _pickedState.rows;
+    if (!rows.length) { showToast('warn', '내보낼 데이터 없음'); return; }
+    var headers = ['lot_no','picking_no','customer','tonbag_count','total_kg','picking_date'];
+    function csvEsc(v){ var s = String(v == null ? '' : v); if (/[,"\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"'; return s; }
+    var lines = [headers.join(',')];
+    rows.forEach(function(r){
+      lines.push(headers.map(function(h){ return csvEsc(r[h]); }).join(','));
+    });
+    var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url;
+    var ts = new Date();
+    a.download = 'picked_' + ts.getFullYear() + String(ts.getMonth()+1).padStart(2,'0') + String(ts.getDate()).padStart(2,'0') + '_' + String(ts.getHours()).padStart(2,'0') + String(ts.getMinutes()).padStart(2,'0') + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('success', '📥 ' + a.download);
+  };
 
   var _pickedExpandedLot = null;
   window.togglePickedDetail = function(lotNo) {
@@ -1783,21 +1870,40 @@
     var route = _currentRoute;
     var c = document.getElementById('page-container');
     if (!c) return;
+    if (!_outboundState.selectedLots) _outboundState.selectedLots = new Set();
+    _outboundState.selectedLots.clear();
     c.innerHTML = [
       '<section class="page" data-page="outbound">',
-      '<div style="display:flex;align-items:center;gap:12px;padding:8px 0 12px">',
+      '<div style="display:flex;align-items:center;gap:12px;padding:4px 0 8px">',
       '  <h2 style="margin:0">📤 출고 완료 (Sold / Outbound)</h2>',
+      '  <span id="outbound-count" style="font-size:12px;color:var(--text-muted)"></span>',
       '  <button class="btn btn-secondary" onclick="renderPage(\'outbound\')" style="margin-left:auto">🔁 새로고침</button>',
+      '</div>',
+      /* 액션 툴바 */
+      '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 10px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;margin-bottom:8px">',
+      '  <button class="btn btn-danger" onclick="window.outboundReturnSelected()" title="OUTBOUND → RETURN">🔄 반품 확정</button>',
+      '  <button class="btn" onclick="window.outboundRevertSelected()" title="OUTBOUND → PICKED 되돌림">↩️ Picked 되돌림</button>',
+      '  <span style="width:1px;height:20px;background:var(--panel-border);margin:0 4px"></span>',
+      '  <label style="font-size:12px">📅 From:</label><input type="date" id="outbound-from" onchange="window.outboundDateFilter()" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-size:12px">',
+      '  <label style="font-size:12px">To:</label><input type="date" id="outbound-to" onchange="window.outboundDateFilter()" style="padding:3px 6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-size:12px">',
+      '  <button class="btn" onclick="window.outboundClearFilter()">✖ 필터 해제</button>',
+      '  <span style="width:1px;height:20px;background:var(--panel-border);margin:0 4px"></span>',
+      '  <button class="btn" onclick="window.outboundExportCsv()">📥 Excel 내보내기</button>',
+      '  <button class="btn" onclick="window.outboundSelectAll(true)">☑ 전체 선택</button>',
+      '  <button class="btn" onclick="window.outboundSelectAll(false)">☐ 해제</button>',
       '</div>',
       '<div id="outbound-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
       '<div style="overflow-x:auto">',
       '  <table class="data-table" id="outbound-table" style="display:none">',
-      '  <thead><tr><th></th><th>#</th><th>LOT No</th><th>판매주문No</th><th>고객사</th><th>톤백수</th><th>중량(kg)</th><th>출고일</th></tr></thead>',
+      '  <thead><tr>',
+      '    <th style="width:32px"><input type="checkbox" id="outbound-select-all" onclick="window.outboundSelectAll(this.checked)"></th>',
+      '    <th></th><th>#</th><th>LOT No</th><th>판매주문No</th><th>고객사</th><th style="text-align:right">톤백수</th><th style="text-align:right">중량(kg)</th><th>출고일</th>',
+      '  </tr></thead>',
       '  <tbody id="outbound-tbody"></tbody>',
       '  </table>',
       '</div>',
       '<div class="empty" id="outbound-empty" style="display:none;padding:60px;text-align:center;color:var(--text-muted)">📭 출고 데이터 없음</div>',
-      '<div id="outbound-detail-panel" style="display:none;margin-top:16px;border-top:2px solid var(--border);padding-top:16px">',
+      '<div id="outbound-detail-panel" style="display:none;margin-top:16px;border-top:2px solid var(--panel-border);padding-top:16px">',
       '  <h3 id="outbound-detail-title" style="margin:0 0 12px 0">톤백 상세</h3>',
       '  <div id="outbound-detail-content"></div>',
       '</div>',
@@ -1806,28 +1912,14 @@
 
     apiGet('/api/q/sold-list').then(function(res){
       if (_currentRoute !== route) return;
-      var rows = extractRows(res);
+      _outboundState.rows = extractRows(res);
       document.getElementById('outbound-loading').style.display = 'none';
-      if (!rows.length) {
+      if (!_outboundState.rows.length) {
         document.getElementById('outbound-empty').style.display = 'block';
         return;
       }
-      var tbody = document.getElementById('outbound-tbody');
-      if (tbody) tbody.innerHTML = rows.map(function(r, i){
-        var lot = escapeHtml(r.lot_no||'');
-        return '<tr class="outbound-summary-row" data-lot="'+lot+'" style="cursor:pointer" onclick="window.toggleOutboundDetail(\''+lot+'\')">' +
-          '<td style="width:24px;text-align:center"><span class="outbound-expand-icon">▶</span></td>' +
-          '<td class="mono-cell" style="color:var(--text-muted)">'+(i+1)+'</td>' +
-          '<td class="mono-cell" style="color:var(--accent);font-weight:600">'+lot+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.sales_order_no||'-')+'</td>' +
-          '<td>'+escapeHtml(r.customer||'-')+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+(r.tonbag_count||0)+'</td>' +
-          '<td class="mono-cell" style="text-align:right">'+(r.total_kg!=null?fmtN(r.total_kg):'-')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.sold_date||'-')+'</td>' +
-          '</tr>';
-      }).join('');
-      document.getElementById('outbound-table').style.display = '';
-      dbgLog('📤','outbound-page','rows='+rows.length,'#4caf50');
+      _renderOutboundTable();
+      dbgLog('📤','outbound-page','rows=' + _outboundState.rows.length,'#4caf50');
     }).catch(function(e){
       if (_currentRoute !== route) return;
       document.getElementById('outbound-loading').style.display = 'none';
@@ -1836,6 +1928,104 @@
       showToast('error', '출고 현황 로드 실패');
     });
   }
+
+  /* [Sprint 2-D] Outbound 상태 + 핸들러 */
+  var _outboundState = { rows: [], selectedLots: null, dateFrom: '', dateTo: '' };
+
+  function _renderOutboundTable() {
+    var tbody = document.getElementById('outbound-tbody');
+    var tbl = document.getElementById('outbound-table');
+    var cnt = document.getElementById('outbound-count');
+    var rows = _outboundState.rows.slice();
+    if (_outboundState.dateFrom) rows = rows.filter(function(r){ return (r.sold_date || '') >= _outboundState.dateFrom; });
+    if (_outboundState.dateTo)   rows = rows.filter(function(r){ return (r.sold_date || '') <= _outboundState.dateTo; });
+    if (cnt) cnt.textContent = '(' + rows.length + ' / ' + _outboundState.rows.length + ' LOTs)';
+    if (!tbody || !tbl) return;
+    tbl.style.display = '';
+    tbody.innerHTML = rows.map(function(r, i){
+      var lot = String(r.lot_no || '');
+      var checked = _outboundState.selectedLots.has(lot) ? 'checked' : '';
+      return '<tr class="outbound-summary-row" data-lot="' + escapeHtml(lot) + '">' +
+        '<td style="text-align:center"><input type="checkbox" ' + checked + ' onclick="event.stopPropagation();window.outboundToggleRow(\'' + escapeHtml(lot) + '\',this.checked)"></td>' +
+        '<td style="width:24px;text-align:center;cursor:pointer" onclick="window.toggleOutboundDetail(\'' + escapeHtml(lot) + '\')"><span class="outbound-expand-icon">▶</span></td>' +
+        '<td class="mono-cell" style="color:var(--text-muted)">' + (i + 1) + '</td>' +
+        '<td class="mono-cell" style="color:var(--accent);font-weight:600;cursor:pointer" onclick="window.toggleOutboundDetail(\'' + escapeHtml(lot) + '\')">' + escapeHtml(lot) + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.sales_order_no || '-') + '</td>' +
+        '<td>' + escapeHtml(r.customer || '-') + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + (r.tonbag_count || 0) + '</td>' +
+        '<td class="mono-cell" style="text-align:right">' + (r.total_kg != null ? fmtN(r.total_kg) : '-') + '</td>' +
+        '<td class="mono-cell">' + escapeHtml(r.sold_date || '-') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  window.outboundToggleRow = function(lot, checked) {
+    if (checked) _outboundState.selectedLots.add(lot);
+    else _outboundState.selectedLots.delete(lot);
+  };
+  window.outboundSelectAll = function(checked) {
+    _outboundState.rows.forEach(function(r){
+      var lot = String(r.lot_no || '');
+      if (checked) _outboundState.selectedLots.add(lot);
+      else _outboundState.selectedLots.delete(lot);
+    });
+    _renderOutboundTable();
+    var hdr = document.getElementById('outbound-select-all');
+    if (hdr) hdr.checked = checked;
+  };
+  window.outboundDateFilter = function() {
+    _outboundState.dateFrom = (document.getElementById('outbound-from') || {}).value || '';
+    _outboundState.dateTo = (document.getElementById('outbound-to') || {}).value || '';
+    _renderOutboundTable();
+  };
+  window.outboundClearFilter = function() {
+    _outboundState.dateFrom = ''; _outboundState.dateTo = '';
+    var f = document.getElementById('outbound-from'); if (f) f.value = '';
+    var t = document.getElementById('outbound-to'); if (t) t.value = '';
+    _renderOutboundTable();
+  };
+  function _outboundBulkAction(opts) {
+    var lots = Array.from(_outboundState.selectedLots);
+    if (!lots.length) { showToast('warn', opts.label + ': 선택된 LOT 없음'); return; }
+    var preview = lots.slice(0, 5).join(', ') + (lots.length > 5 ? ' …외 ' + (lots.length - 5) : '');
+    if (!confirm(opts.icon + ' ' + opts.label + '\n\n' + lots.length + '건 처리?\n' + preview)) return;
+    var ok = 0, errs = [];
+    Promise.all(lots.map(function(lot){
+      return apiPost('/api/allocation/' + encodeURIComponent(lot) + opts.suffix, {})
+        .then(function(res){ if (res && res.success) ok++; else errs.push({lot:lot, reason: res.message}); })
+        .catch(function(e){ errs.push({lot:lot, reason: e.message || String(e)}); });
+    })).then(function(){
+      showToast(errs.length ? 'warn' : 'success', opts.label + ': ' + ok + '건 성공' + (errs.length ? ', ' + errs.length + '건 실패' : ''));
+      _outboundState.selectedLots.clear();
+      loadOutboundPage();
+    });
+  }
+  window.outboundReturnSelected = function() {
+    _outboundBulkAction({ icon: '🔄', label: '반품 확정', suffix: '/return-outbound' });
+  };
+  window.outboundRevertSelected = function() {
+    _outboundBulkAction({ icon: '↩️', label: 'Picked 되돌림', suffix: '/revert-outbound' });
+  };
+  window.outboundExportCsv = function() {
+    var rows = _outboundState.rows;
+    if (_outboundState.dateFrom) rows = rows.filter(function(r){ return (r.sold_date || '') >= _outboundState.dateFrom; });
+    if (_outboundState.dateTo)   rows = rows.filter(function(r){ return (r.sold_date || '') <= _outboundState.dateTo; });
+    if (!rows.length) { showToast('warn', '내보낼 데이터 없음'); return; }
+    var headers = ['lot_no','sales_order_no','customer','tonbag_count','total_kg','sold_date'];
+    function csvEsc(v){ var s = String(v == null ? '' : v); if (/[,"\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"'; return s; }
+    var lines = [headers.join(',')];
+    rows.forEach(function(r){
+      lines.push(headers.map(function(h){ return csvEsc(r[h]); }).join(','));
+    });
+    var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a'); a.href = url;
+    var ts = new Date();
+    a.download = 'outbound_' + ts.getFullYear() + String(ts.getMonth()+1).padStart(2,'0') + String(ts.getDate()).padStart(2,'0') + '_' + String(ts.getHours()).padStart(2,'0') + String(ts.getMinutes()).padStart(2,'0') + '.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('success', '📥 ' + a.download);
+  };
 
   var _outboundExpandedLot = null;
   window.toggleOutboundDetail = function(lotNo) {
