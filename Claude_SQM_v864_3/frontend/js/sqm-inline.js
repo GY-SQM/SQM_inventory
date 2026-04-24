@@ -8072,15 +8072,9 @@
     'onGeminiToggle':      {m:'JS', u:'settings',                                  lbl:'🔀 Gemini AI 사용'},
     'onGeminiApiSettings': {m:'JS', u:'settings',                                  lbl:'🔐 API 키 설정'},
     'onGeminiApiTest':     {m:'JS', u:'settings',                                  lbl:'🧪 API 연결 테스트'},
-    'onAiChat':            {m:'JS', u:'wip',                                       lbl:'💬 AI 채팅 (Phase 2)'},
-    'onGeminiToggle':      {m:'JS', u:'wip',                                       lbl:'🔀 Gemini AI 사용'},
-    'onAiChat':            {m:'JS', u:'wip',                                       lbl:'💬 AI 채팅'},
-    'onGeminiApiSettings': {m:'JS', u:'wip',                                       lbl:'🔐 Gemini API 설정'},
-    'onGeminiApiTest':     {m:'JS', u:'wip',                                       lbl:'🧪 Gemini API 테스트'},
-
-    /* ── [Sprint 0-3] v864-2 재고 메뉴 슬롯 (placeholder — Sprint 1/2에서 실구현) ── */
-    'onExportLot':         {m:'JS', u:'wip',                                       lbl:'📊 LOT 리스트 Excel'},
-    'onStockTrendChart':   {m:'JS', u:'wip',                                       lbl:'📊 재고 추이 차트'},
+    /* ── [Sprint 0-3 → Sprint 2/3 활성화] 재고 메뉴 슬롯 ── */
+    'onExportLot':         {m:'GET', u:'/api/action/export-lot-excel',             lbl:'📊 LOT 리스트 Excel'},
+    'onStockTrendChart':   {m:'GET', u:'/api/q/inventory-trend',                   lbl:'📊 재고 추이 차트'},
 
     /* ── [Sprint 2-C] 🔍 전역 검색 버튼 — 실구현 ── */
     'onGlobalSearch':      {m:'JS', u:'global-search',                             lbl:'🔍 전역 검색'},
