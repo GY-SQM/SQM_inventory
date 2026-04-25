@@ -166,6 +166,57 @@ def do_update(payload: dict):
         return err_response(str(e))
 
 
+# ── D/O 다중 필드 일괄 업데이트 [Sprint 2-S] ─────────────────────────
+@router.post("/do-update-bulk", summary="📄 D/O 다중 필드 일괄 업데이트")
+def do_update_bulk(payload: dict):
+    """
+    payload: { lot_no: str, fields: {field_name: value, ...} }
+    document_do 의 다중 필드를 atomic 하게 업데이트.
+    """
+    lot_no = (payload.get("lot_no") or "").strip()
+    fields = payload.get("fields") or {}
+    ALLOWED_FIELDS = {
+        "free_time", "con_return", "warehouse_name", "warehouse_code",
+        "arrival_date", "stock_date", "place_of_delivery", "final_destination"
+    }
+    if not lot_no:
+        raise HTTPException(400, "lot_no 필수")
+    if not isinstance(fields, dict) or not fields:
+        raise HTTPException(400, "fields(dict) 필수, 1개 이상")
+
+    valid = {k: v for k, v in fields.items() if k in ALLOWED_FIELDS}
+    invalid = [k for k in fields if k not in ALLOWED_FIELDS]
+    if not valid:
+        return err_response(f"허용된 필드 없음. 허용: {sorted(ALLOWED_FIELDS)}")
+
+    try:
+        con = _db()
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        row = con.execute("SELECT id FROM document_do WHERE lot_no=?", (lot_no,)).fetchone()
+        if not row:
+            con.close()
+            return err_response(f"D/O LOT '{lot_no}' 없음")
+
+        sets = ", ".join(f"{k}=?" for k in valid.keys())
+        values = list(valid.values()) + [ts, lot_no]
+        con.execute(
+            f"UPDATE document_do SET {sets}, parsed_at=? WHERE lot_no=?",
+            values
+        )
+        con.commit()
+        con.close()
+        return ok_response(data={
+            "lot_no": lot_no,
+            "updated_fields": list(valid.keys()),
+            "ignored_fields": invalid,
+            "count": len(valid),
+            "message": f"{lot_no} D/O {len(valid)}개 필드 업데이트 완료",
+        })
+    except Exception as e:
+        logger.error("do-update-bulk error: %s", e)
+        return err_response(str(e))
+
+
 # ── 반품 생성 ────────────────────────────────────────────────────
 @router.post("/return-create", summary="↩️ 반품 등록 (F007-alt)")
 def return_create(payload: dict):

@@ -4417,6 +4417,7 @@
      8e. D/O 후속 연결 (F003) — 단건 필드 업데이트 폼
      =================================================== */
   function showDoUpdateModal() {
+    /* [Sprint 2-S] 단건 → 다중 필드 일괄 편집 폼 (v864-2 DOUpdateDialog 매칭) */
     var ALLOWED_FIELDS = [
       ['free_time',         'Free Time'],
       ['con_return',        'Container Return 일자'],
@@ -4427,55 +4428,104 @@
       ['place_of_delivery', 'Place of Delivery'],
       ['final_destination', 'Final Destination'],
     ];
-    var fieldOpts = ALLOWED_FIELDS.map(function(f){
-      return '<option value="' + f[0] + '">' + f[1] + ' (' + f[0] + ')</option>';
+
+    var rowsHtml = ALLOWED_FIELDS.map(function(f){
+      return [
+        '<tr>',
+        '  <td style="padding:6px 8px;font-weight:600;white-space:nowrap">'+escapeHtml(f[1])+'</td>',
+        '  <td style="padding:6px 8px;color:var(--text-muted);font-family:monospace;font-size:.85rem;white-space:nowrap">'+escapeHtml(f[0])+'</td>',
+        '  <td style="padding:6px 8px"><input type="text" data-do-field="'+f[0]+'" placeholder="(빈값=변경 안 함)" style="width:100%;padding:6px 8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:4px"></td>',
+        '</tr>'
+      ].join('');
     }).join('');
 
     var html = [
-      '<div style="max-width:520px">',
-      '  <h2 style="margin:0 0 12px 0">📋 D/O 후속 연결</h2>',
-      '  <p style="color:var(--text-muted);margin:0 0 16px 0;font-size:.9rem">',
-      '    특정 LOT 의 D/O 필드 값을 수정합니다.',
+      '<div style="max-width:680px">',
+      '  <h2 style="margin:0 0 8px 0">📋 D/O 후속 연결 — 다중 필드 일괄 편집</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 12px 0;font-size:.9rem">',
+      '    LOT 번호를 입력 후 <strong>현재 값 조회</strong>를 누르면 기존 값이 표시됩니다. 빈 칸은 변경하지 않습니다.',
       '  </p>',
-      '  <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:14px">',
-      '    <label style="font-weight:600">LOT 번호</label>',
-      '    <input type="text" id="do-lot" placeholder="예: 1126013063" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
-      '    <label style="font-weight:600">필드</label>',
-      '    <select id="do-field" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">' + fieldOpts + '</select>',
-      '    <label style="font-weight:600">값</label>',
-      '    <input type="text" id="do-value" placeholder="" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '  <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">',
+      '    <label style="font-weight:600;min-width:90px">LOT 번호</label>',
+      '    <input type="text" id="do-lot" placeholder="예: 1126013063" style="flex:1;padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '    <button id="do-load-btn" class="btn btn-ghost" style="white-space:nowrap">🔍 현재 값 조회</button>',
       '  </div>',
+      '  <div id="do-current" style="padding:8px 12px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;color:var(--text-muted);margin-bottom:12px;min-height:24px">LOT 번호 조회 후 현재 값이 여기에 표시됩니다.</div>',
+      '  <table class="data-table" style="font-size:.9rem;margin-bottom:12px"><thead><tr><th style="text-align:left">필드</th><th style="text-align:left">키</th><th style="text-align:left;width:55%">새 값</th></tr></thead><tbody>',
+      rowsHtml,
+      '  </tbody></table>',
       '  <div id="do-result" style="margin-bottom:12px"></div>',
-      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
-      '    <button id="do-cancel-btn" class="btn btn-ghost">닫기</button>',
-      '    <button id="do-submit-btn" class="btn btn-primary" disabled>업데이트</button>',
+      '  <div style="display:flex;gap:8px;justify-content:space-between;align-items:center">',
+      '    <div style="color:var(--text-muted);font-size:.8rem">💡 v864-2 동등: 8개 필드 한 번에 편집</div>',
+      '    <div style="display:flex;gap:8px">',
+      '      <button id="do-cancel-btn" class="btn btn-ghost">닫기</button>',
+      '      <button id="do-submit-btn" class="btn btn-primary" disabled>일괄 업데이트</button>',
+      '    </div>',
       '  </div>',
       '</div>'
     ].join('\n');
     showDataModal('', html);
 
     var lot = document.getElementById('do-lot');
-    var fld = document.getElementById('do-field');
-    var val = document.getElementById('do-value');
+    var loadBtn = document.getElementById('do-load-btn');
+    var current = document.getElementById('do-current');
     var result = document.getElementById('do-result');
     var submit = document.getElementById('do-submit-btn');
     var cancel = document.getElementById('do-cancel-btn');
+    var inputs = Array.prototype.slice.call(document.querySelectorAll('[data-do-field]'));
 
-    function validate() { submit.disabled = !(lot.value.trim() && fld.value && val.value !== ''); }
-    lot.addEventListener('input', validate); val.addEventListener('input', validate); fld.addEventListener('change', validate);
+    function collectFields() {
+      var fields = {};
+      inputs.forEach(function(inp){
+        var v = inp.value;
+        if (v !== '' && v !== null && v !== undefined) fields[inp.dataset.doField] = v;
+      });
+      return fields;
+    }
+    function validate() {
+      var hasLot = !!lot.value.trim();
+      var n = Object.keys(collectFields()).length;
+      submit.disabled = !(hasLot && n > 0);
+    }
+    lot.addEventListener('input', validate);
+    inputs.forEach(function(inp){ inp.addEventListener('input', validate); });
+
+    loadBtn.addEventListener('click', function(){
+      var v = lot.value.trim();
+      if (!v) { showToast('warning','LOT 번호를 입력하세요'); return; }
+      current.textContent = '⏳ 조회 중...';
+      apiCall('GET', '/api/q/lot/' + encodeURIComponent(v), null)
+        .then(function(res){
+          var d = (res && res.data) || res || {};
+          var doc = d.document_do || d.do || d;
+          var lines = ALLOWED_FIELDS.map(function(f){
+            var cur = doc[f[0]];
+            return f[1]+': <strong>'+escapeHtml(String(cur||'(없음)'))+'</strong>';
+          }).join(' · ');
+          current.innerHTML = lines;
+        })
+        .catch(function(e){ current.textContent = '조회 실패: '+(e.message||String(e)); });
+    });
 
     cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
     submit.addEventListener('click', function(){
-      var payload = { lot_no: lot.value.trim(), field: fld.value, value: val.value };
+      var payload = { lot_no: lot.value.trim(), fields: collectFields() };
+      var n = Object.keys(payload.fields).length;
+      if (!confirm('LOT '+payload.lot_no+' 의 '+n+'개 필드를 업데이트합니다. 계속?')) return;
       submit.disabled = true; cancel.disabled = true;
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 업데이트 중...</div>';
-      apiPost('/api/action3/do-update', payload)
+      apiPost('/api/action3/do-update-bulk', payload)
         .then(function(res){
           if (res && res.ok !== false) {
-            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ ' + escapeHtml((res.data && res.data.message) || '업데이트 완료') + '</div></div>';
-            showToast('success', 'D/O 업데이트 완료');
-            dbgLog('🟢','DO-UPDATE OK', payload.lot_no + ' · ' + payload.field, '#66bb6a');
+            var d = res.data || {};
+            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)">' +
+              '<div style="font-weight:600">✅ ' + escapeHtml(d.message||'업데이트 완료') + '</div>' +
+              '<div style="color:var(--text-muted);font-size:.85rem;margin-top:4px">필드: ' + (d.updated_fields||[]).join(', ') + '</div>' +
+            '</div>';
+            showToast('success', d.message || '완료');
+            dbgLog('🟢','DO-UPDATE-BULK', payload.lot_no + ' · ' + n + '개 필드', '#66bb6a');
             if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+            cancel.disabled = false;
           } else {
             var msg = (res && (res.error || res.message)) || '실패';
             result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)"><div style="font-weight:600">❌ ' + escapeHtml(msg) + '</div></div>';
