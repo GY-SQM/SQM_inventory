@@ -2698,43 +2698,280 @@
     });
   }
 
-  /* 수동 입고 (F002) */
-  function showInboundManualUploadModal() {
-    _showExcelUploadModal({
-      title: '📊 수동 입고 — Excel 업로드',
-      subtitle: '엑셀 파일(.xlsx/.xls)을 선택하세요. 컬럼: <code>lot_no, sap_no, bl_no, container_no, product, net_weight, stock_date</code> 등',
-      endpoint: '/api/inbound/bulk-import-excel',
-      onSuccess: function(d) {
-        var errHtml = '';
-        if (d.errors && d.errors.length) {
-          errHtml = '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--warning)">⚠️ ' + d.errors.length + '건 실패 상세</summary><table class="data-table" style="margin-top:8px;font-size:.85rem"><thead><tr><th>행</th><th>LOT</th><th>사유</th></tr></thead><tbody>' +
-            d.errors.map(function(er){
-              return '<tr><td>'+er.row+'</td><td>'+escapeHtml(er.lot_no||'-')+'</td><td>'+escapeHtml(er.reason||'')+'</td></tr>';
-            }).join('') + '</tbody></table></details>';
+  /* ===================================================
+     [Sprint 2-T] _showUploadPreviewModal — Generic upload→preview→edit→save
+     ───────────────────────────────────────────────────
+     v864-2 ManualInboundPreviewDialog/PickingListPreviewDialog/
+     LocationUploadPreviewDialog/ReturnInbound/ParsePreviewConfirmDialog 통합.
+
+     opts:
+       title:           모달 제목
+       subtitle:        설명 HTML (서브타이틀)
+       fileExt:         '.xlsx,.xls' or '.pdf' (file picker accept)
+       parseEndpoint:   POST endpoint (multipart) ?dry_run=1 호출
+       saveEndpoint:    POST endpoint (JSON) — { rows: [...] }
+       columns:         [{ key: 'lot_no', label: 'LOT NO', width:'100px', editable:true }, ...]
+       extraSavePayload?: { ... } 추가 저장 payload (선택)
+       onSaved?:        function(data) — 저장 후 콜백
+     =================================================== */
+  function _showUploadPreviewModal(opts) {
+    var fileExt = opts.fileExt || '.xlsx,.xls';
+    var html = [
+      '<div style="max-width:1100px;width:90vw">',
+      '  <h2 style="margin:0 0 8px 0">' + escapeHtml(opts.title) + '</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 12px 0;font-size:.9rem">'+(opts.subtitle||'')+'</p>',
+      '  <div id="upm-step1">',
+      '    <div id="upm-drop" style="border:2px dashed var(--border);border-radius:8px;padding:32px 16px;text-align:center;background:var(--bg-hover);cursor:pointer;margin-bottom:12px">',
+      '      <div style="font-size:2.5rem;margin-bottom:8px">📁</div>',
+      '      <div id="upm-fname" style="color:var(--text-muted)">클릭 또는 파일을 여기에 드롭하세요 ('+escapeHtml(fileExt)+')</div>',
+      '    </div>',
+      '    <input type="file" id="upm-input" accept="'+escapeHtml(fileExt)+'" style="display:none">',
+      '    <div id="upm-progress" style="display:none;margin-bottom:12px">',
+      '      <div style="background:var(--bg-hover);border-radius:4px;height:8px;overflow:hidden"><div id="upm-bar" style="background:var(--accent);height:100%;width:0%;transition:width .3s"></div></div>',
+      '      <div id="upm-ptext" style="font-size:.85rem;color:var(--text-muted);margin-top:4px">준비 중...</div>',
+      '    </div>',
+      '  </div>',
+      '  <div id="upm-step2" style="display:none">',
+      '    <div id="upm-summary" style="padding:8px 12px;background:var(--bg-hover);border-radius:6px;margin-bottom:8px;font-size:.9rem"></div>',
+      '    <div style="margin-bottom:6px;color:var(--text-muted);font-size:.85rem">💡 셀 더블클릭으로 편집 · 행 우측 [×] 삭제 · "DB 반영" 클릭으로 최종 저장</div>',
+      '    <div id="upm-table-wrap" style="max-height:50vh;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg)"></div>',
+      '  </div>',
+      '  <div id="upm-result" style="margin-top:12px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin-top:12px">',
+      '    <div id="upm-step-info" style="color:var(--text-muted);font-size:.85rem">1단계 — 파일 선택</div>',
+      '    <div style="display:flex;gap:8px">',
+      '      <button id="upm-cancel" class="btn btn-ghost">닫기</button>',
+      '      <button id="upm-back" class="btn btn-ghost" style="display:none">← 다시 선택</button>',
+      '      <button id="upm-parse" class="btn btn-primary" disabled>파싱(미리보기)</button>',
+      '      <button id="upm-save"  class="btn btn-primary" style="display:none">💾 DB 반영</button>',
+      '    </div>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+
+    var input  = document.getElementById('upm-input');
+    var drop   = document.getElementById('upm-drop');
+    var fname  = document.getElementById('upm-fname');
+    var prog   = document.getElementById('upm-progress');
+    var bar    = document.getElementById('upm-bar');
+    var ptext  = document.getElementById('upm-ptext');
+    var step1  = document.getElementById('upm-step1');
+    var step2  = document.getElementById('upm-step2');
+    var stepInfo = document.getElementById('upm-step-info');
+    var summary = document.getElementById('upm-summary');
+    var tableWrap = document.getElementById('upm-table-wrap');
+    var result = document.getElementById('upm-result');
+    var btnCancel = document.getElementById('upm-cancel');
+    var btnBack   = document.getElementById('upm-back');
+    var btnParse  = document.getElementById('upm-parse');
+    var btnSave   = document.getElementById('upm-save');
+
+    var selectedFile = null;
+    var rows = [];
+    var parseData = null;
+
+    function setFile(f){
+      if (!f) return;
+      var allowed = fileExt.split(',').map(function(s){return s.trim().toLowerCase()});
+      var nameLow = f.name.toLowerCase();
+      var ok = allowed.some(function(ext){return nameLow.endsWith(ext)});
+      if (!ok) { showToast('error','지원 파일: '+fileExt); return; }
+      selectedFile = f;
+      fname.innerHTML = '✅ <strong>'+escapeHtml(f.name)+'</strong> ('+Math.round(f.size/1024)+' KB)';
+      btnParse.disabled = false;
+    }
+    drop.addEventListener('click', function(){ input.click() });
+    input.addEventListener('change', function(e){ if (e.target.files && e.target.files[0]) setFile(e.target.files[0]) });
+    drop.addEventListener('dragover', function(e){ e.preventDefault(); drop.style.background='var(--bg-active)' });
+    drop.addEventListener('dragleave', function(){ drop.style.background='var(--bg-hover)' });
+    drop.addEventListener('drop', function(e){
+      e.preventDefault();
+      drop.style.background='var(--bg-hover)';
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+    });
+    btnCancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none' });
+    btnBack.addEventListener('click', function(){
+      step2.style.display='none'; step1.style.display=''; btnSave.style.display='none'; btnParse.style.display=''; btnBack.style.display='none';
+      stepInfo.textContent = '1단계 — 파일 선택';
+      result.innerHTML = '';
+    });
+
+    btnParse.addEventListener('click', function(){
+      if (!selectedFile) return;
+      btnParse.disabled = true; btnCancel.disabled = true;
+      prog.style.display='block'; bar.style.width='10%'; ptext.textContent='파싱 중...';
+      var form = new FormData(); form.append('file', selectedFile, selectedFile.name);
+      var url = API + opts.parseEndpoint + (opts.parseEndpoint.indexOf('?')>=0 ? '&' : '?') + 'dry_run=1';
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', url);
+      xhr.upload.onprogress = function(e){
+        if (e.lengthComputable) { var p = Math.round((e.loaded/e.total)*70)+10; bar.style.width=p+'%'; ptext.textContent='업로드 '+p+'%'; }
+      };
+      xhr.onload = function(){
+        bar.style.width='100%'; btnCancel.disabled=false;
+        var body = null; try { body = JSON.parse(xhr.responseText); } catch(e){}
+        if (xhr.status>=200 && xhr.status<300 && body && body.ok) {
+          parseData = body.data || {};
+          rows = parseData.preview_rows || [];
+          if (!rows.length) { result.innerHTML = '<div style="padding:8px;color:var(--warning)">⚠️ 파싱 결과가 비어있습니다</div>'; btnParse.disabled=false; return; }
+          /* Step 2 진입 */
+          step1.style.display='none'; step2.style.display=''; btnParse.style.display='none'; btnBack.style.display=''; btnSave.style.display='';
+          stepInfo.textContent = '2단계 — 미리보기 + 편집';
+          var matched = (parseData.matched_columns || []).join(', ');
+          summary.innerHTML = '파일: <strong>'+escapeHtml(parseData.filename||'-')+'</strong>'+
+            ' · 총 <strong style="color:var(--accent)">'+rows.length+'행</strong>'+
+            (matched ? ' · 매핑: '+escapeHtml(matched) : '')+
+            (parseData.parse_method ? ' · 방법: '+escapeHtml(parseData.parse_method) : '');
+          renderTable();
+        } else {
+          var err = (body && (body.detail || body.error || body.message)) || ('HTTP '+xhr.status);
+          if (typeof err === 'object') err = JSON.stringify(err);
+          result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)"><div style="font-weight:600">❌ 파싱 실패</div><div style="color:var(--text-muted);font-size:.85rem;margin-top:4px">'+escapeHtml(String(err))+'</div></div>';
+          showToast('error','파싱 실패: '+err);
+          btnParse.disabled=false;
         }
-        return '<div style="color:var(--text-muted);font-size:.85rem">파일: ' + escapeHtml(d.filename||'-') +
-               ' · 성공 ' + (d.success_count||0) + ' / 실패 ' + (d.fail_count||0) + ' / 총 ' + (d.total||0) +
-               ' · 매핑: ' + ((d.matched_columns||[]).join(', ')) + '</div>' + errHtml;
-      }
+      };
+      xhr.onerror = function(){
+        result.innerHTML = '<div style="padding:12px;color:var(--danger)">네트워크 에러</div>';
+        showToast('error','네트워크 에러');
+        btnParse.disabled=false; btnCancel.disabled=false;
+      };
+      xhr.send(form);
+    });
+
+    function renderTable(){
+      var cols = opts.columns || [];
+      var thead = '<tr><th style="position:sticky;top:0;background:var(--bg-hover);padding:6px 8px;border-bottom:1px solid var(--border);text-align:center;width:40px">#</th>'+
+        cols.map(function(c){
+          return '<th style="position:sticky;top:0;background:var(--bg-hover);padding:6px 8px;border-bottom:1px solid var(--border);text-align:left'+(c.width?';width:'+c.width:'')+'">'+escapeHtml(c.label||c.key)+'</th>';
+        }).join('')+
+        '<th style="position:sticky;top:0;background:var(--bg-hover);padding:6px 8px;border-bottom:1px solid var(--border);width:40px"></th></tr>';
+      var tbody = rows.map(function(r, idx){
+        var rowHtml = '<tr data-upm-idx="'+idx+'">'+
+          '<td style="text-align:center;color:var(--text-muted);padding:4px 6px">'+(r._row||(idx+1))+'</td>'+
+          cols.map(function(c){
+            var v = r[c.key];
+            if (v === undefined || v === null) v = '';
+            var editable = c.editable !== false;
+            var cls = editable ? 'upm-edit' : '';
+            return '<td class="'+cls+'" data-upm-key="'+c.key+'" style="padding:4px 6px;'+(editable?'cursor:cell;':'color:var(--text-muted);')+'border-bottom:1px solid rgba(255,255,255,.05)">'+escapeHtml(String(v))+'</td>';
+          }).join('')+
+          '<td style="text-align:center"><button class="upm-del" data-upm-idx="'+idx+'" style="background:none;border:0;color:var(--danger);cursor:pointer;font-size:1.1rem">×</button></td>'+
+          '</tr>';
+        return rowHtml;
+      }).join('');
+      tableWrap.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.85rem"><thead>'+thead+'</thead><tbody>'+tbody+'</tbody></table>';
+      /* inline edit on dblclick */
+      tableWrap.querySelectorAll('td.upm-edit').forEach(function(td){
+        td.addEventListener('dblclick', function(){
+          var tr = td.parentElement; var idx = parseInt(tr.dataset.upmIdx, 10);
+          var key = td.dataset.upmKey;
+          var oldVal = rows[idx][key]==null ? '' : String(rows[idx][key]);
+          var inp = document.createElement('input');
+          inp.type='text'; inp.value=oldVal; inp.style.cssText='width:100%;padding:2px 4px;border:1px solid var(--accent);border-radius:3px;background:var(--bg);color:var(--text);font:inherit';
+          td.innerHTML = ''; td.appendChild(inp); inp.focus(); inp.select();
+          function commit(){
+            var nv = inp.value;
+            rows[idx][key] = nv;
+            td.textContent = nv;
+          }
+          inp.addEventListener('blur', commit);
+          inp.addEventListener('keydown', function(e){
+            if (e.key === 'Enter') { commit(); }
+            else if (e.key === 'Escape') { td.textContent = oldVal; }
+          });
+        });
+      });
+      /* delete row */
+      tableWrap.querySelectorAll('button.upm-del').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var idx = parseInt(btn.dataset.upmIdx, 10);
+          rows.splice(idx, 1);
+          renderTable();
+          summary.innerHTML = summary.innerHTML.replace(/총 <strong[^>]*>\d+행<\/strong>/, '총 <strong style="color:var(--accent)">'+rows.length+'행</strong>');
+        });
+      });
+    }
+
+    btnSave.addEventListener('click', function(){
+      if (!rows.length) { showToast('warning','저장할 행이 없습니다'); return; }
+      if (!confirm(rows.length + '건을 DB에 반영합니다. 계속?')) return;
+      btnSave.disabled = true; btnBack.disabled = true; btnCancel.disabled = true;
+      result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 저장 중...</div>';
+      var payload = Object.assign({ rows: rows }, opts.extraSavePayload || {});
+      apiPost(opts.saveEndpoint, payload)
+        .then(function(res){
+          if (res && res.ok !== false) {
+            var d = res.data || {};
+            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)">'+
+              '<div style="font-weight:600">✅ '+escapeHtml(res.message||'완료')+'</div>'+
+              '<div style="color:var(--text-muted);font-size:.85rem;margin-top:4px">'+
+              (d.success_count!==undefined ? '성공 '+d.success_count+' / 실패 '+(d.fail_count||0) : '')+
+              (d.applied!==undefined ? '반영 '+d.applied+'건' : '')+
+              (d.returned!==undefined ? '반품 복구 '+d.returned+'건' : '')+
+              '</div>'+
+              '</div>';
+            showToast('success', res.message||'완료');
+            dbgLog('🟢','UPM-SAVE OK', opts.saveEndpoint+' — '+(res.message||''),'#66bb6a');
+            if (typeof opts.onSaved === 'function') { try { opts.onSaved(d) } catch(e){} }
+            if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+            if (typeof loadKpi === 'function') loadKpi();
+            btnCancel.disabled = false;
+          } else {
+            var msg = (res && (res.error || res.message)) || '실패';
+            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)"><div style="font-weight:600">❌ '+escapeHtml(msg)+'</div></div>';
+            showToast('error', msg);
+            btnSave.disabled=false; btnBack.disabled=false; btnCancel.disabled=false;
+          }
+        })
+        .catch(function(e){
+          result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ '+escapeHtml(e.message||String(e))+'</div>';
+          showToast('error', '실패: '+(e.message||String(e)));
+          btnSave.disabled=false; btnBack.disabled=false; btnCancel.disabled=false;
+        });
+    });
+  }
+  window._showUploadPreviewModal = _showUploadPreviewModal;
+
+  /* 수동 입고 (F002) — [Sprint 2-T] preview-edit-save 패턴 */
+  function showInboundManualUploadModal() {
+    _showUploadPreviewModal({
+      title: '📊 수동 입고 — Excel 업로드 (미리보기 + 편집)',
+      subtitle: '엑셀(.xlsx/.xls) 선택 → <strong>파싱(미리보기)</strong> → 셀 편집 → <strong>DB 반영</strong>. 컬럼: <code>lot_no, sap_no, bl_no, container_no, product, net_weight, stock_date</code> 등',
+      fileExt: '.xlsx,.xls',
+      parseEndpoint: '/api/inbound/bulk-import-excel',
+      saveEndpoint:  '/api/inbound/bulk-import-save',
+      columns: [
+        { key:'lot_no', label:'LOT NO', width:'100px' },
+        { key:'sap_no', label:'SAP NO', width:'90px' },
+        { key:'bl_no',  label:'B/L NO', width:'100px' },
+        { key:'container_no', label:'컨테이너', width:'100px' },
+        { key:'product', label:'제품명', width:'140px' },
+        { key:'net_weight', label:'순중량(kg)', width:'90px' },
+        { key:'mxbg_pallet', label:'톤백수', width:'60px' },
+        { key:'warehouse', label:'창고', width:'80px' },
+        { key:'stock_date', label:'입고일', width:'100px' },
+      ],
     });
   }
   window.showInboundManualUploadModal = showInboundManualUploadModal;
 
-  /* 반품 입고 (F007) */
+  /* 반품 입고 (F007) — [Sprint 2-T] preview-edit-save 패턴 */
   function showReturnInboundUploadModal() {
-    _showExcelUploadModal({
-      title: '🔄 반품 입고 — Excel 업로드',
-      subtitle: '반품 Excel 파일을 선택하세요. 기존 PICKING 데이터와 자동 매칭되어 재고로 복구됩니다.',
-      endpoint: '/api/inbound/return-excel',
-      onSuccess: function(d) {
-        var detailHtml = '';
-        if (d.details && d.details.length) {
-          detailHtml = '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text-muted)">📋 처리 상세 (' + d.details.length + '건)</summary><pre style="white-space:pre-wrap;font-size:.8rem;margin-top:8px;max-height:240px;overflow:auto">' +
-            escapeHtml(JSON.stringify(d.details.slice(0,50), null, 2)) + '</pre></details>';
-        }
-        return '<div style="color:var(--text-muted);font-size:.85rem">파일: ' + escapeHtml(d.filename||'-') +
-               ' · <strong style="color:var(--accent)">' + (d.returned||0) + '건</strong> 반품 복구</div>' + detailHtml;
-      }
+    _showUploadPreviewModal({
+      title: '🔄 반품 입고 — Excel 업로드 (미리보기 + 편집)',
+      subtitle: '반품 Excel(.xlsx/.xls) 선택 → 파싱 → 편집 → DB 반영. 기존 PICKING 데이터와 자동 매칭되어 재고로 복구됩니다.',
+      fileExt: '.xlsx,.xls',
+      parseEndpoint: '/api/inbound/return-excel',
+      saveEndpoint:  '/api/inbound/return-save',
+      columns: [
+        { key:'lot_no',     label:'LOT NO', width:'100px' },
+        { key:'sub_lt',     label:'sub_lt', width:'70px' },
+        { key:'weight_kg',  label:'중량(kg)', width:'90px' },
+        { key:'reason',     label:'사유', width:'120px' },
+        { key:'note',       label:'비고', width:'140px' },
+      ],
     });
   }
   window.showReturnInboundUploadModal = showReturnInboundUploadModal;
@@ -4393,22 +4630,20 @@
      8d. 톤백 위치 매핑 (F004) — Excel 업로드 공통 유틸 재사용
      =================================================== */
   function showTonbagLocationUploadModal() {
-    _showExcelUploadModal({
-      title: '📍 톤백 위치 매핑 — Excel 업로드',
-      subtitle: 'Excel 컬럼: <code>lot_no, sub_lt, location, reason(선택), note(선택)</code>',
-      endpoint: '/api/tonbag/location-upload',
-      onSuccess: function(d) {
-        var errHtml = '';
-        if (d.errors && d.errors.length) {
-          errHtml = '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--warning)">⚠️ ' + d.errors.length + '건 실패 상세</summary><table class="data-table" style="margin-top:8px;font-size:.85rem"><thead><tr><th>행</th><th>LOT</th><th>sub_lt</th><th>사유</th></tr></thead><tbody>' +
-            d.errors.map(function(er){
-              return '<tr><td>'+er.row+'</td><td>'+escapeHtml(er.lot_no||'-')+'</td><td>'+(er.sub_lt||'-')+'</td><td>'+escapeHtml(er.reason||'')+'</td></tr>';
-            }).join('') + '</tbody></table></details>';
-        }
-        return '<div style="color:var(--text-muted);font-size:.85rem">파일: ' + escapeHtml(d.filename||'-') +
-               ' · 성공 <strong style="color:var(--accent)">' + (d.success_count||0) + '건</strong> / 실패 ' + (d.fail_count||0) +
-               ' / 총 ' + (d.total||0) + '</div>' + errHtml;
-      }
+    /* [Sprint 2-T] preview-edit-save 패턴 */
+    _showUploadPreviewModal({
+      title: '📍 톤백 위치 매핑 — Excel 업로드 (미리보기 + 편집)',
+      subtitle: 'Excel(.xlsx/.xls) → 파싱 → 편집 → DB 반영. 컬럼: <code>lot_no, sub_lt, location, reason(선택), note(선택)</code>',
+      fileExt: '.xlsx,.xls',
+      parseEndpoint: '/api/tonbag/location-upload',
+      saveEndpoint:  '/api/tonbag/location-save',
+      columns: [
+        { key:'lot_no',   label:'LOT NO', width:'100px' },
+        { key:'sub_lt',   label:'sub_lt', width:'70px' },
+        { key:'location', label:'위치', width:'140px' },
+        { key:'reason',   label:'사유', width:'120px' },
+        { key:'note',     label:'비고', width:'160px' },
+      ],
     });
   }
   window.showTonbagLocationUploadModal = showTonbagLocationUploadModal;
@@ -5334,23 +5569,23 @@
     });
   }
 
-  /* F017 Picking List PDF 업로드 */
+  /* F017 Picking List PDF 업로드 — [Sprint 2-T] preview-edit-save 패턴 */
   function showPickingListPdfModal() {
-    _showPdfUploadModal({
-      title: '📋 Picking List PDF 업로드',
-      subtitle: 'Picking List PDF 를 업로드하면 자동 파싱하여 picking_table 에 반영합니다.',
-      endpoint: '/api/outbound/picking-list-pdf',
-      onSuccess: function(d) {
-        var warnHtml = '';
-        if (d.warnings && d.warnings.length) {
-          warnHtml = '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--warning)">⚠️ 경고 ' + d.warnings.length + '건</summary><pre style="white-space:pre-wrap;font-size:.8rem;margin-top:8px">' + escapeHtml(d.warnings.join('\n')) + '</pre></details>';
-        }
-        return '<div style="color:var(--text-muted);font-size:.85rem">파일: ' + escapeHtml(d.filename||'-') +
-               ' · 방법: ' + escapeHtml(d.parse_method||'-') +
-               ' · LOT ' + (d.total_lots||0) + '개 · 일반 ' + (d.total_normal_mt||0) + ' MT · 샘플 ' + (d.total_sample_kg||0) + ' KG' +
-               ' · <strong style="color:var(--accent)">반영 ' + (d.applied||0) + '건</strong>' +
-               '</div>' + warnHtml;
-      }
+    _showUploadPreviewModal({
+      title: '📋 Picking List PDF 업로드 (미리보기 + 편집)',
+      subtitle: 'Picking List PDF 선택 → 자동 파싱 → 편집 → DB 반영 (picking_table).',
+      fileExt: '.pdf',
+      parseEndpoint: '/api/outbound/picking-list-pdf',
+      saveEndpoint:  '/api/outbound/picking-list-save',
+      columns: [
+        { key:'lot_no', label:'LOT NO', width:'100px' },
+        { key:'product', label:'제품명', width:'140px' },
+        { key:'normal_mt', label:'일반(MT)', width:'80px' },
+        { key:'sample_kg', label:'샘플(KG)', width:'80px' },
+        { key:'sub_count', label:'톤백수', width:'70px' },
+        { key:'destination', label:'목적지', width:'120px' },
+        { key:'note', label:'비고', width:'140px' },
+      ],
     });
   }
   window.showPickingListPdfModal = showPickingListPdfModal;

@@ -9,7 +9,7 @@ import os
 import tempfile
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Body
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/tonbag", tags=["tonbag"])
@@ -53,10 +53,14 @@ def _clean(v: Any) -> Any:
 
 
 @router.post("/location-upload", summary="📍 톤백 위치 매핑 — Excel 업로드 (F004)")
-async def location_upload(file: UploadFile = File(...)):
+async def location_upload(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(False, description="True면 파싱만 (preview용, DB 미반영)"),
+):
     """
     Excel 각 행: (lot_no, sub_lt, location, [reason], [note])
     engine.update_tonbag_location() 반복 호출. 행별 성공/실패 독립.
+    [Sprint 2-T] dry_run=True 시 파싱 결과만 반환.
     """
     if not file.filename:
         raise HTTPException(400, "파일명 없음")
@@ -103,6 +107,25 @@ async def location_upload(file: UploadFile = File(...)):
             raise HTTPException(400, "필수 컬럼 없음 (lot_no + sub_lt + location)")
 
         col_map = _match_columns(df.columns)
+
+        # [Sprint 2-T] dry_run: 파싱만
+        if dry_run:
+            preview_rows = []
+            for idx, row in df.iterrows():
+                data = {k: _clean(row[c]) for k, c in col_map.items()}
+                preview_rows.append({"_row": int(idx) + 2, **data})
+            return {
+                "ok": True,
+                "data": {
+                    "filename": file.filename,
+                    "total": int(len(df)),
+                    "header_row": header_used,
+                    "matched_columns": list(col_map.keys()),
+                    "preview_rows": preview_rows,
+                },
+                "message": f"{len(preview_rows)}건 파싱 완료 (preview, DB 미반영)",
+            }
+
         success_count = 0
         fail_count = 0
         errors = []
@@ -180,3 +203,80 @@ async def location_upload(file: UploadFile = File(...)):
                 os.unlink(tmp_path)
             except Exception:
                 pass
+
+
+# ────────────────────────────────────────────────────────────
+# [Sprint 2-T] Tonbag location — preview 후 편집된 rows 저장
+# ────────────────────────────────────────────────────────────
+@router.post("/location-save", summary="📍 톤백 위치 매핑 — 편집된 preview rows 저장 [Sprint 2-T]")
+def location_upload_save(payload: dict = Body(...)):
+    """
+    payload: { rows: [{lot_no, sub_lt, location, reason?, note?}, ...] }
+    프론트에서 편집된 preview_rows 를 받아 engine.update_tonbag_location 호출.
+    """
+    rows = (payload or {}).get("rows") or []
+    if not isinstance(rows, list) or not rows:
+        raise HTTPException(400, "rows(list) 필수")
+
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None or not hasattr(engine, "update_tonbag_location"):
+        raise HTTPException(500, "엔진 update_tonbag_location 메서드 없음")
+
+    success_count = 0
+    fail_count = 0
+    errors = []
+    for r in rows:
+        if not isinstance(r, dict): continue
+        lot_no = r.get("lot_no")
+        sub_lt = r.get("sub_lt")
+        location = r.get("location")
+        reason = r.get("reason") or "RELOCATE"
+        note = r.get("note") or ""
+
+        if not lot_no or sub_lt in (None, "") or not location:
+            fail_count += 1
+            errors.append({"row": r.get("_row"), "reason": "lot_no/sub_lt/location 누락"})
+            continue
+        try:
+            sub_lt_int = int(sub_lt)
+        except Exception:
+            fail_count += 1
+            errors.append({"row": r.get("_row"), "reason": f"sub_lt 정수 변환 실패: {sub_lt}"})
+            continue
+        try:
+            result = engine.update_tonbag_location(
+                lot_no=str(lot_no).strip(),
+                sub_lt=sub_lt_int,
+                location=str(location).strip(),
+                source="EDITED_PREVIEW",
+                reason_code=str(reason).strip().upper() if reason else "RELOCATE",
+                operator="web_ui",
+                note=str(note),
+            )
+            if result.get("success"):
+                success_count += 1
+            else:
+                fail_count += 1
+                errors.append({
+                    "row": r.get("_row"),
+                    "lot_no": str(lot_no),
+                    "sub_lt": sub_lt_int,
+                    "reason": result.get("error") or "unknown",
+                })
+        except Exception as e:
+            fail_count += 1
+            errors.append({"row": r.get("_row"), "lot_no": str(lot_no), "reason": f"exception: {e}"})
+
+    return {
+        "ok": True,
+        "data": {
+            "total": len(rows),
+            "success_count": success_count,
+            "fail_count": fail_count,
+            "errors": errors[:50],
+        },
+        "message": f"{success_count}건 위치 변경 / {fail_count}건 실패",
+    }

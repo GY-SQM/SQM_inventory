@@ -15,7 +15,7 @@ from io import StringIO, BytesIO
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Body, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Body, Form, Query
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -148,9 +148,13 @@ def quick_outbound_info(lot_no: str):
 # features.parsers.picking_list_parser + picking_engine 재사용
 # ────────────────────────────────────────────────────────────
 @router.post("/picking-list-pdf", summary="📋 Picking List PDF 업로드 (F017)")
-async def picking_list_pdf(file: UploadFile = File(...)):
+async def picking_list_pdf(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(False, description="True면 파싱만 (preview용, DB 미반영)"),
+):
     """
     Picking List PDF 파싱 → picking_engine.apply_picking_list_to_db() 호출.
+    [Sprint 2-T] dry_run=True 시 파싱 결과만 반환.
     """
     if not file.filename:
         raise HTTPException(400, "파일명 없음")
@@ -198,6 +202,30 @@ async def picking_list_pdf(file: UploadFile = File(...)):
                 "error": "Picking List 파싱 실패",
                 "detail": {"code": "PARSE_FAILED", "warnings": doc.get("warnings", [])},
                 "message": "Picking List 파싱 실패 — PDF 내용을 확인해주세요",
+            }
+
+        # [Sprint 2-T] dry_run: 파싱 결과만 (DB 미반영)
+        if dry_run:
+            items = doc.get("items", [])
+            preview_rows = []
+            for i, it in enumerate(items):
+                if isinstance(it, dict):
+                    preview_rows.append({"_row": i + 2, **it})
+                else:
+                    preview_rows.append({"_row": i + 2, "value": str(it)})
+            return {
+                "ok": True,
+                "data": {
+                    "filename": file.filename,
+                    "parse_method": doc.get("parse_method"),
+                    "total_lots": doc.get("total_lots", 0),
+                    "total_normal_mt": doc.get("total_normal_mt", 0),
+                    "total_sample_kg": doc.get("total_sample_kg", 0),
+                    "warnings": doc.get("warnings", []),
+                    "preview_rows": preview_rows,
+                    "total": len(preview_rows),
+                },
+                "message": f"{len(preview_rows)}건 파싱 완료 (preview, DB 미반영)",
             }
 
         # 2. DB 반영
@@ -258,6 +286,61 @@ class QuickOutboundPasteRequest(BaseModel):
     customer: str = Field(..., min_length=1, description="공통 고객명")
     reason: str = Field("", description="사유")
     operator: str = Field("", description="작업자")
+
+
+# ────────────────────────────────────────────────────────────
+# [Sprint 2-T] Picking List — preview 후 편집된 rows 저장
+# ────────────────────────────────────────────────────────────
+@router.post("/picking-list-save", summary="📋 Picking List — 편집된 preview rows 저장 [Sprint 2-T]")
+def picking_list_save(payload: dict = Body(...)):
+    """
+    payload: { rows: [...], total_normal_mt?, total_sample_kg?, parse_method? }
+    프론트에서 편집된 preview rows 를 받아 picking_engine.apply_picking_list_to_db 호출.
+    """
+    rows = (payload or {}).get("rows") or []
+    if not isinstance(rows, list) or not rows:
+        raise HTTPException(400, "rows(list) 필수")
+
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+        from features.parsers.picking_engine import apply_picking_list_to_db
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진 사용 불가")
+
+    items = [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows if isinstance(r, dict)]
+    doc = {
+        "parse_ok": True,
+        "items": items,
+        "parse_method": payload.get("parse_method", "edited"),
+        "total_lots": len(items),
+        "total_normal_mt": payload.get("total_normal_mt", 0),
+        "total_sample_kg": payload.get("total_sample_kg", 0),
+        "warnings": payload.get("warnings", []),
+    }
+    try:
+        result = apply_picking_list_to_db(engine, doc, None)
+        if result.get("success"):
+            applied = int(result.get("applied", 0) or result.get("picked", 0) or 0)
+            return {
+                "ok": True,
+                "data": {
+                    "applied": applied,
+                    "total_lots": doc["total_lots"],
+                    "details": result.get("details", [])[:30],
+                },
+                "message": f"Picking List 반영 완료 ({applied}건)",
+            }
+        return {
+            "ok": False,
+            "data": {"errors": result.get("errors", [])},
+            "error": "Picking List 반영 실패",
+            "message": "DB 반영 실패",
+        }
+    except Exception as e:
+        logger.exception(f"[picking-list-save] 에러: {e}")
+        raise HTTPException(500, str(e))
 
 
 @router.post("/quick-paste", summary="📤 빠른 출고 (붙여넣기) — 여러 LOT 일괄 (F016)")

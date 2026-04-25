@@ -74,13 +74,18 @@ def _clean_value(v: Any) -> Any:
 
 
 @router.post("/bulk-import-excel", summary="📊 수동 입고 — Excel 업로드 (F002)")
-async def bulk_import_excel(file: UploadFile = File(...)):
+async def bulk_import_excel(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(False, description="True면 파싱만 (DB 저장 안 함, preview용)"),
+):
     """
     PyWebView 네이티브 수동 입고.
     - multipart/form-data 로 Excel 파일 업로드
     - pandas 로 header=1 (수동 입고 템플릿) 우선, 실패 시 header=0 fallback
     - 각 행을 engine.add_inventory_from_dict(row_dict) 호출
     - 결과: {success_count, fail_count, total, errors: [...]}
+
+    [Sprint 2-T] dry_run=True 시 preview_rows 만 반환 (DB 미반영).
     """
     # 1. 입력 검증
     if not file.filename:
@@ -139,6 +144,27 @@ async def bulk_import_excel(file: UploadFile = File(...)):
         logger.info(f"[bulk-import] header={header_used}, {len(df)}행, 매핑: {list(col_map.keys())}")
         if "lot_no" not in col_map:
             raise HTTPException(400, f"필수 컬럼 'lot_no' 없음. 감지된 컬럼: {list(df.columns)}")
+
+        # [Sprint 2-T] dry_run 모드: 파싱만 → preview_rows 반환
+        if dry_run:
+            preview_rows = []
+            for idx, row in df.iterrows():
+                data = {}
+                for std_key, orig_col in col_map.items():
+                    data[std_key] = _clean_value(row[orig_col])
+                preview_rows.append({"_row": int(idx) + 2, **data})
+            logger.info(f"[bulk-import dry_run] 파싱: {len(preview_rows)}행")
+            return {
+                "ok": True,
+                "data": {
+                    "filename": file.filename,
+                    "total": int(len(df)),
+                    "header_row": header_used,
+                    "matched_columns": list(col_map.keys()),
+                    "preview_rows": preview_rows,
+                },
+                "message": f"{len(preview_rows)}건 파싱 완료 (preview, DB 미반영)",
+            }
 
         # 6. 행별 엔진 호출
         success_count = 0
@@ -203,15 +229,83 @@ async def bulk_import_excel(file: UploadFile = File(...)):
 
 
 # ────────────────────────────────────────────────────────────
+# [Sprint 2-T] Manual Inbound — preview 후 편집된 rows 저장
+# ────────────────────────────────────────────────────────────
+@router.post("/bulk-import-save", summary="📊 수동 입고 — 편집된 preview rows 저장 [Sprint 2-T]")
+def bulk_import_save(payload: dict = Body(...)):
+    """
+    payload: { rows: [{lot_no, sap_no, ...}, ...] }
+    프론트에서 편집된 preview_rows 를 받아 engine.add_inventory_from_dict 호출.
+    """
+    rows = (payload or {}).get("rows") or []
+    if not isinstance(rows, list):
+        raise HTTPException(400, "rows(list) 필수")
+    if not rows:
+        raise HTTPException(400, "저장할 row 가 없습니다")
+
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진이 사용 불가 상태")
+
+    success_count = 0
+    fail_count = 0
+    errors = []
+    for r in rows:
+        if not isinstance(r, dict): continue
+        data = {k: v for k, v in r.items() if not k.startswith("_")}
+        if not data.get("lot_no"):
+            fail_count += 1
+            errors.append({"row": r.get("_row"), "reason": "lot_no 빈 값"})
+            continue
+        try:
+            result = engine.add_inventory_from_dict(data)
+            if result.get("success"):
+                success_count += 1
+            else:
+                fail_count += 1
+                errors.append({
+                    "row": r.get("_row"),
+                    "lot_no": str(data.get("lot_no", "")),
+                    "reason": result.get("message") or result.get("error") or "unknown",
+                })
+        except Exception as e:
+            fail_count += 1
+            errors.append({
+                "row": r.get("_row"),
+                "lot_no": str(data.get("lot_no", "")),
+                "reason": f"exception: {e}",
+            })
+
+    logger.info(f"[bulk-import-save] 완료: 성공 {success_count} / 실패 {fail_count} / 총 {len(rows)}")
+    return {
+        "ok": True,
+        "data": {
+            "total": len(rows),
+            "success_count": success_count,
+            "fail_count": fail_count,
+            "errors": errors[:50],
+        },
+        "message": f"{success_count}건 입고 완료 / {fail_count}건 실패",
+    }
+
+
+# ────────────────────────────────────────────────────────────
 # v864.3 Phase 4-B: 반품 입고 (Excel 업로드) — F007
 # 기존 features.parsers.return_inbound_parser + return_inbound_engine 재사용
 # ────────────────────────────────────────────────────────────
 @router.post("/return-excel", summary="🔄 반품 입고 — Excel 업로드 (F007)")
-async def return_inbound_excel(file: UploadFile = File(...)):
+async def return_inbound_excel(
+    file: UploadFile = File(...),
+    dry_run: bool = Query(False, description="True면 파싱만 (preview용, DB 미반영)"),
+):
     """
     반품 Excel → picking_table 매칭 → inventory 복구 (트랜잭션).
     - parse_return_inbound_excel 로 파싱
     - process_return_inbound(engine, parsed) 로 DB 반영 (전체 or 롤백)
+    [Sprint 2-T] dry_run=True 시 파싱 결과만 반환.
     """
     if not file.filename:
         raise HTTPException(400, "파일명이 없습니다.")
@@ -261,6 +355,25 @@ async def return_inbound_excel(file: UploadFile = File(...)):
                 "message": "Excel 파싱 실패",
             }
 
+        # [Sprint 2-T] dry_run: 파싱 결과만 반환 (DB 미반영)
+        if dry_run:
+            items = parsed.get("items", [])
+            preview_rows = []
+            for i, it in enumerate(items):
+                if isinstance(it, dict):
+                    preview_rows.append({"_row": i + 2, **it})
+                else:
+                    preview_rows.append({"_row": i + 2, "value": str(it)})
+            return {
+                "ok": True,
+                "data": {
+                    "filename": file.filename,
+                    "total": len(preview_rows),
+                    "preview_rows": preview_rows,
+                },
+                "message": f"{len(preview_rows)}건 파싱 완료 (preview, DB 미반영)",
+            }
+
         # 2. DB 반영 (트랜잭션)
         result = process_return_inbound(engine, parsed, source_file=file.filename)
 
@@ -303,6 +416,50 @@ async def return_inbound_excel(file: UploadFile = File(...)):
             except Exception:
                 pass
 
+
+# ────────────────────────────────────────────────────────────
+# [Sprint 2-T] Return Inbound — preview 후 편집된 rows 저장
+# ────────────────────────────────────────────────────────────
+@router.post("/return-save", summary="🔄 반품 입고 — 편집된 preview rows 저장 [Sprint 2-T]")
+def return_inbound_save(payload: dict = Body(...)):
+    """
+    payload: { rows: [{lot_no, sub_lt, weight_kg, ...}, ...] }
+    프론트에서 편집된 preview_rows 를 받아 process_return_inbound 호출.
+    """
+    rows = (payload or {}).get("rows") or []
+    if not isinstance(rows, list) or not rows:
+        raise HTTPException(400, "rows(list) 필수")
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+        from features.parsers.return_inbound_engine import process_return_inbound
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진 사용 불가")
+
+    items = [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows if isinstance(r, dict)]
+    parsed = {"parse_ok": True, "items": items, "errors": []}
+    try:
+        result = process_return_inbound(engine, parsed, source_file="(edited preview)")
+        if not result.get("success"):
+            return {
+                "ok": False,
+                "data": {"returned": result.get("returned", 0), "errors": result.get("errors", [])},
+                "error": "반품 처리 실패",
+                "message": "반품 처리 실패 — 전체 롤백",
+            }
+        return {
+            "ok": True,
+            "data": {
+                "returned": result.get("returned", 0),
+                "details": result.get("details", [])[:50],
+                "total": len(rows),
+            },
+            "message": f"{result.get('returned', 0)}건 반품 입고 완료",
+        }
+    except Exception as e:
+        logger.exception(f"[return-save] 에러: {e}")
+        raise HTTPException(500, str(e))
 
 
 class PdfInboundRequest(BaseModel):
