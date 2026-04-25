@@ -1,8 +1,10 @@
-# 🤖 v864-3 포팅 작업 핸드오프 (2026-04-25 최종 v4)
+# 🤖 v864-3 포팅 작업 핸드오프 (2026-04-25 최종 v5)
 
 > **다음 AI 또는 작업자에게**: 이 문서 하나만 읽으면 처음부터 모든 컨텍스트 파악 가능.
-> **현 시점**: 36개 커밋 완료. **Sprint 1 P0 100% + Sprint 2 P1 ~82% + Sprint 3 P2 ~85%**.
-> **남은 작업**: 4건 (Sprint 2 잔여 4건 + Sprint 3 P2 2건 + Phase 2 Gemini)
+> **현 시점**: 38개 커밋 완료. **Sprint 1 P0 100% + Sprint 2 P1 ~85% + Sprint 3 P2 ~85%**.
+> **남은 작업**: ~5건 (preview-before-save 강화 5개 + Phase 2 Gemini)
+>
+> **v5 추가**: Sprint 2-S DOUpdateDialog 단필드→8필드 일괄 (commit 1903d11).
 
 ---
 
@@ -55,7 +57,7 @@ D:/program/SQM_inventory/
 - **리포지토리**: https://github.com/kidongnam1/sqm_2
 - **브랜치**: `claude/v864-3-sprint0`
 - **시작점**: `ea9d0f0`
-- **현재 HEAD**: `7a8a5aa` (정리 + 36 커밋)
+- **현재 HEAD**: `1903d11` (정리 + 38 커밋)
 
 ### 환경
 - Windows 11 + PowerShell + Python 3.11
@@ -65,7 +67,7 @@ D:/program/SQM_inventory/
 
 ---
 
-## 3. ✅ 완료된 작업 — 36개 커밋 핵심
+## 3. ✅ 완료된 작업 — 38개 커밋 핵심
 
 ### Sprint 0 + 1 P0 (Sprint 1 100% 완성)
 - 메뉴 구조 v864-2 일치 + cascading 서브메뉴
@@ -78,7 +80,7 @@ D:/program/SQM_inventory/
 - Scan 5단계 상태 전환
 - UX: ESC/Enter/Tab/double-ESC
 
-### Sprint 2 P1 (~82%)
+### Sprint 2 P1 (~85%)
 - 전역 🔍 검색 (4 도메인 통합)
 - InboundTemplate / PickingTemplate 풀 CRUD
 - Picked + Outbound 탭 6버튼 풀
@@ -89,6 +91,7 @@ D:/program/SQM_inventory/
 - **SettingsDialog (API 키 + 선사 BL/DO 규칙)** ⭐
 - 보고서 양식/이력 mis-wire 수정
 - 감사 로그 / Swap / 재고 알림 메뉴 활성화
+- **DOUpdateDialog 8필드 일괄 편집** ⭐ (Sprint 2-S, commit 1903d11)
 
 ### Sprint 3 P2 (~85%)
 - 단축키 가이드, STATUS 가이드, 사용법
@@ -100,21 +103,36 @@ D:/program/SQM_inventory/
 
 ---
 
-## 4. 🟡 남은 작업 — 4건만 (실제 남은 시간 ~3~5시간)
+## 4. 🟡 남은 작업 — preview 강화 5건 (실제 시간 ~3~5시간)
 
-### Sprint 2 잔여 (4건)
-| # | 작업 | 공수(추정) | 비고 |
+> **참고**: 모든 dialog 가 **이미 동작**합니다 (parse + save 단일 단계). v864-2 의 preview-before-save 단계가 빠진 것이라, 사용자가 업로드 결과를 미리 보고 편집할 기회를 추가하면 됩니다.
+
+### Sprint 2 잔여 — preview 강화 (5건)
+| # | 작업 | 현재 상태 | 강화 사항 |
 |---|---|---|---|
-| 1 | ManualInboundPreviewDialog 9열 인라인 편집 | 3일 | OneStop Inbound 패턴 재사용 가능 |
-| 2 | DOUpdateDialog 풀 (PDF + 6열 매칭) | 3일 | 부분 구현 있음 |
-| 3 | PickingListPreviewDialog 풀 | 3일 | 부분 구현 있음 |
-| 4 | LocationUploadPreviewDialog | 3일 | Tonbag 위치 매핑 미리보기 |
-| 5 | ReturnInboundPreviewDialog | 3일 | Return 처리 미리보기 |
-| 6 | ParsePreviewConfirmDialog | 3일 | 파싱 결과 확인 |
-| 7 | Move 탭 보강 (Lookup/Clear/Approval) | 3일 | 페이지 추가 |
-| 8 | Return Cargo Overview 20열 | 3일 | Return 탭 보강 |
+| 1 | ManualInboundPreviewDialog 9열 인라인 편집 | ✅ 업로드+저장 동작 | dry_run → 편집 가능 테이블 → confirm 단계 추가 |
+| 2 | ~~DOUpdateDialog~~ | ✅ **8필드 일괄 완료** | (Sprint 2-S 1903d11) |
+| 3 | PickingListPreviewDialog 풀 | ✅ PDF 업로드+저장 동작 | parse 결과 편집 가능 테이블 |
+| 4 | LocationUploadPreviewDialog | ✅ Excel 업로드+저장 동작 | 매핑 결과 미리보기 + 편집 |
+| 5 | ReturnInboundPreviewDialog | ✅ Excel 업로드+저장 동작 | 반품 매칭 결과 미리보기 |
+| 6 | ParsePreviewConfirmDialog | ✅ 인라인 _showParsePreviewModal 가능 | 범용 헬퍼 추가 옵션 |
 
-(이 중 일부는 v864-2에서 자동 동작하던 흐름이라 별도 다이얼로그 없이도 OK)
+**구현 패턴 (모든 preview dialog 공통)**:
+```javascript
+// 1) Upload with dry_run=1
+fetch(endpoint + '?dry_run=1', { method:'POST', body: form })
+// 2) 결과를 편집 가능 테이블로 표시
+//    (Inbound OneStop 18열 패턴 재사용 가능: line ~5060-5200)
+// 3) "저장" 버튼 → POST edited rows to /save endpoint
+```
+
+대부분의 백엔드는 이미 dry_run 지원. 프론트엔드만 강화하면 됨.
+
+### Sprint 2 추가 보강 (선택, 2건)
+| # | 작업 | 비고 |
+|---|---|---|
+| 7 | Move 탭 보강 (Lookup/Clear/Approval) | Tonbag 위치 페이지 — 현재 dialog 만 |
+| 8 | Return Cargo Overview 20열 | Return 탭 보강 — 현재 기본 동작 |
 
 ### Sprint 3 P2 잔여 (2건)
 | # | 작업 | 비고 |
@@ -133,17 +151,20 @@ D:/program/SQM_inventory/
 ```
 Sprint 0          ████████████████████ 100% ✅
 Sprint 1 P0 14건  ████████████████████ 100% ✅
-Sprint 2 P1 22건  ████████████████░░░░  82% (18/22)
+Sprint 2 P1 22건  █████████████████░░░  86% (19/22)  +1 (Sprint 2-S DOUpdate)
 Sprint 3 P2 13건  █████████████████░░░  85% (11/13)
 ─────────────────────────────────────────
-전체 49건         █████████████████░░░  88% (43/49)
+전체 49건         ██████████████████░░  90% (44/49)
 원래 추정 155일   ████████████████████ ~155일 분량 모두 처리
 ```
 
 ### 실제 남은 시간
-- Sprint 2 잔여 4-8건: 추정 ~30일 → **실제 3~5시간 (1 세션)**
-- Sprint 3 잔여 2건: 추정 ~10일 → **실제 1~2시간**
+- Sprint 2 잔여 5건 (preview 강화): **실제 3~5시간**
+- Sprint 3 잔여 2건: **실제 1~2시간**
 - **남은 실제 시간: 4~7시간 (~1 세션)**
+
+### 핵심 통찰
+모든 dialog 가 **기본 기능은 동작**합니다. 남은 작업은 **편집 가능한 preview 단계** 추가입니다 (실수 방지 / UX 개선용). 운영 투입은 이미 가능한 상태.
 
 ---
 
