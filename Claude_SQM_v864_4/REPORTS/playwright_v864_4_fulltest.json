@@ -1,0 +1,659 @@
+{
+  "summary": {
+    "total": 93,
+    "pass": 91,
+    "skip": 2,
+    "fail": 0
+  },
+  "results": [
+    {
+      "action": "onExportCustoms",
+      "label": "📋 통관요청 양식",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onExportRubyli",
+      "label": "📊 루비리 양식",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onExportTonbag",
+      "label": "🎒 톤백 현황",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onExportIntegrated",
+      "label": "⭐ 통합 현황",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onOnBackup",
+      "label": "💾 백업 생성",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onRestore",
+      "label": "🔄 복원",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onBackupList",
+      "label": "📋 백업 목록",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onAutoBackupSettings",
+      "label": "⏰ 자동 백업 설정",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onBlCarrierRegister",
+      "label": "🚢 선사 BL 등록 도구",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onBlCarrierAnalyze",
+      "label": "🔬 선사 패턴 분석",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGeminiToggle",
+      "label": "🔀 Gemini AI 사용",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onAiChat",
+      "label": "💬 AI 채팅",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGeminiApiSettings",
+      "label": "🔐 API 키 설정",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGeminiApiTest",
+      "label": "🧪 API 연결 테스트",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onDocConvert",
+      "label": "📷 PDF/이미지 변환",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onRecentFiles",
+      "label": "📂 최근 파일",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onExit",
+      "label": "❌ 종료",
+      "result": "SKIP",
+      "error": ""
+    },
+    {
+      "action": "onOnPdfInbound",
+      "label": "📄 PDF 스캔 입고",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onInboundManual",
+      "label": "📊 엑셀 파일 수동 입고",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onDoUpdate",
+      "label": "📋 D/O 후속 연결",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onInventoryMove",
+      "label": "📍 톤백 위치 매핑",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onMoveApprovalQueue",
+      "label": "✅ 대량 이동 승인",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onReturnDialog",
+      "label": "🔄 반품 (재입고)",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onReturnInboundUpload",
+      "label": "📂 반품 입고 (Excel)",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onReturnStatistics",
+      "label": "📊 반품 사유 통계",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onInboundList",
+      "label": "📋 입고 현황 조회",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onInboundTemplateManage",
+      "label": "📝 입고 파싱 템플릿 관리",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onProductMaster",
+      "label": "📦 제품 마스터 관리",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onEmailConfig",
+      "label": "⚙️ 이메일 설정",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onIntegrityReport",
+      "label": "🔍 정합성 검증 (시각화)",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onFixLotIntegrity",
+      "label": "🛠️ LOT 상태 정합성 복구",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onOnQuickOutbound",
+      "label": "🚀 즉시 출고 (원스톱)",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onQuickOutboundPaste",
+      "label": "📤 빠른 출고 (붙여넣기)",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onPickingListUpload",
+      "label": "📋 Picking List 업로드 (PDF)",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onBarcodeScanUpload",
+      "label": "📊 바코드 스캔 업로드",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onGoScanTab",
+      "label": "📷 스캔 탭으로 이동",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onInventoryAllocation",
+      "label": "📋 Allocation 입력",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onApprovalQueue",
+      "label": "✅ 승인 대기",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onApplyApproved",
+      "label": "📌 예약 반영 (승인분)",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onApprovalHistory",
+      "label": "📜 승인 이력 조회",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onGoAllocationTab",
+      "label": "📋 판매 배정 탭으로 이동",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onOutboundStatus",
+      "label": "📋 출고 현황 조회",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onOutboundConfirm",
+      "label": "✅ 출고 확정",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onPickingTemplateManage",
+      "label": "📦 출고 피킹 템플릿 관리",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onExportLot",
+      "label": "📊 LOT 리스트 Excel",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onStockTrendChart",
+      "label": "📊 재고 추이 차트",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onInvoiceGenerate",
+      "label": "📄 거래명세서 생성",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onDetailOfOutbound",
+      "label": "📦 Detail of Outbound",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onSalesOrderDN",
+      "label": "📋 Sales Order DN",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onDnCrossCheck",
+      "label": "🔍 DN 교차검증",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onReportCustom",
+      "label": "📝 고객 보고서 생성",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onReportTemplates",
+      "label": "📂 보고서 양식 관리",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onReportHistory",
+      "label": "📋 보고서 이력 조회",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onInventoryReport",
+      "label": "📦 재고 현황 보고서",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onMovementHistory",
+      "label": "📈 입출고 내역",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onReportMonthly",
+      "label": "📅 월간 실적 PDF",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onReportDaily",
+      "label": "📊 일일 현황 PDF",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onLotDetailPdf",
+      "label": "🔖 LOT 상세",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGlobalSearch",
+      "label": "🔍 검색",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onProductInventoryReport",
+      "label": "📊 제품별 재고 현황",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onLotAllocationAudit",
+      "label": "📊 LOT Allocation 톤백 현황",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onIntegrityCheck",
+      "label": "🩺 데이터 정합성 검사",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onOptimizeDb",
+      "label": "🔧 DB 최적화",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onCleanupLogs",
+      "label": "📋 로그 정리",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onDbInfo",
+      "label": "ℹ️ DB 정보",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onTestDbReset",
+      "label": "🗑️ 테스트 DB 초기화",
+      "result": "SKIP",
+      "error": ""
+    },
+    {
+      "action": "onHelp",
+      "label": "📖 사용법",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onShortcuts",
+      "label": "⌨️ 단축키 안내",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onStatusGuide",
+      "label": "📊 STATUS 상태값 안내",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onBackupGuide",
+      "label": "💾 DB 백업/복구 가이드",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onSystemInfo",
+      "label": "ℹ️ 시스템 정보",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onAbout",
+      "label": "📝 버전 정보",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "refresh-all",
+      "label": "🔄 Refresh (F5)",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGoInventoryTab",
+      "label": "📦 Inventory",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGoPickedTab",
+      "label": "🚛 Picked",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGoOutboundTab",
+      "label": "📤 Outbound",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGoReturnTab",
+      "label": "🔄 Return",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGoMoveTab",
+      "label": "🔀 Move",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGoDashboardTab",
+      "label": "📊 Dashboard",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onGoLogTab",
+      "label": "📝 Log",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onToggleTheme",
+      "label": "🎨 Theme",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "onProductSummary",
+      "label": "📋 품목별 재고 요약",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onProductLotLookup",
+      "label": "🔍 품목별 LOT 조회",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "onProductMovement",
+      "label": "📊 품목별 입출고 현황",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "theme-dark",
+      "label": "🌙 Dark",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "theme-light",
+      "label": "☀️ Light",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "tb-pdf-inbound",
+      "label": "📄 PDF 입고",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "tb-quick-outbound",
+      "label": "🚀 즉시 출고",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "tb-return",
+      "label": "🔄 반품",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "tb-inventory",
+      "label": "📋 재고 조회",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "tb-integrity",
+      "label": "✅ 정합성",
+      "result": "PASS",
+      "modal": true,
+      "error": ""
+    },
+    {
+      "action": "tb-backup",
+      "label": "💾 백업",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    },
+    {
+      "action": "tb-settings",
+      "label": "⚙️ 설정",
+      "result": "PASS",
+      "modal": false,
+      "error": ""
+    }
+  ]
+}
