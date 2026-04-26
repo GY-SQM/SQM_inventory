@@ -105,6 +105,14 @@ try:
 except Exception as e:
     logging.warning(f"settings router load failed: {e}")
 
+# [Sprint 2-V] AI Chat (Gemini natural-language inventory query)
+try:
+    from backend.api.ai_chat import router as ai_chat_router
+    app.include_router(ai_chat_router)
+    logging.info("ai_chat router loaded OK (POST /api/ai/chat)")
+except Exception as e:
+    logging.warning(f"ai_chat router load failed: {e}")
+
 # Phase 4-A Group 3: SQL 직접 조회 (queries.py — F009,F023,F025,F031,F034,F037,F038,F046,F047,F055)
 try:
     from backend.api.queries import router as queries_router

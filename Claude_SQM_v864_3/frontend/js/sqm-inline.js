@@ -2934,6 +2934,131 @@
   }
   window._showUploadPreviewModal = _showUploadPreviewModal;
 
+  /* ===================================================
+     [Sprint 2-U] Parse Error Recovery — 9 ERROR_CODES
+     v864-2 parse_error_recovery_dialog.py 매칭.
+     OneStop Inbound 파싱 실패 시 사용자가 수동 입력으로 복구.
+     =================================================== */
+  var PARSE_ERROR_CODES = {
+    'ERR-BL-01': { title:'BL No 미추출', desc:'AI가 선하증권 번호(BL No)를 인식하지 못했습니다.',
+      fields:[['bl_no','BL No','MEDU1234567890']], doc:'BL' },
+    'ERR-BL-02': { title:'Vessel / Voyage 미추출', desc:'선박명 또는 항차 번호를 인식하지 못했습니다.',
+      fields:[['vessel','선박명 (Vessel)','MSC BLESSING'], ['voyage','항차 (Voyage)','234N']], doc:'BL' },
+    'ERR-PL-01': { title:'LOT No 미추출', desc:'Packing List에서 LOT 번호를 인식하지 못했습니다.',
+      fields:[['lot_no','LOT No (8~11자리)','1125082734']], doc:'PL' },
+    'ERR-PL-02': { title:'SAP No 미추출', desc:'SAP 문서번호(10자리)를 인식하지 못했습니다.',
+      fields:[['sap_no','SAP No (10자리)','2200033062']], doc:'PL' },
+    'ERR-PL-03': { title:'무게 미추출', desc:'순중량(Net Weight) 또는 총중량(Gross Weight)을 인식하지 못했습니다.',
+      fields:[['net_weight','Net Weight (kg)','500.0'], ['gross_weight','Gross Weight (kg)','512.5']], doc:'PL' },
+    'ERR-IV-01': { title:'Invoice No 미추출', desc:'인보이스 번호를 인식하지 못했습니다.',
+      fields:[['invoice_no','Invoice No','INV-2026-001']], doc:'Invoice' },
+    'ERR-IV-02': { title:'LOT / SAP 불일치', desc:'Invoice의 LOT No 또는 SAP No가 Packing List와 다릅니다.',
+      fields:[['lot_no','LOT No (수동 확인 후 입력)',''], ['sap_no','SAP No (수동 확인 후 입력)','']], doc:'Invoice' },
+    'ERR-DO-01': { title:'Arrival Date 미추출', desc:'D/O에서 입항일(Arrival Date)을 인식하지 못했습니다.',
+      fields:[['arrival_date','입항일 (YYYY-MM-DD)','2025-10-22']], doc:'DO' },
+    'ERR-DO-02': { title:'Container / Free Time 미추출', desc:'컨테이너 번호 또는 반납일(Free Time)을 인식하지 못했습니다.',
+      fields:[['container_no','컨테이너 No','MSCU1234567'], ['con_return','반납일 (YYYY-MM-DD)','2025-11-05']], doc:'DO' },
+  };
+  window.PARSE_ERROR_CODES = PARSE_ERROR_CODES;
+
+  /**
+   * showParseErrorRecoveryModal(errorCodes, opts)
+   *   errorCodes: ['ERR-BL-01', 'ERR-PL-02', ...]
+   *   opts:
+   *     onSubmit: function(corrections) — { field_name: value, ... }
+   *     onSkip:   function() — 사용자 건너뛰기
+   *     onCancel: function() — 닫기
+   *     contextLabel?: '문서명 등 컨텍스트 라벨'
+   */
+  function showParseErrorRecoveryModal(errorCodes, opts) {
+    opts = opts || {};
+    var codes = (errorCodes || []).filter(function(c){ return PARSE_ERROR_CODES[c]; });
+    if (!codes.length) {
+      showToast('info','복구할 에러가 없습니다');
+      if (opts.onSkip) opts.onSkip();
+      return;
+    }
+    var blocks = codes.map(function(code, i){
+      var info = PARSE_ERROR_CODES[code];
+      var fieldsHtml = info.fields.map(function(f){
+        var key=f[0], label=f[1], placeholder=f[2]||'';
+        return '<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">'+
+          '<label style="min-width:170px;font-size:.85rem;color:var(--text-muted)">'+escapeHtml(label)+'</label>'+
+          '<input type="text" data-pe-key="'+escapeHtml(key)+'" placeholder="'+escapeHtml(placeholder)+'" style="flex:1;padding:6px 8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:monospace">'+
+        '</div>';
+      }).join('');
+      return [
+        '<div style="border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:10px">',
+        '  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">',
+        '    <div style="font-weight:600">'+escapeHtml(info.title)+' <span style="color:var(--text-muted);font-weight:normal;font-size:.8rem">['+code+' · '+escapeHtml(info.doc)+']</span></div>',
+        '    <span class="pe-status" data-pe-code="'+code+'" style="font-size:.8rem;color:var(--warning)">⚠️ 미해결</span>',
+        '  </div>',
+        '  <div style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">'+escapeHtml(info.desc)+'</div>',
+        fieldsHtml,
+        '</div>'
+      ].join('');
+    }).join('');
+
+    var html = [
+      '<div style="max-width:680px">',
+      '  <h2 style="margin:0 0 8px 0">⚠️ 파싱 오류 복구 — '+codes.length+'건</h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 12px 0;font-size:.9rem">',
+      '    AI 파싱이 실패한 항목입니다. 수동으로 입력 후 [복구 적용]을 누르세요.',
+      (opts.contextLabel ? ' · <strong>'+escapeHtml(opts.contextLabel)+'</strong>' : ''),
+      '  </p>',
+      '  <div style="max-height:60vh;overflow:auto;padding:4px">'+blocks+'</div>',
+      '  <div id="pe-result" style="margin-top:8px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">',
+      '    <button id="pe-cancel" class="btn btn-ghost">닫기</button>',
+      '    <button id="pe-skip"   class="btn btn-ghost">⏭ 건너뛰기</button>',
+      '    <button id="pe-apply"  class="btn btn-primary">✅ 복구 적용</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+
+    var modal = document.getElementById('sqm-modal');
+    document.getElementById('pe-cancel').addEventListener('click', function(){
+      modal.style.display='none';
+      if (opts.onCancel) opts.onCancel();
+    });
+    document.getElementById('pe-skip').addEventListener('click', function(){
+      modal.style.display='none';
+      if (opts.onSkip) opts.onSkip();
+    });
+    document.getElementById('pe-apply').addEventListener('click', function(){
+      var corrections = {};
+      var allFilled = true;
+      codes.forEach(function(code){
+        var info = PARSE_ERROR_CODES[code];
+        var thisAllFilled = info.fields.every(function(f){
+          var inp = document.querySelector('input[data-pe-key="'+f[0]+'"]');
+          if (inp) {
+            var v = inp.value.trim();
+            if (v) { corrections[f[0]] = v; return true; }
+            return false;
+          }
+          return false;
+        });
+        var status = document.querySelector('.pe-status[data-pe-code="'+code+'"]');
+        if (status) {
+          status.textContent = thisAllFilled ? '✅ 입력됨' : '⚠️ 미해결';
+          status.style.color = thisAllFilled ? 'var(--success)' : 'var(--warning)';
+        }
+        if (!thisAllFilled) allFilled = false;
+      });
+      if (!allFilled) {
+        document.getElementById('pe-result').innerHTML = '<div style="padding:8px;color:var(--warning)">⚠️ 모든 필드를 입력해주세요</div>';
+        return;
+      }
+      modal.style.display='none';
+      showToast('success', codes.length + '건 복구 완료');
+      dbgLog('🟢','PE-RECOVERY', codes.length+' codes — '+Object.keys(corrections).join(','),'#66bb6a');
+      if (opts.onSubmit) opts.onSubmit(corrections);
+    });
+  }
+  window.showParseErrorRecoveryModal = showParseErrorRecoveryModal;
+
   /* 수동 입고 (F002) — [Sprint 2-T] preview-edit-save 패턴 */
   function showInboundManualUploadModal() {
     _showUploadPreviewModal({
@@ -5367,7 +5492,12 @@
       } else {
         var errMsg = (body && (body.detail || body.error || body.message)) || ('HTTP ' + xhr.status);
         if (typeof errMsg === 'object') errMsg = JSON.stringify(errMsg);
-        if (pb) pb.innerHTML = '<div style="color:var(--danger);font-weight:700">❌ 파싱 실패</div><div style="color:var(--text-muted);font-size:12px;margin-top:4px">' + escapeHtml(String(errMsg)) + '</div>';
+        /* [Sprint 2-U] 파싱 실패 시 ERROR_CODES 추출 → 복구 다이얼로그 자동 트리거 */
+        var detail = body && body.detail || {};
+        var errorCodes = detail.error_codes || (body && body.data && body.data.error_codes) || [];
+        if (pb) pb.innerHTML = '<div style="color:var(--danger);font-weight:700">❌ 파싱 실패</div>'+
+          '<div style="color:var(--text-muted);font-size:12px;margin-top:4px">' + escapeHtml(String(errMsg)) + '</div>'+
+          (errorCodes.length ? '<button class="btn btn-warning" style="margin-top:8px" onclick="window.showParseErrorRecoveryModal('+JSON.stringify(errorCodes).replace(/"/g,'&quot;')+', { onSubmit: function(c){ window._onestopState && (window._onestopState.manualCorrections = c); showToast(\'success\',\'복구값 적용 — 재파싱하세요\'); } })">🔧 수동 복구 ('+errorCodes.length+'건)</button>' : '');
         showToast('error', '파싱 실패: ' + errMsg);
         _onestopSetStep(1);
       }
@@ -6723,6 +6853,142 @@
     }
   }
   window.showGlobalSearchModal = showGlobalSearchModal;
+
+  /* ===================================================
+     [Sprint 2-V] AI Chat Modal — 자연어 재고 조회
+     v864-2 source: features/ai/gemini_chat_gui.py (473 lines)
+     포팅: Web 채팅 UI + REST API (/api/ai/chat)
+     =================================================== */
+  function showAiChatModal() {
+    var html = [
+      '<div style="max-width:820px;width:92vw;display:flex;flex-direction:column;height:74vh">',
+      '  <h2 style="margin:0 0 6px 0">🤖 AI 채팅 — 자연어 재고 조회</h2>',
+      '  <div id="ai-status-bar" style="font-size:.8rem;color:var(--text-muted);margin-bottom:8px">상태 확인 중...</div>',
+      '  <div id="ai-history" style="flex:1;overflow:auto;padding:10px;background:var(--bg-hover);border:1px solid var(--border);border-radius:8px;margin-bottom:8px">',
+      '    <div style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">',
+      '      💡 예시: <em>"리튬카보네이트 현재고 알려줘"</em>, <em>"저재고 LOT 5건"</em>, <em>"이번 달 출고 현황"</em>',
+      '    </div>',
+      '  </div>',
+      '  <div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap">',
+      '    <button class="btn btn-ghost ai-quick" data-q="전체 재고 요약">📊 전체 재고 요약</button>',
+      '    <button class="btn btn-ghost ai-quick" data-q="제품별 재고 현황">📦 제품별 재고</button>',
+      '    <button class="btn btn-ghost ai-quick" data-q="저재고 LOT 10건 알려줘">⚠️ 저재고 LOT</button>',
+      '    <button class="btn btn-ghost ai-quick" data-q="이번 달 출고 현황">📤 이번 달 출고</button>',
+      '    <button class="btn btn-ghost ai-quick" data-q="예약 배정 현황">📅 예약 배정</button>',
+      '  </div>',
+      '  <div style="display:flex;gap:6px">',
+      '    <input type="text" id="ai-input" placeholder="질문을 입력하세요 (Enter)" style="flex:1;padding:10px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    <button id="ai-send" class="btn btn-primary" disabled>전송</button>',
+      '    <button id="ai-clear" class="btn btn-ghost" title="히스토리 초기화">🗑</button>',
+      '    <button id="ai-cancel" class="btn btn-ghost">닫기</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+
+    var hist = document.getElementById('ai-history');
+    var inp  = document.getElementById('ai-input');
+    var send = document.getElementById('ai-send');
+    var clr  = document.getElementById('ai-clear');
+    var cancel = document.getElementById('ai-cancel');
+    var statusBar = document.getElementById('ai-status-bar');
+
+    /* 상태 조회 */
+    apiCall('GET','/api/ai/status', null).then(function(res){
+      var d = (res && res.data) || {};
+      if (d.configured) {
+        statusBar.innerHTML = '🟢 Gemini 연결됨 · 모델 <code>'+escapeHtml(d.model||'')+'</code> · 키 '+escapeHtml(d.key_masked||'***');
+        send.disabled = !inp.value.trim();
+      } else {
+        statusBar.innerHTML = '⚠️ <strong>Gemini API 키 미설정</strong> — [메뉴 → 설정 → API 키] 에서 등록 후 사용';
+        send.disabled = true;
+      }
+    }).catch(function(e){
+      statusBar.innerHTML = '❌ 상태 조회 실패: '+escapeHtml(e.message||String(e));
+      send.disabled = true;
+    });
+
+    function appendMsg(role, content, extra) {
+      /* role: 'user' | 'ai' | 'error' */
+      var bgColor = role === 'user' ? 'var(--accent-bg, #1e3a5f)' : (role === 'error' ? 'rgba(239,83,80,0.1)' : 'rgba(255,255,255,0.04)');
+      var borderColor = role === 'user' ? 'var(--accent)' : (role === 'error' ? 'var(--danger)' : 'var(--border)');
+      var icon = role === 'user' ? '🧑' : (role === 'error' ? '❌' : '🤖');
+      var roleLabel = role === 'user' ? '나' : (role === 'error' ? '오류' : 'Gemini');
+      var div = document.createElement('div');
+      div.style.cssText = 'margin-bottom:8px;padding:10px;background:'+bgColor+';border-left:3px solid '+borderColor+';border-radius:4px';
+      div.innerHTML = '<div style="font-size:.75rem;color:var(--text-muted);margin-bottom:4px">'+icon+' '+roleLabel+' · '+new Date().toLocaleTimeString()+'</div>'+
+        '<div style="white-space:pre-wrap;font-size:.9rem">'+escapeHtml(content)+'</div>'+
+        (extra || '');
+      /* 첫 메시지 추가 시 placeholder 제거 */
+      if (hist.querySelector('div[style*="text-align:center"]')) hist.innerHTML = '';
+      hist.appendChild(div);
+      hist.scrollTop = hist.scrollHeight;
+    }
+
+    function send_(question) {
+      if (!question.trim()) return;
+      appendMsg('user', question);
+      inp.value = '';
+      send.disabled = true;
+      var loading = document.createElement('div');
+      loading.style.cssText = 'padding:8px;color:var(--text-muted);font-style:italic';
+      loading.textContent = '⏳ Gemini 가 분석 중...';
+      hist.appendChild(loading);
+      hist.scrollTop = hist.scrollHeight;
+
+      apiPost('/api/ai/chat', { question: question }).then(function(res){
+        loading.remove();
+        if (res && res.ok !== false) {
+          var d = res.data || {};
+          var rowCount = d.row_count || 0;
+          var tableHtml = '';
+          if (d.data && d.data.length && d.columns && d.columns.length) {
+            tableHtml = '<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--accent);font-size:.85rem">📊 '+rowCount+'건 결과 보기</summary>'+
+              '<div style="max-height:200px;overflow:auto;margin-top:6px"><table style="width:100%;border-collapse:collapse;font-size:.8rem"><thead><tr>'+
+              d.columns.map(function(c){ return '<th style="padding:4px 6px;background:var(--bg);border-bottom:1px solid var(--border);text-align:left">'+escapeHtml(String(c))+'</th>' }).join('')+
+              '</tr></thead><tbody>'+
+              d.data.slice(0, 100).map(function(row){
+                return '<tr>'+d.columns.map(function(c){ return '<td style="padding:3px 6px;border-bottom:1px solid rgba(255,255,255,0.05)">'+escapeHtml(String(row[c]==null?'':row[c]))+'</td>' }).join('')+'</tr>';
+              }).join('')+
+              '</tbody></table></div></details>';
+          }
+          var sqlHtml = d.sql ? '<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--text-muted);font-size:.75rem">🔍 SQL 보기</summary><pre style="font-size:.75rem;background:var(--bg);padding:6px;border-radius:4px;overflow:auto;max-height:120px;margin-top:4px">'+escapeHtml(d.sql)+'</pre></details>' : '';
+          appendMsg('ai', d.answer || '(응답 없음)', tableHtml + sqlHtml);
+        } else {
+          appendMsg('error', (res && (res.error || res.message)) || '응답 실패');
+        }
+        send.disabled = !inp.value.trim();
+        inp.focus();
+      }).catch(function(e){
+        loading.remove();
+        appendMsg('error', e.message||String(e));
+        send.disabled = !inp.value.trim();
+      });
+    }
+
+    inp.addEventListener('input', function(){ send.disabled = !inp.value.trim() });
+    inp.addEventListener('keydown', function(e){
+      if (e.key === 'Enter' && !e.shiftKey && !send.disabled) { e.preventDefault(); send_(inp.value); }
+    });
+    send.addEventListener('click', function(){ send_(inp.value) });
+    cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none' });
+    clr.addEventListener('click', function(){
+      if (!confirm('대화 히스토리를 초기화합니다. 계속?')) return;
+      apiPost('/api/ai/clear-history', {}).then(function(){
+        hist.innerHTML = '<div style="color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px">히스토리 초기화됨</div>';
+        showToast('success','히스토리 초기화');
+      });
+    });
+    document.querySelectorAll('button.ai-quick').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        if (send.disabled && !inp.value) return;
+        inp.value = btn.dataset.q;
+        send_(inp.value);
+      });
+    });
+    setTimeout(function(){ inp.focus() }, 100);
+  }
+  window.showAiChatModal = showAiChatModal;
 
   window.gsClear = function() {
     var inp = document.getElementById('gs-input');
@@ -8355,6 +8621,7 @@
     'onBlCarrierAnalyze':  {m:'JS', u:'carrier-rules',                             lbl:'🔬 선사 패턴 분석'},
     'onSettings':          {m:'JS', u:'settings',                                  lbl:'⚙️ 설정 (API + BL 규칙)'},
     'onGeminiToggle':      {m:'JS', u:'settings',                                  lbl:'🔀 Gemini AI 사용'},
+    'onAiChat':            {m:'JS', u:'ai-chat',                                   lbl:'💬 AI 채팅'},  /* [Sprint 2-V] */
     'onGeminiApiSettings': {m:'JS', u:'settings',                                  lbl:'🔐 API 키 설정'},
     'onGeminiApiTest':     {m:'JS', u:'settings',                                  lbl:'🧪 API 연결 테스트'},
     /* ── [Sprint 0-3 → Sprint 2/3 활성화] 재고 메뉴 슬롯 ── */
@@ -8522,6 +8789,8 @@
       if (conf.u === 'integrity-fix') { showIntegrityV760Modal(true); return; }
       /* [Sprint 2-C] 전역 검색 */
       if (conf.u === 'global-search') { showGlobalSearchModal(); return; }
+      /* [Sprint 2-V] AI Chat */
+      if (conf.u === 'ai-chat') { showAiChatModal(); return; }
       /* [Sprint 2-A] Inbound Template */
       if (conf.u === 'inbound-template') { showInboundTemplateModal(); return; }
       /* [Sprint 2] Picking Template */
