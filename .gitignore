@@ -1,59 +1,164 @@
+# SQM 재고관리 - 루트 .gitignore
+
 # Python
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+*.so
 *.egg-info/
 dist/
 build/
-*.spec
+*.egg
+.pytest_cache/
+.ruff_cache/
+.tox/
+.coverage
+htmlcov/
 
-# 환경
-.env
-*.bak
-*.tmp
-*.log
-
-# DB
-data/db/*.db
-data/db/*.db-wal
-data/db/*.db-shm
-
-# IDE
+# IDE / Editor
 .vscode/
 .idea/
+.cursor/
+*.swp
+*.swo
+*~
 
-# Node
+# Environment
+.env
+.env.local
+venv/
+.venv/
+
+# Node.js
 node_modules/
-web/node_modules/
+.vite/
+
+# Database (런타임 생성)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/db/backups/
+
+# Backup / Archive / 다른 버전 폴더 (리포지토리에는 메인 코드만)
+backup/
+BACKUP/
+archive/
+_archive/
+.sync_main/
+_generated_patches/
+_review_*/
+updates/
+WORK/
+OLD/
+LEGACY/
+
+# 다른 SQM 버전/복사본 폴더 (메인 소스만 푸시)
+SQM V6.3.1/
+SQM V6.3.2/
+SQM V6.3.2 - 복사본/
+SQM V6.3.3*/
+SQM V6.3.4/
+SQM v5*/
+SQM v6*/
+SQM_v5*/
+SQM_v56*/
+SQM_v57*/
+SQM_v58*/
+SQM_v59*/
+SQM_v60*/
+SQM_v61*/
+SQM_v62*/
+SQM_v70*/
+SQM_inventory_repo/
+SQM-inventory_work/
+SQM_v627_work/
+SQM_All_Session_Patches*/
+SQM_Clean_ZIP_Builder*/
+SQM_v6.3.2_PATCH*/
+sqm_outbound_patches*/
+sqm_v500*/
+sqm_v501*/
+sqm_v502*/
+sqm_v503*/
+sqm_v504*/
+sqm_v505*/
+sqm_v509*/
+SQM_v612_Clean_Build/
+SQM_v613*/
+SQM_v70_Architecture_Diagrams/
+SQM_v701*/
+
+# 압축 파일 및 대용량
+*.zip
+*.7z
+*.rar
+
+# Logs / Output
+logs/
+*.log
+output/
+temp/
+tmp/
+REPORTS/
+generated_allocation/
+packages/
+data/audit/
+
+# 설정 (API 키 등 포함 가능)
+settings.ini
+theme_preference.json
+window_config.json
+query_history.json
+gui_config.json
 
 # OS
-Thumbs.db
 .DS_Store
-
-# Secrets
-config_gemini.json
-
-# cache
-__pycache__/
-.pytest_cache/
-
-# logs
-logs/
-
-# python
-*.pyc
-
-# backup
-*.bak*
-*.zip
-
-# temp
-*.tmp
-*.log
-
-# node
-node_modules/
-dist/
-
-# windows
+Thumbs.db
 desktop.ini
+
+# 샘플/개인 엑셀 등 (필요 시 주석 해제)
+# *.xlsx
+# sample inbound data/
+# sample outbound allocation table/
+Claude_SQM_v770_PATCH1/nul
+
+# --- 워크스페이스 정리 (2026-04-04) ---
+# Claude Code 로컬 권한·환경 (공유 제외)
+**/.claude/settings.local.json
+
+# 편집 세션 백업 산출물
+*.bak_auto
+*.bak_20*
+
+# MS Office 임시 잠금 파일
+~$*
+
+# 동일 저장소 내 수동 복사본(중복·대용량, 커밋 제외)
+Claude_SQM_v854 - 복사본 (2)/
+Claude_SQM_v865 - 복사본/
+Claude_SQM_v867 - 복사본/
+Claude_SQM_v867 - 복사본 (2)/
+
+# GPT 패치/임시 폴더
+GPT_Claude_SQM_v870_FULL_FIXED_20260406/
+GPT_v870_menu_patch_and_run.ps1
+
+# 런타임 생성 폴더
+found/
+.aider*
+.env
+
+# Env / Secrets
+.env
+.env.*
+!.env.example
+
+# v864_4 로컬 전용 (공유 제외)
+Claude_SQM_v864_4/.bkit/
+Claude_SQM_v864_4/.claude/
+Claude_SQM_v864_4/.gemini/
+Claude_SQM_v864_4/_phase1_backup_20260420/
+Claude_SQM_v864_4/=6.0
+Claude_SQM_v864_4/sqm_2/
+Claude_SQM_v864_4/data/db/.fuse_hidden*
