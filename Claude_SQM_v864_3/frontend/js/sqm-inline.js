@@ -5951,53 +5951,76 @@
      8i. 입고 취소 — LOT 선택 → POST /api/action2/inbound-cancel
      =================================================== */
   function showInboundCancelModal() {
-    var html = [
-      '<div style="max-width:480px">',
-      '  <h2 style="margin:0 0 12px 0">↩️ 입고 취소</h2>',
-      '  <p style="color:var(--text-muted);margin:0 0 16px 0;font-size:.9rem">',
-      '    입고된 LOT를 취소(CANCELLED)합니다. 톤백 포함 원복됩니다.',
-      '  </p>',
-      '  <div style="display:grid;grid-template-columns:100px 1fr;gap:10px;align-items:center;margin-bottom:16px">',
-      '    <label style="font-weight:600">LOT 번호</label>',
-      '    <input type="text" id="ic-lot" placeholder="예: L240101-001" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
-      '    <label style="font-weight:600">사유</label>',
-      '    <input type="text" id="ic-reason" placeholder="취소 사유 (선택)" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
-      '  </div>',
-      '  <div id="ic-result" style="margin-bottom:12px;min-height:24px"></div>',
-      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
-      '    <button id="ic-cancel" class="btn btn-ghost">닫기</button>',
-      '    <button id="ic-submit" class="btn btn-primary">입고 취소</button>',
-      '  </div>',
-      '</div>'
-    ].join('\n');
-    showDataModal('', html);
-    var cancel = document.getElementById('ic-cancel');
-    var submit = document.getElementById('ic-submit');
-    var result = document.getElementById('ic-result');
-    cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submit.addEventListener('click', function(){
-      var lot = document.getElementById('ic-lot').value.trim();
-      if (!lot) { showToast('warning', 'LOT 번호를 입력하세요'); return; }
-      if (!confirm('LOT ' + lot + ' 입고를 취소합니다. 계속할까요?')) return;
-      submit.disabled = true; cancel.disabled = true;
-      result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
-      apiPost('/api/action2/inbound-cancel', { lot_no: lot, reason: document.getElementById('ic-reason').value.trim() })
-        .then(function(res){
-          if (res && res.ok) {
-            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ ' + escapeHtml(res.message||'입고 취소 완료') + '</div></div>';
-            showToast('success', res.message || '입고 취소 완료');
-            if (typeof loadKpi === 'function') loadKpi();
-          } else {
-            result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)"><div style="font-weight:600">❌ ' + escapeHtml((res&&res.message)||'실패') + '</div></div>';
-            showToast('error', (res&&res.message)||'실패');
-            submit.disabled = false; cancel.disabled = false;
-          }
-        })
-        .catch(function(e){
-          result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
-          submit.disabled = false; cancel.disabled = false;
-        });
-    });
+    /* Stage 2: LOT 드롭다운 (최근 입고 목록) + 영향 범위 프리뷰 */
+    showDataModal('', '<div style="max-width:560px"><h2 style="margin:0 0 8px 0">↩️ 입고 취소</h2><div style="padding:20px;text-align:center;color:var(--text-muted)">⏳ 최근 입고 LOT 조회 중...</div></div>');
+    apiGet('/api/q/recent-inbound-lots?limit=50').then(function(res){
+      var items = (res && res.data && res.data.items) || [];
+      var optHtml = '<option value="">-- LOT 번호 직접 입력 --</option>';
+      optHtml += items.map(function(r){
+        var label = escapeHtml(r.lot_no) + '  ' + escapeHtml(r.product||'') + '  (' + escapeHtml(r.status||'') + ')';
+        return '<option value="'+escapeHtml(r.lot_no)+'">'+label+'</option>';
+      }).join('');
+      var html = [
+        '<div style="max-width:560px">',
+        '  <h2 style="margin:0 0 8px 0">↩️ 입고 취소</h2>',
+        '  <p style="color:var(--text-muted);margin:0 0 14px 0;font-size:.9rem">입고된 LOT를 취소(CANCELLED)합니다. 연관 톤백이 모두 원복됩니다.</p>',
+        '  <div style="display:grid;grid-template-columns:100px 1fr;gap:10px;align-items:start;margin-bottom:12px">',
+        '    <label style="font-weight:600;padding-top:8px">LOT 선택</label>',
+        '    <div>',
+        '      <select id="ic-lot-sel" style="width:100%;padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;margin-bottom:6px">'+optHtml+'</select>',
+        '      <input type="text" id="ic-lot" placeholder="또는 직접 입력" style="width:100%;padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace;box-sizing:border-box">',
+        '    </div>',
+        '    <label style="font-weight:600;padding-top:8px">사유</label>',
+        '    <input type="text" id="ic-reason" placeholder="취소 사유 (선택)" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+        '  </div>',
+        '  <div id="ic-preview" style="margin-bottom:12px;min-height:24px"></div>',
+        '  <div id="ic-result" style="margin-bottom:12px;min-height:24px"></div>',
+        '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+        '    <button id="ic-preview-btn" class="btn btn-ghost">📋 영향 범위 확인</button>',
+        '    <button id="ic-cancel" class="btn btn-ghost">닫기</button>',
+        '    <button id="ic-submit" class="btn btn-primary">입고 취소 실행</button>',
+        '  </div>',
+        '</div>'
+      ].join('\n');
+      document.getElementById('sqm-modal-content').innerHTML = html;
+      document.getElementById('ic-lot-sel').addEventListener('change', function(){
+        if (this.value) document.getElementById('ic-lot').value = this.value;
+      });
+      document.getElementById('ic-preview-btn').addEventListener('click', function(){
+        var lot = document.getElementById('ic-lot').value.trim();
+        if (!lot) { showToast('warning', 'LOT 번호를 입력하세요'); return; }
+        var pv = document.getElementById('ic-preview');
+        pv.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 조회 중...</div>';
+        apiGet('/api/q/tonbag-detail?lot_no=' + encodeURIComponent(lot)).then(function(r2){
+          var total = (r2 && r2.data && r2.data.total) || 0;
+          var wt = 0; ((r2 && r2.data && r2.data.items) || []).forEach(function(t){ wt += (t.weight||0); });
+          pv.innerHTML = '<div style="padding:10px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--warning)">'+
+            '<strong>영향 범위:</strong> 톤백 '+total+'개 · 총 중량 '+wt.toFixed(3)+' MT<br>'+
+            '<span style="font-size:.85rem;color:var(--text-muted)">해당 LOT의 모든 톤백이 CANCELLED 처리됩니다</span></div>';
+        }).catch(function(){ pv.innerHTML=''; });
+      });
+      document.getElementById('ic-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+      var submit = document.getElementById('ic-submit');
+      submit.addEventListener('click', function(){
+        var lot = document.getElementById('ic-lot').value.trim();
+        if (!lot) { showToast('warning', 'LOT 번호를 입력하세요'); return; }
+        if (!confirm('LOT ' + lot + ' 입고를 취소합니다.\n모든 톤백이 원복됩니다. 계속할까요?')) return;
+        submit.disabled = true;
+        var result = document.getElementById('ic-result');
+        result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
+        apiPost('/api/action2/inbound-cancel', { lot_no: lot, reason: document.getElementById('ic-reason').value.trim() })
+          .then(function(res){
+            if (res && res.ok) {
+              result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><strong>✅ '+escapeHtml(res.message||'입고 취소 완료')+'</strong></div>';
+              showToast('success', res.message||'입고 취소 완료');
+              if (typeof loadKpi === 'function') loadKpi();
+            } else {
+              result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ '+escapeHtml((res&&res.message)||'실패')+'</div>';
+              showToast('error', (res&&res.message)||'실패'); submit.disabled=false;
+            }
+          }).catch(function(e){ result.innerHTML='<div style="padding:12px;color:var(--danger)">❌ '+escapeHtml(e.message||String(e))+'</div>'; submit.disabled=false; });
+      });
+    }).catch(function(){ document.getElementById('sqm-modal-content').innerHTML='<h2>↩️ 입고 취소</h2><div class="empty">LOT 목록 조회 실패</div>'; });
   }
   window.showInboundCancelModal = showInboundCancelModal;
 
@@ -6005,26 +6028,84 @@
      8j. 승인 대기 (Allocation Approval Queue)
      =================================================== */
   function showApprovalQueueModal() {
-    showDataModal('✅ 승인 대기','<div style="padding:20px;text-align:center">⏳ Loading...</div>');
-    apiGet('/api/q/approval-history').then(function(res){
-      var rows = extractRows(res);
-      var pending = rows.filter(function(r){ return (r.approval_status||'').toUpperCase() === 'PENDING'; });
-      var html;
-      if (!pending.length && !rows.length) {
-        html = '<div class="empty">승인 대기 건이 없습니다</div>';
-      } else {
-        var tgt = pending.length ? pending : rows;
-        html = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">총 ' + tgt.length + '건' + (pending.length ? ' (PENDING)' : ' (전체 이력)') + '</p>';
-        html += '<table class="data-table"><thead><tr><th>LOT</th><th>고객</th><th>수량</th><th>상태</th><th>요청일</th></tr></thead><tbody>';
-        html += tgt.slice(0,50).map(function(r){
-          return '<tr><td class="mono-cell">'+escapeHtml(r.lot_no||'-')+'</td><td>'+escapeHtml(r.sold_to||r.customer||'-')+'</td><td>'+(r.qty_mt!=null?Number(r.qty_mt).toFixed(3):'-')+'</td><td><span class="tag">'+escapeHtml(r.approval_status||r.status||'-')+'</span></td><td>'+escapeHtml(r.request_date||r.created_at||'-')+'</td></tr>';
-        }).join('');
-        html += '</tbody></table>';
-      }
-      document.getElementById('sqm-modal-content').innerHTML = '<h2 style="margin-bottom:16px">✅ 승인 대기 (Allocation)</h2>' + html;
-    }).catch(function(e){
-      document.getElementById('sqm-modal-content').innerHTML = '<h2>승인 대기</h2><div class="empty">조회 실패: ' + escapeHtml(e.message||String(e)) + '</div>';
-    });
+    /* Stage 2: 체크박스 + 승인/반려 버튼 */
+    showDataModal('', '<div style="max-width:900px"><h2 style="margin:0 0 8px 0">✅ 할당 승인 대기</h2><div style="padding:20px;text-align:center;color:var(--text-muted)">⏳ Loading...</div></div>');
+    function _loadApproval() {
+      apiGet('/api/q/approval-history').then(function(res){
+        var rows = extractRows(res);
+        var pending = rows.filter(function(r){ return (r.approval_status||r.status||'').toUpperCase() === 'PENDING' || !(r.approval_status||r.status); });
+        var tgt = pending.length ? pending : rows.slice(0,50);
+        var html = '<div style="max-width:900px">';
+        html += '<h2 style="margin:0 0 8px 0">✅ 할당 승인 대기</h2>';
+        if (!tgt.length) {
+          html += '<div class="empty">승인 대기 건이 없습니다</div>';
+        } else {
+          html += '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">총 '+tgt.length+'건 · 체크박스로 선택 후 일괄 승인/반려</p>';
+          html += '<div style="display:flex;gap:8px;margin-bottom:10px">'+
+            '<button id="aq-approve" class="btn btn-primary" style="background:var(--success)">✅ 선택 항목 승인</button>'+
+            '<button id="aq-reject" class="btn btn-primary" style="background:var(--danger)">❌ 선택 항목 반려</button>'+
+            '<button id="aq-select-all" class="btn btn-ghost">전체 선택</button>'+
+            '<button class="btn btn-ghost" style="margin-left:auto" onclick="window.showApprovalQueueModal()">🔄 새로고침</button>'+
+            '</div>';
+          html += '<div style="max-height:400px;overflow:auto"><table class="data-table"><thead><tr><th><input type="checkbox" id="aq-chk-all"></th><th>ID</th><th>LOT</th><th>고객</th><th>수량(MT)</th><th>상태</th><th>요청일</th></tr></thead><tbody>';
+          html += tgt.map(function(r){
+            var statusColor = (r.approval_status||r.status||'').toUpperCase() === 'APPROVED' ? 'var(--success)' :
+                              (r.approval_status||r.status||'').toUpperCase() === 'REJECTED' ? 'var(--danger)' : 'var(--warning)';
+            return '<tr><td><input type="checkbox" class="aq-chk" data-id="'+escapeHtml(String(r.id||''))+'"></td>'+
+              '<td class="mono-cell">'+escapeHtml(String(r.id||'-'))+'</td>'+
+              '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot_no||'-')+'</td>'+
+              '<td>'+escapeHtml(r.sold_to||r.customer||r.sale_ref||'-')+'</td>'+
+              '<td>'+(r.qty_mt!=null?Number(r.qty_mt).toFixed(3):(r.reserved_weight||'-'))+'</td>'+
+              '<td><span class="tag" style="background:'+statusColor+';color:#fff">'+escapeHtml(r.approval_status||r.status||'PENDING')+'</span></td>'+
+              '<td style="font-size:.85rem">'+escapeHtml((r.request_date||r.created_at||'-').slice(0,16))+'</td></tr>';
+          }).join('');
+          html += '</tbody></table></div>';
+        }
+        html += '<div id="aq-result" style="margin-top:10px;min-height:24px"></div>';
+        html += '<div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button></div>';
+        html += '</div>';
+        document.getElementById('sqm-modal-content').innerHTML = html;
+
+        var chkAll = document.getElementById('aq-chk-all');
+        var selAll = document.getElementById('aq-select-all');
+        if (chkAll) chkAll.addEventListener('change', function(){
+          document.querySelectorAll('.aq-chk').forEach(function(c){ c.checked = chkAll.checked; });
+        });
+        if (selAll) selAll.addEventListener('click', function(){
+          document.querySelectorAll('.aq-chk').forEach(function(c){ c.checked=true; });
+          if (chkAll) chkAll.checked=true;
+        });
+
+        function _getSelectedIds(){
+          return Array.from(document.querySelectorAll('.aq-chk:checked')).map(function(c){ return parseInt(c.dataset.id); }).filter(function(id){ return !isNaN(id); });
+        }
+        var approveBtn = document.getElementById('aq-approve');
+        var rejectBtn = document.getElementById('aq-reject');
+        var resultEl = document.getElementById('aq-result');
+        if (approveBtn) approveBtn.addEventListener('click', function(){
+          var ids = _getSelectedIds();
+          if (!ids.length) { showToast('warning', '항목을 선택하세요'); return; }
+          if (!confirm(ids.length+'건을 승인합니다.')) return;
+          apiPost('/api/allocation/approve', { ids: ids }).then(function(r){
+            if (r && r.ok) { showToast('success', r.message||'승인됨'); _loadApproval(); }
+            else { showToast('error', (r&&r.message)||'실패'); }
+          }).catch(function(e){ showToast('error', e.message||String(e)); });
+        });
+        if (rejectBtn) rejectBtn.addEventListener('click', function(){
+          var ids = _getSelectedIds();
+          if (!ids.length) { showToast('warning', '항목을 선택하세요'); return; }
+          var reason = prompt('반려 사유를 입력하세요:') || '반려';
+          if (!confirm(ids.length+'건을 반려합니다.')) return;
+          apiPost('/api/allocation/reject', { ids: ids, reason: reason }).then(function(r){
+            if (r && r.ok) { showToast('success', r.message||'반려됨'); _loadApproval(); }
+            else { showToast('error', (r&&r.message)||'실패'); }
+          }).catch(function(e){ showToast('error', e.message||String(e)); });
+        });
+      }).catch(function(e){
+        document.getElementById('sqm-modal-content').innerHTML = '<h2>✅ 승인 대기</h2><div class="empty">조회 실패: '+escapeHtml(e.message||String(e))+'</div>';
+      });
+    }
+    _loadApproval();
   }
   window.showApprovalQueueModal = showApprovalQueueModal;
 
@@ -6109,21 +6190,25 @@
      8m. 반품 다이얼로그 — 2탭: 소량(수동) + 다량(Excel)
      =================================================== */
   function showReturnDialog() {
+    var INP = 'padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;width:100%';
     var html = [
-      '<div style="max-width:600px">',
+      '<div style="max-width:680px">',
       '  <h2 style="margin:0 0 12px 0">🔄 반품 (재입고)</h2>',
       '  <div style="display:flex;gap:0;margin-bottom:16px">',
       '    <button id="ret-tab-manual" class="btn btn-ghost" style="flex:1;border-radius:6px 0 0 6px;border:1px solid var(--border);background:var(--accent);color:#fff">📝 소량 반품 (수동)</button>',
       '    <button id="ret-tab-excel" class="btn btn-ghost" style="flex:1;border-radius:0 6px 6px 0;border:1px solid var(--border)">📂 다량 반품 (Excel)</button>',
       '  </div>',
       '  <div id="ret-panel-manual">',
-      '    <div style="display:grid;grid-template-columns:100px 1fr;gap:10px;align-items:center;margin-bottom:12px">',
-      '      <label style="font-weight:600">LOT 번호</label>',
-      '      <input type="text" id="ret-lot" placeholder="반품할 LOT" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
-      '      <label style="font-weight:600">톤백 수</label>',
-      '      <input type="number" id="ret-count" placeholder="반품 톤백 수" min="1" value="1" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:start;margin-bottom:12px">',
+      '      <label style="font-weight:600;padding-top:8px">LOT 번호</label>',
+      '      <div style="display:flex;gap:6px">',
+      '        <input type="text" id="ret-lot" placeholder="반품할 LOT 번호" style="' + INP + ';flex:1;font-family:monospace">',
+      '        <button id="ret-load-tb" class="btn" style="white-space:nowrap;padding:8px 12px">조회</button>',
+      '      </div>',
+      '      <label style="font-weight:600;padding-top:4px">톤백 선택</label>',
+      '      <div id="ret-tb-area" style="max-height:180px;overflow-y:auto;background:var(--bg-hover);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:.85rem;color:var(--text-muted)">LOT 조회 후 표시됩니다.</div>',
       '      <label style="font-weight:600">사유</label>',
-      '      <select id="ret-reason" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '      <select id="ret-reason" style="' + INP + '">',
       '        <option value="품질 불량">품질 불량</option>',
       '        <option value="수량 초과">수량 초과</option>',
       '        <option value="오배송">오배송</option>',
@@ -6131,7 +6216,7 @@
       '        <option value="기타">기타</option>',
       '      </select>',
       '      <label style="font-weight:600">메모</label>',
-      '      <input type="text" id="ret-memo" placeholder="추가 메모 (선택)" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '      <input type="text" id="ret-memo" placeholder="추가 메모 (선택)" style="' + INP + '">',
       '    </div>',
       '  </div>',
       '  <div id="ret-panel-excel" style="display:none">',
@@ -6152,7 +6237,10 @@
     var panelManual = document.getElementById('ret-panel-manual');
     var panelExcel = document.getElementById('ret-panel-excel');
     var submitBtn = document.getElementById('ret-submit');
+    var tbArea = document.getElementById('ret-tb-area');
+    var resultEl = document.getElementById('ret-result');
 
+    /* 탭 전환 */
     tabManual.addEventListener('click', function(){
       panelManual.style.display=''; panelExcel.style.display='none';
       tabManual.style.background='var(--accent)'; tabManual.style.color='#fff';
@@ -6170,30 +6258,71 @@
       showReturnInboundUploadModal();
     });
     document.getElementById('ret-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+
+    /* 톤백 조회 */
+    document.getElementById('ret-load-tb').addEventListener('click', function() {
+      var lot = document.getElementById('ret-lot').value.trim();
+      if (!lot) { showToast('warning', 'LOT 번호를 입력하세요'); return; }
+      tbArea.innerHTML = '<div style="color:var(--text-muted)">⏳ 조회 중...</div>';
+      apiFetch('/api/q/tonbag-detail?lot_no=' + encodeURIComponent(lot))
+        .then(function(res) {
+          var rows = (res && res.data && res.data.items) || [];
+          if (!res || !res.ok || !rows.length) {
+            tbArea.innerHTML = '<div style="color:var(--danger)">해당 LOT 톤백 없음</div>';
+            return;
+          }
+          var chkAll = '<label style="display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:6px;cursor:pointer">' +
+            '<input type="checkbox" id="ret-chk-all"> 전체 선택 (' + rows.length + '개)</label>';
+          var trs = rows.map(function(r, i) {
+            var uid = escapeHtml(r.tonbag_uid || (lot + '_' + r.sub_lt));
+            return '<tr><td style="padding:3px 6px"><input type="checkbox" class="ret-tb-chk" data-uid="' + uid + '" data-idx="' + i + '"></td>' +
+              '<td style="padding:3px 6px;font-family:monospace">' + escapeHtml(String(r.sub_lt||'')) + '</td>' +
+              '<td style="padding:3px 6px">' + escapeHtml(r.status||'') + '</td>' +
+              '<td style="padding:3px 6px">' + (r.weight||0).toFixed(3) + ' MT</td>' +
+              '<td style="padding:3px 6px">' + escapeHtml(r.location||'') + '</td>' +
+              '</tr>';
+          }).join('');
+          tbArea.innerHTML = chkAll +
+            '<table style="width:100%;border-collapse:collapse;font-size:.82rem"><thead>' +
+            '<tr style="border-bottom:1px solid var(--border)">' +
+            '<th style="padding:3px 6px;width:28px"></th><th style="padding:3px 6px;text-align:left">sub_lt</th>' +
+            '<th style="padding:3px 6px;text-align:left">상태</th><th style="padding:3px 6px;text-align:right">중량</th>' +
+            '<th style="padding:3px 6px;text-align:left">위치</th></tr></thead><tbody>' + trs + '</tbody></table>';
+          document.getElementById('ret-chk-all').addEventListener('change', function(e) {
+            tbArea.querySelectorAll('.ret-tb-chk').forEach(function(cb){ cb.checked = e.target.checked; });
+          });
+        })
+        .catch(function(e) { tbArea.innerHTML = '<div style="color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>'; });
+    });
+
+    /* 반품 처리 */
     submitBtn.addEventListener('click', function(){
       var lot = document.getElementById('ret-lot').value.trim();
       if (!lot) { showToast('warning', 'LOT 번호를 입력하세요'); return; }
-      if (!confirm('LOT ' + lot + ' 반품 처리를 진행합니다.')) return;
-      submitBtn.disabled = true;
-      var result = document.getElementById('ret-result');
-      result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
-      apiPost('/api/action3/return-create', {
+      var selectedUids = Array.from(tbArea.querySelectorAll('.ret-tb-chk:checked')).map(function(cb){ return cb.dataset.uid; });
+      var payload = {
         lot_no: lot,
-        tonbag_count: parseInt(document.getElementById('ret-count').value)||1,
+        tonbag_count: selectedUids.length || parseInt((document.querySelector('#ret-count') || {}).value || '1') || 1,
+        tonbag_uids: selectedUids,
         reason: document.getElementById('ret-reason').value,
         memo: document.getElementById('ret-memo').value.trim()
-      }).then(function(res){
-        if (res && res.ok) {
-          result.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ ' + escapeHtml(res.message||'반품 완료') + '</div></div>';
-          showToast('success', res.message || '반품 완료');
-        } else {
-          result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'실패') + '</div>';
+      };
+      if (!confirm('LOT ' + lot + ' — ' + (selectedUids.length ? selectedUids.length + '개 톤백' : '전체') + ' 반품 처리를 진행합니다.')) return;
+      submitBtn.disabled = true;
+      resultEl.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
+      apiPost('/api/action3/return-create', payload)
+        .then(function(res){
+          if (res && res.ok) {
+            resultEl.innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ ' + escapeHtml(res.message||'반품 완료') + '</div></div>';
+            showToast('success', res.message || '반품 완료');
+          } else {
+            resultEl.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'실패') + '</div>';
+            submitBtn.disabled = false;
+          }
+        }).catch(function(e){
+          resultEl.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
           submitBtn.disabled = false;
-        }
-      }).catch(function(e){
-        result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
-        submitBtn.disabled = false;
-      });
+        });
     });
   }
   window.showReturnDialog = showReturnDialog;
@@ -6202,38 +6331,88 @@
      8n. LOT Allocation·톤백 현황 조회
      =================================================== */
   function showLotAllocationAuditModal() {
-    var html = [
-      '<div style="max-width:700px">',
-      '  <h2 style="margin:0 0 12px 0">📊 LOT Allocation·톤백 현황</h2>',
-      '  <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">',
-      '    <input type="text" id="laa-lot" placeholder="LOT 번호 (비우면 전체)" style="flex:1;padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
-      '    <button id="laa-search" class="btn btn-primary">조회</button>',
-      '  </div>',
-      '  <div id="laa-result" style="min-height:60px"><div class="empty">LOT 번호를 입력하고 조회를 클릭하세요</div></div>',
-      '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">',
-      '    <button id="laa-close" class="btn btn-ghost">닫기</button>',
-      '  </div>',
-      '</div>'
-    ].join('\n');
+    /* Stage 2: 2단 표 — LOT 요약 + 톤백 상세 */
+    var html = '<div style="max-width:900px">'+
+      '<h2 style="margin:0 0 8px 0">📊 LOT Allocation · 톤백 현황</h2>'+
+      '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">'+
+      '<input type="text" id="laa-lot" placeholder="LOT 번호 입력" style="flex:1;padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">'+
+      '<button id="laa-search" class="btn btn-primary">🔍 조회</button>'+
+      '<button id="laa-all" class="btn btn-ghost">전체 조회</button>'+
+      '</div>'+
+      '<div id="laa-lot-tbl" style="margin-bottom:12px"></div>'+
+      '<div id="laa-tonbag-tbl"></div>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">'+
+      '<button id="laa-close" class="btn btn-ghost">닫기</button>'+
+      '</div></div>';
     showDataModal('', html);
     document.getElementById('laa-close').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    document.getElementById('laa-search').addEventListener('click', function(){
-      var lot = document.getElementById('laa-lot').value.trim();
-      var result = document.getElementById('laa-result');
-      result.innerHTML = '<div style="padding:20px;text-align:center">⏳ 조회 중...</div>';
-      var url = '/api/q/product-inventory' + (lot ? '?lot_no=' + encodeURIComponent(lot) : '');
+
+    function _searchLot(lot) {
+      var lotTbl = document.getElementById('laa-lot-tbl');
+      var tbTbl = document.getElementById('laa-tonbag-tbl');
+      lotTbl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--text-muted)">⏳ 조회 중...</div>';
+      tbTbl.innerHTML = '';
+      var url = '/api/q/product-inventory' + (lot ? '?lot_no='+encodeURIComponent(lot) : '');
       apiGet(url).then(function(res){
         var rows = extractRows(res);
-        if (!rows.length) { result.innerHTML = '<div class="empty">데이터가 없습니다</div>'; return; }
-        var tbl = '<table class="data-table"><thead><tr><th>LOT</th><th>제품</th><th>상태</th><th>톤백수</th><th>중량(MT)</th><th>위치</th></tr></thead><tbody>';
+        if (!rows.length) { lotTbl.innerHTML='<div class="empty">데이터 없음</div>'; return; }
+        var tbl = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:6px"><strong>LOT 현황</strong> '+rows.length+'건'+
+          (lot ? ' — <span style="cursor:pointer;color:var(--accent)" id="laa-tb-btn">🎒 '+lot+' 톤백 상세 보기</span>' : '')+'</p>';
+        tbl += '<table class="data-table"><thead><tr><th>LOT</th><th>제품</th><th>상태</th><th>톤백</th><th>중량(MT)</th><th>창고</th><th>입고일</th></tr></thead><tbody>';
         tbl += rows.slice(0,100).map(function(r){
-          return '<tr><td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot_no||'-')+'</td><td>'+escapeHtml(r.product||'-')+'</td><td><span class="tag">'+escapeHtml(r.status||'-')+'</span></td><td>'+(r.tonbag_count||r.total_tonbags||'-')+'</td><td>'+(r.net_weight!=null?Number(r.net_weight).toFixed(3):(r.total_weight||'-'))+'</td><td>'+escapeHtml(r.location||r.warehouse||'-')+'</td></tr>';
+          return '<tr style="cursor:pointer" onclick="window._laaClickLot(\''+escapeHtml(r.lot_no||'')+'\')">'+
+            '<td class="mono-cell" style="color:var(--accent)">'+escapeHtml(r.lot_no||'-')+'</td>'+
+            '<td>'+escapeHtml(r.product||'-')+'</td>'+
+            '<td><span class="tag">'+escapeHtml(r.status||'-')+'</span></td>'+
+            '<td>'+(r.tonbag_count||'-')+'</td>'+
+            '<td>'+(r.net_weight!=null?Number(r.net_weight).toFixed(3):'-')+'</td>'+
+            '<td>'+escapeHtml(r.warehouse||r.location||'-')+'</td>'+
+            '<td style="font-size:.85rem">'+escapeHtml((r.inbound_date||r.stock_date||'-').slice(0,10))+'</td></tr>';
         }).join('');
         tbl += '</tbody></table>';
-        result.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">총 ' + rows.length + '건</p>' + tbl;
-      }).catch(function(e){
-        result.innerHTML = '<div class="empty">조회 실패: ' + escapeHtml(e.message||String(e)) + '</div>';
-      });
+        lotTbl.innerHTML = tbl;
+        if (lot) {
+          var tbBtn = document.getElementById('laa-tb-btn');
+          if (tbBtn) tbBtn.addEventListener('click', function(){ window._laaClickLot(lot); });
+          window._laaClickLot(lot);
+        }
+      }).catch(function(e){ lotTbl.innerHTML='<div class="empty">조회 실패: '+escapeHtml(e.message||String(e))+'</div>'; });
+    }
+
+    window._laaClickLot = function(lot) {
+      var tbTbl = document.getElementById('laa-tonbag-tbl');
+      tbTbl.innerHTML = '<div style="padding:10px;text-align:center;color:var(--text-muted)">⏳ 톤백 목록 조회 중...</div>';
+      Promise.all([
+        apiGet('/api/q/tonbag-detail?lot_no='+encodeURIComponent(lot)),
+        apiGet('/api/q/allocation-summary?lot_no='+encodeURIComponent(lot)).catch(function(){ return null; }),
+      ]).then(function(results){
+        var tbRows = ((results[0]&&results[0].data&&results[0].data.items)||[]);
+        var allocRows = extractRows(results[1]);
+        var html2 = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+        // 톤백 표
+        html2 += '<div><p style="font-weight:600;margin-bottom:6px">🎒 톤백 목록 ('+tbRows.length+'개)</p>'+
+          '<table class="data-table" style="font-size:.85rem"><thead><tr><th>sub_lt</th><th>중량</th><th>상태</th><th>위치</th></tr></thead><tbody>'+
+          tbRows.map(function(t){ return '<tr><td class="mono-cell">'+t.sub_lt+'</td><td>'+(t.weight||0).toFixed(3)+'</td><td><span class="tag">'+escapeHtml(t.status||'-')+'</span></td><td>'+escapeHtml(t.location||'-')+'</td></tr>'; }).join('')+
+          '</tbody></table></div>';
+        // 할당 표
+        html2 += '<div><p style="font-weight:600;margin-bottom:6px">📋 할당 현황 ('+allocRows.length+'건)</p>'+
+          '<table class="data-table" style="font-size:.85rem"><thead><tr><th>고객</th><th>수량</th><th>상태</th></tr></thead><tbody>'+
+          (allocRows.length ? allocRows.map(function(a){ return '<tr><td>'+escapeHtml(a.customer||a.sold_to||'-')+'</td><td>'+(a.qty_mt!=null?Number(a.qty_mt).toFixed(3):(a.reserved_weight||'-'))+'</td><td><span class="tag">'+escapeHtml(a.status||'-')+'</span></td></tr>'; }).join('') : '<tr><td colspan="3" style="color:var(--text-muted);text-align:center">할당 없음</td></tr>')+
+          '</tbody></table></div>';
+        html2 += '</div>';
+        tbTbl.innerHTML = '<hr style="border:none;border-top:1px solid var(--border);margin:10px 0"><p style="font-weight:600;margin-bottom:8px;color:var(--accent)">LOT: '+escapeHtml(lot)+'</p>'+html2;
+      }).catch(function(e){ tbTbl.innerHTML='<div class="empty">조회 실패: '+escapeHtml(e.message||String(e))+'</div>'; });
+    };
+
+    document.getElementById('laa-search').addEventListener('click', function(){
+      _searchLot(document.getElementById('laa-lot').value.trim());
+    });
+    document.getElementById('laa-all').addEventListener('click', function(){
+      document.getElementById('laa-lot').value='';
+      _searchLot('');
+    });
+    document.getElementById('laa-lot').addEventListener('keydown', function(e){
+      if (e.key==='Enter') _searchLot(this.value.trim());
     });
   }
   window.showLotAllocationAuditModal = showLotAllocationAuditModal;
@@ -6243,45 +6422,119 @@
      =================================================== */
   function showTestDbResetModal() {
     var html = [
-      '<div style="max-width:480px">',
+      '<div style="max-width:560px">',
       '  <h2 style="margin:0 0 12px 0;color:var(--danger)">🗑️ 테스트 DB 초기화</h2>',
-      '  <div style="padding:16px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger);margin-bottom:16px">',
-      '    <div style="font-weight:600;color:var(--danger)">⚠️ 위험한 작업</div>',
-      '    <div style="color:var(--text-muted);font-size:.9rem;margin-top:4px">모든 데이터가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</div>',
+      '  <div style="padding:12px 16px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger);margin-bottom:16px">',
+      '    <div style="font-weight:600;color:var(--danger)">⚠️ 위험한 작업 (개발자 전용)</div>',
+      '    <div style="color:var(--text-muted);font-size:.85rem;margin-top:4px">선택한 테이블의 데이터가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.</div>',
       '  </div>',
-      '  <div style="margin-bottom:16px">',
-      '    <label style="display:flex;align-items:center;gap:8px;color:var(--warning)">',
-      '      <input type="checkbox" id="dbr-confirm"> 위 내용을 이해했으며 DB를 초기화합니다',
-      '    </label>',
+      '  <div id="dbr-stats-area" style="margin-bottom:16px">',
+      '    <div style="color:var(--text-muted);font-size:.9rem">⏳ 테이블 통계 로딩 중...</div>',
+      '  </div>',
+      '  <div style="display:flex;gap:8px;margin-bottom:12px">',
+      '    <button id="dbr-sel-all" class="btn btn-ghost" style="font-size:.8rem;padding:4px 10px">전체 선택</button>',
+      '    <button id="dbr-sel-none" class="btn btn-ghost" style="font-size:.8rem;padding:4px 10px">전체 해제</button>',
+      '    <span style="flex:1"></span>',
+      '    <button id="dbr-full-reset" class="btn btn-ghost" style="font-size:.8rem;padding:4px 10px;color:var(--danger);border-color:var(--danger)">전체 초기화</button>',
       '  </div>',
       '  <div id="dbr-result" style="margin-bottom:12px;min-height:24px"></div>',
       '  <div style="display:flex;gap:8px;justify-content:flex-end">',
       '    <button id="dbr-cancel" class="btn btn-ghost">닫기</button>',
-      '    <button id="dbr-submit" class="btn btn-primary" disabled style="background:var(--danger)">초기화 실행</button>',
+      '    <button id="dbr-submit" class="btn btn-primary" disabled style="background:var(--danger)">선택 테이블 삭제</button>',
       '  </div>',
       '</div>'
     ].join('\n');
     showDataModal('', html);
-    var chk = document.getElementById('dbr-confirm');
+
+    var statsArea = document.getElementById('dbr-stats-area');
     var submit = document.getElementById('dbr-submit');
-    chk.addEventListener('change', function(){ submit.disabled = !chk.checked; });
+    var resultEl = document.getElementById('dbr-result');
+
+    function updateSubmitState() {
+      var anyChecked = statsArea.querySelectorAll('input[type=checkbox]:checked').length > 0;
+      submit.disabled = !anyChecked;
+    }
+
+    function loadStats() {
+      statsArea.innerHTML = '<div style="color:var(--text-muted);font-size:.9rem">⏳ 로딩 중...</div>';
+      apiFetch('/api/settings/table-stats')
+        .then(function(res) {
+          if (!res || !res.ok) { statsArea.innerHTML = '<div style="color:var(--danger)">❌ 통계 로드 실패</div>'; return; }
+          var tables = res.tables || [];
+          var rows = tables.map(function(t) {
+            var safe = escapeHtml(t.table);
+            var isCore = (t.protected === true);
+            var disabled = isCore ? 'disabled title="핵심 테이블 삭제 불가"' : '';
+            var color = isCore ? 'var(--text-muted)' : (t.count > 0 ? 'var(--text)' : 'var(--text-muted)');
+            return '<tr style="border-bottom:1px solid var(--border)">' +
+              '<td style="padding:6px 8px"><input type="checkbox" class="dbr-chk" data-table="' + safe + '" ' + disabled + '></td>' +
+              '<td style="padding:6px 8px;font-family:monospace;color:' + color + '">' + safe + (isCore ? ' <span style="font-size:.75rem;color:var(--text-muted)">[보호]</span>' : '') + '</td>' +
+              '<td style="padding:6px 8px;text-align:right;color:' + color + '">' + (t.count||0).toLocaleString() + '</td>' +
+              '</tr>';
+          });
+          statsArea.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.9rem">' +
+            '<thead><tr style="border-bottom:2px solid var(--border)">' +
+            '<th style="padding:6px 8px;width:36px"></th>' +
+            '<th style="padding:6px 8px;text-align:left">테이블</th>' +
+            '<th style="padding:6px 8px;text-align:right">행 수</th>' +
+            '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
+          statsArea.querySelectorAll('input.dbr-chk').forEach(function(cb) {
+            cb.addEventListener('change', updateSubmitState);
+          });
+          updateSubmitState();
+        })
+        .catch(function(e) {
+          statsArea.innerHTML = '<div style="color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+        });
+    }
+    loadStats();
+
+    document.getElementById('dbr-sel-all').addEventListener('click', function() {
+      statsArea.querySelectorAll('input.dbr-chk:not([disabled])').forEach(function(cb){ cb.checked = true; });
+      updateSubmitState();
+    });
+    document.getElementById('dbr-sel-none').addEventListener('click', function() {
+      statsArea.querySelectorAll('input.dbr-chk').forEach(function(cb){ cb.checked = false; });
+      updateSubmitState();
+    });
     document.getElementById('dbr-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submit.addEventListener('click', function(){
-      if (!confirm('정말로 DB를 완전 초기화할까요?\n\n이 작업은 되돌릴 수 없습니다!')) return;
-      submit.disabled = true;
-      document.getElementById('dbr-result').innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 초기화 중...</div>';
+
+    document.getElementById('dbr-full-reset').addEventListener('click', function() {
+      if (!confirm('전체 DB를 초기화할까요?\n\n모든 데이터가 삭제되며 되돌릴 수 없습니다!')) return;
+      resultEl.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 전체 초기화 중...</div>';
       apiPost('/api/action3/db-reset', { confirm: true })
-        .then(function(res){
+        .then(function(res) {
           if (res && res.ok) {
-            document.getElementById('dbr-result').innerHTML = '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)"><div style="font-weight:600">✅ DB 초기화 완료</div></div>';
-            showToast('success', 'DB 초기화 완료');
+            resultEl.innerHTML = '<div style="padding:10px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)">✅ 전체 초기화 완료</div>';
+            showToast('success', '전체 DB 초기화 완료');
+            loadStats();
           } else {
-            document.getElementById('dbr-result').innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'실패') + '</div>';
+            resultEl.innerHTML = '<div style="padding:10px;color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'실패') + '</div>';
+          }
+        })
+        .catch(function(e) { resultEl.innerHTML = '<div style="padding:10px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>'; });
+    });
+
+    submit.addEventListener('click', function() {
+      var selected = Array.from(statsArea.querySelectorAll('input.dbr-chk:checked')).map(function(cb){ return cb.dataset.table; });
+      if (!selected.length) return;
+      if (!confirm('선택한 테이블 ' + selected.length + '개를 삭제할까요?\n\n' + selected.join(', ') + '\n\n이 작업은 되돌릴 수 없습니다!')) return;
+      submit.disabled = true;
+      resultEl.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 삭제 중...</div>';
+      apiPost('/api/settings/table-delete', { tables: selected })
+        .then(function(res) {
+          if (res && res.ok) {
+            var msg = res.deleted ? res.deleted.map(function(d){ return d.table + ' (' + (d.deleted||0) + '행)'; }).join(', ') : selected.join(', ');
+            resultEl.innerHTML = '<div style="padding:10px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)">✅ 삭제 완료: ' + escapeHtml(msg) + '</div>';
+            showToast('success', selected.length + '개 테이블 삭제 완료');
+            loadStats();
+          } else {
+            resultEl.innerHTML = '<div style="padding:10px;color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'실패') + '</div>';
             submit.disabled = false;
           }
         })
-        .catch(function(e){
-          document.getElementById('dbr-result').innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+        .catch(function(e) {
+          resultEl.innerHTML = '<div style="padding:10px;color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
           submit.disabled = false;
         });
     });
@@ -6292,13 +6545,82 @@
      8p. 바코드 스캔 업로드 — CSV/Excel 파일 업로드
      =================================================== */
   function showBarcodeScanUploadModal() {
-    _showExcelUploadModal({
-      title: '📊 바코드 스캔 업로드',
-      subtitle: '바코드 스캔 결과 파일(Excel/CSV)을 선택하세요. 스캔된 UID와 LOT를 매칭하여 출고 처리합니다.',
-      endpoint: '/api/inbound/bulk-import-excel',
-      onSuccess: function(d) {
-        return '<div style="color:var(--text-muted);font-size:.85rem">처리 결과: 성공 ' + (d.success_count||0) + ' / 실패 ' + (d.fail_count||0) + '</div>';
-      }
+    var html = '<div style="max-width:720px">' +
+      '<h2 style="margin:0 0 8px 0">📊 바코드 스캔 업로드</h2>' +
+      '<p style="font-size:.85rem;color:var(--text-muted);margin:0 0 14px 0">CSV/Excel 파일 업로드 → tonbag_uid / sub_lt 일괄 매칭. 컬럼: <code>tonbag_uid</code>, <code>sub_lt</code>, 또는 <code>barcode</code></p>' +
+      '<div style="display:grid;grid-template-columns:120px 1fr;gap:8px 12px;align-items:center;margin-bottom:14px">' +
+      '<label style="font-weight:600">파일</label>' +
+      '<input type="file" id="bsu-file" accept=".csv,.xlsx,.xls" style="padding:6px;background:var(--bg-hover);border:1px solid var(--border);border-radius:6px;color:var(--text)">' +
+      '<label style="font-weight:600">처리 액션</label>' +
+      '<select id="bsu-action" style="padding:8px;background:var(--bg-hover);border:1px solid var(--border);border-radius:6px;color:var(--text)">' +
+      '<option value="lookup">조회만 (상태 변경 없음)</option>' +
+      '<option value="outbound">출고 처리 (PICKED → OUTBOUND)</option>' +
+      '<option value="pick">피킹 처리 (AVAILABLE → PICKED)</option>' +
+      '<option value="return">반품 처리 (OUTBOUND → RETURN)</option>' +
+      '<option value="available">재입고 (→ AVAILABLE)</option>' +
+      '</select>' +
+      '</div>' +
+      '<div id="bsu-result" style="margin-bottom:12px;min-height:24px"></div>' +
+      '<div id="bsu-table" style="max-height:360px;overflow-y:auto"></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">' +
+      '<button id="bsu-cancel" class="btn btn-ghost">닫기</button>' +
+      '<button id="bsu-submit" class="btn btn-primary">업로드 처리</button>' +
+      '</div></div>';
+    showDataModal('', html);
+
+    document.getElementById('bsu-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+
+    document.getElementById('bsu-submit').addEventListener('click', function() {
+      var fileInput = document.getElementById('bsu-file');
+      var action = document.getElementById('bsu-action').value;
+      var resultEl = document.getElementById('bsu-result');
+      var tableEl = document.getElementById('bsu-table');
+
+      if (!fileInput.files || !fileInput.files.length) { showToast('warning', '파일을 선택하세요'); return; }
+      var file = fileInput.files[0];
+      if (action !== 'lookup' && !confirm('선택한 액션 "' + action + '"으로 상태를 변경합니다. 계속할까요?')) return;
+
+      resultEl.innerHTML = '<div style="color:var(--text-muted)">⏳ 업로드 중...</div>';
+      tableEl.innerHTML = '';
+      var fd = new FormData();
+      fd.append('file', file);
+
+      fetch('/api/scan/bulk-upload?action=' + encodeURIComponent(action), { method: 'POST', body: fd })
+        .then(function(r){ return r.json(); })
+        .then(function(res) {
+          if (!res || !res.ok) {
+            resultEl.innerHTML = '<div style="color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'처리 실패') + '</div>';
+            return;
+          }
+          var matched = res.matched_count || 0;
+          var notMatched = res.not_matched_count || 0;
+          resultEl.innerHTML = '<div style="padding:8px 12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)">' +
+            '✅ ' + escapeHtml(res.message||'완료') + ' — 매칭 <strong style="color:var(--success)">' + matched + '</strong> / 미매칭 <strong style="color:var(--danger)">' + notMatched + '</strong>' +
+            '</div>';
+          var rows = res.results || [];
+          if (rows.length) {
+            var trs = rows.map(function(r) {
+              var bg = r.matched ? '' : 'background:rgba(244,67,54,.08)';
+              var statusHtml = r.matched ? '<span class="tag">'+escapeHtml(r.status||'-')+'</span>' : '<span style="color:var(--danger)">미매칭</span>';
+              var change = r.status_changed ? ' <span style="font-size:.8rem;color:var(--warning)">('+escapeHtml(r.status_changed)+')</span>' : '';
+              return '<tr style="' + bg + '">' +
+                '<td style="padding:4px 8px;font-family:monospace">' + escapeHtml(r.input_uid||'-') + '</td>' +
+                '<td style="padding:4px 8px;font-family:monospace">' + escapeHtml(r.lot_no||'-') + '</td>' +
+                '<td style="padding:4px 8px">' + statusHtml + change + '</td>' +
+                '<td style="padding:4px 8px">' + (r.weight||0).toFixed(3) + '</td>' +
+                '<td style="padding:4px 8px">' + escapeHtml(r.location||'-') + '</td>' +
+                '</tr>';
+            }).join('');
+            tableEl.innerHTML = '<table class="data-table" style="font-size:.82rem"><thead>' +
+              '<tr><th>입력 UID</th><th>LOT</th><th>상태</th><th>중량</th><th>위치</th></tr>' +
+              '</thead><tbody>' + trs + '</tbody></table>';
+          }
+          if (notMatched > 0) showToast('warning', notMatched + '개 UID 미매칭');
+          else showToast('success', matched + '개 처리 완료');
+        })
+        .catch(function(e) {
+          resultEl.innerHTML = '<div style="color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+        });
     });
   }
   window.showBarcodeScanUploadModal = showBarcodeScanUploadModal;
@@ -7990,49 +8312,146 @@
     });
   };
 
-  /* 이메일 설정 — Sprint 3 시작 */
+  /* 이메일 설정 — Sprint 3 (real backend) */
   window.showEmailConfigModal = function() {
-    var html = '<div style="max-width:600px"><h2>⚙️ 이메일 알림 설정</h2>' +
-      '<p style="font-size:11px;color:var(--text-muted)">Gmail SMTP 기준 — 출고/반품 발생 시 자동 이메일 발송. 실제 적용은 백엔드 SMTP 설정 후.</p>' +
-      '<div style="display:grid;grid-template-columns:130px 1fr;gap:8px;align-items:center">' +
-      '<label><input type="checkbox" id="em-enable"> 이메일 알림 활성화</label><span></span>' +
-      '<label>SMTP 서버:</label><input type="text" id="em-smtp" value="smtp.gmail.com" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
-      '<label>포트:</label><input type="number" id="em-port" value="587" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
-      '<label>Gmail 계정:</label><input type="email" id="em-account" placeholder="user@gmail.com" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
-      '<label>앱 비밀번호:</label><input type="password" id="em-pass" placeholder="16자리" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-family:Consolas,monospace">' +
-      '<label>발신자:</label><input type="email" id="em-from" placeholder="alerts@company.com" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
-      '<label>수신자:</label><input type="text" id="em-to" placeholder="kidong@..., admin@..." style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
-      '<label>회사명:</label><input type="text" id="em-company" value="(주)지와이로지스" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
-      '<label>창고명:</label><input type="text" id="em-wh" value="광양 창고" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
-      '<label>반품 임계:</label><input type="number" id="em-thresh" value="3" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
-      '<label>조회 기간(일):</label><input type="number" id="em-period" value="30" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
+    var INP = 'padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;color:var(--text);width:100%';
+    var html = '<div style="max-width:600px">' +
+      '<h2 style="margin:0 0 8px 0">⚙️ 이메일 알림 설정</h2>' +
+      '<p style="font-size:11px;color:var(--text-muted);margin:0 0 14px 0">Gmail SMTP 기준 — 출고/반품 발생 시 자동 이메일 발송.</p>' +
+      '<div style="display:grid;grid-template-columns:140px 1fr;gap:8px 12px;align-items:center">' +
+      '<label style="font-weight:600">알림 활성화</label><label><input type="checkbox" id="em-enable"> 이메일 알림 켜기</label>' +
+      '<label style="font-weight:600">SMTP 서버</label><input type="text" id="em-smtp" style="' + INP + '">' +
+      '<label style="font-weight:600">포트</label><input type="number" id="em-port" style="' + INP + '">' +
+      '<label style="font-weight:600">계정 (발신)</label><input type="email" id="em-account" placeholder="user@gmail.com" style="' + INP + '">' +
+      '<label style="font-weight:600">앱 비밀번호</label><input type="password" id="em-pass" placeholder="저장된 값 유지 (비워두면 변경 안 함)" style="' + INP + ';font-family:Consolas,monospace">' +
+      '<label style="font-weight:600">발신자</label><input type="email" id="em-from" placeholder="alerts@company.com" style="' + INP + '">' +
+      '<label style="font-weight:600">수신자</label><input type="text" id="em-to" placeholder="comma separated" style="' + INP + '">' +
+      '<label style="font-weight:600">회사명</label><input type="text" id="em-company" style="' + INP + '">' +
+      '<label style="font-weight:600">창고명</label><input type="text" id="em-wh" style="' + INP + '">' +
+      '<label style="font-weight:600">반품 임계(건)</label><input type="number" id="em-thresh" style="' + INP + '">' +
+      '<label style="font-weight:600">조회 기간(일)</label><input type="number" id="em-period" style="' + INP + '">' +
       '</div>' +
-      '<p style="font-size:10px;color:var(--text-muted);margin-top:10px">💡 Gmail 앱 비밀번호: Google 계정 → 보안 → 앱 비밀번호</p>' +
+      '<p style="font-size:10px;color:var(--text-muted);margin-top:8px">💡 Gmail 앱 비밀번호: Google 계정 → 보안 → 앱 비밀번호 (16자리)</p>' +
+      '<div id="em-result" style="min-height:20px;margin-top:8px"></div>' +
       '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
-      '<button class="btn" onclick="showToast(\'info\', \'테스트 발송: 백엔드 SMTP 설정 후 활성화 예정\')">📧 테스트 발송</button>' +
-      '<button class="btn btn-primary" onclick="showToast(\'info\', \'설정 저장: 백엔드 settings 엔드포인트 확장 후 동작 예정 (현재는 UI만)\')">💾 저장</button>' +
+      '<button id="em-test" class="btn">📧 테스트 발송</button>' +
+      '<button id="em-save" class="btn btn-primary">💾 저장</button>' +
       '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
       '</div></div>';
     showDataModal('', html);
+
+    var resultEl = document.getElementById('em-result');
+
+    /* 현재 설정 로드 */
+    apiFetch('/api/settings/email').then(function(res) {
+      if (!res || !res.ok) return;
+      var c = res.config || {};
+      if (c.enabled !== undefined) document.getElementById('em-enable').checked = !!c.enabled;
+      if (c.smtp_host) document.getElementById('em-smtp').value = c.smtp_host;
+      if (c.smtp_port) document.getElementById('em-port').value = c.smtp_port;
+      if (c.username) document.getElementById('em-account').value = c.username;
+      /* password intentionally blank — placeholder explains */
+      if (c.sender) document.getElementById('em-from').value = c.sender;
+      if (c.recipients) document.getElementById('em-to').value = Array.isArray(c.recipients) ? c.recipients.join(', ') : c.recipients;
+      if (c.company_name) document.getElementById('em-company').value = c.company_name;
+      if (c.warehouse_name) document.getElementById('em-wh').value = c.warehouse_name;
+      if (c.return_threshold !== undefined) document.getElementById('em-thresh').value = c.return_threshold;
+      if (c.period_days !== undefined) document.getElementById('em-period').value = c.period_days;
+    }).catch(function(){});
+
+    document.getElementById('em-save').addEventListener('click', function() {
+      var recips = document.getElementById('em-to').value.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+      var payload = {
+        enabled: document.getElementById('em-enable').checked,
+        smtp_host: document.getElementById('em-smtp').value.trim(),
+        smtp_port: parseInt(document.getElementById('em-port').value) || 587,
+        username: document.getElementById('em-account').value.trim(),
+        password: document.getElementById('em-pass').value,  /* empty = keep existing */
+        sender: document.getElementById('em-from').value.trim(),
+        recipients: recips,
+        company_name: document.getElementById('em-company').value.trim(),
+        warehouse_name: document.getElementById('em-wh').value.trim(),
+        return_threshold: parseInt(document.getElementById('em-thresh').value) || 3,
+        period_days: parseInt(document.getElementById('em-period').value) || 30,
+      };
+      apiPost('/api/settings/email', payload)
+        .then(function(res) {
+          if (res && res.ok) { resultEl.innerHTML = '<span style="color:var(--success)">✅ 저장 완료</span>'; showToast('success', '이메일 설정 저장'); }
+          else { resultEl.innerHTML = '<span style="color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'저장 실패') + '</span>'; }
+        }).catch(function(e){ resultEl.innerHTML = '<span style="color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</span>'; });
+    });
+
+    document.getElementById('em-test').addEventListener('click', function() {
+      resultEl.innerHTML = '<span style="color:var(--text-muted)">⏳ 테스트 발송 중...</span>';
+      apiPost('/api/settings/email/test', {})
+        .then(function(res) {
+          if (res && res.ok) { resultEl.innerHTML = '<span style="color:var(--success)">✅ 테스트 이메일 발송 성공</span>'; showToast('success', '테스트 이메일 발송 성공'); }
+          else { resultEl.innerHTML = '<span style="color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'발송 실패') + '</span>'; }
+        }).catch(function(e){ resultEl.innerHTML = '<span style="color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</span>'; });
+    });
   };
 
-  /* 자동 백업 설정 */
+  /* 자동 백업 설정 — real backend */
   window.showAutoBackupModal = function() {
-    showDataModal('', '<div style="max-width:550px"><h2>⏰ 자동 백업 설정</h2>' +
-      '<p style="font-size:11px;color:var(--text-muted)">백업 주기와 보존 기간 설정.</p>' +
-      '<div style="display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:center">' +
-      '<label><input type="checkbox" id="ab-enable" checked> 자동 백업 활성화</label><span></span>' +
-      '<label>백업 주기:</label><select id="ab-interval" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px"><option value="hourly">매 시간</option><option value="daily" selected>매일</option><option value="weekly">매주</option></select>' +
-      '<label>백업 시각:</label><input type="time" id="ab-time" value="03:00" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
-      '<label>보존 기간(일):</label><input type="number" id="ab-keep" value="30" style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px">' +
-      '<label>백업 위치:</label><input type="text" value="data/backups/" readonly style="padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;font-family:Consolas,monospace">' +
+    var INP = 'padding:6px;background:var(--bg-hover);border:1px solid var(--panel-border);border-radius:3px;color:var(--text);width:100%';
+    var html = '<div style="max-width:520px">' +
+      '<h2 style="margin:0 0 8px 0">⏰ 자동 백업 설정</h2>' +
+      '<p style="font-size:11px;color:var(--text-muted);margin:0 0 14px 0">백업 주기와 보존 기간 설정.</p>' +
+      '<div style="display:grid;grid-template-columns:140px 1fr;gap:8px 12px;align-items:center">' +
+      '<label style="font-weight:600">자동 백업</label><label><input type="checkbox" id="ab-enable"> 활성화</label>' +
+      '<label style="font-weight:600">백업 주기</label>' +
+      '<select id="ab-interval" style="' + INP + '">' +
+      '<option value="hourly">매 시간</option>' +
+      '<option value="daily" selected>매일</option>' +
+      '<option value="weekly">매주</option>' +
+      '</select>' +
+      '<label style="font-weight:600">백업 시각</label><input type="time" id="ab-time" value="03:00" style="' + INP + '">' +
+      '<label style="font-weight:600">보존 기간(일)</label><input type="number" id="ab-keep" value="30" style="' + INP + '">' +
+      '<label style="font-weight:600">최대 보존 수</label><input type="number" id="ab-max" value="10" style="' + INP + '">' +
+      '<label style="font-weight:600">백업 위치</label><input type="text" id="ab-path" value="backup/" style="' + INP + ';font-family:Consolas,monospace">' +
       '</div>' +
-      '<p style="font-size:10px;color:var(--text-muted);margin-top:10px">💡 즉시 백업: 메뉴 → 파일 → 백업 → 💾 백업 생성</p>' +
+      '<p style="font-size:10px;color:var(--text-muted);margin-top:8px">💡 즉시 백업: 메뉴 → 파일 → 백업 → 💾 백업 생성</p>' +
+      '<div id="ab-result" style="min-height:20px;margin-top:8px"></div>' +
       '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">' +
-      '<button class="btn" onclick="dispatchAction(\'onOnBackup\')">💾 즉시 백업 실행</button>' +
-      '<button class="btn btn-primary" onclick="showToast(\'info\', \'자동 백업 스케줄러: Phase 2 cron 통합\')">💾 저장</button>' +
+      '<button id="ab-now" class="btn">💾 즉시 백업 실행</button>' +
+      '<button id="ab-save" class="btn btn-primary">💾 저장</button>' +
       '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>' +
-      '</div></div>');
+      '</div></div>';
+    showDataModal('', html);
+
+    var resultEl = document.getElementById('ab-result');
+
+    /* 현재 설정 로드 */
+    apiFetch('/api/settings/backup').then(function(res) {
+      if (!res || !res.ok) return;
+      var c = res.config || {};
+      if (c.enabled !== undefined) document.getElementById('ab-enable').checked = !!c.enabled;
+      if (c.interval) document.getElementById('ab-interval').value = c.interval;
+      if (c.backup_time) document.getElementById('ab-time').value = c.backup_time;
+      if (c.retention_days !== undefined) document.getElementById('ab-keep').value = c.retention_days;
+      if (c.max_backups !== undefined) document.getElementById('ab-max').value = c.max_backups;
+      if (c.backup_path) document.getElementById('ab-path').value = c.backup_path;
+    }).catch(function(){});
+
+    document.getElementById('ab-save').addEventListener('click', function() {
+      var payload = {
+        enabled: document.getElementById('ab-enable').checked,
+        interval: document.getElementById('ab-interval').value,
+        backup_time: document.getElementById('ab-time').value,
+        retention_days: parseInt(document.getElementById('ab-keep').value) || 30,
+        max_backups: parseInt(document.getElementById('ab-max').value) || 10,
+        backup_path: document.getElementById('ab-path').value.trim(),
+      };
+      apiPost('/api/settings/backup', payload)
+        .then(function(res) {
+          if (res && res.ok) { resultEl.innerHTML = '<span style="color:var(--success)">✅ 저장 완료</span>'; showToast('success', '자동 백업 설정 저장'); }
+          else { resultEl.innerHTML = '<span style="color:var(--danger)">❌ ' + escapeHtml((res&&res.message)||'저장 실패') + '</span>'; }
+        }).catch(function(e){ resultEl.innerHTML = '<span style="color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</span>'; });
+    });
+
+    document.getElementById('ab-now').addEventListener('click', function() {
+      dispatchAction('onOnBackup');
+    });
   };
 
   /* 단축키 가이드 */

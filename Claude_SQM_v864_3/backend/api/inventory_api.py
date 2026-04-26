@@ -660,3 +660,107 @@ def health_check():
         }
     except Exception as e:
         return {"status": "error", "message": str(e), "engine_count": 0}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# POST /api/scan/bulk-upload  — 바코드 스캔 결과 CSV/Excel 업로드
+#   CSV/Excel: 첫 컬럼 = tonbag_uid 또는 sub_lt
+#   action 쿼리파라미터: lookup(기본) / outbound / return 등
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+from fastapi import UploadFile, File as FileField
+import io, tempfile, pathlib
+
+@scan_router.post("/bulk-upload")
+async def scan_bulk_upload(file: UploadFile = FileField(...), action: str = "lookup"):
+    """
+    CSV/Excel 파일 업로드 → tonbag_uid / sub_lt 일괄 조회.
+    action=lookup: 조회만 (상태 변경 없음)
+    action=outbound|return|...: 각 uid에 scan_process 로직 적용
+    """
+    try:
+        content = await file.read()
+        ext = pathlib.Path(file.filename or "upload.csv").suffix.lower()
+
+        # 파싱
+        try:
+            import pandas as pd
+        except ImportError:
+            return {"ok": False, "message": "pandas not installed"}
+
+        if ext in (".xlsx", ".xls"):
+            df = pd.read_excel(io.BytesIO(content), header=0, dtype=str)
+        else:
+            # CSV — try utf-8 then cp949
+            try:
+                df = pd.read_csv(io.StringIO(content.decode("utf-8")), header=0, dtype=str)
+            except Exception:
+                df = pd.read_csv(io.StringIO(content.decode("cp949", errors="replace")), header=0, dtype=str)
+
+        df.columns = [str(c).strip().lower() for c in df.columns]
+        # uid 컬럼 찾기
+        uid_col = None
+        for cand in ["tonbag_uid", "uid", "sub_lt", "barcode", "scan_id", df.columns[0]]:
+            if cand in df.columns:
+                uid_col = cand
+                break
+        if uid_col is None:
+            return {"ok": False, "message": "인식 가능한 UID 컬럼 없음 (tonbag_uid / sub_lt / barcode)"}
+
+        uids = df[uid_col].dropna().str.strip().unique().tolist()
+        if not uids:
+            return {"ok": False, "message": "유효한 UID 없음"}
+
+        db = _db()
+        results = []
+        for uid in uids:
+            row = db.execute("""
+                SELECT t.id, t.sub_lt, t.lot_no, t.tonbag_uid, t.status,
+                       t.weight, t.location, i.product, i.warehouse
+                FROM inventory_tonbag t
+                LEFT JOIN inventory i ON i.lot_no = t.lot_no
+                WHERE t.tonbag_uid = ? OR t.sub_lt = ?
+                LIMIT 1
+            """, (uid, uid)).fetchone()
+            if row:
+                r = dict(row)
+                r["input_uid"] = uid
+                r["matched"] = True
+                if action != "lookup":
+                    # 상태 전환 (단순 매핑)
+                    STATUS_TRANS = {
+                        "outbound": ("PICKED", "OUTBOUND"),
+                        "return": ("OUTBOUND", "RETURN"),
+                        "pick": ("AVAILABLE", "PICKED"),
+                        "available": (None, "AVAILABLE"),
+                    }
+                    trans = STATUS_TRANS.get(action.lower())
+                    if trans:
+                        src, dst = trans
+                        if src is None or r.get("status") == src:
+                            db.execute(
+                                "UPDATE inventory_tonbag SET status=? WHERE id=?",
+                                (dst, r["id"])
+                            )
+                            r["status_changed"] = f"{src or '*'} → {dst}"
+                r["weight"] = float(r.get("weight") or 0)
+            else:
+                r = {"input_uid": uid, "matched": False, "lot_no": None, "status": None, "weight": 0}
+            results.append(r)
+        db.commit()
+        db.close()
+
+        matched = sum(1 for r in results if r.get("matched"))
+        not_matched = len(results) - matched
+        return {
+            "ok": True,
+            "message": f"처리 완료: {matched} 매칭 / {not_matched} 미매칭",
+            "results": results,
+            "matched_count": matched,
+            "not_matched_count": not_matched,
+            "action": action,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("scan bulk-upload error: %s", e)
+        return {"ok": False, "message": str(e)}
