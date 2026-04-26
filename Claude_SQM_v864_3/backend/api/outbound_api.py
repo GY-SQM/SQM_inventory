@@ -1039,3 +1039,79 @@ def proof_cleanup_status():
             "dates":          date_dirs[-30:],  # 최근 30일만
         },
     }
+
+
+@router.get("/proof-docs-list", summary="📎 Proof docs 파일 목록 (Stage 3)")
+def proof_docs_list(date: str = "", lot_no: str = ""):
+    """
+    proof_docs 폴더의 파일 목록 반환.
+    date 파라미터: YYYY-MM-DD 형식으로 특정 날짜 필터
+    lot_no 파라미터: LOT 번호 포함 파일 필터
+    """
+    if not PROOF_DOCS_ROOT.exists():
+        return {"ok": True, "data": {"files": [], "total": 0}}
+    files = []
+    try:
+        if date:
+            search_dirs = [PROOF_DOCS_ROOT / date] if (PROOF_DOCS_ROOT / date).exists() else []
+        else:
+            search_dirs = sorted([d for d in PROOF_DOCS_ROOT.iterdir() if d.is_dir()])[-30:]  # 최근 30일
+
+        for date_dir in search_dirs:
+            for batch_dir in sorted(date_dir.iterdir()) if date_dir.is_dir() else []:
+                if batch_dir.is_file():
+                    # date_dir 직하 파일
+                    fname = batch_dir.name
+                    if lot_no and lot_no not in fname:
+                        continue
+                    files.append({
+                        "date": date_dir.name,
+                        "batch": "",
+                        "filename": fname,
+                        "path": str(batch_dir).replace("\\", "/"),
+                        "size_bytes": batch_dir.stat().st_size,
+                        "ext": batch_dir.suffix.lower(),
+                    })
+                elif batch_dir.is_dir():
+                    for f in sorted(batch_dir.iterdir()):
+                        if not f.is_file():
+                            continue
+                        if lot_no and lot_no not in f.name and lot_no not in batch_dir.name:
+                            continue
+                        files.append({
+                            "date": date_dir.name,
+                            "batch": batch_dir.name,
+                            "filename": f.name,
+                            "path": str(f).replace("\\", "/"),
+                            "size_bytes": f.stat().st_size,
+                            "ext": f.suffix.lower(),
+                        })
+
+        files.sort(key=lambda x: (x["date"], x["batch"], x["filename"]), reverse=True)
+        files = files[:200]  # 최대 200개
+        return {"ok": True, "data": {"files": files, "total": len(files)}}
+    except Exception as e:
+        logger.exception("proof-docs-list error: %s", e)
+        return {"ok": False, "message": str(e)}
+
+
+@router.get("/proof-docs-download", summary="📎 Proof docs 파일 다운로드 (Stage 3)")
+def proof_docs_download(path: str = ""):
+    """proof_docs 내 특정 파일 다운로드. path는 data/proof_docs/ 하위 경로여야 함."""
+    from fastapi.responses import FileResponse
+    if not path:
+        raise HTTPException(400, "path 파라미터 필요")
+    # 보안: proof_docs 폴더 밖 접근 방지
+    abs_path = Path(path).resolve()
+    abs_root = PROOF_DOCS_ROOT.resolve()
+    try:
+        abs_path.relative_to(abs_root)
+    except ValueError:
+        raise HTTPException(403, "허용되지 않는 경로")
+    if not abs_path.exists() or not abs_path.is_file():
+        raise HTTPException(404, "파일 없음")
+    return FileResponse(
+        path=str(abs_path),
+        filename=abs_path.name,
+        media_type="application/octet-stream",
+    )

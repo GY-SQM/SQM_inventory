@@ -8708,6 +8708,80 @@
       '<button class="btn btn-primary" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">확인</button></div></div>');
   };
 
+  /* =====================================================================
+     [Stage 3] 출고 증빙 서류 뷰어 — proof_docs/ 파일 목록 + 다운로드
+     ===================================================================== */
+  window.showProofDocsViewerModal = function() {
+    var html = '<div style="max-width:800px">' +
+      '<h2 style="margin:0 0 8px 0">📎 출고 증빙 서류 (Proof Docs)</h2>' +
+      '<p style="font-size:.85rem;color:var(--text-muted);margin:0 0 14px 0">data/proof_docs/ 폴더 — 90일 자동 보존. 날짜 또는 LOT 번호로 필터링.</p>' +
+      '<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">' +
+      '<input type="date" id="pd-date" style="padding:6px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">' +
+      '<input type="text" id="pd-lot" placeholder="LOT 번호" style="flex:1;padding:6px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">' +
+      '<button id="pd-search" class="btn btn-primary">🔍 조회</button>' +
+      '<button id="pd-reset" class="btn btn-ghost">초기화</button>' +
+      '</div>' +
+      '<div id="pd-stats" style="font-size:.85rem;color:var(--text-muted);margin-bottom:8px"></div>' +
+      '<div id="pd-loading" style="padding:30px;text-align:center;color:var(--text-muted);display:none">⏳ 조회 중...</div>' +
+      '<div id="pd-table-wrap" style="max-height:420px;overflow-y:auto"></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">' +
+      '<button id="pd-close" class="btn btn-ghost">닫기</button>' +
+      '</div></div>';
+    showDataModal('', html);
+    document.getElementById('pd-close').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+
+    function _load() {
+      var date = (document.getElementById('pd-date')||{}).value || '';
+      var lot  = ((document.getElementById('pd-lot')||{}).value || '').trim();
+      document.getElementById('pd-loading').style.display = 'block';
+      document.getElementById('pd-table-wrap').innerHTML = '';
+      document.getElementById('pd-stats').textContent = '';
+      var url = '/api/outbound/proof-docs-list';
+      var params = [];
+      if (date) params.push('date=' + encodeURIComponent(date));
+      if (lot)  params.push('lot_no=' + encodeURIComponent(lot));
+      if (params.length) url += '?' + params.join('&');
+      apiFetch(url).then(function(res) {
+        document.getElementById('pd-loading').style.display = 'none';
+        if (!res || !res.ok) { document.getElementById('pd-table-wrap').innerHTML = '<div style="color:var(--danger)">조회 실패</div>'; return; }
+        var files = (res.data && res.data.files) || [];
+        var total = (res.data && res.data.total) || files.length;
+        document.getElementById('pd-stats').textContent = '총 ' + total + '건 (최대 200건 표시)';
+        if (!files.length) { document.getElementById('pd-table-wrap').innerHTML = '<div class="empty">증빙 서류 없음</div>'; return; }
+        var EXT_ICON = {'.pdf':'📄','.xlsx':'📊','.xls':'📊','.png':'🖼️','.jpg':'🖼️','.jpeg':'🖼️','.csv':'📋'};
+        var rows = files.map(function(f) {
+          var icon = EXT_ICON[f.ext] || '📎';
+          var sizeKb = (f.size_bytes / 1024).toFixed(1);
+          var pathEnc = encodeURIComponent(f.path);
+          return '<tr>' +
+            '<td style="padding:5px 8px">' + icon + '</td>' +
+            '<td style="padding:5px 8px;font-size:.8rem">' + escapeHtml(f.date) + '</td>' +
+            '<td style="padding:5px 8px;font-size:.8rem;color:var(--text-muted)">' + escapeHtml(f.batch) + '</td>' +
+            '<td style="padding:5px 8px;font-family:monospace;font-size:.82rem">' + escapeHtml(f.filename) + '</td>' +
+            '<td style="padding:5px 8px;text-align:right;font-size:.8rem">' + sizeKb + ' KB</td>' +
+            '<td style="padding:5px 8px">' +
+            '<a href="/api/outbound/proof-docs-download?path=' + pathEnc + '" target="_blank" class="btn btn-ghost" style="font-size:.78rem;padding:3px 8px">📥 다운로드</a>' +
+            '</td></tr>';
+        }).join('');
+        document.getElementById('pd-table-wrap').innerHTML =
+          '<table class="data-table" style="font-size:.85rem;width:100%"><thead>' +
+          '<tr><th></th><th>날짜</th><th>배치</th><th>파일명</th><th style="text-align:right">크기</th><th></th></tr>' +
+          '</thead><tbody>' + rows + '</tbody></table>';
+      }).catch(function(e) {
+        document.getElementById('pd-loading').style.display = 'none';
+        document.getElementById('pd-table-wrap').innerHTML = '<div style="color:var(--danger)">❌ ' + escapeHtml(e.message||String(e)) + '</div>';
+      });
+    }
+
+    document.getElementById('pd-search').addEventListener('click', _load);
+    document.getElementById('pd-reset').addEventListener('click', function() {
+      document.getElementById('pd-date').value = '';
+      document.getElementById('pd-lot').value = '';
+      _load();
+    });
+    _load();
+  };
+
   window.showSystemInfoModal = function() {
     apiGet('/api/info/system-info').catch(function(){ return null; }).then(function(res){
       var d = (res && res.data) || res || {};
@@ -9121,6 +9195,7 @@
     'onDetailOfOutbound': {m:'GET', u:'/api/q2/detail-outbound',                 lbl:'Detail of Outbound'},
     'onSalesOrderDN':    {m:'GET',  u:'/api/q3/sales-order-dn',                  lbl:'Sales Order DN'},
     'onDnCrossCheck':    {m:'JS',   u:'dn-cross-check',                         lbl:'DN 교차검증'},  /* [Sprint 2-O] */
+    'onViewProofDocs':   {m:'JS',   u:'proof-docs-viewer',                       lbl:'출고 증빙 서류'},  /* [Stage 3] */
     'onLotDetailPdf':    {m:'GET',  u:'/api/action/lot-detail',                  lbl:'LOT 상세'},
     'onLotListExcel':    {m:'GET',  u:'/api/action/export-lot-excel',             lbl:'LOT 리스트 Excel'},
     'onTonbagListExcel': {m:'GET',  u:'/api/action2/export-tonbag-excel',          lbl:'톤백리스트 Excel'},
@@ -9297,6 +9372,10 @@
       }
       if (conf.u === 'inbound-cancel') {
         showInboundCancelModal();
+        return;
+      }
+      if (conf.u === 'proof-docs-viewer') {
+        showProofDocsViewerModal();
         return;
       }
       if (conf.u === 'approval-queue') {
