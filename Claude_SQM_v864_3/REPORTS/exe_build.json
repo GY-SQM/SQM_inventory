@@ -1,0 +1,18 @@
+{
+  "phase": "C",
+  "title": "PyInstaller EXE 빌드 검증",
+  "timestamp": "2026-04-26",
+  "build_result": {
+    "status": "SUCCESS",
+    "exe_path": "dist/SQM_v864_3.exe",
+    "exe_size_bytes": 34929695,
+    "exe_size_mb": "33.3 MB",
+    "build_date": "2026-04-26 10:16",
+    "pyinstaller_version": "6.20.0",
+    "spec_file": "build/SQM_v864_3.spec"
+  },
+  "summary": {
+    "overall_pass": true,
+    "notes": "Build completed successfully. EXE increased from 33.9MB (Apr 25) to 33.3MB (Apr 26) due to updated hiddenimports."
+  }
+}

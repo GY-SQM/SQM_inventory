@@ -1,0 +1,65 @@
+{
+  "phase": "A",
+  "title": "실 PDF 업로드 검증",
+  "timestamp": "2026-04-26 10:12:37",
+  "api_result": {
+    "method": "direct_api",
+    "pdf_found": {
+      "bl": "D:\\program\\SQM_inventory\\2200033057 BL.pdf",
+      "pl": "D:\\program\\SQM_inventory\\2200033057_PackingList1.pdf",
+      "invoice": "D:\\program\\SQM_inventory\\2200033057 FA.pdf",
+      "do": null
+    },
+    "tests": [
+      {
+        "test": "onestop_upload_dry_run",
+        "status_code": 200,
+        "elapsed_s": 0.067,
+        "preview_count": 20,
+        "has_rows": true,
+        "cross_check_critical": 0,
+        "cross_check_warning": 0,
+        "cross_check_pass": true,
+        "pass": true
+      },
+      {
+        "test": "pdf_upload_single_pl",
+        "status_code": 200,
+        "elapsed_s": 0.019,
+        "response_keys": [
+          "ok",
+          "success",
+          "message",
+          "error",
+          "detail",
+          "data"
+        ],
+        "pass": true
+      },
+      {
+        "test": "pdf_inbound_base64",
+        "status_code": 200,
+        "elapsed_s": 0.015,
+        "pass": true
+      }
+    ],
+    "summary": {
+      "total": 3,
+      "pass": 3,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "ui_result": {
+    "method": "playwright_ui",
+    "skip_reason": "playwright not installed",
+    "pass": null
+  },
+  "summary": {
+    "total": 3,
+    "pass": 3,
+    "fail": 0,
+    "skip": 0,
+    "overall_pass": true
+  }
+}
