@@ -1,0 +1,160 @@
+{
+  "summary": {
+    "total": 30,
+    "pass": 30,
+    "fail": 0
+  },
+  "errors": [],
+  "results": [
+    {
+      "test": "ai_chat_modal_opened",
+      "pass": true,
+      "note": "modal visible"
+    },
+    {
+      "test": "ai_chat_status_bar",
+      "pass": true,
+      "note": "🟢 Gemini 연결됨 · 모델 gemini-2.5-flash · 키 AQ.A***aWbw"
+    },
+    {
+      "test": "ai_chat_quick_buttons",
+      "pass": true,
+      "note": "5 quick buttons"
+    },
+    {
+      "test": "ai_chat_history_area",
+      "pass": true,
+      "note": "history area exists"
+    },
+    {
+      "test": "manual_inbound_step1_visible",
+      "pass": true,
+      "note": "drop zone present"
+    },
+    {
+      "test": "manual_inbound_parse_btn",
+      "pass": true,
+      "note": "parse btn disabled (no file)"
+    },
+    {
+      "test": "picking_list_step1_visible",
+      "pass": true,
+      "note": "drop zone"
+    },
+    {
+      "test": "picking_list_accepts_pdf",
+      "pass": true,
+      "note": "accept=.pdf"
+    },
+    {
+      "test": "location_step1_visible",
+      "pass": true,
+      "note": "drop zone"
+    },
+    {
+      "test": "return_inbound_step1_visible",
+      "pass": true,
+      "note": "drop zone"
+    },
+    {
+      "test": "do_update_8_fields",
+      "pass": true,
+      "note": "8 field inputs"
+    },
+    {
+      "test": "do_update_load_btn",
+      "pass": true,
+      "note": "현재 값 조회 버튼"
+    },
+    {
+      "test": "onestop_inbound_pl_slot",
+      "pass": true,
+      "note": "PACKING_LIST slot"
+    },
+    {
+      "test": "onestop_inbound_bl_slot",
+      "pass": true,
+      "note": "BL slot"
+    },
+    {
+      "test": "onestop_inbound_invoice_slot",
+      "pass": true,
+      "note": "INVOICE slot"
+    },
+    {
+      "test": "onestop_inbound_do_slot",
+      "pass": true,
+      "note": "DO slot"
+    },
+    {
+      "test": "outbound_4tab_wizard",
+      "pass": true,
+      "note": "14 tab headers"
+    },
+    {
+      "test": "settings_modal_opened",
+      "pass": true,
+      "note": "modal visible"
+    },
+    {
+      "test": "global_search_input",
+      "pass": true,
+      "note": "gs-input field"
+    },
+    {
+      "test": "global_search_results_area",
+      "pass": true,
+      "note": "results area"
+    },
+    {
+      "test": "ai_chat_live_response",
+      "pass": true,
+      "note": "len=173"
+    },
+    {
+      "test": "parse_error_9_codes",
+      "pass": true,
+      "note": "9 ERROR_CODES"
+    },
+    {
+      "test": "parse_error_modal_opened",
+      "pass": true,
+      "note": "recovery modal opened"
+    },
+    {
+      "test": "parse_error_input_fields",
+      "pass": true,
+      "note": "bl_no + lot_no inputs"
+    },
+    {
+      "test": "allocation_editable_cells",
+      "pass": true,
+      "note": "0 editable cells (data 없으면 0 정상)"
+    },
+    {
+      "test": "allocation_page_rendered",
+      "pass": true,
+      "note": "page text len=150"
+    },
+    {
+      "test": "allocation_action_functions",
+      "pass": true,
+      "note": "7/7 alloc functions defined"
+    },
+    {
+      "test": "inventory_table_rendered",
+      "pass": true,
+      "note": "table element exists"
+    },
+    {
+      "test": "inventory_rows",
+      "pass": true,
+      "note": "45 rows"
+    },
+    {
+      "test": "no_critical_js_errors",
+      "pass": true,
+      "note": "0 critical errors"
+    }
+  ]
+}

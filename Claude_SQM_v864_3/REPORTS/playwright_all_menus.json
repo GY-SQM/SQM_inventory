@@ -1,7 +1,7 @@
 {
   "summary": {
-    "total": 99,
-    "pass": 99,
+    "total": 109,
+    "pass": 109,
     "fail": 0
   },
   "errors": [],
@@ -9,15 +9,17 @@
     {
       "test": "top_menu_count",
       "expected": 7,
-      "actual": 7,
+      "actual": 9,
       "pass": true,
       "detail": [
-        "출고",
         "파일",
+        "입고",
+        "출고",
+        "재고",
         "보고서",
-        "도구",
-        "View",
+        "설정/도구",
         "도움말",
+        "View",
         "품목"
       ]
     },
@@ -68,6 +70,191 @@
     {
       "test": "sidebar_scan",
       "pass": true
+    },
+    {
+      "test": "menu_onExportCustoms",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onExportRubyli",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onExportTonbag",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onExportIntegrated",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onOnBackup",
+      "pass": true,
+      "status": "PASS",
+      "modal": false
+    },
+    {
+      "test": "menu_onRestore",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onBackupList",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onAutoBackupSettings",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onBlCarrierRegister",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onBlCarrierAnalyze",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onGeminiToggle",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onAiChat",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onGeminiApiSettings",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onGeminiApiTest",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onDocConvert",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onRecentFiles",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onExit",
+      "pass": true,
+      "skipped": true
+    },
+    {
+      "test": "menu_onOnPdfInbound",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onInboundManual",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onDoUpdate",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onInventoryMove",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onMoveApprovalQueue",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReturnDialog",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReturnInboundUpload",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onReturnStatistics",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onInboundList",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onInboundTemplateManage",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onProductMaster",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onEmailConfig",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onIntegrityReport",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onFixLotIntegrity",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
     },
     {
       "test": "menu_onOnQuickOutbound",
@@ -148,97 +335,7 @@
       "modal": true
     },
     {
-      "test": "menu_onOnPdfInbound",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onInboundManual",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onDoUpdate",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onInventoryMove",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onMoveApprovalQueue",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onReturnDialog",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onReturnInboundUpload",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onReturnStatistics",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onInboundList",
-      "pass": true,
-      "status": "PASS",
-      "modal": false
-    },
-    {
-      "test": "menu_onInboundTemplateManage",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onProductMaster",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onEmailConfig",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onIntegrityReport",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onFixLotIntegrity",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onExportCustoms",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onExportRubyli",
+      "test": "menu_onExportLot",
       "pass": true,
       "status": "PASS",
       "modal": true
@@ -250,45 +347,16 @@
       "modal": true
     },
     {
-      "test": "menu_onExportIntegrated",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onOnBackup",
+      "test": "menu_onOutboundStatus",
       "pass": true,
       "status": "PASS",
       "modal": false
     },
     {
-      "test": "menu_onRestore",
+      "test": "menu_onStockTrendChart",
       "pass": true,
       "status": "PASS",
       "modal": true
-    },
-    {
-      "test": "menu_onBackupList",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onAutoBackupSettings",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onRecentFiles",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onExit",
-      "pass": true,
-      "skipped": true
     },
     {
       "test": "menu_onInvoiceGenerate",
@@ -324,13 +392,13 @@
       "test": "menu_onReportTemplates",
       "pass": true,
       "status": "PASS",
-      "modal": true
+      "modal": false
     },
     {
       "test": "menu_onReportHistory",
       "pass": true,
       "status": "PASS",
-      "modal": true
+      "modal": false
     },
     {
       "test": "menu_onInventoryReport",
@@ -387,12 +455,6 @@
       "modal": true
     },
     {
-      "test": "menu_onDocConvert",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
       "test": "menu_onIntegrityCheck",
       "pass": true,
       "status": "PASS",
@@ -420,6 +482,42 @@
       "test": "menu_onTestDbReset",
       "pass": true,
       "skipped": true
+    },
+    {
+      "test": "menu_onHelp",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onShortcuts",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onStatusGuide",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onBackupGuide",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onSystemInfo",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
+    },
+    {
+      "test": "menu_onAbout",
+      "pass": true,
+      "status": "PASS",
+      "modal": true
     },
     {
       "test": "menu_refresh-all",
@@ -486,42 +584,6 @@
       "pass": true,
       "status": "PASS",
       "modal": false
-    },
-    {
-      "test": "menu_onHelp",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onShortcuts",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onStatusGuide",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onBackupGuide",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onSystemInfo",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
-    },
-    {
-      "test": "menu_onAbout",
-      "pass": true,
-      "status": "PASS",
-      "modal": true
     },
     {
       "test": "menu_onProductSummary",

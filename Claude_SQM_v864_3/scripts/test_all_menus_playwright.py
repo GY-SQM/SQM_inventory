@@ -141,7 +141,14 @@ def main():
                     pre_toasts = page.query_selector_all('.toast-error, .toast.error')
                     pre_count = len(pre_toasts)
 
-                    btn.click()
+                    # [Sprint 2 v864.3] 모든 클릭을 JS evaluate 로 통일 — cascading submenu(visibility:hidden) 우회
+                    # ElementHandle.click() 은 visibility 체크로 hidden submenu 항목에서 30초 timeout 발생 → JS click 으로 해결
+                    page.evaluate(f"""
+                        (function(){{
+                            var b = document.querySelector('.menu-dropdown button[data-action="{action_name}"]');
+                            if (b) b.click();
+                        }})();
+                    """)
                     page.wait_for_timeout(600)
 
                     # 모달이 열렸는지 확인
