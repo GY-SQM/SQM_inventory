@@ -315,3 +315,43 @@ def get_detail_outbound(limit: int = QP(200)):
     except Exception as e:
         logger.error("detail-outbound error: %s", e)
         return err_response(str(e))
+
+
+# ── 반품 이력 목록 ────────────────────────────────────────────────
+@router.get("/return-list", summary="↩️ 반품 이력 목록 (Stage 3)")
+def get_return_list(limit: int = 200, reason: str = "", date_from: str = "", date_to: str = ""):
+    """return_history 테이블 전체 목록 + inventory에서 LOT 정보 JOIN"""
+    try:
+        con = _db()
+        params = []
+        where_parts = []
+        if reason:
+            where_parts.append("r.reason = ?")
+            params.append(reason)
+        if date_from:
+            where_parts.append("r.return_date >= ?")
+            params.append(date_from)
+        if date_to:
+            where_parts.append("r.return_date <= ?")
+            params.append(date_to)
+        where = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
+        rows = con.execute(f"""
+            SELECT r.id, r.lot_no, r.tonbag_uid, r.sub_lt,
+                   r.reason, r.memo, r.return_date, r.created_at,
+                   ROUND(r.weight_kg / 1000.0, 3) AS weight_mt,
+                   i.product, i.bl_no, i.warehouse, i.status AS inv_status
+            FROM return_history r
+            LEFT JOIN inventory i ON i.lot_no = r.lot_no
+            {where}
+            ORDER BY r.created_at DESC
+            LIMIT ?
+        """, params + [limit]).fetchall()
+        # 반품 사유 고유 목록 (필터 드롭다운용)
+        reasons = [r[0] for r in con.execute(
+            "SELECT DISTINCT reason FROM return_history WHERE reason IS NOT NULL ORDER BY reason"
+        ).fetchall()]
+        con.close()
+        return ok_response(data={"items": _rows(rows), "total": len(rows), "reasons": reasons})
+    except Exception as e:
+        logger.error("return-list error: %s", e)
+        return err_response(str(e))

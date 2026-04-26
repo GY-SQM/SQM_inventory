@@ -2079,36 +2079,138 @@
     if (!c) return;
     c.innerHTML = [
       '<section class="page" data-page="return">',
-      '<h2>Return - Re-inbound</h2>',
-      '<div class="toolbar-mini"><button class="btn btn-secondary" onclick="renderPage(\'return\')">Refresh</button></div>',
-      '<div id="return-loading" style="padding:40px;text-align:center">Loading...</div>',
+      '<div style="display:flex;align-items:center;gap:12px;padding:4px 0 10px">',
+      '  <h2 style="margin:0">↩️ Return — 반품 관리</h2>',
+      '</div>',
+      /* 필터 툴바 */
+      '<div class="toolbar-mini" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">',
+      '  <select id="ret-filter-reason" style="padding:6px 10px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:.85rem">',
+      '    <option value="">모든 사유</option>',
+      '  </select>',
+      '  <input type="date" id="ret-filter-from" style="padding:6px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:.85rem" title="시작일">',
+      '  <span style="color:var(--text-muted)">~</span>',
+      '  <input type="date" id="ret-filter-to" style="padding:6px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:.85rem" title="종료일">',
+      '  <button id="ret-filter-btn" class="btn" style="padding:6px 14px">🔍 필터 적용</button>',
+      '  <button id="ret-reset-btn" class="btn btn-ghost" style="padding:6px 14px">초기화</button>',
+      '  <span style="flex:1"></span>',
+      '  <button class="btn btn-primary" onclick="showReturnDialog()">+ 반품 처리</button>',
+      '  <button class="btn btn-ghost" id="ret-refresh-btn">🔄 새로고침</button>',
+      '</div>',
+      /* 통계 카드 */
+      '<div id="ret-stats-bar" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px"></div>',
+      /* 테이블 */
+      '<div id="return-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 로딩 중...</div>',
+      '<div id="ret-count-label" style="font-size:.85rem;color:var(--text-muted);margin-bottom:6px;display:none"></div>',
       '<table class="data-table" id="return-table" style="display:none">',
-      '<thead><tr><th>LOT</th><th>Product</th><th>Qty</th><th>Date</th><th>Reason</th></tr></thead>',
+      '<thead><tr>',
+      '  <th>ID</th><th>LOT NO</th><th>제품</th><th>BL NO</th>',
+      '  <th>톤백 UID</th><th style="text-align:right">중량(MT)</th>',
+      '  <th>반품 사유</th><th>반품일</th><th>창고</th><th>메모</th>',
+      '</tr></thead>',
       '<tbody id="return-tbody"></tbody></table>',
-      '<div class="empty" id="return-empty" style="display:none">No return data</div>',
+      '<div class="empty" id="return-empty" style="display:none">반품 이력이 없습니다.</div>',
       '</section>'
     ].join('');
-    /* return-stats는 통계 구조(by_reason/monthly_trend)라 items 없음 → inventory?status=RETURN 직접 조회 */
-    apiGet('/api/inventory?status=RETURN').then(function(res){
-      if (_currentRoute !== route) return;
-      var rows = extractRows(res);
-      renderReturnRows(rows, route);
-    }).catch(function(){
-      if (_currentRoute !== route) return;
-      document.getElementById('return-loading').style.display = 'none';
-      document.getElementById('return-empty').style.display = 'block';
+
+    function _buildUrl() {
+      var reason = (document.getElementById('ret-filter-reason')||{}).value || '';
+      var from   = (document.getElementById('ret-filter-from')||{}).value || '';
+      var to     = (document.getElementById('ret-filter-to')||{}).value || '';
+      var p = '/api/q2/return-list?limit=500';
+      if (reason) p += '&reason=' + encodeURIComponent(reason);
+      if (from)   p += '&date_from=' + encodeURIComponent(from);
+      if (to)     p += '&date_to='   + encodeURIComponent(to);
+      return p;
+    }
+
+    function _loadReturn() {
+      document.getElementById('return-loading').style.display = 'block';
+      document.getElementById('return-table').style.display = 'none';
+      document.getElementById('return-empty').style.display = 'none';
+      document.getElementById('ret-count-label').style.display = 'none';
+      apiGet(_buildUrl()).then(function(res) {
+        if (_currentRoute !== route) return;
+        document.getElementById('return-loading').style.display = 'none';
+        var items = (res && res.data && res.data.items) || [];
+        var reasons = (res && res.data && res.data.reasons) || [];
+        /* 사유 드롭다운 갱신 */
+        var rsel = document.getElementById('ret-filter-reason');
+        if (rsel && rsel.options.length <= 1) {
+          reasons.forEach(function(r) {
+            var opt = document.createElement('option');
+            opt.value = r; opt.textContent = r;
+            rsel.appendChild(opt);
+          });
+        }
+        /* 통계 카드 */
+        var totalMt = items.reduce(function(s, r){ return s + (parseFloat(r.weight_mt)||0); }, 0);
+        var byStat = {};
+        items.forEach(function(r){ byStat[r.reason||'미분류'] = (byStat[r.reason||'미분류']||0)+1; });
+        var topReason = Object.keys(byStat).sort(function(a,b){ return byStat[b]-byStat[a]; })[0] || '-';
+        var statsEl = document.getElementById('ret-stats-bar');
+        if (statsEl) statsEl.innerHTML = [
+          ['↩️ 총 반품', items.length + '건'],
+          ['⚖️ 총 중량', totalMt.toFixed(3) + ' MT'],
+          ['📋 사유 수', Object.keys(byStat).length + '종'],
+          ['🏆 최다 사유', escapeHtml(topReason) + ' (' + (byStat[topReason]||0) + '건)'],
+        ].map(function(pair) {
+          return '<div style="background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;padding:10px 12px">' +
+            '<div style="font-size:11px;color:var(--text-muted);font-weight:600">' + pair[0] + '</div>' +
+            '<div style="font-size:18px;font-weight:700;margin-top:2px">' + pair[1] + '</div></div>';
+        }).join('');
+        if (!items.length) { document.getElementById('return-empty').style.display='block'; return; }
+        var countEl = document.getElementById('ret-count-label');
+        if (countEl) { countEl.textContent = '총 ' + items.length + '건 (최근 500건)'; countEl.style.display='block'; }
+        var tbody = document.getElementById('return-tbody');
+        if (tbody) tbody.innerHTML = items.map(function(r) {
+          return '<tr>' +
+            '<td class="mono-cell">' + (r.id||'-') + '</td>' +
+            '<td class="mono-cell" style="color:var(--accent)">' + escapeHtml(r.lot_no||'-') + '</td>' +
+            '<td>' + escapeHtml(r.product||'-') + '</td>' +
+            '<td class="mono-cell">' + escapeHtml(r.bl_no||'-') + '</td>' +
+            '<td class="mono-cell" style="font-size:.8rem">' + escapeHtml(r.tonbag_uid||('-' + (r.sub_lt!=null?'/'+r.sub_lt:''))) + '</td>' +
+            '<td style="text-align:right">' + (parseFloat(r.weight_mt)||0).toFixed(3) + '</td>' +
+            '<td><span class="tag">' + escapeHtml(r.reason||'미분류') + '</span></td>' +
+            '<td style="font-size:.85rem">' + escapeHtml((r.return_date||r.created_at||'-').slice(0,10)) + '</td>' +
+            '<td>' + escapeHtml(r.warehouse||'-') + '</td>' +
+            '<td style="font-size:.82rem;color:var(--text-muted)">' + escapeHtml(r.memo||'-') + '</td>' +
+            '</tr>';
+        }).join('');
+        document.getElementById('return-table').style.display = '';
+      }).catch(function(e) {
+        if (_currentRoute !== route) return;
+        document.getElementById('return-loading').style.display = 'none';
+        document.getElementById('return-empty').textContent = '로드 실패: ' + (e.message||String(e));
+        document.getElementById('return-empty').style.display = 'block';
+      });
+    }
+
+    document.getElementById('ret-filter-btn').addEventListener('click', _loadReturn);
+    document.getElementById('ret-reset-btn').addEventListener('click', function() {
+      document.getElementById('ret-filter-reason').value = '';
+      document.getElementById('ret-filter-from').value = '';
+      document.getElementById('ret-filter-to').value = '';
+      _loadReturn();
     });
+    document.getElementById('ret-refresh-btn').addEventListener('click', _loadReturn);
+    _loadReturn();
   }
 
   function renderReturnRows(rows, route) {
+    /* legacy stub — kept for back-compat */
     if (_currentRoute !== route) return;
-    document.getElementById('return-loading').style.display = 'none';
-    if (!rows.length) { document.getElementById('return-empty').style.display='block'; return; }
+    var loading = document.getElementById('return-loading');
+    var empty   = document.getElementById('return-empty');
+    if (loading) loading.style.display = 'none';
+    if (!rows.length) { if (empty) empty.style.display='block'; return; }
     var tbody = document.getElementById('return-tbody');
     if (tbody) tbody.innerHTML = rows.map(function(r){
-      return '<tr><td>'+escapeHtml(r.lot||'')+'</td><td>'+escapeHtml(r.product||'')+'</td><td>'+(r.bags||r.qty||'')+'</td><td>'+escapeHtml(r.date||'')+'</td><td>'+escapeHtml(r.reason||'')+'</td></tr>';
+      return '<tr><td>'+escapeHtml(r.lot_no||r.lot||'')+'</td><td>'+escapeHtml(r.product||'')+'</td>' +
+        '<td>'+(r.tonbag_count||r.bags||r.qty||'')+'</td><td>'+escapeHtml((r.return_date||r.date||'').slice(0,10))+'</td>' +
+        '<td>'+escapeHtml(r.reason||'')+'</td></tr>';
     }).join('');
-    document.getElementById('return-table').style.display = '';
+    var tbl = document.getElementById('return-table');
+    if (tbl) tbl.style.display = '';
   }
 
   /* ===================================================
@@ -2181,43 +2283,110 @@
     if (!c) return;
     c.innerHTML = [
       '<section class="page" data-page="log">',
-      '<h2>Log - Activity Log</h2>',
-      '<div class="toolbar-mini">',
-      '<button class="btn btn-secondary" onclick="renderPage(\'log\')">Refresh</button>',
-      '<select id="log-limit" class="select" style="margin-left:8px" onchange="renderPage(\'log\')">',
-      '<option value="100">Last 100</option>',
-      '<option value="500">Last 500</option>',
-      '<option value="1000">Last 1000</option>',
-      '</select></div>',
-      '<div id="log-loading" style="padding:40px;text-align:center">Loading...</div>',
+      '<div style="display:flex;align-items:center;gap:12px;padding:4px 0 10px">',
+      '  <h2 style="margin:0">📝 Log — 이벤트 로그</h2>',
+      '</div>',
+      /* 필터 툴바 */
+      '<div class="toolbar-mini" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">',
+      '  <input type="text" id="log-search" placeholder="🔍 LOT / 이벤트 타입 검색" style="flex:1;min-width:160px;padding:6px 10px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:.85rem">',
+      '  <select id="log-type" style="padding:6px 10px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:.85rem">',
+      '    <option value="">모든 이벤트</option>',
+      '    <option value="INBOUND">INBOUND</option>',
+      '    <option value="OUTBOUND">OUTBOUND</option>',
+      '    <option value="RETURN">RETURN</option>',
+      '    <option value="PICK">PICK</option>',
+      '    <option value="MOVE">MOVE</option>',
+      '    <option value="SCAN">SCAN</option>',
+      '    <option value="EDIT">EDIT</option>',
+      '    <option value="BACKUP">BACKUP</option>',
+      '  </select>',
+      '  <select id="log-limit" style="padding:6px 10px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:.85rem">',
+      '    <option value="100">최근 100건</option>',
+      '    <option value="500">최근 500건</option>',
+      '    <option value="1000">최근 1000건</option>',
+      '  </select>',
+      '  <button id="log-refresh" class="btn btn-ghost">🔄 새로고침</button>',
+      '</div>',
+      /* 테이블 */
+      '<div id="log-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 로딩 중...</div>',
+      '<div id="log-count" style="font-size:.85rem;color:var(--text-muted);margin-bottom:6px;display:none"></div>',
       '<table class="data-table" id="log-table" style="display:none">',
-      '<thead><tr><th>Time</th><th>Type</th><th>LOT</th><th>Detail</th></tr></thead>',
+      '<thead><tr>',
+      '  <th style="width:160px">시각</th>',
+      '  <th style="width:110px">이벤트</th>',
+      '  <th>LOT NO</th>',
+      '  <th>톤백/UID</th>',
+      '  <th>상세</th>',
+      '  <th style="width:90px">사용자</th>',
+      '</tr></thead>',
       '<tbody id="log-tbody"></tbody></table>',
-      '<div class="empty" id="log-empty" style="display:none">No logs</div>',
+      '<div class="empty" id="log-empty" style="display:none">로그 없음</div>',
       '</section>'
     ].join('');
-    var limit = 100;
-    try { var el=document.getElementById('log-limit'); if(el) limit=parseInt(el.value)||100; } catch {}
-    apiGet('/api/q/audit-log?limit='+limit).then(function(res){
-      if (_currentRoute !== route) return;
-      var rows = extractRows(res);
-      document.getElementById('log-loading').style.display = 'none';
-      if (!rows.length) { document.getElementById('log-empty').style.display='block'; return; }
+
+    var _allRows = [];
+
+    function _applyFilter() {
+      var q = ((document.getElementById('log-search')||{}).value||'').toLowerCase().trim();
+      var t = ((document.getElementById('log-type')||{}).value||'');
+      var filtered = _allRows.filter(function(r) {
+        if (t && !(r.event_type||'').toUpperCase().includes(t.toUpperCase())) return false;
+        if (q) {
+          var hay = [(r.lot_no||''),(r.event_type||''),(r.event_data||''),(r.tonbag_uid||'')].join(' ').toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+      var countEl = document.getElementById('log-count');
+      if (countEl) { countEl.textContent = filtered.length + ' / ' + _allRows.length + '건'; countEl.style.display='block'; }
       var tbody = document.getElementById('log-tbody');
-      if (tbody) tbody.innerHTML = rows.map(function(r){
+      if (!filtered.length) {
+        document.getElementById('log-empty').style.display='block';
+        document.getElementById('log-table').style.display='none';
+        return;
+      }
+      document.getElementById('log-empty').style.display='none';
+      document.getElementById('log-table').style.display='';
+      if (tbody) tbody.innerHTML = filtered.map(function(r) {
+        var evType = escapeHtml(r.event_type||r.action||'-');
+        var colorMap = {INBOUND:'var(--success)',OUTBOUND:'var(--warning)',RETURN:'var(--danger)',PICK:'var(--accent)',MOVE:'#ab47bc',SCAN:'#26c6da',EDIT:'var(--text-muted)',BACKUP:'var(--text-muted)'};
+        var evColor = colorMap[(r.event_type||'').toUpperCase()] || 'var(--text)';
         return '<tr>' +
-          '<td class="mono-cell">'+escapeHtml(r.created_at||r.time||r.timestamp||'')+'</td>' +
-          '<td>'+escapeHtml(r.event_type||r.type||r.action||'')+'</td>' +
-          '<td class="mono-cell">'+escapeHtml(r.lot_no||r.lot||r.tonbag_id||'')+'</td>' +
-          '<td>'+escapeHtml(r.event_data||r.user_note||r.note||r.memo||r.detail||'')+'</td></tr>';
+          '<td class="mono-cell" style="font-size:.8rem">' + escapeHtml((r.created_at||r.timestamp||'-').slice(0,19)) + '</td>' +
+          '<td><span class="tag" style="background:' + evColor + ';color:#fff;font-size:.75rem">' + evType + '</span></td>' +
+          '<td class="mono-cell" style="color:var(--accent)">' + escapeHtml(r.lot_no||'-') + '</td>' +
+          '<td class="mono-cell" style="font-size:.78rem">' + escapeHtml(r.tonbag_uid||('-'+(r.sub_lt!=null?'/'+r.sub_lt:''))) + '</td>' +
+          '<td style="font-size:.82rem;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(r.event_data||r.note||r.detail||'') + '">' +
+            escapeHtml((r.event_data||r.note||r.detail||r.memo||'-').slice(0,120)) + '</td>' +
+          '<td style="font-size:.8rem">' + escapeHtml(r.user||r.operator||'-') + '</td>' +
+          '</tr>';
       }).join('');
-      document.getElementById('log-table').style.display = '';
-    }).catch(function(e){
-      if (_currentRoute !== route) return;
-      document.getElementById('log-loading').style.display = 'none';
-      var el=document.getElementById('log-empty');
-      if (el) { el.textContent='Load failed: '+(e.message||String(e)); el.style.display='block'; }
-    });
+    }
+
+    function _loadLog() {
+      document.getElementById('log-loading').style.display = 'block';
+      document.getElementById('log-table').style.display = 'none';
+      document.getElementById('log-empty').style.display = 'none';
+      var limit = parseInt((document.getElementById('log-limit')||{}).value)||100;
+      apiGet('/api/q/audit-log?limit='+limit).then(function(res) {
+        if (_currentRoute !== route) return;
+        document.getElementById('log-loading').style.display = 'none';
+        _allRows = (res && res.data && res.data.items) || extractRows(res);
+        if (!_allRows.length) { document.getElementById('log-empty').style.display='block'; return; }
+        _applyFilter();
+      }).catch(function(e) {
+        if (_currentRoute !== route) return;
+        document.getElementById('log-loading').style.display = 'none';
+        var el = document.getElementById('log-empty');
+        if (el) { el.textContent = '로드 실패: '+(e.message||String(e)); el.style.display='block'; }
+      });
+    }
+
+    document.getElementById('log-refresh').addEventListener('click', _loadLog);
+    document.getElementById('log-limit').addEventListener('change', _loadLog);
+    document.getElementById('log-search').addEventListener('input', _applyFilter);
+    document.getElementById('log-type').addEventListener('change', _applyFilter);
+    _loadLog();
   }
 
   /* ===================================================

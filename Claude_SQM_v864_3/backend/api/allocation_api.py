@@ -9,7 +9,7 @@ import os
 import tempfile
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Body
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/allocation", tags=["allocation"])
@@ -227,3 +227,133 @@ def apply_approved_allocation():
             "detail": {"code": "APPLY_APPROVED_FAILED", "errors": result.get("errors", [])[:10]},
             "message": "; ".join(result.get("errors", []))[:200] or "예약 반영 실패",
         }
+
+
+# ==============================================================
+# Stage 2: 승인/반려 액션 (ApprovalQueueModal)
+# ==============================================================
+import sqlite3 as _sqlite3
+import pathlib as _pathlib
+
+def _alloc_db():
+    root = _pathlib.Path(__file__).resolve().parent.parent.parent
+    path = root / "data" / "db" / "sqm_inventory.db"
+    con = _sqlite3.connect(str(path), timeout=5, check_same_thread=False)
+    con.row_factory = _sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    return con
+
+@router.post("/approve", summary="✅ 할당 승인 (Stage 2)")
+def approve_allocation(data: dict = Body(...)):
+    """allocation_plan 레코드의 approval_status → APPROVED"""
+    ids = data.get("ids") or []
+    actor = data.get("actor") or "system"
+    reason = data.get("reason") or ""
+    if not ids:
+        raise HTTPException(400, "ids 필요")
+    try:
+        con = _alloc_db()
+        updated = 0
+        for plan_id in ids:
+            cur = con.execute(
+                "UPDATE allocation_plan SET approval_status='APPROVED', updated_at=datetime('now') WHERE id=?",
+                (plan_id,)
+            )
+            updated += cur.rowcount
+            con.execute(
+                "INSERT INTO allocation_approval (allocation_plan_id, status, actor, reason, created_at) VALUES (?,?,?,?,datetime('now'))",
+                (plan_id, "APPROVED", actor, reason)
+            )
+        con.commit(); con.close()
+        return {"ok": True, "message": f"{updated}건 승인됨", "data": {"updated": updated}}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@router.post("/reject", summary="❌ 할당 반려 (Stage 2)")
+def reject_allocation(data: dict = Body(...)):
+    """allocation_plan 레코드의 approval_status → REJECTED"""
+    ids = data.get("ids") or []
+    actor = data.get("actor") or "system"
+    reason = data.get("reason") or "반려"
+    if not ids:
+        raise HTTPException(400, "ids 필요")
+    try:
+        con = _alloc_db()
+        updated = 0
+        for plan_id in ids:
+            cur = con.execute(
+                "UPDATE allocation_plan SET approval_status='REJECTED', updated_at=datetime('now') WHERE id=?",
+                (plan_id,)
+            )
+            updated += cur.rowcount
+            con.execute(
+                "INSERT INTO allocation_approval (allocation_plan_id, status, actor, reason, created_at) VALUES (?,?,?,?,datetime('now'))",
+                (plan_id, "REJECTED", actor, reason)
+            )
+        con.commit(); con.close()
+        return {"ok": True, "message": f"{updated}건 반려됨", "data": {"updated": updated}}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# PATCH /api/allocation/{lot_no} — 할당 인라인 편집 (Stage 3)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+from fastapi import Path as PathParam
+
+ALLOC_EDITABLE_FIELDS = {"qty_mt", "customer", "sale_ref", "outbound_date", "remarks"}
+
+@router.patch("/{lot_no}", summary="✏️ 할당 인라인 편집 (Stage 3)")
+def patch_allocation(lot_no: str = PathParam(..., description="LOT NO"), data: dict = Body(...)):
+    """
+    allocation_plan 또는 inventory 레코드의 편집 가능 필드 1개 업데이트.
+    허용 필드: qty_mt / customer / sale_ref / outbound_date / remarks
+    """
+    fields_to_update = {k: v for k, v in data.items() if k in ALLOC_EDITABLE_FIELDS}
+    if not fields_to_update:
+        raise HTTPException(400, f"허용된 편집 필드 없음. 허용: {sorted(ALLOC_EDITABLE_FIELDS)}")
+    try:
+        con = _alloc_db()
+        # allocation_plan 우선 시도
+        plan_row = con.execute(
+            "SELECT id FROM allocation_plan WHERE lot_no=? LIMIT 1", (lot_no,)
+        ).fetchone()
+        updated = 0
+        if plan_row:
+            set_clauses = ", ".join(f"{f}=?" for f in fields_to_update)
+            vals = list(fields_to_update.values()) + [lot_no]
+            cur = con.execute(
+                f"UPDATE allocation_plan SET {set_clauses}, updated_at=datetime('now') WHERE lot_no=?",
+                vals
+            )
+            updated += cur.rowcount
+        # inventory 테이블에 해당하는 필드도 동기화
+        INV_FIELD_MAP = {
+            "customer": "sold_to",
+            "sale_ref": "sale_ref",
+            "outbound_date": "ship_date",
+            "remarks": "remarks",
+        }
+        inv_fields = {}
+        for f, v in fields_to_update.items():
+            if f in INV_FIELD_MAP:
+                inv_fields[INV_FIELD_MAP[f]] = v
+        if inv_fields:
+            set_clauses_inv = ", ".join(f"{f}=?" for f in inv_fields)
+            vals_inv = list(inv_fields.values()) + [lot_no]
+            con.execute(
+                f"UPDATE inventory SET {set_clauses_inv}, updated_at=datetime('now') WHERE lot_no=?",
+                vals_inv
+            )
+        con.commit()
+        con.close()
+        return {
+            "success": True,
+            "lot_no": lot_no,
+            "updated_fields": list(fields_to_update.keys()),
+            "allocation_rows": updated,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
