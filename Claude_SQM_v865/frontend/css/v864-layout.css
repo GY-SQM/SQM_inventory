@@ -1409,17 +1409,19 @@ footer.statusbar .status-sep,
 /* 8방향 리사이즈 핸들 */
 .sqm-rh {
   position: absolute;
-  z-index: 30;
+  z-index: 40;
   background: transparent;
+  transition: background 0.15s;
 }
+.sqm-rh:hover { background: rgba(79,195,247,0.18); border-radius:3px; }
 .sqm-rh-n  { top:-5px;    left:12px;   right:12px;  height:10px; cursor:n-resize;  }
 .sqm-rh-s  { bottom:-5px; left:12px;   right:12px;  height:10px; cursor:s-resize;  }
 .sqm-rh-e  { right:-5px;  top:12px;    bottom:12px; width:10px;  cursor:e-resize;  }
 .sqm-rh-w  { left:-5px;   top:12px;    bottom:12px; width:10px;  cursor:w-resize;  }
-.sqm-rh-ne { top:-6px;    right:-6px;  width:14px;  height:14px; cursor:ne-resize; }
-.sqm-rh-nw { top:-6px;    left:-6px;   width:14px;  height:14px; cursor:nw-resize; }
-.sqm-rh-se { bottom:-6px; right:-6px;  width:14px;  height:14px; cursor:se-resize; }
-.sqm-rh-sw { bottom:-6px; left:-6px;   width:14px;  height:14px; cursor:sw-resize; }
+.sqm-rh-ne { top:-6px;    right:-6px;  width:16px;  height:16px; cursor:ne-resize; }
+.sqm-rh-nw { top:-6px;    left:-6px;   width:16px;  height:16px; cursor:nw-resize; }
+.sqm-rh-se { bottom:-6px; right:-6px;  width:16px;  height:16px; cursor:se-resize; }
+.sqm-rh-sw { bottom:-6px; left:-6px;   width:16px;  height:16px; cursor:sw-resize; }
 
 /* 코너 시각 힌트 */
 .sqm-rh-se::after {
@@ -1433,6 +1435,18 @@ footer.statusbar .status-sep,
   border-left:2px solid var(--accent,#4fc3f7);
   border-bottom:2px solid var(--accent,#4fc3f7);
   position:absolute; bottom:2px; left:2px;
+}
+.sqm-rh-ne::after {
+  content:''; display:block; width:7px; height:7px;
+  border-right:2px solid var(--accent,#4fc3f7);
+  border-top:2px solid var(--accent,#4fc3f7);
+  position:absolute; top:2px; right:2px;
+}
+.sqm-rh-nw::after {
+  content:''; display:block; width:7px; height:7px;
+  border-left:2px solid var(--accent,#4fc3f7);
+  border-top:2px solid var(--accent,#4fc3f7);
+  position:absolute; top:2px; left:2px;
 }
 
 /* 인라인 오버레이 모달 (별도 overlay div) 공통 */
@@ -1456,3 +1470,4 @@ footer.statusbar .status-sep,
 .sqm-float-modal .sqm-float-body::-webkit-scrollbar      { width:8px; height:8px; }
 .sqm-float-modal .sqm-float-body::-webkit-scrollbar-track { background:var(--bg-card); }
 .sqm-float-modal .sqm-float-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    

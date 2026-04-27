@@ -3575,12 +3575,87 @@
     'CON RETURN','FREE TIME','WH'
   ];
 
+  /* ─── 파싱 결과 플로팅 창 ─────────────────────── */
+  var _parseResultPanel = null;
+  function _ensureParseResultWindow() {
+    if (_parseResultPanel && document.body.contains(_parseResultPanel)) {
+      _parseResultPanel.style.display = 'flex';
+      return _parseResultPanel;
+    }
+    var _fHtml = ['SAP','BL','CONTAINER','PRODUCT','STATUS'].map(function(f){
+      return '<label style="font-size:11px;color:var(--text-muted)">' + f + ':</label>'
+        + '<input type="text" id="onestop-filter-' + f.toLowerCase()
+        + '" placeholder=" " oninput="window.onestopApplyFilter&&window.onestopApplyFilter()"'
+        + ' style="padding:3px 6px;background:var(--bg-hover);color:var(--fg);border:1px solid var(--border);border-radius:4px;font-size:11px;width:90px">';
+    }).join('');
+    var _pH = ONESTOP_PREVIEW_COLS.map(function(cc){ return '<th>' + cc + '</th>'; }).join('');
+    var p = document.createElement('div');
+    p.id = 'sqm-parse-result';
+    p.style.cssText = 'position:fixed;top:55px;left:50%;transform:translateX(-50%);'
+      + 'width:min(1450px,96vw);height:84vh;background:var(--bg-card);'
+      + 'border:2px solid var(--accent,#4fc3f7);border-radius:10px;'
+      + 'box-shadow:0 8px 40px rgba(0,0,0,.6);z-index:10003;'
+      + 'display:flex;flex-direction:column;overflow:visible;';
+    var hdr = document.createElement('div');
+    hdr.id = 'sqm-parse-result-hdr';
+    hdr.style.cssText = 'flex-shrink:0;cursor:move;user-select:none;background:var(--bg-hover);'
+      + 'border-radius:10px 10px 0 0;border-bottom:1px solid var(--panel-border);'
+      + 'padding:6px 52px 6px 14px;display:flex;align-items:center;gap:8px;'
+      + 'min-height:34px;position:relative;';
+    hdr.innerHTML = '<span style="font-size:15px;font-weight:700;color:var(--accent)">📊 파싱 결과</span>'
+      + '<span id="parse-result-title" style="font-size:11px;color:var(--text-muted)"></span>'
+      + '<button onclick="document.getElementById(\'sqm-parse-result\').style.display=\'none\'" '
+      + 'style="position:absolute;top:4px;right:10px;background:none;border:none;'
+      + 'font-size:1.4rem;cursor:pointer;color:var(--text-muted);">×</button>';
+    var bdy = document.createElement('div');
+    bdy.style.cssText = 'flex:1 1 auto;display:flex;flex-direction:column;overflow:hidden;padding:10px 14px;gap:6px;';
+    bdy.innerHTML =
+      '<div class="onestop-edit-toolbar" style="display:flex;align-items:center;gap:6px;'
+      + 'padding:6px 10px;background:var(--panel);border:1px solid var(--panel-border);'
+      + 'border-radius:6px;flex-wrap:wrap;flex-shrink:0">'
+      + '<span style="font-weight:700;color:var(--text-muted);font-size:12px">✏️ 편집:</span>'
+      + '<button class="btn" id="onestop-undo-btn" onclick="window.onestopUndo()" disabled>↶ 되돌리기</button>'
+      + '<button class="btn" id="onestop-redo-btn" onclick="window.onestopRedo()" disabled>↷ 다시 실행</button>'
+      + '<button class="btn" id="onestop-reset-btn" onclick="window.onestopResetAll()" disabled>⟲ 원본 초기화</button>'
+      + '<span style="width:1px;height:20px;background:var(--panel-border);margin:0 2px"></span>'
+      + '<button class="btn btn-wip" onclick="window.onestopTemplateSave()">📋 템플릿 저장</button>'
+      + '<button class="btn btn-wip" onclick="window.onestopTemplateLoad()">📋 템플릿 선택</button>'
+      + '<span class="hint" style="margin-left:auto;color:var(--text-muted);font-size:11px">셀 더블클릭 → Enter 저장 · Esc 취소</span>'
+      + '</div>'
+      + '<div class="onestop-filter-bar" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0">'
+      + '<span style="font-weight:700;font-size:12px">▼ 필터:</span>' + _fHtml
+      + '<button class="btn" onclick="window.onestopResetFilter()" style="margin-left:auto">✖ 초기화</button>'
+      + '</div>'
+      + '<div style="flex:1 1 auto;overflow-x:auto;overflow-y:auto;">'
+      + '<table class="onestop-preview-table" style="min-width:1200px">'
+      + '<thead><tr>' + _pH + '</tr></thead>'
+      + '<tbody id="onestop-preview-body">'
+      + '<tr><td colspan="' + ONESTOP_PREVIEW_COLS.length + '" class="onestop-preview-empty">📭 파싱 대기 중...</td></tr>'
+      + '</tbody></table></div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;flex-shrink:0;padding-top:6px">'
+      + '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-parse-result\').style.display=\'none\'">❌ 닫기</button>'
+      + '<button class="btn btn-primary" id="onestop-save-btn" onclick="window.onestopSaveDb()" disabled>📤 DB 업로드</button>'
+      + '</div>';
+    p.appendChild(hdr); p.appendChild(bdy);
+    document.body.appendChild(p);
+    _makeDraggableResizable(p, hdr);
+    _parseResultPanel = p;
+    return p;
+  }
+  function _openParseResultWindow(carrier, lotCount) {
+    var pw = _ensureParseResultWindow();
+    pw.style.display = 'flex';
+    var ttl = document.getElementById('parse-result-title');
+    if (ttl) ttl.textContent = carrier
+      ? ' — ' + carrier + (lotCount != null ? ' (' + lotCount + ' LOT)' : '') : '';
+  }
+
   function showOneStopInboundModal() {
     /* 상태 초기화 */
     _onestopState.files = { BL: null, PACKING_LIST: null, INVOICE: null, DO: null };
     _onestopState.step = 1;
 
-    var slotsHtml = ONESTOP_DOC_TYPES.map(function(dt){
+    var slotsHtml = ONESTOP_DOC_TYPES.filter(function(dt){ return dt.key !== 'BL'; }).map(function(dt){
       return (
         '<div class="upload-slot" id="onestop-slot-' + dt.key + '">' +
           '<div class="upload-slot-icon">' + dt.icon + '</div>' +
@@ -3596,12 +3671,6 @@
       );
     }).join('');
 
-    var filterHtml = ['SAP','BL','CONTAINER','PRODUCT','STATUS'].map(function(f){
-      return '<label>' + f + ':</label><input type="text" id="onestop-filter-' + f.toLowerCase() + '" placeholder=" ">';
-    }).join('');
-
-    var previewHeader = ONESTOP_PREVIEW_COLS.map(function(c){ return '<th>' + c + '</th>'; }).join('');
-
     var html = [
       '<div class="onestop-modal">',
       '  <h2 style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">📥 입고 — SQM v8.6.5 (OneStop)'
@@ -3609,15 +3678,14 @@
       /* 템플릿 줄 */
       '  <div class="onestop-row">',
       '    <label>적용 템플릿:</label>',
-      '    <select id="onestop-template" disabled><option>MAERSK — 리튬카보네이트 500 kg (500kg BL:숫자9)</option></select>',
+      '    <select id="onestop-template" disabled><option value="">— 템플릿 없음 —</option></select>',
       '    <span class="chip">Sprint 2 예정</span>',
       '    <button class="btn" style="margin-left:auto" onclick="window.onestopSkipDo()">📋 D/O 나중에</button>',
       '  </div>',
       /* 선사 줄 */
       '  <div class="onestop-row">',
       '    <label>🚢 선사:</label>',
-      '    <input type="text" id="onestop-carrier" placeholder="Maersk / ONE / Evergreen ...">',
-      '    <span class="chip">[선사: Maersk] (템플릿)</span>',
+      '    <select id="onestop-carrier" style="padding:6px;flex:1;max-width:280px;background:var(--bg-hover);color:var(--fg);border:1px solid var(--border);border-radius:6px;font-weight:600"><option value="">— 선사 선택 (필수) —</option><option>Maersk</option><option>ONE</option><option>Evergreen</option><option>HMM</option><option>MSC</option><option>CMA CGM</option><option>Hapag-Lloyd</option><option>Yang Ming</option><option>ZIM</option><option>PIL</option><option>Wan Hai</option></select>',
       '    <button class="btn" onclick="window.onestopReparseCarrier()" disabled>🚢 선사 재파싱</button>',
       '  </div>',
       /* 4 업로드 슬롯 */
@@ -3634,32 +3702,10 @@
       '    <div class="onestop-progress-title">📊 진행 상태</div>',
       '    <div id="onestop-progress-body" class="onestop-progress-empty">파싱을 시작하면 진행 상황이 여기에 표시됩니다.</div>',
       '  </div>',
-      /* [Sprint 1-2-D] 편집 툴바 (Undo/Redo + 템플릿 + 힌트) */
-      '  <div class="onestop-edit-toolbar" style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;margin-bottom:6px;flex-wrap:wrap">',
-      '    <span style="font-weight:700;color:var(--text-muted);font-size:12px">✏️ 편집:</span>',
-      '    <button class="btn" id="onestop-undo-btn" onclick="window.onestopUndo()" disabled title="되돌리기 (Ctrl+Z)">↶ 되돌리기</button>',
-      '    <button class="btn" id="onestop-redo-btn" onclick="window.onestopRedo()" disabled title="다시 실행 (Ctrl+Y)">↷ 다시 실행</button>',
-      '    <button class="btn" id="onestop-reset-btn" onclick="window.onestopResetAll()" disabled title="모든 편집 되돌림">⟲ 원본 초기화</button>',
-      '    <span style="width:1px;height:20px;background:var(--panel-border);margin:0 2px"></span>',
-      '    <button class="btn btn-wip" onclick="window.onestopTemplateSave()" title="Sprint 2 예정">📋 템플릿 저장</button>',
-      '    <button class="btn btn-wip" onclick="window.onestopTemplateLoad()" title="Sprint 2 예정">📋 템플릿 선택</button>',
-      '    <span class="hint" style="margin-left:auto;color:var(--text-muted);font-size:11px">셀 더블클릭 → Enter 저장 · Esc 취소</span>',
-      '  </div>',
-      /* 필터 바 */
-      '  <div class="onestop-filter-bar">',
-      '    <span style="font-weight:700">▼ 필터:</span>' + filterHtml,
-      '    <button class="btn" onclick="window.onestopResetFilter()" style="margin-left:auto">✖ 초기화</button>',
-      '  </div>',
-      /* 미리보기 */
-      '  <div style="overflow-x:auto;max-height:320px;overflow-y:auto">',
-      '    <table class="onestop-preview-table"><thead><tr>' + previewHeader + '</tr></thead>',
-      '      <tbody id="onestop-preview-body"><tr><td colspan="' + ONESTOP_PREVIEW_COLS.length + '" class="onestop-preview-empty">📭 파싱 결과가 없습니다. 파일 선택 후 ▶ 파싱 시작을 눌러주세요.</td></tr></tbody>',
-      '    </table>',
-      '  </div>',
-      /* 하단 버튼 */
+      /* 결과는 별도 플로팅 창 (_ensureParseResultWindow) */
+      '  <div id="onestop-result-hint" style="padding:10px 14px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;margin-top:4px;color:var(--text-muted);font-size:12px;text-align:center">📊 파싱 시작 후 결과가 별도 창에 표시됩니다</div>',
       '  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">',
-      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">❌ 취소</button>',
-      '    <button class="btn btn-primary" id="onestop-save-btn" onclick="window.onestopSaveDb()" disabled>📤 DB 업로드</button>',
+      '    <button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">❌ 닫기</button>',
       '  </div>',
       '</div>'
     ].join('\n');
@@ -3912,10 +3958,13 @@
   /* ── 파싱 실행 (Sprint 1-2-B: /api/inbound/onestop-upload 4종 multipart + 크로스체크) ── */
   window.onestopParseStart = function() {
     var s = _onestopState.files;
+    var _cEl = document.getElementById('onestop-carrier');
+    if (!_cEl || !_cEl.value) { showToast('error', '🚢 선사를 먼저 선택하세요 (필수)'); return; }
     if (!s.PACKING_LIST) { showToast('error', 'Packing List(PL) 먼저 선택하세요'); return; }
 
     _onestopSetStep(2);
     _showParseLogPanel();
+    _openParseResultWindow(document.getElementById('onestop-carrier') ? document.getElementById('onestop-carrier').value : '', null);
     _addParseLog('🚀', '파싱 시작', 'var(--text-muted)');
     var pb = document.getElementById('onestop-progress-body');
     if (pb) {
@@ -3994,6 +4043,8 @@
         }
         _onestopRenderPreview(_onestopState.previewRows);
         _onestopUpdateHistoryButtons();
+        var _cEl2 = document.getElementById('onestop-carrier');
+        _openParseResultWindow(_cEl2 ? _cEl2.value : '', rows.length);
 
         _onestopSetStep(3);
         _addParseLog('✅', '파싱 완료 — LOT ' + rows.length + '건', 'var(--success,#4caf50)');
@@ -4913,6 +4964,35 @@
   }
   window.showAutoBackupSettingsModal = showAutoBackupSettingsModal;
 
+  /* 폰트 크기 전역 설정 */
+  window.sqmSetFontScale = function(pct) {
+    document.body.style.zoom = (pct / 100);
+    window._sqmFontScale = pct;
+    showToast('success', '폰트 크기: ' + pct + '%');
+  };
+  function showFontSizeModal() {
+    var cur = window._sqmFontScale || 100;
+    var html = '<div style="max-width:420px">'
+      + '<h2 style="margin:0 0 14px 0">🔤 화면 폰트 크기</h2>'
+      + '<p style="color:var(--text-muted);font-size:.9rem;margin-bottom:16px">'
+      + '전체 UI 폰트를 일괄 확대합니다. 100% = 기본값.</p>'
+      + '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">';
+    [100,110,120,130,140,150].forEach(function(p) {
+      html += '<button class="btn' + (cur === p ? ' btn-primary' : '') + '"'
+        + ' onclick="window.sqmSetFontScale(' + p + ');'
+        + 'document.getElementById(\'sqm-modal\').style.display=\'none\'"'
+        + ' style="min-width:66px;font-size:14px">' + p + '%</button>';
+    });
+    html += '</div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+      + '<button class="btn btn-ghost" onclick="window.sqmSetFontScale(100);'
+      + 'document.getElementById(\'sqm-modal\').style.display=\'none\'">초기화 (100%)</button>'
+      + '<button class="btn btn-ghost" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'">닫기</button>'
+      + '</div></div>';
+    showDataModal('', html);
+  }
+  window.showFontSizeModal = showFontSizeModal;
+
   function showInboundTemplateModal() {
     showSettingsDialog('입고 파싱 템플릿 관리', '📝', [
       { id:'name', label:'템플릿 이름', hint:'기본 Packing List' },
@@ -5313,6 +5393,7 @@
     'onPickingTemplateManage': {m:'JS', u:'picking-template',                      lbl:'피킹 템플릿 관리'},
     'onMoveApprovalQueue': {m:'JS', u:'move-approval-queue',                      lbl:'대량 이동 승인'},
     'onInboundTemplateManage': {m:'JS', u:'inbound-template',                     lbl:'입고 파싱 템플릿'},
+    'onFontSizeSettings':    {m:'JS', u:'font-size-settings',                       lbl:'🔤 화면 폰트 크기'},
     'onEmailConfig':     {m:'JS',   u:'email-config',                              lbl:'이메일 설정'},
     'onIntegrityReport': {m:'GET',  u:'/api/action/integrity-check',              lbl:'정합성 검증 (시각화)'},
     'onFixLotIntegrity': {m:'GET',  u:'/api/action/integrity-check',              lbl:'LOT 상태 정합성 복구'},
@@ -5468,6 +5549,10 @@
       }
       if (conf.u === 'inbound-template') {
         showInboundTemplateModal();
+        return;
+      }
+      if (conf.u === 'font-size-settings') {
+        showFontSizeModal();
         return;
       }
       if (conf.u === 'picking-template') {
