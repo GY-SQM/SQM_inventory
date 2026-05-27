@@ -176,6 +176,14 @@
     if (typeof window._makeDraggableResizable === 'function') {
       window._makeDraggableResizable(d, document.getElementById('sqm-listview-hdr'));
     }
+    /* v8.7.1: 🪟 별도 OS 창 분리 버튼 */
+    if (typeof window.sqmAddPopOutBtn === 'function') {
+      window.sqmAddPopOutBtn(d, document.getElementById('sqm-listview-hdr'), {
+        key: 'listview',
+        title: '📋 리스트 뷰',
+        width: 1200, height: 800,
+      });
+    }
     return d;
   }
 

@@ -105,8 +105,9 @@
     var _pH = ONESTOP_PREVIEW_COLS.map(function(cc){ return '<th>' + cc + '</th>'; }).join('');
     var p = document.createElement('div');
     p.id = 'sqm-parse-result';
-    p.style.cssText = 'position:fixed;top:55px;left:50%;transform:translateX(-50%);'
-      + 'width:min(1450px,96vw);height:84vh;background:var(--bg-card);'
+    /* v8.7.1: 폭 축소 (min(1200px,70vw)) + 좌측 정렬 — 우측에 파싱 로그 공간 확보 */
+    p.style.cssText = 'position:fixed;top:55px;left:12px;'
+      + 'width:min(1200px,calc(70vw - 12px));height:calc(100vh - 70px);background:var(--bg-card);'
       + 'border:2px solid var(--accent,#4fc3f7);border-radius:10px;'
       + 'box-shadow:0 8px 40px rgba(0,0,0,.6);z-index:10050;'
       + 'display:flex;flex-direction:column;overflow:visible;';
@@ -160,6 +161,15 @@
     }
     document.body.appendChild(p);
     _makeDraggableResizable(p, hdr);
+    /* v8.7.1: 🪟 별도 OS 창 분리 버튼 */
+    if (typeof window.sqmAddPopOutBtn === 'function') {
+      window.sqmAddPopOutBtn(p, hdr, {
+        key: 'parse-result',
+        title: '📊 파싱 결과',
+        width: 1200, height: 800,
+        liveSync: true,
+      });
+    }
     _parseResultPanel = p;
     return p;
   }
@@ -1257,6 +1267,16 @@
       }).join('');
       return '<tr' + (style ? ' style="' + style + '"' : '') + '>' + cellsHtml + '</tr>';
     }).join('');
+    /* v8.7.1: 분리 창이 열려있으면 tbody 를 라이브 미러링 */
+    if (typeof window.sqmPopOutBroadcast === 'function'
+        && typeof window.sqmPopOutIsActive === 'function'
+        && window.sqmPopOutIsActive('parse-result')) {
+      window.sqmPopOutBroadcast('parse-result', {
+        type: 'replace',
+        selector: '#onestop-preview-body',
+        html: tbody.innerHTML,
+      });
+    }
   }
 
   /* 셀 더블클릭 → input 으로 교체, blur/Enter 로 커밋, Escape 로 취소 */
@@ -1486,18 +1506,31 @@
     }
     var p = document.createElement('div');
     p.id = 'sqm-parse-log';
-    p.style.cssText = 'position:fixed;top:130px;right:28px;width:340px;background:var(--bg-card);border:1px solid var(--panel-border);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.45);z-index:10051;font-size:12px;display:flex;flex-direction:column';
+    /* v8.7.1: 우측 상단 → 우측 하단으로 이동, 폭 380, 높이 자동 — 파싱 결과창과 겹치지 않음 */
+    p.style.cssText = 'position:fixed;bottom:18px;right:18px;width:380px;'
+      + 'background:var(--bg-card);border:1px solid var(--panel-border);border-radius:10px;'
+      + 'box-shadow:0 8px 32px rgba(0,0,0,.45);z-index:10051;font-size:12px;'
+      + 'display:flex;flex-direction:column';
     p.innerHTML =
       '<div id="sqm-parse-log-hdr" style="cursor:move;user-select:none;padding:7px 12px;border-bottom:1px solid var(--panel-border);display:flex;align-items:center;gap:6px;border-radius:10px 10px 0 0;background:var(--panel);flex-shrink:0">'
       +'<span style="font-weight:700;flex:1;font-size:13px">⚙️ 파싱 진행 로그</span>'
       +'<button onclick="document.getElementById(\'sqm-parse-log\').style.display=\'none\'" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.2rem;line-height:1;padding:0 2px">✕</button>'
       +'</div>'
       +'<div id="sqm-parse-log-body" style="padding:8px 12px;max-height:340px;min-height:60px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;"></div>'
-      +'<div style="padding:5px 12px;border-top:1px solid var(--panel-border);font-size:10px;color:var(--text-muted);border-radius:0 0 10px 10px;background:var(--panel)">드래그로 이동 가능 · ✕ 닫기</div>';
+      +'<div style="padding:5px 12px;border-top:1px solid var(--panel-border);font-size:10px;color:var(--text-muted);border-radius:0 0 10px 10px;background:var(--panel)">드래그로 이동 · 🪟 별도 창 · ✕ 닫기</div>';
     document.body.appendChild(p);
     _parseLogPanel = p;
     _parseLogBody  = p.querySelector('#sqm-parse-log-body');
     var hdr = p.querySelector('#sqm-parse-log-hdr');
+    /* v8.7.1: 🪟 별도 OS 창 분리 버튼 */
+    if (typeof window.sqmAddPopOutBtn === 'function') {
+      window.sqmAddPopOutBtn(p, hdr, {
+        key: 'parse-log',
+        title: '⚙️ 파싱 진행 로그',
+        width: 420, height: 560,
+        liveSync: true,
+      });
+    }
     var drag = {on:false,sx:0,sy:0,ox:0,oy:0};
     hdr.addEventListener('mousedown', function(e){
       drag.on=true; drag.sx=e.clientX; drag.sy=e.clientY;
@@ -1515,14 +1548,25 @@
     if (!_parseLogBody) return;
     var t = new Date();
     var ts = t.getHours().toString().padStart(2,'0')+':'+t.getMinutes().toString().padStart(2,'0')+':'+t.getSeconds().toString().padStart(2,'0');
-    var row = document.createElement('div');
-    row.style.cssText = 'display:flex;gap:5px;align-items:flex-start;padding:3px 0;border-bottom:1px solid var(--panel-border,rgba(255,255,255,.07))';
-    row.innerHTML =
-      '<span style="color:var(--text-muted);flex-shrink:0;font-size:10px;padding-top:2px;width:50px">'+ts+'</span>'
-      +'<span style="flex-shrink:0;font-size:13px">'+icon+'</span>'
-      +'<span style="color:'+(color||'var(--fg)')+';flex:1;line-height:1.45">'+escapeHtml(msg)+'</span>';
-    _parseLogBody.appendChild(row);
+    var rowHtml =
+      '<div style="display:flex;gap:5px;align-items:flex-start;padding:3px 0;border-bottom:1px solid var(--panel-border,rgba(255,255,255,.07))">'
+      + '<span style="color:var(--text-muted);flex-shrink:0;font-size:10px;padding-top:2px;width:50px">'+ts+'</span>'
+      + '<span style="flex-shrink:0;font-size:13px">'+icon+'</span>'
+      + '<span style="color:'+(color||'var(--fg)')+';flex:1;line-height:1.45">'+escapeHtml(msg)+'</span>'
+      + '</div>';
+    _parseLogBody.insertAdjacentHTML('beforeend', rowHtml);
     _parseLogBody.scrollTop = _parseLogBody.scrollHeight;
+    /* v8.7.1: 분리 창이 열려있으면 같은 row 를 라이브 푸시 */
+    if (typeof window.sqmPopOutBroadcast === 'function'
+        && typeof window.sqmPopOutIsActive === 'function'
+        && window.sqmPopOutIsActive('parse-log')) {
+      window.sqmPopOutBroadcast('parse-log', {
+        type: 'append',
+        selector: '#sqm-parse-log-body',
+        html: rowHtml,
+        scroll: 'bottom',
+      });
+    }
   }
 
 
@@ -1557,7 +1601,9 @@
 
     /* draggable header */
     var drag = {on:false,sx:0,sy:0,ox:0,oy:0};
-    p.querySelector('#sgc-hdr').addEventListener('mousedown', function(e){
+    var sgcHdr = p.querySelector('#sgc-hdr');
+    sgcHdr.addEventListener('mousedown', function(e){
+      if (e.target.tagName === 'BUTTON') return;
       drag.on=true; drag.sx=e.clientX; drag.sy=e.clientY;
       var r=p.getBoundingClientRect(); drag.ox=r.left; drag.oy=r.top;
       p.style.transform='none'; p.style.left=r.left+'px'; e.preventDefault();
@@ -1568,6 +1614,15 @@
       p.style.top =(drag.oy+(e.clientY-drag.sy))+'px';
     });
     document.addEventListener('mouseup', function(){ drag.on=false; });
+
+    /* v8.7.1: 🪟 별도 OS 창 분리 버튼 */
+    if (typeof window.sqmAddPopOutBtn === 'function') {
+      window.sqmAddPopOutBtn(p, sgcHdr, {
+        key: 'gemini-compare',
+        title: '🔍 파싱 결과 비교',
+        width: 1300, height: 800,
+      });
+    }
 
     /* store rows for selection */
     p._coordRows  = coordRows;

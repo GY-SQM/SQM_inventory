@@ -84,6 +84,14 @@
     if (typeof window._makeDraggableResizable === 'function') {
       window._makeDraggableResizable(d, document.getElementById('case3-hdr'));
     }
+    /* v8.7.1: 🪟 별도 OS 창 분리 버튼 */
+    if (typeof window.sqmAddPopOutBtn === 'function') {
+      window.sqmAddPopOutBtn(d, document.getElementById('case3-hdr'), {
+        key: 'case3-dialog',
+        title: '🔄 잔량 처리 (Case 3)',
+        width: 1100, height: 760,
+      });
+    }
     return d;
   }
 

@@ -535,6 +535,14 @@ try:
 except Exception as e:
     logging.warning(f"template_ai router load failed: {e}")
 
+# v8.7.1: Popout (분리 창) Pub/Sub
+try:
+    from backend.api.popout import router as popout_router
+    app.include_router(popout_router)
+    logging.info("popout router loaded OK (/api/popout/*)")
+except Exception as e:
+    logging.warning(f"popout router load failed: {e}")
+
 
 # ── 표준 예외 핸들러 설치 ────────────────────────────────────
 # v864.3 Phase 2: static mount moved to END of file — Starlette matches

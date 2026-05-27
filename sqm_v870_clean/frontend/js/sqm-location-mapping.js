@@ -132,6 +132,14 @@
     if (typeof window._makeDraggableResizable === 'function') {
       window._makeDraggableResizable(d, document.getElementById('loc-map-hdr'));
     }
+    /* v8.7.1: 🪟 별도 OS 창 분리 버튼 */
+    if (typeof window.sqmAddPopOutBtn === 'function') {
+      window.sqmAddPopOutBtn(d, document.getElementById('loc-map-hdr'), {
+        key: 'location-mapping',
+        title: '🗺️ 위치 매핑',
+        width: 1200, height: 800,
+      });
+    }
     return d;
   }
 

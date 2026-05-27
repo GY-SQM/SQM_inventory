@@ -125,10 +125,18 @@
       +'<div id="sqm-modal-content" style="flex:1 1 auto;overflow:auto;padding:16px 20px;min-height:100px;"></div>'
       +'</div>';
     document.body.appendChild(m);
-    _makeDraggableResizable(
-      document.getElementById('sqm-modal-inner'),
-      document.getElementById('sqm-modal-header')
-    );
+    var _inner  = document.getElementById('sqm-modal-inner');
+    var _header = document.getElementById('sqm-modal-header');
+    _makeDraggableResizable(_inner, _header);
+    /* v8.7.1: 🪟 별도 OS 창 분리 버튼 (메인 데이터 모달용) */
+    if (typeof window.sqmAddPopOutBtn === 'function') {
+      window.sqmAddPopOutBtn(_inner, _header, {
+        /* key/title 은 showDataModal 호출 시 동적으로 결정되므로 동적 갱신 — 여기선 기본만 */
+        key: 'data-modal',
+        title: 'SQM',
+        width: 1280, height: 800,
+      });
+    }
     return m;
   }
 
@@ -139,6 +147,14 @@
     }
     html = html == null ? '' : String(html);
     var explicit = (title != null && String(title).trim()) ? String(title).trim() : '';
+    /* v8.7.1: 기존 data-modal popout 이 열려있으면 새 컨텐츠 진입 전 닫기 (스냅샷 stale 방지) */
+    try {
+      if (window.sqmPopOutIsActive && window.sqmPopOutIsActive('data-modal')
+          && window.pywebview && window.pywebview.api
+          && window.pywebview.api.close_detached_window) {
+        window.pywebview.api.close_detached_window('data-modal');
+      }
+    } catch(_) {}
     ensureModal().style.display = 'block';
     document.getElementById('sqm-modal-content').innerHTML = html;
     var barEl = document.getElementById('sqm-modal-title');
