@@ -1749,6 +1749,25 @@ class DatabaseMigrationMixin:
             "- 컨테이너 번호는 MRKU, MSKU, TRHU, HMMU 등으로 시작 11자리.\n"
             "- Seal No는 숫자만으로 구성되는 경우도 있음."
         )
+        _HINT_HAPAG_PL = (
+            "HAPAG-LLOYD PackingList 특이사항:\n"
+            "- LOT 번호는 'LOT NUMBER', 'SQM LOT', 'N LOTES' 열에서 10자리 숫자로 추출.\n"
+            "- 중량은 유럽식 표기 사용 가능. Net Weight/NET WEIGHT 열 우선.\n"
+            "- 컨테이너 번호는 HLCU, HLBU, UACU 등으로 시작하는 11자리.\n"
+            "- mxbg는 'BAGS', 'MAXIBAGS', 'QUANTITY' 열에서 읽음."
+        )
+        _HINT_HAPAG_INV = (
+            "HAPAG-LLOYD Invoice 특이사항:\n"
+            "- SAP NO는 'Customer Reference', 'Our Order', 'Ref.SQM' 주변의 22로 시작하는 10자리.\n"
+            "- LOT 번호는 표 또는 'N° LOTES' 섹션의 10자리 숫자.\n"
+            "- Invoice No는 문서 상단의 'Invoice No.' 또는 'No.' 필드."
+        )
+        _HINT_HAPAG_BL = (
+            "HAPAG-LLOYD B/L 특이사항:\n"
+            "- B/L No 형식: HLCU로 시작하는 번호 또는 Hapag-Lloyd 문서 번호.\n"
+            "- 컨테이너 번호는 HLCU/HLBU/UACU 등으로 시작하는 11자리.\n"
+            "- Vessel/Voyage, POL/POD, Shipped on Board 날짜를 BL 표기 영역에서 추출."
+        )
 
         presets = [
             {
@@ -1811,6 +1830,42 @@ class DatabaseMigrationMixin:
                 'gemini_hint_bl':      _HINT_MAERSK_BL,
                 'note':                'MAERSK 선사 리튬카보네이트 500kg 톤백 표준 템플릿',
             },
+            {
+                'template_id':         'MAERSK_LC1000',
+                'template_name':       '🚢 MAERSK — 리튬카보네이트 1,000 kg',
+                'carrier_id':          'MAERSK',
+                'bag_weight_kg':       1000,
+                'packing_type':        'A',
+                'product_hint':        'LITHIUM CARBONATE',
+                'gemini_hint_packing': _HINT_MAERSK_PL,
+                'gemini_hint_invoice': _HINT_MAERSK_INV,
+                'gemini_hint_bl':      _HINT_MAERSK_BL,
+                'note':                'MAERSK 선사 리튬카보네이트 1000kg 톤백 템플릿',
+            },
+            {
+                'template_id':         'HAPAG_LC500',
+                'template_name':       '🚢 HAPAG-LLOYD — 리튬카보네이트 500 kg',
+                'carrier_id':          'HAPAG',
+                'bag_weight_kg':       500,
+                'packing_type':        'C',
+                'product_hint':        'LITHIUM CARBONATE',
+                'gemini_hint_packing': _HINT_HAPAG_PL,
+                'gemini_hint_invoice': _HINT_HAPAG_INV,
+                'gemini_hint_bl':      _HINT_HAPAG_BL,
+                'note':                'HAPAG-LLOYD 선사 리튬카보네이트 500kg 톤백 표준 템플릿',
+            },
+            {
+                'template_id':         'HAPAG_LC1000',
+                'template_name':       '🚢 HAPAG-LLOYD — 리튬카보네이트 1,000 kg',
+                'carrier_id':          'HAPAG',
+                'bag_weight_kg':       1000,
+                'packing_type':        'A',
+                'product_hint':        'LITHIUM CARBONATE',
+                'gemini_hint_packing': _HINT_HAPAG_PL,
+                'gemini_hint_invoice': _HINT_HAPAG_INV,
+                'gemini_hint_bl':      _HINT_HAPAG_BL,
+                'note':                'HAPAG-LLOYD 선사 리튬카보네이트 1000kg 톤백 템플릿',
+            },
         ]
         for p in presets:
             try:
@@ -1829,7 +1884,7 @@ class DatabaseMigrationMixin:
             except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
                 logger.debug(f"[v7.2.0] preset 스킵({p['template_id']}): {e}")
 
-        logger.info("[v7.2.0] inbound_template 마이그레이션 완료 (5개 preset)")
+        logger.info("[v7.2.0] inbound_template 마이그레이션 완료 (8개 preset)")
 
     def _migrate_v740_picking_template(self) -> None:
         """
