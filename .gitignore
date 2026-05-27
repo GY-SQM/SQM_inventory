@@ -162,3 +162,7 @@ Claude_SQM_v864_4/_phase1_backup_20260420/
 Claude_SQM_v864_4/=6.0
 Claude_SQM_v864_4/sqm_2/
 Claude_SQM_v864_4/data/db/.fuse_hidden*
+
+# sqm_v870_clean 런타임/로컬 상태 (공유 제외)
+sqm_v870_clean/.bkit/
+sqm_v870_clean/window_state.json

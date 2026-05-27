@@ -238,7 +238,7 @@
       /* DB 파싱 템플릿 행 */
       '  <div class="onestop-row" id="onestop-db-tpl-row">',
       '    <label>🏋️ 파싱 템플릿:</label>',
-      '    <span id="onestop-db-tpl-label" style="flex:1;padding:5px 10px;background:var(--bg-hover);border:1px solid var(--danger,#f44336);border-radius:6px;font-size:12px;color:var(--danger,#f44336);font-weight:600">❌ 미설정 (파싱 전 선택 필수)</span>',
+      '    <span id="onestop-db-tpl-label" style="flex:1;min-height:28px;padding:5px 10px;background:var(--bg-hover);border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--text-muted);font-weight:600"></span>',
       '    <button class="btn btn-sm" onclick="window.onestopOpenDbTemplatePicker()">📋 DB 템플릿 선택</button>',
       '  </div>',
       /* 4 업로드 슬롯 */
@@ -593,6 +593,14 @@
     var localOnly = (list || []).filter(function(t) { return !t._is_db; });
     try { localStorage.setItem(_tplKey(carrier), JSON.stringify(localOnly)); } catch(e) {}
   }
+  function _clearDbTemplateLabel() {
+    var dbLbl = document.getElementById('onestop-db-tpl-label');
+    if (!dbLbl) return;
+    dbLbl.textContent = '';
+    dbLbl.style.color = 'var(--text-muted)';
+    dbLbl.style.border = '1px solid var(--border)';
+    dbLbl.style.borderColor = 'var(--border)';
+  }
   function _applyTemplate(tpl, carrier) {
     window._onestopActiveTemplate = tpl;
     var lbl = document.getElementById('onestop-tpl-label');
@@ -663,20 +671,14 @@
     var lbl = document.getElementById('onestop-tpl-label');
     if (lbl) { lbl.textContent = '미선택'; lbl.style.color = 'var(--text-muted)'; lbl.style.fontWeight = 'normal'; }
     var dbLbl = document.getElementById('onestop-db-tpl-label');
-    if (dbLbl) {
-      dbLbl.style.color = 'var(--danger,#f44336)';
-      dbLbl.style.border = '1px solid var(--danger,#f44336)';
-      dbLbl.textContent = '❌ 미설정 (파싱 전 선택 필수)';
-    }
+    if (dbLbl) _clearDbTemplateLabel();
     var tRow = document.getElementById('onestop-template-row');
     if (tRow) tRow.style.display = carrier ? '' : 'none';
     if (!carrier) return;
     /* DB 템플릿을 먼저 fetch → 캐시 채운 뒤 localStorage 와 머지하여 자동 적용 판정 */
     _fetchDbTemplates(carrier, function() {
       var list = _loadTplList(carrier);
-      if (list.length === 1) {
-        _applyTemplate(list[0], carrier);
-      } else if (list.length > 1) {
+      if (list.length > 0) {
         showToast('info', carrier + ' 템플릿 ' + list.length + '개 — [선택/수정]에서 선택하세요');
       } else {
         showToast('info', carrier + ' 템플릿 없음 — [선택/수정]으로 새 템플릿을 만드세요');
@@ -690,12 +692,7 @@
         if (window._onestopDbTemplateId) return;  /* 이미 DB 템플릿 적용됨 */
         if (p.bag_weight_kg) {
           var lbl2 = document.getElementById('onestop-db-tpl-label');
-          if (lbl2) {
-            lbl2.textContent = '❌ DB 템플릿 선택 필요 · 선사 기본값: '
-              + escapeHtml(p.display_name || carrier) + ' (' + p.bag_weight_kg + 'kg)';
-            lbl2.style.color = 'var(--danger,#f44336)';
-            lbl2.style.borderColor = 'var(--danger,#f44336)';
-          }
+          if (lbl2) _clearDbTemplateLabel();
         }
       })
       .catch(function() {});

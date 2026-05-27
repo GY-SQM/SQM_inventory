@@ -108,7 +108,7 @@ def _gemini_parse_pdf(pdf_path: str, filename: str = "") -> Optional[Any]:
             from google.genai import types as genai_types
             contents = [
                 genai_types.Part.from_bytes(data=img_bytes, mime_type="image/png"),
-                genai_types.Part.from_text(_GEMINI_PARSE_PROMPT),
+                genai_types.Part.from_text(text=_GEMINI_PARSE_PROMPT),
             ]
         except ImportError:
             # 구버전 google-generativeai 호환
