@@ -34,6 +34,7 @@ READ_ONLY_QUERY_TYPES = {
     "DB_테이블_미리보기",
     "DB_상태_요약",
     "DB_쓰기_거부",
+    "AI_자유조회",          # 전체 스키마 기반 읽기전용 NL→SQL 자유 조회
 }
 
 TABLE_ALIASES = {
@@ -580,6 +581,16 @@ class GeminiChatQuery:
             else:
                 intent["query_type"] = "전체_재고_요약"
 
+        # ── ★ 전용 템플릿이 하나도 안 맞아 기본값(전체_재고_요약)으로 떨어진 경우:
+        #    Gemini 사용 가능하면 전체 스키마 기반 읽기전용 자유 조회로 폴백.
+        #    (단, 사용자가 명시적으로 '전체 요약/현황'을 묻거나 순수 재고 질문이면 기존 템플릿 유지) ──
+        if intent["query_type"] == "전체_재고_요약" and getattr(self, "gemini_available", False):
+            named_table = self._find_readable_table(question)
+            core_inventory = (("재고" in q or "현재고" in q) and named_table is None)
+            explicit_overall = (("전체" in q and ("요약" in q or "현황" in q)) or core_inventory)
+            if not explicit_overall:
+                intent["query_type"] = "AI_자유조회"
+
         return intent
 
     def _has_write_intent(self, q: str) -> bool:
@@ -674,10 +685,106 @@ class GeminiChatQuery:
 
         return None
 
+    # ── ★ 전체 스키마 기반 읽기전용 자유 조회 (NL→SQL) ──────────────────────
+    def _build_full_schema(self) -> str:
+        """읽기 가능한 모든 테이블의 (테이블: 컬럼들) 스키마 텍스트."""
+        lines = []
+        for t in self._get_readable_tables():
+            try:
+                cols = self._table_columns(t)
+            except Exception:
+                cols = []
+            lines.append(f"{t}({', '.join(cols)})")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _extract_sql(text: str) -> Optional[str]:
+        """LLM 응답에서 SELECT/WITH SQL만 추출."""
+        if not text:
+            return None
+        s = text.strip()
+        m = re.search(r"```(?:sql)?\s*(.+?)```", s, re.S | re.I)   # 코드펜스 제거
+        if m:
+            s = m.group(1).strip()
+        m2 = re.search(r"\b(SELECT|WITH)\b", s, re.I)              # 첫 SELECT/WITH 부터
+        if not m2:
+            return None
+        s = s[m2.start():].strip()
+        s = s.split(";")[0].strip()                                # 첫 문장만
+        return s or None
+
+    @staticmethod
+    def _enforce_limit(sql: str, max_rows: int) -> str:
+        """LIMIT 없으면 안전상한 추가."""
+        if re.search(r"\bLIMIT\b", sql, re.I):
+            return sql
+        return f"{sql.rstrip().rstrip(';')}\nLIMIT {int(max_rows)}"
+
+    def _generate_sql_via_gemini(self, question: str, schema: str) -> Optional[str]:
+        """전체 스키마를 주고 읽기전용 SELECT 1개를 생성."""
+        prompt = (
+            "당신은 SQLite 읽기 전용 데이터 분석가입니다. 아래 [스키마]에 존재하는 "
+            "테이블/컬럼만 사용해 [질문]에 답하는 SQLite 쿼리 1개를 작성하세요.\n"
+            "규칙:\n"
+            "- 반드시 SELECT 또는 WITH ... SELECT 만. INSERT/UPDATE/DELETE/ALTER/DROP 등 변경문 절대 금지.\n"
+            "- 스키마에 없는 테이블/컬럼은 쓰지 말 것.\n"
+            "- 결과는 최대 500행(LIMIT 500 이하).\n"
+            "- 설명/주석/코드펜스 없이 SQL 본문만 출력.\n\n"
+            f"[스키마]\n{schema}\n\n[질문]\n{question}\n\n[SQL]"
+        )
+        try:
+            from features.ai.gemini_utils import call_gemini_safe
+            text = call_gemini_safe(self.client, self.model_name, prompt, timeout=30)
+        except ImportError:
+            try:
+                text = self.client.models.generate_content(
+                    model=self.model_name, contents=prompt
+                ).text
+            except Exception as e:
+                logger.warning(f"NL2SQL 생성 실패(fallback): {e}")
+                return None
+        except Exception as e:
+            logger.warning(f"NL2SQL 생성 실패: {e}")
+            return None
+        return self._extract_sql(text)
+
+    def _execute_ai_freeform(self, question: str) -> QueryResult:
+        """전체 스키마 기반 읽기전용 자유 조회."""
+        if not getattr(self, "gemini_available", False) or not self.client:
+            return QueryResult(False, "AI_자유조회", "", [], [], 0,
+                               "AI 자유 조회는 Gemini API 키가 설정돼야 사용할 수 있습니다.", error="no_api_key")
+        schema = self._build_full_schema()
+        sql = self._generate_sql_via_gemini(question, schema)
+        if not sql:
+            return QueryResult(False, "AI_자유조회", "", [], [], 0,
+                               "질문을 SQL로 변환하지 못했습니다. 테이블/컬럼을 더 구체적으로 알려주세요.",
+                               "sql_gen_failed")
+        try:
+            sql = self._enforce_limit(sql, 500)
+            self._validate_read_only_sql(sql)          # ★ 기존 읽기전용 가드 재사용
+            data = self._fetchall_readonly(sql)
+        except ValueError as e:
+            return QueryResult(False, "AI_자유조회", sql, [], [], 0,
+                               f"읽기 전용 정책으로 차단된 쿼리입니다: {e}", error="read_only_guard")
+        except sqlite3.Error as e:
+            return QueryResult(False, "AI_자유조회", sql, [], [], 0,
+                               f"쿼리 실행 오류: {e}\nSQL: {sql}", error="sql_error")
+        columns = list(data[0].keys()) if data else []
+        if not data:
+            answer = f"조건에 맞는 데이터가 없습니다.\n\n실행 SQL:\n{sql}"
+        else:
+            preview_cols = ", ".join(columns[:8]) + (" …" if len(columns) > 8 else "")
+            answer = (f"📊 {len(data)}건 조회됨 (읽기 전용).\n"
+                      f"컬럼: {preview_cols}\n\n실행 SQL:\n{sql}")
+        return QueryResult(True, "AI_자유조회", sql, data, columns, len(data), answer)
+
     def _execute_database_tool(self, intent: Dict, question: str) -> QueryResult:
         """전체 DB 읽기 전용 도구 실행."""
         query_type = intent["query_type"]
         try:
+            if query_type == "AI_자유조회":
+                return self._execute_ai_freeform(question)
+
             if query_type == "DB_쓰기_거부":
                 return QueryResult(
                     success=False,

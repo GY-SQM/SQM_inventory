@@ -40,7 +40,7 @@
     catch (e) {}
   }
   // 시작 로그는 항상 출력 (사용자가 로드 여부 확인 가능)
-  try { console.info('[sqm-modal-mgr] v8.7.0-r9 loaded'); } catch (e) {}
+  try { console.info('[sqm-modal-mgr] v8.7.0-r10 loaded'); } catch (e) {}
 
   /* ── 상수 ─────────────────────────────────────────────────────────────── */
   var STORAGE_KEY = 'sqm_win_prefs';   // localStorage 키
@@ -265,7 +265,26 @@
     overlay.setAttribute('data-sqm-overlay', '1');
   }
 
-  /* ── 위치/크기 복원 ──────────────────────────────────────────────────── */
+  /* ── ★ 박스를 현재 메인창(뷰포트) 안으로 맞춤 ─────────────────────────
+     크기가 창보다 크면 줄이고, 밖으로 나가면 안으로 끌어당긴 {w,h,x,y} 반환.
+     순수 계산 함수 — 호출할 때마다 같은 입력엔 같은 출력 ⇒ 떨림(루프) 불가. */
+  function _fitBox(w, h, x, y) {
+    var M = 6;                                   // 가장자리 여백(px)
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var maxW = Math.max(MIN_W, vw - M * 2);
+    var maxH = Math.max(MIN_H, vh - M * 2);
+    if (w > maxW) w = maxW;
+    if (h > maxH) h = maxH;
+    if (x == null) x = Math.round((vw - w) / 2);  // 위치 없으면 가운데
+    if (y == null) y = Math.round((vh - h) / 2);
+    if (x + w > vw - M) x = vw - w - M;            // 오른쪽 넘침 → 당김
+    if (y + h > vh - M) y = vh - h - M;            // 아래 넘침 → 당김
+    if (x < M) x = M;
+    if (y < M) y = M;
+    return { w: Math.round(w), h: Math.round(h), x: Math.round(x), y: Math.round(y) };
+  }
+
+  /* ── 위치/크기 복원 (★ 항상 뷰포트 안으로 맞춰 적용 → 잘림 방지) ────────── */
   function _restorePref(el, id) {
     var pref = _getPref(id);
     if (!pref) return;
@@ -276,11 +295,16 @@
     el.style.setProperty('max-height', 'none', 'important');
     el.style.setProperty('min-width',  '0',    'important');
     el.style.setProperty('min-height', '0',    'important');
-    if (pref.w) el.style.setProperty('width',  pref.w + 'px', 'important');
-    if (pref.h) el.style.setProperty('height', pref.h + 'px', 'important');
-    if (pref.x != null) el.style.left = pref.x + 'px';
-    if (pref.y != null) el.style.top  = pref.y + 'px';
-    _log('restorePref', id, pref);
+    // 저장값을 현재 메인창 크기에 맞춰 축소·수납한 값으로 적용
+    var r0  = el.getBoundingClientRect();
+    var box = _fitBox(pref.w || r0.width, pref.h || r0.height,
+                      (pref.x != null ? pref.x : null),
+                      (pref.y != null ? pref.y : null));
+    el.style.setProperty('width',  box.w + 'px', 'important');
+    el.style.setProperty('height', box.h + 'px', 'important');
+    el.style.left = box.x + 'px';
+    el.style.top  = box.y + 'px';
+    _log('restorePref(fit)', id, box);
   }
 
   /* ── ★ 글로벌 강제 닫기 위임 ──────────────────────────────────────────
@@ -616,6 +640,33 @@
     // 저장된 위치/크기 복원
     _restorePref(el, id);
 
+    // ★ 저장값 없던 창도 최초 1회 메인창 안으로 수납 (내용 렌더 후 1회만)
+    //   수납한 값을 곧바로 저장 → 이후 복원과 값이 일치하므로 떨림(루프) 없음
+    if (!_getPref(id)) {
+      setTimeout(function () {
+        try {
+          if (!document.body.contains(el)) return;
+          var cs = window.getComputedStyle(el);
+          if (cs.display === 'none' || cs.visibility === 'hidden') return;
+          var M = 6, vw = window.innerWidth, vh = window.innerHeight;
+          var r = el.getBoundingClientRect();
+          var over = (r.width  > vw - M * 2) || (r.height > vh - M * 2) ||
+                     (r.right  > vw - M) || (r.bottom > vh - M) ||
+                     (r.left   < M)      || (r.top    < M);
+          if (!over) return;                         // 이미 안에 들어옴 → 손대지 않음
+          var box = _fitBox(r.width, r.height, r.left, r.top);
+          el.style.setProperty('position', 'fixed', 'important');
+          el.style.transform = 'none';
+          el.style.setProperty('width',  box.w + 'px', 'important');
+          el.style.setProperty('height', box.h + 'px', 'important');
+          el.style.left = box.x + 'px';
+          el.style.top  = box.y + 'px';
+          _persist(el, id);                          // 저장 → 복원과 일치
+          _log('initial fit', id, box);
+        } catch (e) { _log('initial fit 오류', e); }
+      }, 90);
+    }
+
     var dragHandle = _findDragHandle(el);
 
     /* ── 🪟 별도 OS 창 분리(popout) 버튼 자동 부착 ──────────────────────
@@ -857,7 +908,7 @@
         var ev = new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27 });
         document.dispatchEvent(ev);
       },
-      version: 'v8.7.0-r9',
+      version: 'v8.7.0-r10',
       // 진단/리셋 헬퍼
       resetPrefs: function() { localStorage.removeItem(STORAGE_KEY); _log('all prefs cleared'); },
       autoDetect: _autoDetect,
