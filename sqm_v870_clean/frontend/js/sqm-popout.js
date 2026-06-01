@@ -171,8 +171,10 @@
 
     const title = opts.title || _detectTitle(panel) || ('SQM — ' + key);
     const html = _serializePanel(panel);
-    const w = opts.width  || Math.min(1200, Math.round(window.innerWidth  * 0.7));
-    const h = opts.height || Math.min(800,  Math.round(window.innerHeight * 0.8));
+    const screenW = (window.screen && window.screen.availWidth) || window.innerWidth || 1400;
+    const screenH = (window.screen && window.screen.availHeight) || window.innerHeight || 900;
+    const w = opts.width  || Math.min(1500, Math.max(900, Math.round(screenW * 0.82)));
+    const h = opts.height || Math.min(950,  Math.max(700, Math.round(screenH * 0.84)));
 
     /* 1) 스냅샷 저장 */
     _post('/api/popout/snapshot/' + encodeURIComponent(key), {html: html}).then(function () {

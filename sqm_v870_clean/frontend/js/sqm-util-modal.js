@@ -25,9 +25,22 @@
   // 전역 노출 (인라인 이벤트에서 접근 가능)
   window._bringToFront = _bringToFront;
 
+  function _keepTitleBarReachable(el, x, y) {
+    var w = Math.max(el.offsetWidth || 0, 400);
+    var minX = 80 - w;
+    var maxX = Math.max(80, (window.innerWidth || 1200) - 80);
+    var maxY = Math.max(40, (window.innerHeight || 800) - 40);
+    return {
+      x: Math.min(maxX, Math.max(minX, x)),
+      y: Math.min(maxY, Math.max(0, y))
+    };
+  }
+
   function _makeDraggableResizable(el, dragBar) {
     var drag = {on:false, sx:0, sy:0, ox:0, oy:0};
     dragBar.style.cursor = 'move';
+    el.style.setProperty('max-width', 'none', 'important');
+    el.style.setProperty('max-height', 'none', 'important');
     el.addEventListener('mousedown', function(){ _bringToFront(el); });
     dragBar.addEventListener('mousedown', function(e){
       if (e.target.tagName === 'BUTTON') return;
@@ -41,8 +54,9 @@
     });
     document.addEventListener('mousemove', function(e){
       if (!drag.on) return;
-      el.style.left = Math.max(0, drag.ox + (e.clientX - drag.sx)) + 'px';
-      el.style.top  = Math.max(0, drag.oy + (e.clientY - drag.sy)) + 'px';
+      var p = _keepTitleBarReachable(el, drag.ox + (e.clientX - drag.sx), drag.oy + (e.clientY - drag.sy));
+      el.style.left = p.x + 'px';
+      el.style.top  = p.y + 'px';
     });
     document.addEventListener('mouseup', function(){ drag.on = false; });
     ['n','s','e','w','ne','nw','se','sw'].forEach(function(d){
@@ -66,8 +80,11 @@
         if (d.indexOf('s')!==-1)  nh=Math.max(200,res.oh+dy);
         if (d.indexOf('w')!==-1){ nw=Math.max(400,res.ow-dx); nx=res.ox+(res.ow-nw); }
         if (d.indexOf('n')!==-1){ nh=Math.max(200,res.oh-dy); ny=res.oy+(res.oh-nh); }
+        var p = _keepTitleBarReachable(el, nx, ny);
         el.style.width=nw+'px'; el.style.height=nh+'px';
-        el.style.left=nx+'px';  el.style.top=ny+'px';
+        el.style.left=p.x+'px';  el.style.top=p.y+'px';
+        el.style.setProperty('max-width', 'none', 'important');
+        el.style.setProperty('max-height', 'none', 'important');
       });
       document.addEventListener('mouseup', function(){ res.on=false; });
     });
@@ -115,8 +132,8 @@
     }
     m=document.createElement('div');
     m.id='sqm-modal';
-    m.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;';
-    m.innerHTML='<div id="sqm-modal-inner" style="background:var(--bg-card);border-radius:8px;width:min(1280px,92vw);max-width:92vw;min-height:200px;max-height:88vh;position:fixed;top:65px;left:50%;transform:translateX(-50%);overflow:visible;display:flex;flex-direction:column;">'
+    m.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;overflow:visible;';
+    m.innerHTML='<div id="sqm-modal-inner" style="background:var(--bg-card);border-radius:8px;width:min(1280px,92vw);max-width:none;min-height:200px;max-height:none;position:fixed;top:65px;left:50%;transform:translateX(-50%);overflow:visible;display:flex;flex-direction:column;pointer-events:all;">'
       +'<div id="sqm-modal-header" onmousedown="(function(){var mi=document.getElementById(\'sqm-modal-inner\');if(mi)mi.style.zIndex=++(window._sqmZ);})()" style="flex-shrink:0;cursor:move;user-select:none;background:var(--bg-hover,rgba(0,0,0,.06));border-radius:8px 8px 0 0;border-bottom:1px solid var(--panel-border);padding:5px 48px 5px 12px;display:flex;align-items:center;gap:8px;min-height:28px;position:relative;">'
       +'<span id="sqm-modal-title">SQM</span>'
       +'<span id="sqm-modal-drag-hint" title="이 줄을 드래그하면 창 이동, 바깥 모서리를 잡으면 크기 조절">⋮⋮ 이동 · 크기</span>'

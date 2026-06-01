@@ -29,6 +29,58 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 
+READ_ONLY_QUERY_TYPES = {
+    "DB_전체_테이블_요약",
+    "DB_테이블_미리보기",
+    "DB_상태_요약",
+    "DB_쓰기_거부",
+}
+
+TABLE_ALIASES = {
+    "재고": "inventory",
+    "입고": "inventory",
+    "입고 대기": "inventory",
+    "톤백": "inventory_tonbag",
+    "서브롯": "inventory_tonbag",
+    "sublot": "inventory_tonbag",
+    "출고 예정": "outbound",
+    "출고": "outbound",
+    "allocation": "allocation_plan",
+    "allocaton": "allocation_plan",
+    "예약": "allocation_plan",
+    "배정": "allocation_plan",
+    "picking": "picking_table",
+    "피킹": "picking_table",
+    "sold": "sold_table",
+    "판매": "sold_table",
+    "반품": "return_history",
+    "return": "return_history",
+    "위치 이동": "stock_movement",
+    "위치": "stock_movement",
+    "이동": "stock_movement",
+    "대량 이동": "move_batch",
+    "move_batch": "move_batch",
+    "오류": "audit_log",
+    "에러": "audit_log",
+    "검증": "allocation_plan",
+}
+
+HARD_WRITE_INTENT_TERMS = (
+    "삭제", "저장", "반영", "확정", "반려", "취소",
+    "update", "delete", "insert", "drop", "alter", "create", "replace",
+    "truncate", "attach", "detach", "vacuum",
+)
+
+SOFT_WRITE_INTENT_TERMS = (
+    "수정", "변경", "승인",
+)
+
+READ_INTENT_TERMS = (
+    "조회", "알려", "보여", "목록", "요약", "몇", "상태", "대기", "읽",
+    "read", "show", "list", "summary", "pending",
+)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # 쿼리 템플릿 정의
 # ═══════════════════════════════════════════════════════════════════════
@@ -173,6 +225,81 @@ QUERY_TEMPLATES = {
         {where_clause}
         ORDER BY ap.created_at DESC
         LIMIT {limit}
+    """,
+    "입고_PENDING_목록": """
+        SELECT
+            lot_no as LOT_NO,
+            sap_no as SAP_NO,
+            product as 제품,
+            ROUND(COALESCE(net_weight, initial_weight, current_weight, 0) / 1000.0, 3) as 중량_MT,
+            container_no as 컨테이너,
+            warehouse as 창고,
+            inbound_date as 입고예정일,
+            arrival_date as 입항일,
+            bl_no as BL_NO,
+            vessel as 선박,
+            created_at as 등록일시
+        FROM inventory
+        WHERE status = 'PENDING'
+        {and_clause}
+        ORDER BY COALESCE(inbound_date, arrival_date, created_at) DESC
+        LIMIT {limit}
+    """,
+    "입고_PENDING_요약": """
+        SELECT
+            COUNT(*) as 건수,
+            ROUND(SUM(COALESCE(net_weight, initial_weight, current_weight, 0)) / 1000.0, 3) as 총중량_MT,
+            COUNT(DISTINCT container_no) as 컨테이너수,
+            COUNT(DISTINCT product) as 제품수
+        FROM inventory
+        WHERE status = 'PENDING'
+        {and_clause}
+    """,
+    "Allocation_승인대기": """
+        SELECT
+            id as ID,
+            lot_no as LOT_NO,
+            sub_lt as Sub_LT,
+            customer as 고객,
+            sale_ref as SALE_REF,
+            qty_mt as 수량_MT,
+            outbound_date as 출고예정일,
+            status as 상태,
+            workflow_status as 워크플로상태,
+            created_at as 요청일시
+        FROM allocation_plan
+        WHERE status = 'STAGED'
+          AND workflow_status = 'PENDING_APPROVAL'
+          {and_clause}
+        ORDER BY created_at DESC, id DESC
+        LIMIT {limit}
+    """,
+    "대량이동_PENDING": """
+        SELECT
+            batch_id as Batch_ID,
+            total_count as 건수,
+            reason_code as 사유,
+            submitted_by as 요청자,
+            submitted_at as 요청일시,
+            note as 메모
+        FROM move_batch
+        WHERE status = 'PENDING'
+        ORDER BY submitted_at DESC
+        LIMIT {limit}
+    """,
+    "운영_PENDING_요약": """
+        SELECT '입고 대기' as 구분, COUNT(*) as 건수
+        FROM inventory
+        WHERE status = 'PENDING'
+        UNION ALL
+        SELECT 'Allocation 승인 대기' as 구분, COUNT(*) as 건수
+        FROM allocation_plan
+        WHERE status = 'STAGED'
+          AND workflow_status = 'PENDING_APPROVAL'
+        UNION ALL
+        SELECT '대량 이동 승인 대기' as 구분, COUNT(*) as 건수
+        FROM move_batch
+        WHERE status = 'PENDING'
     """,
 }
 
@@ -370,7 +497,50 @@ class GeminiChatQuery:
             intent["date_range"] = f"{month_match.group(1)}-{int(month_match.group(2)):02d}"
 
         # 쿼리 타입 결정
-        if "allocation" in q or "allocaton" in q or "예약" in q or "배정" in q or "allocation table" in q:
+        if self._has_write_intent(q):
+            intent["query_type"] = "DB_쓰기_거부"
+            return intent
+
+        if self._is_database_overview_question(q):
+            intent["query_type"] = "DB_전체_테이블_요약"
+            return intent
+
+        if self._is_database_status_question(q):
+            intent["query_type"] = "DB_상태_요약"
+            return intent
+
+        table_name = self._find_readable_table(question) if self._is_table_preview_question(q) else None
+        if table_name:
+            intent["query_type"] = "DB_테이블_미리보기"
+            intent["table_name"] = table_name
+            return intent
+
+        pending_terms = ("pending", "펜딩", "대기", "미반입")
+        has_pending = any(term in q for term in pending_terms)
+        has_approval_wait = ("승인" in q and "대기" in q) or "pending_approval" in q
+        has_allocation = (
+            "allocation" in q or "allocaton" in q or "예약" in q
+            or "배정" in q or "allocation table" in q
+        )
+        has_batch_move = (
+            ("대량" in q and "이동" in q) or "batch move" in q
+            or "move_batch" in q or "이동승인" in q
+        )
+
+        if has_batch_move and has_pending:
+            intent["query_type"] = "대량이동_PENDING"
+        elif has_approval_wait or (has_allocation and has_pending):
+            intent["query_type"] = "Allocation_승인대기"
+        elif (
+            ("입고" in q or "창고" in q or "미반입" in q or "보세" in q) and has_pending
+        ) or (has_pending and (intent["product"] or intent["sap_no"] or intent["bl_no"] or intent["lot_no"])):
+            if "요약" in q or "몇" in q or "건수" in q or "총" in q:
+                intent["query_type"] = "입고_PENDING_요약"
+            else:
+                intent["query_type"] = "입고_PENDING_목록"
+        elif has_pending:
+            intent["query_type"] = "운영_PENDING_요약"
+        elif has_allocation:
             # "allocation table에서 몇 개 allocation됐니?" → 예약/배정 현황
             if "목록" in q or "리스트" in q or "내역" in q:
                 intent["query_type"] = "예약_배정_목록"
@@ -412,11 +582,193 @@ class GeminiChatQuery:
 
         return intent
 
+    def _has_write_intent(self, q: str) -> bool:
+        """채팅에서 상태 변경/쓰기 요청은 항상 거부한다."""
+        if any(term in q for term in HARD_WRITE_INTENT_TERMS):
+            return True
+        if any(term in q for term in SOFT_WRITE_INTENT_TERMS):
+            return not any(term in q for term in READ_INTENT_TERMS)
+        return False
+
+    def _is_database_overview_question(self, q: str) -> bool:
+        """전체 DB 테이블 목록/건수 요약 질문인지 판별."""
+        has_db = "db" in q or "database" in q or "데이터베이스" in q or "테이블" in q
+        has_overview = "전체" in q or "모든" in q or "목록" in q or "요약" in q
+        return has_db and has_overview and "상태" not in q
+
+    def _is_database_status_question(self, q: str) -> bool:
+        """DB 전체 상태 컬럼 요약 질문인지 판별."""
+        has_scope = "전체" in q or "모든" in q or "database" in q or "데이터베이스" in q
+        has_status = "상태" in q or "status" in q or "워크플로" in q or "workflow" in q
+        return has_scope and has_status
+
+    def _is_table_preview_question(self, q: str) -> bool:
+        """특정 테이블 원본 행 미리보기 질문인지 판별."""
+        if "테이블" in q or "table" in q:
+            return True
+        return any(table_name.lower() in q for table_name in self._get_readable_tables())
+
+    @staticmethod
+    def _quote_identifier(identifier: str) -> str:
+        """SQLite 식별자 안전 인용."""
+        if not isinstance(identifier, str) or not identifier:
+            raise ValueError("빈 테이블명은 사용할 수 없습니다.")
+        return '"' + identifier.replace('"', '""') + '"'
+
+    def _validate_read_only_sql(self, sql: str) -> None:
+        """생성된 SQL이 읽기 전용인지 최종 확인."""
+        without_comments = re.sub(r"--.*?(?:\n|$)|/\*.*?\*/", "", sql, flags=re.DOTALL)
+        compact = re.sub(r"\s+", " ", without_comments.strip())
+        first_word = compact.split(" ", 1)[0].upper() if compact else ""
+        if first_word not in ("SELECT", "WITH", "PRAGMA"):
+            raise ValueError("AI 채팅은 읽기 전용 SQL만 실행할 수 있습니다.")
+        if first_word == "PRAGMA" and not re.match(
+            r"^PRAGMA\s+(table_info|index_list|foreign_key_list|database_list)\b",
+            compact,
+            re.IGNORECASE,
+        ):
+            raise ValueError("AI 채팅은 메타데이터 조회 PRAGMA만 실행할 수 있습니다.")
+        blocked = re.search(
+            r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|REPLACE|TRUNCATE|ATTACH|DETACH|VACUUM)\b",
+            compact,
+            re.IGNORECASE,
+        )
+        if blocked:
+            raise ValueError("AI 채팅은 데이터 수정 SQL을 실행할 수 없습니다.")
+
+    def _fetchall_readonly(self, sql: str, params: tuple = ()) -> List[Dict]:
+        self._validate_read_only_sql(sql)
+        return self.db.fetchall(sql, params)
+
+    def _get_readable_tables(self) -> List[str]:
+        rows = self._fetchall_readonly(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table'
+              AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+            """
+        )
+        return [str(r.get("name", "")) for r in rows if r.get("name")]
+
+    def _table_columns(self, table_name: str) -> List[str]:
+        quoted = self._quote_identifier(table_name)
+        rows = self._fetchall_readonly(f"PRAGMA table_info({quoted})")
+        return [str(r.get("name", "")) for r in rows if r.get("name")]
+
+    def _find_readable_table(self, question: str) -> Optional[str]:
+        """질문에서 실제 DB 테이블명을 찾는다."""
+        q = question.lower()
+        tables = set(self._get_readable_tables())
+        if not tables:
+            return None
+
+        for table_name in sorted(tables, key=len, reverse=True):
+            if table_name.lower() in q:
+                return table_name
+
+        for alias, table_name in sorted(TABLE_ALIASES.items(), key=lambda item: len(item[0]), reverse=True):
+            if alias.lower() in q and table_name in tables:
+                return table_name
+
+        return None
+
+    def _execute_database_tool(self, intent: Dict, question: str) -> QueryResult:
+        """전체 DB 읽기 전용 도구 실행."""
+        query_type = intent["query_type"]
+        try:
+            if query_type == "DB_쓰기_거부":
+                return QueryResult(
+                    success=False,
+                    query_type=query_type,
+                    sql="",
+                    data=[],
+                    columns=[],
+                    row_count=0,
+                    answer=(
+                        "읽기 전용 AI 채팅에서는 데이터 수정, 승인, 반려, 확정, 삭제를 실행할 수 없습니다. "
+                        "필요한 값은 조회만 하고, 상태 변경은 기존 화면의 명시적 버튼에서 처리하세요."
+                    ),
+                    error="read_only_guard",
+                )
+
+            if query_type == "DB_전체_테이블_요약":
+                data = []
+                for table_name in self._get_readable_tables():
+                    quoted = self._quote_identifier(table_name)
+                    row = self._fetchall_readonly(f"SELECT COUNT(*) AS row_count FROM {quoted}")[0]
+                    cols = self._table_columns(table_name)
+                    data.append({
+                        "테이블": table_name,
+                        "행수": int(row.get("row_count", 0) or 0),
+                        "컬럼수": len(cols),
+                    })
+                answer = self._generate_answer(query_type, data, ["테이블", "행수", "컬럼수"], intent, question)
+                return QueryResult(True, query_type, "sqlite_master + COUNT(*)", data,
+                                   ["테이블", "행수", "컬럼수"], len(data), answer)
+
+            if query_type == "DB_테이블_미리보기":
+                table_name = intent.get("table_name") or self._find_readable_table(question)
+                if not table_name:
+                    return QueryResult(False, query_type, "", [], [], 0,
+                                       "읽을 테이블을 찾지 못했습니다. '전체 테이블 요약'으로 테이블명을 먼저 확인하세요.",
+                                       "table_not_found")
+                quoted = self._quote_identifier(table_name)
+                limit = int(intent.get("limit", 100))
+                sql = f"SELECT * FROM {quoted} LIMIT ?"
+                data = self._fetchall_readonly(sql, (limit,))
+                columns = list(data[0].keys()) if data else self._table_columns(table_name)
+                intent["table_name"] = table_name
+                answer = self._generate_answer(query_type, data, columns, intent, question)
+                return QueryResult(True, query_type, sql, data, columns, len(data), answer)
+
+            if query_type == "DB_상태_요약":
+                data = []
+                status_columns = {
+                    "status", "workflow_status", "gate_status", "approval_status",
+                    "fail_code", "fail_reason", "risk_flags",
+                }
+                for table_name in self._get_readable_tables():
+                    columns = self._table_columns(table_name)
+                    for col in columns:
+                        if col.lower() not in status_columns:
+                            continue
+                        quoted_table = self._quote_identifier(table_name)
+                        quoted_col = self._quote_identifier(col)
+                        sql = (
+                            f"SELECT {quoted_col} AS value, COUNT(*) AS count "
+                            f"FROM {quoted_table} "
+                            f"WHERE {quoted_col} IS NOT NULL AND TRIM(CAST({quoted_col} AS TEXT)) <> '' "
+                            f"GROUP BY {quoted_col} ORDER BY count DESC LIMIT 50"
+                        )
+                        for row in self._fetchall_readonly(sql):
+                            data.append({
+                                "테이블": table_name,
+                                "컬럼": col,
+                                "값": row.get("value"),
+                                "건수": int(row.get("count", 0) or 0),
+                            })
+                columns = ["테이블", "컬럼", "값", "건수"]
+                answer = self._generate_answer(query_type, data, columns, intent, question)
+                return QueryResult(True, query_type, "status-column GROUP BY scan", data,
+                                   columns, len(data), answer)
+
+            return QueryResult(False, query_type, "", [], [], 0, "지원하지 않는 DB 조회 도구입니다.")
+        except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
+            err_msg = str(e)
+            logger.error(f"읽기 전용 DB 도구 오류: {e}")
+            return QueryResult(False, query_type, "", [], [], 0,
+                               f"읽기 전용 DB 조회 중 오류가 발생했습니다: {err_msg}", err_msg)
+
     def _execute_query(self, intent: Dict, question: str) -> QueryResult:
         """쿼리 실행"""
         query_type = intent["query_type"]
 
         try:
+            if query_type in READ_ONLY_QUERY_TYPES:
+                return self._execute_database_tool(intent, question)
+
             # WHERE 절 구성 — ? 파라미터 바인딩 사용 (SQL 인젝션 방지 P0-1)
             where_parts: list = []
             and_parts: list = []
@@ -461,10 +813,50 @@ class GeminiChatQuery:
                 and_parts = ap_parts
                 params = ap_params
 
+            # PENDING 전용 조회는 각 템플릿이 안전한 고정 조건을 이미 포함한다.
+            if query_type in ("입고_PENDING_목록", "입고_PENDING_요약"):
+                inv_parts: list = []
+                inv_params: list = []
+                if intent.get("product"):
+                    inv_parts.append("product = ?")
+                    inv_params.append(intent["product"])
+                if intent.get("sap_no"):
+                    inv_parts.append("sap_no = ?")
+                    inv_params.append(intent["sap_no"])
+                if intent.get("bl_no"):
+                    inv_parts.append("bl_no = ?")
+                    inv_params.append(intent["bl_no"])
+                if intent.get("lot_no"):
+                    inv_parts.append("lot_no = ?")
+                    inv_params.append(intent["lot_no"])
+                if intent.get("date_range"):
+                    inv_parts.append("(inbound_date LIKE ? OR arrival_date LIKE ? OR created_at LIKE ?)")
+                    inv_params.extend([f"{intent['date_range']}%"] * 3)
+                where_parts = []
+                and_parts = inv_parts
+                params = inv_params
+            elif query_type == "Allocation_승인대기":
+                ap_parts = []
+                ap_params = []
+                if intent.get("lot_no"):
+                    ap_parts.append("lot_no = ?")
+                    ap_params.append(intent["lot_no"])
+                if intent.get("date_range"):
+                    ap_parts.append("created_at LIKE ?")
+                    ap_params.append(f"{intent['date_range']}%")
+                where_parts = []
+                and_parts = ap_parts
+                params = ap_params
+            elif query_type in ("대량이동_PENDING", "운영_PENDING_요약"):
+                where_parts = []
+                and_parts = []
+                params = []
+
             where_clause = ""
             and_clause = ""
             if where_parts:
                 where_clause = "WHERE " + " AND ".join(where_parts)
+            if and_parts:
                 and_clause = "AND " + " AND ".join(and_parts)
 
             # SQL 생성 — limit/threshold는 숫자이므로 format 안전
@@ -477,7 +869,7 @@ class GeminiChatQuery:
             )
 
             # 실행 — 파라미터 바인딩으로 SQL 인젝션 방지
-            rows = self.db.fetchall(sql, tuple(params))
+            rows = self._fetchall_readonly(sql, tuple(params))
 
             # 결과를 딕셔너리 리스트로 변환
             if rows and isinstance(rows[0], dict):
@@ -486,6 +878,7 @@ class GeminiChatQuery:
                 columns = list(rows[0].keys()) if rows else []
             else:
                 # tuple/Row인 경우 — params 함께 전달
+                self._validate_read_only_sql(sql)
                 cursor = self.db.execute(sql, tuple(params))
                 columns = [desc[0] for desc in cursor.description] if cursor.description else []
                 data = [dict(zip(columns, row)) for row in rows]
@@ -506,9 +899,20 @@ class GeminiChatQuery:
         except (sqlite3.OperationalError, sqlite3.IntegrityError, ValueError) as e:
             err_msg = str(e)
             logger.error(f"쿼리 실행 오류: {e}")
-            if "allocation_plan" in err_msg and query_type in ("예약_배정_현황", "예약_배정_목록"):
+            allocation_query_types = (
+                "예약_배정_현황",
+                "예약_배정_목록",
+                "Allocation_승인대기",
+                "운영_PENDING_요약",
+            )
+            if "allocation_plan" in err_msg and query_type in allocation_query_types:
                 answer = (
                     "Allocation(예약) 테이블이 DB에 없습니다. "
+                    "앱을 한 번 종료 후 다시 실행하면 테이블이 자동 생성됩니다."
+                )
+            elif "move_batch" in err_msg and query_type in ("대량이동_PENDING", "운영_PENDING_요약"):
+                answer = (
+                    "대량 이동 승인 테이블(move_batch)이 DB에 없습니다. "
                     "앱을 한 번 종료 후 다시 실행하면 테이블이 자동 생성됩니다."
                 )
             else:
@@ -535,10 +939,30 @@ class GeminiChatQuery:
             elif query_type == "제품별_재고" and intent.get("product"):
                 return (f"📋 '{intent['product']}' 제품의 재고가 없습니다.\n"
                         f"현재 DB에 등록된 제품을 확인하려면 '제품별 재고'를 조회하세요.")
+            elif query_type == "입고_PENDING_목록":
+                return "✅ 현재 입고 PENDING LOT가 없습니다."
+            elif query_type == "Allocation_승인대기":
+                return "✅ 현재 Allocation 승인 대기 항목이 없습니다."
+            elif query_type == "대량이동_PENDING":
+                return "✅ 현재 대량 이동 승인 대기 배치가 없습니다."
+            elif query_type == "DB_테이블_미리보기":
+                table_name = intent.get("table_name") or "선택한 테이블"
+                return f"📋 {table_name} 테이블에 표시할 데이터가 없습니다."
+            elif query_type == "DB_상태_요약":
+                return "📋 상태/검증 컬럼이 있는 테이블을 찾지 못했거나 집계할 값이 없습니다."
             return "📋 조회 결과가 없습니다."
 
+        deterministic_query_types = {
+            "입고_PENDING_목록",
+            "입고_PENDING_요약",
+            "Allocation_승인대기",
+            "대량이동_PENDING",
+            "운영_PENDING_요약",
+        }
+
         # Gemini 사용 가능하면 AI 답변 생성
-        if self.gemini_available and len(data) <= 50:
+        # PENDING/승인대기 운영 상태는 숫자와 상태명이 정확해야 하므로 규칙 기반으로 고정한다.
+        if self.gemini_available and len(data) <= 50 and query_type not in deterministic_query_types:
             try:
                 import time
                 _start = time.time()
@@ -640,6 +1064,96 @@ class GeminiChatQuery:
             if not data:
                 return "📋 예약/배정 목록: 0건"
             return f"📋 예약/배정 목록: {len(data)}건\n\n(상세는 Excel/PDF 내보내기 가능)"
+
+        elif query_type == "운영_PENDING_요약":
+            total = 0
+            lines = ["⏳ 운영 PENDING 요약\n"]
+            for r in data:
+                count = int(r.get("건수", 0) or 0)
+                total += count
+                lines.append(f"• {r.get('구분', '')}: {count:,}건")
+            lines.append(f"\n총 {total:,}건의 대기 항목이 있습니다.")
+            return "\n".join(lines)
+
+        elif query_type == "입고_PENDING_요약":
+            r = data[0]
+            return (
+                "⏳ 입고 PENDING 요약\n\n"
+                f"• 대기 LOT: {int(r.get('건수', 0) or 0):,}건\n"
+                f"• 총 중량: {float(r.get('총중량_MT', 0) or 0):,.3f} MT\n"
+                f"• 컨테이너: {int(r.get('컨테이너수', 0) or 0):,}개\n"
+                f"• 제품 수: {int(r.get('제품수', 0) or 0):,}개"
+            )
+
+        elif query_type == "입고_PENDING_목록":
+            total_mt = sum(float(r.get("중량_MT", 0) or 0) for r in data)
+            lines = [f"⏳ 입고 PENDING 목록 — 상위 {len(data):,}건 / {total_mt:,.3f} MT\n"]
+            for r in data[:10]:
+                lines.append(
+                    f"• {r.get('LOT_NO', '')}: {r.get('제품', '')}, "
+                    f"{float(r.get('중량_MT', 0) or 0):,.3f} MT, "
+                    f"컨테이너 {r.get('컨테이너', '') or '-'}"
+                )
+            if len(data) > 10:
+                lines.append(f"\n... 외 {len(data) - 10:,}건")
+            return "\n".join(lines)
+
+        elif query_type == "Allocation_승인대기":
+            total_mt = sum(float(r.get("수량_MT", 0) or 0) for r in data)
+            lines = [f"⏳ Allocation 승인 대기 — {len(data):,}건 / {total_mt:,.3f} MT\n"]
+            for r in data[:10]:
+                lines.append(
+                    f"• {r.get('LOT_NO', '')}-{r.get('Sub_LT', '')}: "
+                    f"{r.get('고객', '') or '-'}, {float(r.get('수량_MT', 0) or 0):,.3f} MT"
+                )
+            if len(data) > 10:
+                lines.append(f"\n... 외 {len(data) - 10:,}건")
+            return "\n".join(lines)
+
+        elif query_type == "대량이동_PENDING":
+            total_count = sum(int(r.get("건수", 0) or 0) for r in data)
+            lines = [f"⏳ 대량 이동 승인 대기 — {len(data):,}배치 / {total_count:,}건\n"]
+            for r in data[:10]:
+                lines.append(
+                    f"• {r.get('Batch_ID', '')}: {int(r.get('건수', 0) or 0):,}건, "
+                    f"{r.get('사유', '') or '-'}, 요청자 {r.get('요청자', '') or '-'}"
+                )
+            if len(data) > 10:
+                lines.append(f"\n... 외 {len(data) - 10:,}배치")
+            return "\n".join(lines)
+
+        elif query_type == "DB_전체_테이블_요약":
+            total_rows = sum(int(r.get("행수", 0) or 0) for r in data)
+            lines = [f"📚 DB 전체 테이블 요약 — {len(data):,}개 테이블 / {total_rows:,}행\n"]
+            for r in data[:30]:
+                lines.append(
+                    f"• {r.get('테이블', '')}: {int(r.get('행수', 0) or 0):,}행, "
+                    f"{int(r.get('컬럼수', 0) or 0):,}컬럼"
+                )
+            if len(data) > 30:
+                lines.append(f"\n... 외 {len(data) - 30:,}개 테이블")
+            lines.append("\n읽기 전용 조회만 가능하며 데이터 수정은 차단됩니다.")
+            return "\n".join(lines)
+
+        elif query_type == "DB_테이블_미리보기":
+            table_name = intent.get("table_name") or "선택한 테이블"
+            return (
+                f"📋 {table_name} 테이블 미리보기 — {len(data):,}건\n\n"
+                f"컬럼: {', '.join(columns[:20])}"
+                + ("\n(상세 데이터는 표/내보내기 기능에서 확인하세요.)" if len(columns) <= 20 else "\n(컬럼이 많아 일부만 표시했습니다.)")
+            )
+
+        elif query_type == "DB_상태_요약":
+            lines = [f"📊 DB 상태/검증 컬럼 요약 — {len(data):,}개 상태값\n"]
+            for r in data[:40]:
+                lines.append(
+                    f"• {r.get('테이블', '')}.{r.get('컬럼', '')} = "
+                    f"{r.get('값', '')}: {int(r.get('건수', 0) or 0):,}건"
+                )
+            if len(data) > 40:
+                lines.append(f"\n... 외 {len(data) - 40:,}개 상태값")
+            lines.append("\n조회 전용 결과입니다. 승인/확정/삭제 같은 상태 변경은 실행하지 않습니다.")
+            return "\n".join(lines)
 
         else:
             return f"조회 결과: {len(data)}건"

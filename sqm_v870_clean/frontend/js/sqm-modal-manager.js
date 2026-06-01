@@ -618,6 +618,18 @@
 
     var dragHandle = _findDragHandle(el);
 
+    /* ── 🪟 별도 OS 창 분리(popout) 버튼 자동 부착 ──────────────────────
+       관리 대상 모든 창에 "메인 창 밖으로 빼는" 탈출구를 보장한다.
+       - sqmAddPopOutBtn 내부에서 .sqm-popout-btn 중복은 자동 방지
+       - 헤더가 곧 dragHandle (관리창 공통). 실패해도 매니저 동작에 영향 없음 */
+    try {
+      if (typeof window.sqmAddPopOutBtn === 'function' &&
+          dragHandle && dragHandle !== el) {
+        window.sqmAddPopOutBtn(el, dragHandle, {});
+        _log('popout 버튼 자동 부착', id);
+      }
+    } catch (e) { _log('popout 버튼 부착 실패', id, e); }
+
     /* ── 드래그 이동 ── */
     var drag = { on:false, sx:0, sy:0, ox:0, oy:0 };
     dragHandle.style.cursor     = 'move';

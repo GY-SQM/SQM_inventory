@@ -37,6 +37,7 @@ export function bindTopbar(root = document) {
     if (el.dataset._bound) return;
     el.addEventListener('click', () => {
       document.documentElement.setAttribute('data-theme', 'dark');
+      if (document.body) document.body.setAttribute('data-theme', 'dark');
       try { localStorage.setItem('sqm_theme', 'dark'); } catch {}
     });
     el.dataset._bound = '1';
@@ -45,6 +46,7 @@ export function bindTopbar(root = document) {
     if (el.dataset._bound) return;
     el.addEventListener('click', () => {
       document.documentElement.setAttribute('data-theme', 'light');
+      if (document.body) document.body.setAttribute('data-theme', 'light');
       try { localStorage.setItem('sqm_theme', 'light'); } catch {}
     });
     el.dataset._bound = '1';

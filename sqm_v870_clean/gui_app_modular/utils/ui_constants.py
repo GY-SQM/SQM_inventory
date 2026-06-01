@@ -300,22 +300,35 @@ class DialogSize:
 
     @classmethod
     def calculate(cls, parent, size_type: str = 'medium') -> Tuple[int, int]:
-        """부모 창 기준 다이얼로그 크기 계산"""
+        """화면 크기 기준으로 다이얼로그 크기 계산.
+
+        부모 창이 작거나 하위 다이얼로그에서 다시 다이얼로그를 열 때도
+        새 창이 부모 크기에 묶여 잘리지 않도록 화면 크기를 기준으로 삼는다.
+        """
         config = cls.CONFIGS.get(size_type, cls.CONFIGS['medium'])
 
         try:
             parent_width = parent.winfo_width()
             parent_height = parent.winfo_height()
+            screen_width = parent.winfo_screenwidth()
+            screen_height = parent.winfo_screenheight()
         except (RuntimeError, ValueError):
             parent_width = 1200
             parent_height = 800
+            screen_width = 1920
+            screen_height = 1080
 
-        width = int(parent_width * config.width_ratio)
-        height = int(parent_height * config.height_ratio)
+        base_width = max(parent_width, screen_width)
+        base_height = max(parent_height, screen_height)
 
-        # 최소/최대 제한
+        width = int(base_width * config.width_ratio)
+        height = int(base_height * config.height_ratio)
+
+        # 최소/최대 제한 + 작업 화면 여백 확보
         width = max(config.min_size[0], min(width, config.max_size[0]))
         height = max(config.min_size[1], min(height, config.max_size[1]))
+        width = min(width, max(config.min_size[0], screen_width - 80))
+        height = min(height, max(config.min_size[1], screen_height - 120))
 
         return width, height
 
