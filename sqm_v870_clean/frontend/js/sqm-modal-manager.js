@@ -40,7 +40,7 @@
     catch (e) {}
   }
   // 시작 로그는 항상 출력 (사용자가 로드 여부 확인 가능)
-  try { console.info('[sqm-modal-mgr] v8.7.0-r10 loaded'); } catch (e) {}
+  try { console.info('[sqm-modal-mgr] v8.7.0-r11 loaded'); } catch (e) {}
 
   /* ── 상수 ─────────────────────────────────────────────────────────────── */
   var STORAGE_KEY = 'sqm_win_prefs';   // localStorage 키
@@ -270,15 +270,18 @@
      순수 계산 함수 — 호출할 때마다 같은 입력엔 같은 출력 ⇒ 떨림(루프) 불가. */
   function _fitBox(w, h, x, y) {
     var M = 6;                                   // 가장자리 여백(px)
+    var KEEP = 140;                              // 최소 이만큼은 화면에 남겨 잡을 수 있게
     var vw = window.innerWidth, vh = window.innerHeight;
-    var maxW = Math.max(MIN_W, vw - M * 2);
-    var maxH = Math.max(MIN_H, vh - M * 2);
-    if (w > maxW) w = maxW;
-    if (h > maxH) h = maxH;
+    // ★ r11: 크기는 사용자가 정한 값을 존중 — 메인창보다 커도 강제 축소하지 않음.
+    //   (단일 OS창이라 넘치는 부분은 내부 스크롤로, 진짜 창 확장은 popout 사용)
+    //   최소 크기만 보장 → 같은 입력엔 항상 같은 출력(멱등) ⇒ 떨림 루프 불가.
+    if (w < MIN_W) w = MIN_W;
+    if (h < MIN_H) h = MIN_H;
     if (x == null) x = Math.round((vw - w) / 2);  // 위치 없으면 가운데
     if (y == null) y = Math.round((vh - h) / 2);
-    if (x + w > vw - M) x = vw - w - M;            // 오른쪽 넘침 → 당김
-    if (y + h > vh - M) y = vh - h - M;            // 아래 넘침 → 당김
+    // 위치만 보정: 제목줄/드래그 핸들이 항상 화면에 남도록(닫기·이동 가능 보장)
+    if (x > vw - KEEP) x = vw - KEEP;             // 오른쪽으로 너무 나감 방지
+    if (y > vh - 40)   y = vh - 40;               // 아래로 너무 내려감 방지
     if (x < M) x = M;
     if (y < M) y = M;
     return { w: Math.round(w), h: Math.round(h), x: Math.round(x), y: Math.round(y) };
@@ -304,6 +307,9 @@
     el.style.setProperty('height', box.h + 'px', 'important');
     el.style.left = box.x + 'px';
     el.style.top  = box.y + 'px';
+    // ★ r11: GPU 레이어로 분리해 소수점 렌더링 떨림(jitter) 억제
+    el.style.setProperty('will-change', 'transform');
+    el.style.setProperty('backface-visibility', 'hidden');
     _log('restorePref(fit)', id, box);
   }
 
@@ -908,7 +914,7 @@
         var ev = new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27 });
         document.dispatchEvent(ev);
       },
-      version: 'v8.7.0-r10',
+      version: 'v8.7.0-r11',
       // 진단/리셋 헬퍼
       resetPrefs: function() { localStorage.removeItem(STORAGE_KEY); _log('all prefs cleared'); },
       autoDetect: _autoDetect,
