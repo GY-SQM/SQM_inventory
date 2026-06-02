@@ -265,20 +265,21 @@
     const btn = document.createElement('button');
     btn.className = 'sqm-popout-btn';
     btn.type = 'button';
-    btn.title = '별도 OS 창으로 분리 (메인 창 밖으로 이동 가능)';
-    btn.innerHTML = '🪟';
+    btn.title = '이 화면을 메인 창에 갇히지 않는 별도 창으로 띄웁니다 (크게 보거나 다른 모니터로 이동 가능)';
+    // ★ 발견성 개선: 아이콘만 있던 버튼에 글자 라벨 + accent 강조 → 현장에서 바로 눈에 띄게
+    btn.innerHTML = '🪟 크게 보기';
     btn.style.cssText =
-      'background:none;border:1px solid var(--panel-border,#1e293b);'
-      + 'border-radius:5px;cursor:pointer;color:var(--text-muted,#94a3b8);'
-      + 'font-size:14px;line-height:1;padding:2px 7px;margin-right:6px;'
-      + 'transition:all .12s;';
+      'background:rgba(79,195,247,.12);border:1px solid var(--accent,#4fc3f7);'
+      + 'border-radius:5px;cursor:pointer;color:var(--accent,#4fc3f7);'
+      + 'font-size:12px;font-weight:600;line-height:1;padding:4px 9px;margin-right:6px;'
+      + 'white-space:nowrap;transition:all .12s;';
     btn.onmouseenter = function () {
-      btn.style.background = 'var(--bg-hover,#1e293b)';
-      btn.style.color = 'var(--accent,#4fc3f7)';
+      btn.style.background = 'var(--accent,#4fc3f7)';
+      btn.style.color = '#04121f';
     };
     btn.onmouseleave = function () {
-      btn.style.background = 'none';
-      btn.style.color = 'var(--text-muted,#94a3b8)';
+      btn.style.background = 'rgba(79,195,247,.12)';
+      btn.style.color = 'var(--accent,#4fc3f7)';
     };
     btn.onclick = function (e) {
       e.stopPropagation();
