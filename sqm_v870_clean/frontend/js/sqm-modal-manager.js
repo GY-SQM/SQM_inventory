@@ -40,7 +40,7 @@
     catch (e) {}
   }
   // 시작 로그는 항상 출력 (사용자가 로드 여부 확인 가능)
-  try { console.info('[sqm-modal-mgr] v8.7.0-r11 loaded'); } catch (e) {}
+  try { console.info('[sqm-modal-mgr] v8.7.0-r12-jitterfix loaded'); } catch (e) {}
 
   /* ── 상수 ─────────────────────────────────────────────────────────────── */
   var STORAGE_KEY = 'sqm_win_prefs';   // localStorage 키
@@ -544,44 +544,40 @@
   function _watchDisplayNone(el, id) {
     if (!el || el._watchingDisplay) return;
     el._watchingDisplay = true;
-    var obs = new MutationObserver(function(mutations) {
-      mutations.forEach(function(m) {
-        if (m.attributeName === 'style') {
-          var hidden = (el.style.display === 'none' || el.style.visibility === 'hidden');
-          // ★ inner가 직접 숨겨졌는데 overlay가 살아 있으면 overlay도 같이 숨김
-          if (hidden && el._sqmOverlay && document.body.contains(el._sqmOverlay)) {
-            if (window.getComputedStyle(el._sqmOverlay).display !== 'none') {
-              el._sqmOverlay.style.display = 'none';
-            }
-          }
-          if (hidden) {
-            // 실좌표 → transform 방식으로 초기화 (다음 열릴 때 센터링)
-            var pref = _getPref(id);
-            if (pref) {
-              // 저장된 크기는 유지, 위치만 초기화 (transform 재적용)
-              el.style.left      = '50%';
-              el.style.top       = '50%';
-              el.style.transform = 'translate(-50%, -50%)';
-              el.style.margin    = '0';
-            } else {
-              el.style.left      = '50%';
-              el.style.top       = '50%';
-              el.style.transform = 'translate(-50%, -50%)';
-            }
-          } else {
-            // 다시 표시될 때 → _liberate + 저장된 위치/크기 복원
-            //   max-* 잠금 + setProperty important 적용
-            setTimeout(function() {
-              _liberate(el);
-              el.style.setProperty('max-width',  'none', 'important');
-              el.style.setProperty('max-height', 'none', 'important');
-              el.style.setProperty('min-width',  '0',    'important');
-              el.style.setProperty('min-height', '0',    'important');
-              _restorePref(el, id);
-            }, 10);
+    // 현재 표시 상태를 기록해 둔다 — style 변경이 '표시↔숨김 전환'일 때만 반응하기 위함.
+    el._sqmWasHidden = (el.style.display === 'none' || el.style.visibility === 'hidden');
+    var obs = new MutationObserver(function() {
+      // ★ JITTER FIX (좌우 떨림 근본 차단):
+      //   매니저가 left/top/width/height 를 쓰면 style 속성이 바뀌지만 표시 상태는 그대로다.
+      //   예전 코드는 그때마다 _restorePref 를 다시 호출 → (쓰기→감지→쓰기) 무한 루프 = 떨림.
+      //   이제는 '실제로 숨김↔표시가 바뀐 순간'에만 동작하고, 위치/크기만 바뀐 변경은 무시한다.
+      var hidden = (el.style.display === 'none' || el.style.visibility === 'hidden');
+      if (hidden === el._sqmWasHidden) return;   // 전환 아님(위치/크기 변경뿐) → 무시 → 루프 차단
+      el._sqmWasHidden = hidden;
+
+      if (hidden) {
+        // ★ inner가 직접 숨겨졌는데 overlay가 살아 있으면 overlay도 같이 숨김
+        if (el._sqmOverlay && document.body.contains(el._sqmOverlay)) {
+          if (window.getComputedStyle(el._sqmOverlay).display !== 'none') {
+            el._sqmOverlay.style.display = 'none';
           }
         }
-      });
+        // 실좌표 → transform 방식으로 초기화 (다음 열릴 때 센터링). 저장된 크기는 그대로 유지.
+        el.style.left      = '50%';
+        el.style.top       = '50%';
+        el.style.transform = 'translate(-50%, -50%)';
+        el.style.margin    = '0';
+      } else {
+        // 다시 표시될 때 → _liberate + 저장된 위치/크기 복원 (max-* 잠금 해제 후 1회만)
+        setTimeout(function() {
+          _liberate(el);
+          el.style.setProperty('max-width',  'none', 'important');
+          el.style.setProperty('max-height', 'none', 'important');
+          el.style.setProperty('min-width',  '0',    'important');
+          el.style.setProperty('min-height', '0',    'important');
+          _restorePref(el, id);
+        }, 10);
+      }
     });
     obs.observe(el, { attributes: true, attributeFilter: ['style'] });
   }
