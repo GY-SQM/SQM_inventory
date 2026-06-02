@@ -715,9 +715,22 @@ class GeminiChatQuery:
 
     @staticmethod
     def _enforce_limit(sql: str, max_rows: int) -> str:
-        """LIMIT 없으면 안전상한 추가."""
-        if re.search(r"\bLIMIT\b", sql, re.I):
-            return sql
+        """최외곽 SELECT 레벨에 LIMIT가 없으면 안전 상한 추가.
+        서브쿼리 안의 LIMIT(괄호 depth>0)는 무시 — 행 수 우회 방지."""
+        depth = 0
+        i = 0
+        while i < len(sql):
+            ch = sql[i]
+            if ch == '(':
+                depth += 1
+            elif ch == ')':
+                depth -= 1
+            elif depth == 0 and sql[i:i+5].upper() == 'LIMIT':
+                prev = sql[i - 1] if i > 0 else ' '
+                nxt  = sql[i + 5] if i + 5 < len(sql) else ' '
+                if not (prev.isalnum() or prev == '_') and not (nxt.isalnum() or nxt == '_'):
+                    return sql  # 최외곽 LIMIT 이미 있음
+            i += 1
         return f"{sql.rstrip().rstrip(';')}\nLIMIT {int(max_rows)}"
 
     def _generate_sql_via_gemini(self, question: str, schema: str) -> Optional[str]:

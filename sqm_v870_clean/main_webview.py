@@ -802,12 +802,15 @@ def main():
                     cmd = _DETACH_QUEUE.get(timeout=0.5)
                     key = cmd.get('key', '')
                     if cmd['action'] == 'open':
-                        if key in _DETACHED_WINDOWS:
+                        # 살아있는 창이면 show()로 포커스. 죽은 참조(.show() 실패)면
+                        # dict에서 제거 후 아래에서 재생성 — "닫았다 다시 크게 보기" 버그 방지.
+                        existing = _DETACHED_WINDOWS.get(key)
+                        if existing is not None:
                             try:
-                                _DETACHED_WINDOWS[key].show()
+                                existing.show()
                                 continue
                             except Exception:
-                                pass
+                                _DETACHED_WINDOWS.pop(key, None)  # stale 참조 정리
                         try:
                             win = webview.create_window(
                                 cmd['title'], cmd['url'],
@@ -816,12 +819,20 @@ def main():
                                 resizable=True
                             )
                             _DETACHED_WINDOWS[key] = win
+                            # OS X 로 닫힐 때 dict 에서 자동 제거 (stale 참조 누적 차단).
+                            # k=key 기본인자로 루프 클로저 캡처.
+                            try:
+                                win.events.closed += (lambda k=key: _DETACHED_WINDOWS.pop(k, None))
+                            except Exception:
+                                pass
                         except Exception as ex:
                             log.error('분리 창 생성 실패: %s', ex)
                     elif cmd['action'] == 'close':
-                        if key in _DETACHED_WINDOWS:
+                        # hide() 가 아니라 destroy() — 재팝아웃 시 항상 새 스냅샷을 로드.
+                        win = _DETACHED_WINDOWS.pop(key, None)
+                        if win is not None:
                             try:
-                                _DETACHED_WINDOWS[key].hide()
+                                win.destroy()
                             except Exception:
                                 pass
                 except _queue_mod.Empty:
