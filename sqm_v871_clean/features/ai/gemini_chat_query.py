@@ -390,7 +390,7 @@ class GeminiChatQuery:
         except (ImportError, ModuleNotFoundError) as e:
             logger.warning(f"Gemini API 초기화 실패: {e}")
 
-    def ask(self, question: str) -> Dict[str, Any]:
+    def ask(self, question: str, write_mode: bool = False) -> Dict[str, Any]:
         """
         자연어 질문으로 재고 조회
         
@@ -418,7 +418,12 @@ class GeminiChatQuery:
         logger.info(f"의도 분석: {intent}")
 
         # 2. SQL 생성 및 실행
-        result = self._execute_query(intent, question)
+        if write_mode and self._is_write_intent(question):
+            result = self._execute_write_command(question)
+        elif write_mode and self._is_rollback_intent(question):
+            result = self._execute_rollback(question)
+        else:
+            result = self._execute_query(intent, question)
 
         # 3. 결과 저장
         self.last_result = result
@@ -1452,6 +1457,189 @@ class GeminiChatQuery:
         """대화 히스토리 초기화"""
         self.chat_history = []
         self.last_result = None
+
+    @staticmethod
+    def _is_write_intent(question: str) -> bool:
+        keywords = ["변경", "수정", "바꿔", "바꿔줘", "업데이트", "고쳐", "변경해줘",
+                    "수정해줘", "바꿔주세요", "변경해주세요", "수정해주세요"]
+        return any(kw in question for kw in keywords)
+
+    @staticmethod
+    def _is_rollback_intent(question: str) -> bool:
+        keywords = ["취소", "롤백", "되돌려", "원래대로", "취소해줘", "롤백해줘",
+                    "변경 이력", "수정 이력", "이력 보여줘"]
+        return any(kw in question for kw in keywords)
+
+    def _execute_write_command(self, question: str):
+        """Gemini로 UPDATE SQL 생성 후 ai_edit_log에 기록하고 실행."""
+        import sqlite3
+        from datetime import datetime
+
+        schema = self._build_full_schema()
+        prompt = (
+            "당신은 SQLite 데이터 수정 전문가입니다. 아래 [스키마]에 존재하는 테이블/컬럼만 사용해 "
+            "[질문]에 맞는 UPDATE 문 1개를 작성하세요.\n"
+            "규칙:\n"
+            "- 반드시 UPDATE 문 1개만. SELECT/INSERT/DELETE/DROP/ALTER 절대 금지.\n"
+            "- 반드시 WHERE 절 포함 (WHERE 없는 전체 UPDATE 금지).\n"
+            "- 스키마에 없는 테이블/컬럼 사용 금지.\n"
+            "- 설명/주석/코드펜스 없이 SQL 본문만 출력.\n\n"
+            f"[스키마]\n{schema}\n\n[질문]\n{question}\n\n[UPDATE SQL]"
+        )
+        try:
+            from features.ai.gemini_utils import call_gemini_safe
+            resp = call_gemini_safe(self.client, self.model_name, prompt, timeout=30)
+            sql_text = resp.text if resp else None
+        except Exception as e:
+            return QueryResult(False, "AI_수정", "", [], [], 0,
+                               f"SQL 생성 실패: {e}", "write_gen_failed")
+
+        if not sql_text:
+            return QueryResult(False, "AI_수정", "", [], [], 0,
+                               "수정 SQL을 생성하지 못했습니다. 더 구체적으로 입력해 주세요.",
+                               "write_gen_empty")
+
+        sql_clean = sql_text.strip().strip("```").strip()
+        if not sql_clean.upper().startswith("UPDATE"):
+            return QueryResult(False, "AI_수정", "", [], [], 0,
+                               f"안전하지 않은 SQL이 생성됐습니다: {sql_clean[:80]}",
+                               "write_unsafe")
+
+        if " WHERE " not in sql_clean.upper():
+            return QueryResult(False, "AI_수정", "", [], [], 0,
+                               "WHERE 조건이 없는 전체 수정은 허용되지 않습니다.",
+                               "write_no_where")
+
+        try:
+            con = sqlite3.connect(self.db_path)
+            con.row_factory = sqlite3.Row
+            self._log_before_update(con, sql_clean)
+            cur = con.execute(sql_clean)
+            affected = cur.rowcount
+            con.commit()
+            con.close()
+            return QueryResult(True, "AI_수정", sql_clean, [], [], affected,
+                               f"✅ {affected}건이 수정됐습니다.\n취소하려면: '방금 변경 취소해줘'",
+                               None)
+        except Exception as e:
+            return QueryResult(False, "AI_수정", sql_clean, [], [], 0,
+                               f"수정 실패: {e}", "write_exec_failed")
+
+    def _log_before_update(self, con, update_sql: str) -> None:
+        """UPDATE 실행 전 변경 대상 레코드의 현재 값을 ai_edit_log에 기록."""
+        import re
+        from datetime import datetime
+
+        m = re.match(
+            r"UPDATE\s+(\w+)\s+SET\s+(.+?)\s+WHERE\s+(.+)",
+            update_sql.strip(), re.IGNORECASE | re.DOTALL
+        )
+        if not m:
+            return
+
+        table_name = m.group(1)
+        set_clause = m.group(2)
+        where_clause = m.group(3).split(";")[0]
+
+        set_pairs = [p.strip() for p in re.split(r",(?![^()]*\))", set_clause)]
+        field_names = [p.split("=")[0].strip() for p in set_pairs if "=" in p]
+
+        try:
+            select_sql = f"SELECT rowid, {', '.join(field_names)} FROM {table_name} WHERE {where_clause}"
+            rows = con.execute(select_sql).fetchall()
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            for row in rows:
+                record_id = row[0]
+                for i, field in enumerate(field_names):
+                    old_val = str(row[i + 1]) if row[i + 1] is not None else None
+                    new_val = None
+                    for pair in set_pairs:
+                        parts = pair.split("=", 1)
+                        if parts[0].strip().lower() == field.lower() and len(parts) > 1:
+                            new_val = parts[1].strip().strip("'\"")
+                    con.execute("""
+                        INSERT INTO ai_edit_log
+                          (table_name, record_id, field_name, old_value, new_value, sql_used, changed_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (table_name, record_id, field, old_val, new_val, update_sql, now))
+        except Exception as e:
+            logger.warning(f"ai_edit_log 기록 실패 (무시): {e}")
+
+    def _execute_rollback(self, question: str):
+        """ai_edit_log 기반 롤백 실행."""
+        import sqlite3
+        import re
+        from datetime import datetime
+
+        con = sqlite3.connect(self.db_path)
+
+        if any(kw in question for kw in ["이력", "목록", "보여줘", "조회"]):
+            rows = con.execute("""
+                SELECT id, table_name, field_name, old_value, new_value, changed_at, rolled_back
+                FROM ai_edit_log ORDER BY id DESC LIMIT 20
+            """).fetchall()
+            con.close()
+            if not rows:
+                return QueryResult(True, "AI_이력조회", "", [], [], 0,
+                                   "변경 이력이 없습니다.", None)
+            lines = ["변경 이력 (최근 20건):"]
+            for r in rows:
+                status = "↩️ 롤백됨" if r[6] else "✅ 유효"
+                lines.append(f"#{r[0]} [{r[5]}] {r[1]}.{r[2]}: {r[3]} → {r[4]} {status}")
+            return QueryResult(True, "AI_이력조회", "", [], [], len(rows),
+                               "\n".join(lines), None)
+
+        count = 1
+        m = re.search(r"(\d+)\s*건", question)
+        if m:
+            count = min(int(m.group(1)), 50)
+
+        date_m = re.search(r"(\d{4}-\d{2}-\d{2})", question)
+        if date_m:
+            target_date = date_m.group(1)
+            rows = con.execute("""
+                SELECT id, table_name, record_id, field_name, old_value, sql_used
+                FROM ai_edit_log
+                WHERE rolled_back=0 AND changed_at LIKE ?
+                ORDER BY id DESC
+            """, (f"{target_date}%",)).fetchall()
+        else:
+            rows = con.execute("""
+                SELECT id, table_name, record_id, field_name, old_value, sql_used
+                FROM ai_edit_log
+                WHERE rolled_back=0
+                ORDER BY id DESC LIMIT ?
+            """, (count,)).fetchall()
+
+        if not rows:
+            con.close()
+            return QueryResult(True, "AI_롤백", "", [], [], 0,
+                               "롤백할 변경 이력이 없습니다.", None)
+
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        rolled = 0
+        msgs = []
+        for row in rows:
+            log_id, tbl, rec_id, field, old_val, _ = row
+            try:
+                rollback_sql = f"UPDATE {tbl} SET {field}=? WHERE rowid=?"
+                con.execute(rollback_sql, (old_val, rec_id))
+                con.execute("UPDATE ai_edit_log SET rolled_back=1 WHERE id=?", (log_id,))
+                con.execute("""
+                    INSERT INTO ai_edit_log
+                      (table_name, record_id, field_name, old_value, new_value, sql_used, changed_at)
+                    VALUES (?, ?, ?, '[ROLLBACK]', ?, ?, ?)
+                """, (tbl, rec_id, field, old_val, rollback_sql, now))
+                msgs.append(f"#{log_id} {tbl}.{field} → '{old_val}' 복원")
+                rolled += 1
+            except Exception as e:
+                msgs.append(f"#{log_id} 롤백 실패: {e}")
+
+        con.commit()
+        con.close()
+        summary = f"↩️ {rolled}건 롤백 완료:\n" + "\n".join(msgs)
+        return QueryResult(True, "AI_롤백", "", [], [], rolled, summary, None)
 
 
 # ═══════════════════════════════════════════════════════════════════════
