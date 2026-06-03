@@ -416,30 +416,30 @@
     <script src="js/sqm-status-revert.js?v=20260525c"></script>
 <!-- ══ 🤖 AI 선사 템플릿 자동 생성 모달 ══ -->
 <div id="modal-template-ai" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
-  background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#1e2a38;border-radius:10px;padding:28px;width:520px;max-height:88vh;
-    overflow-y:auto;border:1px solid #2980b9;box-shadow:0 10px 40px rgba(0,0,0,0.6);">
+  background:var(--shadow-modal);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-modal);border-radius:10px;padding:28px;width:520px;max-height:88vh;
+    overflow-y:auto;border:1px solid var(--accent);box-shadow:0 10px 40px var(--shadow-modal);">
 
     <!-- 헤더 -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-      <span style="color:#ecf0f1;font-size:17px;font-weight:bold">🤖 AI 선사 템플릿 자동 생성</span>
-      <button onclick="closeTplAiModal()" style="background:none;border:none;color:#95a5a6;
+      <span style="color:var(--text-primary);font-size:17px;font-weight:bold">🤖 AI 선사 템플릿 자동 생성</span>
+      <button onclick="closeTplAiModal()" style="background:none;border:none;color:var(--text-secondary);
         font-size:20px;cursor:pointer;padding:0 4px">✕</button>
     </div>
 
-    <p style="color:#95a5a6;font-size:13px;margin:0 0 18px;line-height:1.6">
+    <p style="color:var(--text-secondary);font-size:13px;margin:0 0 18px;line-height:1.6">
       BL(선하증권) PDF를 업로드하면 AI가 선사 정보를 자동 분석하여 템플릿을 생성합니다.<br>
       D/O(화물인도지시서)도 함께 올리면 더 정확한 템플릿이 만들어집니다.
     </p>
 
     <!-- BL 업로드 존 -->
     <div id="tpl-bl-zone" onclick="document.getElementById('tpl-bl-input').click()"
-      style="border:2px dashed #2980b9;border-radius:8px;padding:18px;text-align:center;
+      style="border:2px dashed var(--accent);border-radius:8px;padding:18px;text-align:center;
       cursor:pointer;margin-bottom:10px;transition:background 0.2s"
       onmouseover="this.style.background='rgba(41,128,185,0.1)'"
       onmouseout="this.style.background='transparent'">
-      <div id="tpl-bl-label" style="color:#7fb3d3;font-size:13px">
-        📄 BL (선하증권) PDF — 클릭하여 업로드 <span style="color:#e74c3c">*필수</span>
+      <div id="tpl-bl-label" style="color:var(--info);font-size:13px">
+        📄 BL (선하증권) PDF — 클릭하여 업로드 <span style="color:var(--danger)">*필수</span>
       </div>
       <input type="file" id="tpl-bl-input" accept=".pdf" style="display:none"
         onchange="onTplFileSelect(this,'bl')">
@@ -447,12 +447,12 @@
 
     <!-- D/O 업로드 존 -->
     <div id="tpl-do-zone" onclick="document.getElementById('tpl-do-input').click()"
-      style="border:2px dashed #27ae60;border-radius:8px;padding:18px;text-align:center;
+      style="border:2px dashed var(--success);border-radius:8px;padding:18px;text-align:center;
       cursor:pointer;margin-bottom:18px;transition:background 0.2s"
       onmouseover="this.style.background='rgba(39,174,96,0.1)'"
       onmouseout="this.style.background='transparent'">
-      <div id="tpl-do-label" style="color:#82c995;font-size:13px">
-        📄 D/O (화물인도지시서) PDF — 클릭하여 업로드 <span style="color:#95a5a6">(선택)</span>
+      <div id="tpl-do-label" style="color:var(--success);font-size:13px">
+        📄 D/O (화물인도지시서) PDF — 클릭하여 업로드 <span style="color:var(--text-secondary)">(선택)</span>
       </div>
       <input type="file" id="tpl-do-input" accept=".pdf" style="display:none"
         onchange="onTplFileSelect(this,'do')">
@@ -461,42 +461,42 @@
     <!-- 분석 버튼 -->
     <button id="tpl-analyze-btn" onclick="onTplAnalyze()" disabled
       style="width:100%;padding:11px;border:none;border-radius:6px;font-size:14px;
-      font-weight:bold;cursor:pointer;background:#555;color:#999;transition:all 0.2s">
+      font-weight:bold;cursor:pointer;background:var(--bg-card-hover);color:var(--text-muted);transition:all 0.2s">
       🤖 AI 분석 시작
     </button>
 
     <!-- 로딩 표시 -->
-    <div id="tpl-loading" style="display:none;text-align:center;padding:20px;color:#95a5a6;font-size:13px">
+    <div id="tpl-loading" style="display:none;text-align:center;padding:20px;color:var(--text-secondary);font-size:13px">
       ⏳ Gemini AI 분석 중... (10~20초 소요)
     </div>
 
     <!-- 미리보기 -->
-    <div id="tpl-preview" style="display:none;margin-top:18px;background:#16213e;
-      border-radius:8px;padding:16px;border:1px solid #2c3e50">
-      <div style="color:#ecf0f1;font-weight:bold;margin-bottom:12px;font-size:14px">
+    <div id="tpl-preview" style="display:none;margin-top:18px;background:var(--bg-modal);
+      border-radius:8px;padding:16px;border:1px solid var(--bg-input)">
+      <div style="color:var(--text-primary);font-weight:bold;margin-bottom:12px;font-size:14px">
         📋 AI 분석 결과
       </div>
       <table style="width:100%;font-size:13px;border-collapse:collapse">
         <tr>
-          <td style="color:#95a5a6;padding:5px 0;width:38%">선사 코드</td>
-          <td><span id="prev-carrier-id" style="color:#3498db;font-weight:bold">-</span></td>
+          <td style="color:var(--text-secondary);padding:5px 0;width:38%">선사 코드</td>
+          <td><span id="prev-carrier-id" style="color:var(--accent);font-weight:bold">-</span></td>
         </tr>
         <tr>
-          <td style="color:#95a5a6;padding:5px 0">선사명</td>
-          <td><span id="prev-carrier-name" style="color:#ecf0f1">-</span></td>
+          <td style="color:var(--text-secondary);padding:5px 0">선사명</td>
+          <td><span id="prev-carrier-name" style="color:var(--text-primary)">-</span></td>
         </tr>
         <tr>
-          <td style="color:#95a5a6;padding:5px 0">BL 번호 형식</td>
-          <td><span id="prev-bl-format" style="color:#2ecc71;font-family:monospace">-</span></td>
+          <td style="color:var(--text-secondary);padding:5px 0">BL 번호 형식</td>
+          <td><span id="prev-bl-format" style="color:var(--success);font-family:monospace">-</span></td>
         </tr>
         <tr>
-          <td style="color:#95a5a6;padding:5px 0">BL 번호 예시</td>
-          <td><span id="prev-bl-no" style="color:#f39c12;font-family:monospace;font-size:12px">-</span></td>
+          <td style="color:var(--text-secondary);padding:5px 0">BL 번호 예시</td>
+          <td><span id="prev-bl-no" style="color:var(--warning);font-family:monospace;font-size:12px">-</span></td>
         </tr>
         <tr>
-          <td style="color:#95a5a6;padding:5px 0">포대 중량</td>
+          <td style="color:var(--text-secondary);padding:5px 0">포대 중량</td>
           <td>
-            <select id="prev-bag-weight" style="background:#2c3e50;color:#ecf0f1;border:1px solid #34495e;
+            <select id="prev-bag-weight" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-default);
               border-radius:4px;padding:3px 8px;font-size:13px">
               <option value="500">500 kg</option>
               <option value="1000">1,000 kg</option>
@@ -504,15 +504,15 @@
           </td>
         </tr>
       </table>
-      <div id="tpl-ai-msg" style="margin-top:10px;font-size:12px;color:#7f8c8d;line-height:1.5"></div>
+      <div id="tpl-ai-msg" style="margin-top:10px;font-size:12px;color:var(--text-secondary);line-height:1.5"></div>
       <!-- 저장 버튼 (500kg, 1000kg 동시 등록) -->
       <button onclick="onTplSaveBoth()" style="width:100%;margin-top:14px;padding:10px;
-        border:none;border-radius:6px;background:#27ae60;color:#fff;font-size:14px;
+        border:none;border-radius:6px;background:var(--success);color:#fff;font-size:14px;
         font-weight:bold;cursor:pointer">
         💾 500kg + 1,000kg 템플릿 동시 저장
       </button>
       <button onclick="onTplSaveOne()" style="width:100%;margin-top:6px;padding:8px;
-        border:none;border-radius:6px;background:#2980b9;color:#fff;font-size:13px;cursor:pointer">
+        border:none;border-radius:6px;background:var(--accent);color:#fff;font-size:13px;cursor:pointer">
         💾 선택 중량만 저장
       </button>
     </div>
@@ -523,14 +523,14 @@
 
 <!-- 재고 수정 모달 -->
 <div id="inventoryAdjustModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
-  background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#1e2a38;border-radius:8px;padding:24px;width:680px;max-height:80vh;overflow-y:auto;
-    border:1px solid #34495e;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
-    <h3 style="color:#ecf0f1;margin:0 0 16px">✏️ 재고 수정</h3>
-    <p style="color:#95a5a6;font-size:13px;margin-bottom:12px">
+  background:var(--shadow-modal);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-modal);border-radius:8px;padding:24px;width:680px;max-height:80vh;overflow-y:auto;
+    border:1px solid var(--border-default);box-shadow:0 8px 32px var(--shadow-modal);">
+    <h3 style="color:var(--text-primary);margin:0 0 16px">✏️ 재고 수정</h3>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:12px">
       자연어로 입력하세요. 예: "1126012309 LOT 2포대 파손됐어" / "TCLU6404353 컨테이너 전체 50포대로 확인됨"
     </p>
-    <textarea id="adjustTextInput" rows="4" style="width:100%;background:#2c3e50;color:#ecf0f1;
-      border:1px solid #34495e;border-radius:4px;padding:10px;font-size:14px;resize:vertical;"
+    <textarea id="adjustTextInput" rows="4" style="width:100%;background:var(--bg-input);color:var(--text-primary);
+      border:1px solid var(--border-default);border-radius:4px;padding:10px;font-size:14px;resize:vertical;"
       placeholder="예) 1126012309 LOT 2포대 파손됐어&#10;1126012310이랑 1126012311은 정상, 50포대 확인됨"></textarea>
     <div style="marg
