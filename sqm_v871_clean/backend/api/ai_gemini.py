@@ -298,6 +298,96 @@ def chat_message(payload: ChatPayload):
         raise HTTPException(500, f"채팅 오류: {type(e).__name__}: {e}")
 
 
+@router.post("/chat/export-excel", summary="📥 AI 쿼리 결과 Excel 내보내기 (Phase 4-1)")
+def chat_export_excel(payload: dict):
+    """
+    AI 채팅 결과 데이터를 Excel 파일로 반환.
+    요청: { "columns": [...], "data": [[...], ...], "query_type": "..." }
+    """
+    try:
+        import openpyxl
+        from openpyxl.styles import PatternFill, Font, Alignment
+        from fastapi.responses import StreamingResponse
+        import io, datetime
+
+        columns = payload.get("columns") or []
+        data    = payload.get("data")    or []
+        q_type  = (payload.get("query_type") or "AI_조회")[:30]
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = q_type[:31]
+
+        # 헤더
+        header_fill = PatternFill("solid", fgColor="1E3A5F")
+        header_font = Font(bold=True, color="FFFFFF")
+        for ci, col in enumerate(columns, 1):
+            cell = ws.cell(row=1, column=ci, value=col)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center")
+
+        # 데이터
+        for ri, row in enumerate(data, 2):
+            if isinstance(row, dict):
+                row = [row.get(c) for c in columns]
+            for ci, val in enumerate(row, 1):
+                ws.cell(row=ri, column=ci, value=val)
+
+        # 열 너비 자동
+        for ci, col in enumerate(columns, 1):
+            max_len = max((len(str(col)),), *(
+                (len(str(r[ci-1])) if isinstance(r, list) and ci-1 < len(r) else 0,)
+                for r in data
+            ), default=10)
+            ws.column_dimensions[
+                openpyxl.utils.get_column_letter(ci)
+            ].width = min(max_len + 2, 40)
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"AI_{q_type}_{ts}.xlsx"
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
+        )
+    except Exception as e:
+        logger.exception("chat_export_excel error")
+        raise HTTPException(500, f"Excel 생성 실패: {e}")
+
+
+@router.get("/autocomplete", summary="💡 AI 채팅 자동완성 (Phase 4-2)")
+def chat_autocomplete(q: str = ""):
+    """입력 텍스트와 매칭되는 제품명/LOT번호 반환 (최대 10개)."""
+    if not q or len(q.strip()) < 2:
+        return {"items": []}
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.normpath(os.path.join(here, "..", ".."))
+        db_path = os.path.join(project_root, "data", "db", "sqm_inventory.db")
+
+        import sqlite3 as _sq
+        con = _sq.connect(db_path, timeout=3)
+        pattern = f"%{q.strip()}%"
+        rows = con.execute("""
+            SELECT DISTINCT lot_no FROM inventory
+            WHERE lot_no LIKE ? LIMIT 5
+            UNION
+            SELECT DISTINCT product FROM inventory
+            WHERE product LIKE ? LIMIT 5
+        """, (pattern, pattern)).fetchall()
+        con.close()
+        items = [r[0] for r in rows if r[0]]
+        return {"items": items[:10]}
+    except Exception as e:
+        logger.warning(f"autocomplete 오류: {e}")
+        return {"items": []}
+
+
 @router.post("/chat/clear", summary="💬 AI 채팅 히스토리 초기화")
 def chat_clear():
     global _chat_singleton

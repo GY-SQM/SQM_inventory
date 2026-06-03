@@ -63,9 +63,11 @@ body { background: var(--bg-root); color: var(--text-primary); font-family: 'Mal
   <button class="lock-btn" id="lock-btn" onclick="onLockClick()">🔒 수정 잠김</button>
   <button class="dock-btn" onclick="dockBack()">&#x1F4CC; 도킹</button>
 </div>
+<div id="fav-box" style="padding:4px 10px;border-bottom:1px solid var(--border-default);display:flex;flex-wrap:wrap;gap:2px;min-height:0"></div>
 <div class="chat-area" id="chat-area"></div>
 <div class="input-row">
   <input type="text" id="chat-input" placeholder="질문을 입력하세요..." autocomplete="off">
+  <button class="send-btn" title="즐겨찾기 저장" onclick="saveFavorite(document.getElementById('chat-input').value.trim())" style="background:var(--bg-card-hover);color:var(--text-primary);border:1px solid var(--border-default)">⭐</button>
   <button class="send-btn" onclick="sendMsg()">전송</button>
 </div>
 <script>
@@ -197,11 +199,88 @@ function sendMsg() {
     body: JSON.stringify({ message: msg, write_session_token: writeToken })
   }).then(function(r) { return r.json(); }).then(function(res) {
     aiEl.textContent = res.answer || res.reply || res.message || JSON.stringify(res);
+    // Phase 4-1: \uB370\uC774\uD130 \uC788\uC73C\uBA74 \uC5D1\uC140 \uC800\uC7A5 \uBC84\uD2BC \uD45C\uC2DC
+    if (res.data && res.data.length > 0) {
+      window._lastAiResult = res;
+      var btn = document.createElement('button');
+      btn.textContent = '\uD83D\uDCE5 \uC5D1\uC140 \uC800\uC7A5';
+      btn.style.cssText = 'margin-top:6px;padding:3px 10px;background:var(--success);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;display:block';
+      btn.onclick = function() { exportAiExcel(res); };
+      aiEl.appendChild(btn);
+    }
     saveHistory();
   }).catch(function(e) {
     aiEl.textContent = '\u274C \uC624\uB958: ' + (e.message || String(e));
   });
 }
+
+// Phase 4-1: AI \uACB0\uACFC \uC5D1\uC140 \uB0B4\uBCF4\uB0B4\uAE30
+function exportAiExcel(res) {
+  fetch(API_BASE + '/api/ai/chat/export-excel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ columns: res.columns, data: res.data, query_type: res.query_type || 'AI\uC870\uD68C' })
+  }).then(function(r) {
+    if (!r.ok) throw new Error('\uC11C\uBC84 \uC624\uB958');
+    return r.blob();
+  }).then(function(blob) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'AI_\uC870\uD68C_' + new Date().toISOString().slice(0,10) + '.xlsx';
+    a.click();
+  }).catch(function(e) { alert('\uC5D1\uC140 \uC800\uC7A5 \uC2E4\uD328: ' + e.message); });
+}
+
+// Phase 4-2: \uC790\uB3D9\uC644\uC131
+var _acTimer = null;
+document.addEventListener('DOMContentLoaded', function() {
+  var inp = document.getElementById('chat-input');
+  if (!inp) return;
+  var acBox = document.createElement('div');
+  acBox.id = 'ac-box';
+  acBox.style.cssText = 'position:absolute;background:var(--bg-card);border:1px solid var(--border-default);border-radius:6px;z-index:9999;display:none;max-height:160px;overflow-y:auto;font-size:12px;width:300px';
+  inp.parentNode.style.position = 'relative';
+  inp.parentNode.appendChild(acBox);
+
+  inp.addEventListener('input', function() {
+    clearTimeout(_acTimer);
+    var q = this.value.trim();
+    if (q.length < 2) { acBox.style.display = 'none'; return; }
+    _acTimer = setTimeout(function() {
+      fetch(API_BASE + '/api/ai/autocomplete?q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+          if (!res.items || !res.items.length) { acBox.style.display='none'; return; }
+          acBox.innerHTML = res.items.map(function(item) {
+            return '<div style="padding:5px 10px;cursor:pointer" onmousedown="document.getElementById(\'chat-input\').value=\'' + item.replace(/'/g,"\\'") + '\';document.getElementById(\'ac-box\').style.display=\'none\'">' + item + '</div>';
+          }).join('');
+          acBox.style.display = 'block';
+        }).catch(function() { acBox.style.display='none'; });
+    }, 300);
+  });
+  inp.addEventListener('blur', function() { setTimeout(function(){ acBox.style.display='none'; }, 200); });
+});
+
+// Phase 4-3: \uC990\uACA8\uCC3E\uAE30 \uC9C8\uBB38 \uC800\uC7A5
+var _FAV_KEY = 'sqm_fav_queries';
+function saveFavorite(query) {
+  var favs = JSON.parse(localStorage.getItem(_FAV_KEY) || '[]');
+  if (!favs.includes(query)) {
+    favs.unshift(query);
+    favs = favs.slice(0, 10);
+    localStorage.setItem(_FAV_KEY, JSON.stringify(favs));
+    renderFavorites();
+  }
+}
+function renderFavorites() {
+  var favs = JSON.parse(localStorage.getItem(_FAV_KEY) || '[]');
+  var box = document.getElementById('fav-box');
+  if (!box) return;
+  box.innerHTML = favs.map(function(q) {
+    return '<button onclick="sendFav(\'' + q.replace(/'/g,"\\'") + '\')" style="font-size:11px;padding:2px 7px;margin:2px;background:var(--bg-card-hover);color:var(--text-primary);border:1px solid var(--border-default);border-radius:4px;cursor:pointer">' + q.slice(0,20) + '</button>';
+  }).join('');
+}
+function sendFav(q) { document.getElementById('chat-input').value = q; sendMsg(); }
 
 function dockBack() {
   try {
@@ -217,6 +296,7 @@ document.getElementById('chat-input').addEventListener('keydown', function(e) {
 });
 
 loadHistory();
+renderFavorites();
 </script>
 </body>
 </html>

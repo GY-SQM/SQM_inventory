@@ -16,7 +16,12 @@ export const SHORTCUTS = {
   'Ctrl+O':    { action: 'outbound',    label: '출고' },
   'Ctrl+R':    { action: 'return',      label: '반품' },
   'Ctrl+L':    { action: 'log',         label: '로그' },
-  'Escape':    { action: 'close',       label: '닫기' },
+  'Escape':          { action: 'close',       label: '닫기' },
+  // Phase 4-4: 추가 단축키
+  'Ctrl+E':          { action: 'export',      label: '엑셀 내보내기' },
+  'Ctrl+Shift+A':    { action: 'ai-chat',     label: 'AI 채팅 열기/닫기' },
+  'Ctrl+Z':          { action: 'ai-rollback', label: 'AI 마지막 수정 취소' },
+  '?':               { action: 'shortcuts',   label: '단축키 목록' },
 };
 
 function normalizeEvent(ev) {
