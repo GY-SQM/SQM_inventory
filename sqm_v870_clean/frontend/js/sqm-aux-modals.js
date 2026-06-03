@@ -32,6 +32,7 @@
       + '<span style="font-weight:700;color:#fff">🤖 AI 재고 조회</span>'
       + '<div style="display:flex;gap:4px;align-items:center">'
       + '<button id="ai-detach-btn" style="background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:13px" onclick="window._sqmDetachAiChat()" title="별도 창으로 분리">&#x29C9;</button>'
+      + '<button onclick="window._aiChatClear()" style="background:transparent;border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px" title="대화 초기화">🗑</button>'
       + '<button onclick="document.getElementById(\''+panelId+'\').style.display=\'none\'" style="background:none;border:none;color:#fff;font-size:1.2rem;cursor:pointer;line-height:1">×</button>'
       + '</div>'
       + '</div>'
@@ -51,6 +52,14 @@
     });
   }
   window.showAiChatModal = showAiChatModal;
+
+  window._aiChatClear = function() {
+    var hist = document.getElementById('ai-chat-history');
+    if (hist) {
+      hist.innerHTML = '<div style="color:var(--text-muted);font-size:.84rem">대화가 초기화되었습니다.</div>';
+    }
+    apiPost('/api/ai/chat/clear', {}).catch(function(){});
+  };
 
   window._aiChatSend = function(preset) {
     var inp = document.getElementById('ai-chat-input');

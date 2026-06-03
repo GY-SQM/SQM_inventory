@@ -233,25 +233,46 @@ def test_connection():
         return {"success": False, "ok": False, "source": source, "message": f"❌ 연결 실패: {e}"}
 
 
+# ── AI 채팅 싱글턴 캐시 (대화 히스토리 유지) ──────────────────
+_chat_singleton = None
+_chat_singleton_db = None
+_chat_singleton_key = None
+
+
+def _get_chat_singleton(db_path: str, api_key: str):
+    """동일 db+key 조합이면 기존 인스턴스 재사용해 히스토리 유지."""
+    global _chat_singleton, _chat_singleton_db, _chat_singleton_key
+    import sys
+    here = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.normpath(os.path.join(here, "..", ".."))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from features.ai.gemini_chat_query import GeminiChatQuery
+    if (
+        _chat_singleton is None
+        or _chat_singleton_db != db_path
+        or _chat_singleton_key != api_key
+    ):
+        _chat_singleton = GeminiChatQuery(db_path=db_path, api_key=api_key or "")
+        _chat_singleton_db = db_path
+        _chat_singleton_key = api_key
+    return _chat_singleton
+
+
 # ── AI 채팅 ────────────────────────────────────────────────────
 @router.post("/chat", summary="💬 AI 재고 채팅")
 def chat_message(payload: ChatPayload):
-    import sys
     if not payload.message or not payload.message.strip():
         raise HTTPException(400, "메시지가 비어있습니다")
 
-    key, source, model = _fresh_api_key()
+    key, _source, _model = _fresh_api_key()
 
     here = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.normpath(os.path.join(here, "..", ".."))
     db_path = os.path.join(project_root, "data", "db", "sqm_inventory.db")
 
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-
     try:
-        from features.ai.gemini_chat_query import GeminiChatQuery
-        chat = GeminiChatQuery(db_path=db_path, api_key=key or "")
+        chat = _get_chat_singleton(db_path, key or "")
         result = chat.ask(payload.message.strip())
         return {
             "success": result["success"],
@@ -265,3 +286,15 @@ def chat_message(payload: ChatPayload):
     except Exception as e:
         logger.exception("chat_message error")
         raise HTTPException(500, f"채팅 오류: {type(e).__name__}: {e}")
+
+
+@router.post("/chat/clear", summary="💬 AI 채팅 히스토리 초기화")
+def chat_clear():
+    global _chat_singleton
+    if _chat_singleton is not None:
+        try:
+            _chat_singleton.clear_history()
+        except Exception:
+            pass
+        _chat_singleton = None
+    return {"success": True, "message": "대화 히스토리가 초기화되었습니다."}
