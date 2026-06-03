@@ -302,7 +302,7 @@
   </div>
 
   <div class="menubar-spacer"></div>
-  <button id="weight-panel-btn" class="topbar-btn" data-action="show-weight-panel" title="무게 현황 (제고 가치 / PICKED 포함 토글)">⚖️ <span id="weight-nav-label">-- MT</span></button><span id="weight-picked-badge" style="display:none;background:#d97706;color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700;margin-left:2px">+<span id="weight-picked-nav">0</span> MT PICKED</span>
+  <button id="weight-panel-btn" class="topbar-btn" data-action="show-weight-panel" title="무게 현황 (제고 가치 / PICKED 포함 토글)">⚖️ <span id="weight-nav-label">-- MT</span></button><span id="weight-picked-badge" style="display:none;background:var(--warning);color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700;margin-left:2px">+<span id="weight-picked-nav">0</span> MT PICKED</span>
   <span class="topbar-sep">|</span>
   <button class="topbar-btn" data-action="refresh-all" title="전체 데이터를 서버에서 다시 불러옵니다 (단축키: F5)">🔄 새로고침</button>
   <span class="topbar-sep">|</span>
@@ -327,15 +327,15 @@
     <div class="side-group">
       <button class="side-btn side-parent" data-route="inventory"><span class="side-icon">📦</span><span class="side-label">Inventory</span><span class="side-total-badge" id="badge-inv-total"></span></button>
       <div class="side-children">
-        <button class="side-btn side-child" data-route="pending"><span class="side-child-icon">⏳</span><span class="side-child-label">Pending</span><span class="side-child-badge" id="badge-pending" style="color:#94a3b8"></span></button>
-        <button class="side-btn side-child" data-route="available"><span class="side-child-icon">✅</span><span class="side-child-label">Available</span><span class="side-child-badge" id="badge-available" style="color:#22c55e"></span></button>
-        <button class="side-btn side-child" data-route="allocation"><span class="side-child-icon">📋</span><span class="side-child-label">Allocation</span><span class="side-child-badge" id="badge-allocation" style="color:#3b82f6"></span></button>
-        <button class="side-btn side-child" data-route="picked"><span class="side-child-icon">📦</span><span class="side-child-label">Picked</span><span class="side-child-badge" id="badge-picked" style="color:#f59e0b"></span></button>
+        <button class="side-btn side-child" data-route="pending"><span class="side-child-icon">⏳</span><span class="side-child-label">Pending</span><span class="side-child-badge" id="badge-pending" style="color:var(--status-outbound)"></span></button>
+        <button class="side-btn side-child" data-route="available"><span class="side-child-icon">✅</span><span class="side-child-label">Available</span><span class="side-child-badge" id="badge-available" style="color:var(--status-available)"></span></button>
+        <button class="side-btn side-child" data-route="allocation"><span class="side-child-icon">📋</span><span class="side-child-label">Allocation</span><span class="side-child-badge" id="badge-allocation" style="color:var(--accent)"></span></button>
+        <button class="side-btn side-child" data-route="picked"><span class="side-child-icon">📦</span><span class="side-child-label">Picked</span><span class="side-child-badge" id="badge-picked" style="color:var(--status-picked)"></span></button>
       </div>
     </div>
-    <button class="side-btn" data-route="outbound"><span class="side-icon">📤</span><span class="side-label">Sold</span><span class="side-child-badge" id="badge-sold" style="color:#f59e0b"></span></button>
-    <button class="side-btn" data-route="return"><span class="side-icon">🔄</span><span class="side-label">Return</span><span class="side-child-badge" id="badge-return" style="color:#8b5cf6"></span></button>
-    <button class="side-btn" data-route="move"><span class="side-icon">🔀</span><span class="side-label">Move</span><span class="side-child-badge" id="badge-move" style="color:#94a3b8"></span></button>
+    <button class="side-btn" data-route="outbound"><span class="side-icon">📤</span><span class="side-label">Sold</span><span class="side-child-badge" id="badge-sold" style="color:var(--status-picked)"></span></button>
+    <button class="side-btn" data-route="return"><span class="side-icon">🔄</span><span class="side-label">Return</span><span class="side-child-badge" id="badge-return" style="color:var(--tab-move)"></span></button>
+    <button class="side-btn" data-route="move"><span class="side-icon">🔀</span><span class="side-label">Move</span><span class="side-child-badge" id="badge-move" style="color:var(--status-outbound)"></span></button>
     <button class="side-btn active" data-route="dashboard"><span class="side-icon">📊</span><span class="side-label">Dashboard</span></button>
     <button class="side-btn" data-route="log"><span class="side-icon">📝</span><span class="side-label">Log</span></button>
     <button class="side-btn" data-route="scan"><span class="side-icon">📷</span><span class="side-label">Scan</span></button>
