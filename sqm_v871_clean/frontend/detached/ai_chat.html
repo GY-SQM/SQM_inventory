@@ -19,12 +19,48 @@ body { background: var(--bg-root); color: var(--text-primary); font-family: 'Mal
 .input-row input { flex: 1; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: 8px; color: var(--text-primary); font-size: 13px; outline: none; }
 .send-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; white-space: nowrap; }
 .send-btn:hover { opacity: 0.85; }
+.lock-btn { background: transparent; border: 1px solid var(--border-default);
+  border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  color: var(--text-muted); transition: all 0.2s; }
+.lock-btn.unlocked { color: var(--success); border-color: var(--success); }
+.lock-btn.warn { color: var(--warning); border-color: var(--warning); }
+.pin-overlay { display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6); z-index: 999;
+  align-items: center; justify-content: center; }
+.pin-overlay.show { display: flex; }
+.pin-box { background: var(--bg-card); border: 1px solid var(--border-default);
+  border-radius: 12px; padding: 28px 32px; width: 300px; text-align: center; }
+.pin-box h2 { font-size: 15px; margin-bottom: 18px; color: var(--text-primary); }
+.pin-input { width: 100%; padding: 10px; font-size: 20px; letter-spacing: 8px;
+  text-align: center; background: var(--bg-root); color: var(--text-primary);
+  border: 1px solid var(--border-default); border-radius: 8px; outline: none;
+  margin-bottom: 14px; }
+.pin-error { color: var(--danger); font-size: 12px; margin-bottom: 12px;
+  min-height: 18px; }
+.pin-btns { display: flex; gap: 8px; justify-content: center; }
+.pin-btns button { flex: 1; padding: 8px; border-radius: 8px; border: none;
+  cursor: pointer; font-size: 13px; }
+.pin-cancel { background: var(--bg-card-hover); color: var(--text-primary); }
+.pin-confirm { background: var(--accent); color: #fff; }
 </style>
 </head>
 <body>
+<div class="pin-overlay" id="pin-overlay">
+  <div class="pin-box">
+    <h2>🔐 수정 모드 잠금 해제</h2>
+    <input class="pin-input" type="password" id="pin-input"
+           maxlength="6" placeholder="••••" autocomplete="off">
+    <div class="pin-error" id="pin-error"></div>
+    <div class="pin-btns">
+      <button class="pin-cancel" onclick="closePinModal()">취소</button>
+      <button class="pin-confirm" onclick="submitPin()">확인</button>
+    </div>
+  </div>
+</div>
 <div class="header">
   <span>&#x1F916;</span>
   <h1>SQM AI Assistant</h1>
+  <button class="lock-btn" id="lock-btn" onclick="onLockClick()">🔒 수정 잠김</button>
   <button class="dock-btn" onclick="dockBack()">&#x1F4CC; 도킹</button>
 </div>
 <div class="chat-area" id="chat-area"></div>
@@ -34,6 +70,91 @@ body { background: var(--bg-root); color: var(--text-primary); font-family: 'Mal
 </div>
 <script>
 var API_BASE = (window.SQM_API_BASE || window.location.origin || '');
+var writeToken = '';
+var sessionTimer = null;
+
+function onLockClick() {
+  if (writeToken) { lockWrite(); } else { openPinModal(); }
+}
+
+function openPinModal() {
+  document.getElementById('pin-overlay').classList.add('show');
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-error').textContent = '';
+  setTimeout(function() { document.getElementById('pin-input').focus(); }, 100);
+}
+
+function closePinModal() {
+  document.getElementById('pin-overlay').classList.remove('show');
+}
+
+function submitPin() {
+  var pin = document.getElementById('pin-input').value.trim();
+  if (!pin) return;
+  fetch(API_BASE + '/api/ai/write-unlock', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin: pin })
+  }).then(function(r) { return r.json(); }).then(function(res) {
+    if (res.success) {
+      writeToken = res.token;
+      closePinModal();
+      startSessionTimer();
+    } else {
+      document.getElementById('pin-error').textContent = res.detail || '인증 실패';
+    }
+  }).catch(function(e) {
+    document.getElementById('pin-error').textContent = '서버 오류: ' + e.message;
+  });
+}
+
+function lockWrite() {
+  fetch(API_BASE + '/api/ai/write-lock', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  writeToken = '';
+  clearInterval(sessionTimer);
+  sessionTimer = null;
+  updateLockBtn(false, 0);
+}
+
+function startSessionTimer() {
+  updateLockBtn(true, 600);
+  sessionTimer = setInterval(function() {
+    fetch(API_BASE + '/api/ai/write-status?token=' + writeToken)
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (!res.active) {
+          writeToken = '';
+          clearInterval(sessionTimer);
+          sessionTimer = null;
+          updateLockBtn(false, 0);
+          appendMsg('ai', '⏰ 수정 세션이 만료됐습니다. 다시 인증해 주세요.');
+        } else {
+          updateLockBtn(true, res.remaining_seconds);
+        }
+      });
+  }, 15000);
+}
+
+function updateLockBtn(unlocked, seconds) {
+  var btn = document.getElementById('lock-btn');
+  if (!unlocked) {
+    btn.textContent = '🔒 수정 잠김';
+    btn.className = 'lock-btn';
+  } else {
+    var mins = Math.ceil(seconds / 60);
+    btn.textContent = '🔓 ' + mins + '분 남음';
+    btn.className = 'lock-btn' + (seconds < 90 ? ' warn' : ' unlocked');
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  var overlay = document.getElementById('pin-overlay');
+  if (!overlay || !overlay.classList.contains('show')) return;
+  if (e.key === 'Escape') closePinModal();
+  if (e.key === 'Enter') submitPin();
+});
+
 var HIST_KEY = 'sqm_ai_chat_history';
 
 function loadHistory() {
@@ -73,7 +194,7 @@ function sendMsg() {
   fetch(API_BASE + '/api/ai/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: msg })
+    body: JSON.stringify({ message: msg, write_session_token: writeToken })
   }).then(function(r) { return r.json(); }).then(function(res) {
     aiEl.textContent = res.answer || res.reply || res.message || JSON.stringify(res);
     saveHistory();
