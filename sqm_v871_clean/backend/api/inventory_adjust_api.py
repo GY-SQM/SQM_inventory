@@ -185,6 +185,25 @@ def execute_adjust(req: ExecuteRequest):
     except Exception as _bk:
         logger.warning(f"[execute_adjust] 자동 백업 실패 (계속): {_bk}")
 
+    # Phase 2-3: 재고 수정 입력값 검증
+    try:
+        from backend.api.validators import validate_lot_no, validate_quantity, collect_errors
+        _val_errors = []
+        for it in req.items:
+            errs = collect_errors(
+                validate_lot_no(it.lot_no),
+                validate_quantity(it.new_count, "수정 수량"),
+            )
+            if errs:
+                _val_errors.append(f"[{it.lot_no}] {'; '.join(errs)}")
+        if _val_errors:
+            raise HTTPException(status_code=400,
+                                detail="입력값 검증 실패: " + " / ".join(_val_errors))
+    except HTTPException:
+        raise
+    except Exception as _ve:
+        logger.warning(f"[execute_adjust] 검증 실패 (계속): {_ve}")
+
     try:
         from engine_modules.inventory_modular.adjust_executor import execute_adjustment
 

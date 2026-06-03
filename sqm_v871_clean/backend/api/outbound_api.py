@@ -695,6 +695,23 @@ def confirm_outbound_endpoint(req: ConfirmOutboundRequest):
         logger.info(
             f"[confirm-outbound] OK: lot_no={lot_no or '(ALL)'}, confirmed={confirmed}"
         )
+        # Phase 2-2: 출고 확정 감사 로그
+        try:
+            from backend.api.audit_helper import write_audit
+            import os as _os
+            _here = _os.path.dirname(_os.path.abspath(__file__))
+            _db = _os.path.normpath(_os.path.join(_here, "..", "..", "data", "db", "sqm_inventory.db"))
+            write_audit(
+                _db, "OUTBOUND_CONFIRM",
+                table_name="inventory",
+                record_id=lot_no or "(ALL)",
+                extra={"confirmed": confirmed, "force_all": force_all},
+                user_note=f"출고 확정 {confirmed}건",
+                created_by="WEBVIEW_OUTBOUND",
+            )
+        except Exception as _ae:
+            logger.warning(f"[confirm-outbound] 감사 로그 실패 (무시): {_ae}")
+
         return {
             "ok": True,
             "data": {

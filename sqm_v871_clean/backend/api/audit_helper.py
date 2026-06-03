@@ -70,7 +70,8 @@ def write_audit(
         data_str = json.dumps(payload, ensure_ascii=False, default=str)
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        con = sqlite3.connect(db_path, timeout=5)
+        from backend.api.db_helper import get_db_connection
+        con = get_db_connection(db_path, timeout=5, retries=3)
         con.execute(_ENSURE_SQL)
         con.execute(_INDEX_SQL)
         con.execute(

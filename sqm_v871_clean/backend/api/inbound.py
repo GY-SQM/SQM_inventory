@@ -1336,12 +1336,33 @@ def onestop_inbound_save(req: OneStopSaveRequest):
     doc_payload = req.doc_payload or {}
     document_saved_count = 0
 
+    # Phase 2-3: 입력값 서버 검증
+    try:
+        from backend.api.validators import validate_lot_no, validate_date, validate_weight, collect_errors
+        _has_validators = True
+    except Exception:
+        _has_validators = False
+
     for idx, row in enumerate(rows, start=1):
         data = _onestop_row_to_engine_dict(row)
         if not data.get("lot_no"):
             fail_count += 1
             errors.append({"row": idx, "reason": "lot_no 빈 값"})
             continue
+
+        # Phase 2-3: 검증 실행
+        if _has_validators:
+            _errs = collect_errors(
+                validate_lot_no(data.get("lot_no")),
+                validate_date(data.get("inbound_date"), "입고일"),
+                validate_weight(data.get("current_weight"), "중량"),
+            )
+            if _errs:
+                fail_count += 1
+                errors.append({"row": idx, "lot_no": str(data.get("lot_no", "")),
+                                "reason": "; ".join(_errs)})
+                continue
+
         data["status"] = "PENDING"  # v868: OneStop 입고 → PENDING 강제 (053fa7a 정책)
         try:
             result = engine.add_inventory_from_dict(data)
@@ -1380,6 +1401,23 @@ def onestop_inbound_save(req: OneStopSaveRequest):
             logger.warning(f"[onestop-save] row {idx} 실패: {e}")
 
     logger.info(f"[onestop-save] 완료: 성공 {success_count} / 실패 {fail_count} / 총 {len(rows)}")
+
+    # Phase 2-2: 입고 완료 감사 로그
+    if success_count > 0:
+        try:
+            from backend.api.audit_helper import write_audit
+            import os as _os
+            _here = _os.path.dirname(_os.path.abspath(__file__))
+            _db = _os.path.normpath(_os.path.join(_here, "..", "..", "data", "db", "sqm_inventory.db"))
+            write_audit(
+                _db, "INBOUND_SAVE",
+                table_name="inventory",
+                extra={"total": len(rows), "success": success_count, "fail": fail_count},
+                user_note=f"OneStop 입고 {success_count}건 저장",
+                created_by="WEBVIEW_INBOUND",
+            )
+        except Exception as _ae:
+            logger.warning(f"[onestop-save] 감사 로그 실패 (무시): {_ae}")
 
     return {
         "ok": True,

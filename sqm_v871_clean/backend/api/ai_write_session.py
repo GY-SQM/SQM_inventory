@@ -146,9 +146,9 @@ def change_pin(current_pin: str, new_pin: str):
 # ── ai_edit_log 테이블 초기화 ─────────────────────────────────
 def ensure_edit_log_table() -> None:
     """ai_edit_log 테이블이 없으면 생성."""
-    import sqlite3
     try:
-        con = sqlite3.connect(_db_path())
+        from backend.api.db_helper import get_db_connection
+        con = get_db_connection(_db_path())
         con.execute("""
             CREATE TABLE IF NOT EXISTS ai_edit_log (
               id          INTEGER PRIMARY KEY AUTOINCREMENT,
