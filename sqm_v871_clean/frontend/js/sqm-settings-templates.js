@@ -141,13 +141,65 @@
         + '<div style="display:flex;gap:8px;justify-content:flex-end">'
         + '<button onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'" class="btn btn-ghost">닫기</button>'
         + '<button onclick="window._saveGeminiSettings()" class="btn btn-primary">저장</button>'
-        + '</div></div>';
+        + '</div>'
+        + buildPinChangeSection()
+        + '</div>';
       showDataModal('', html);
     }).catch(function() {
       showToast('error', 'Gemini 설정 불러오기 실패');
     });
   }
   window.showGeminiApiSettingsModal = showGeminiApiSettingsModal;
+
+  function buildPinChangeSection() {
+    return '<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-default)">'
+      + '<div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:12px">🔑 AI 수정 PIN 변경</div>'
+      + '<div style="display:flex;flex-direction:column;gap:8px">'
+      + '<input type="password" id="pin-curr" placeholder="현재 PIN" maxlength="6"'
+      + ' style="padding:8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-default);border-radius:8px;font-size:13px;outline:none">'
+      + '<input type="password" id="pin-new" placeholder="새 PIN (4자리 이상)" maxlength="6"'
+      + ' style="padding:8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-default);border-radius:8px;font-size:13px;outline:none">'
+      + '<input type="password" id="pin-confirm" placeholder="새 PIN 확인" maxlength="6"'
+      + ' style="padding:8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-default);border-radius:8px;font-size:13px;outline:none">'
+      + '<div id="pin-change-msg" style="font-size:12px;min-height:16px;color:var(--danger)"></div>'
+      + '<button onclick="window.submitPinChange()"'
+      + ' style="padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;align-self:flex-start">'
+      + 'PIN 변경</button>'
+      + '</div>'
+      + '<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">※ 기본 PIN은 <b>0000</b>입니다. 최초 변경을 권장합니다.</div>'
+      + '</div>';
+  }
+
+  window.submitPinChange = function() {
+    var curr = (document.getElementById('pin-curr') || {}).value || '';
+    var newPin = (document.getElementById('pin-new') || {}).value || '';
+    var confirm = (document.getElementById('pin-confirm') || {}).value || '';
+    var msgEl = document.getElementById('pin-change-msg');
+    if (!curr || !newPin || !confirm) { if(msgEl) msgEl.textContent = '모든 필드를 입력해 주세요.'; return; }
+    if (newPin !== confirm) { if(msgEl) msgEl.textContent = '새 PIN이 일치하지 않습니다.'; return; }
+    if (newPin.length < 4) { if(msgEl) msgEl.textContent = 'PIN은 4자리 이상이어야 합니다.'; return; }
+    var base = (window.SQM_API_BASE || window.location.origin || '');
+    fetch(base + '/api/ai/pin/change', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_pin: curr, new_pin: newPin })
+    }).then(function(r) { return r.json(); }).then(function(res) {
+      if (!msgEl) return;
+      if (res.success) {
+        msgEl.style.color = 'var(--success)';
+        msgEl.textContent = '✅ ' + res.message;
+        ['pin-curr','pin-new','pin-confirm'].forEach(function(id) {
+          var el = document.getElementById(id); if (el) el.value = '';
+        });
+      } else {
+        msgEl.style.color = 'var(--danger)';
+        msgEl.textContent = res.detail || '변경 실패';
+      }
+    }).catch(function(e) {
+      if(msgEl) { msgEl.style.color='var(--danger)'; msgEl.textContent='오류: '+e.message; }
+    });
+  };
+
   window._saveGeminiSettings = function() {
     var key   = (document.getElementById('gm-key')||{}).value||'';
     var model = (document.getElementById('gm-model')||{}).value||'gemini-1.5-flash';
