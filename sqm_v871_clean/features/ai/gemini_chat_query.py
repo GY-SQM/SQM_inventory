@@ -390,6 +390,28 @@ class GeminiChatQuery:
         except (ImportError, ModuleNotFoundError) as e:
             logger.warning(f"Gemini API 초기화 실패: {e}")
 
+    # ── Phase 3-2: 조회 결과 인메모리 캐시 ──────────────────────
+    _cache: dict = {}          # {md5(question) → {result, expires}}
+    _CACHE_TTL: int = 30       # 초
+
+    @classmethod
+    def _get_cache(cls, question: str):
+        import hashlib, time
+        key = hashlib.md5(question.encode()).hexdigest()
+        entry = cls._cache.get(key)
+        if entry and time.time() < entry["expires"]:
+            return entry["result"]
+        return None
+
+    @classmethod
+    def _set_cache(cls, question: str, result):
+        import hashlib, time
+        key = hashlib.md5(question.encode()).hexdigest()
+        cls._cache[key] = {"result": result, "expires": time.time() + cls._CACHE_TTL}
+        if len(cls._cache) > 100:
+            now = time.time()
+            cls._cache = {k: v for k, v in cls._cache.items() if v["expires"] > now}
+
     def ask(self, question: str, write_mode: bool = False) -> Dict[str, Any]:
         """
         자연어 질문으로 재고 조회
@@ -412,6 +434,13 @@ class GeminiChatQuery:
         _ask_start = time.time()
 
         logger.info(f"질문: {question}")
+
+        # Phase 3-2: 읽기 전용 질문만 캐시 적용 (수정/롤백은 항상 실행)
+        if not write_mode:
+            cached = self._get_cache(question)
+            if cached is not None:
+                logger.info(f"캐시 히트: {question[:40]}")
+                return cached
 
         # 1. 질문 분석
         intent = self._analyze_intent(question)
@@ -441,7 +470,7 @@ class GeminiChatQuery:
         _elapsed_ms = int((time.time() - _ask_start) * 1000)
         logger.info(f"질문 처리 완료: {_elapsed_ms}ms")
 
-        return {
+        final = {
             "success": result.success,
             "answer": result.answer,
             "data": result.data,
@@ -451,6 +480,12 @@ class GeminiChatQuery:
             "sql": result.sql,
             "elapsed_ms": _elapsed_ms
         }
+
+        # Phase 3-2: 성공한 읽기 전용 결과만 캐시 저장
+        if not write_mode and result.success:
+            self._set_cache(question, final)
+
+        return final
 
     def _analyze_intent(self, question: str) -> Dict[str, Any]:
         """질문 의도 분석"""
