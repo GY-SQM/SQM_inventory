@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="css/design-system.css?v=20260527pop">
 <link rel="stylesheet" href="css/v864-layout.css?v=20260527pop">
 <style>
-  html,body{margin:0;padding:0;background:var(--bg,#0b1322);color:var(--fg,#e2e8f0);
+  html,body{margin:0;padding:0;background:var(--bg-root);color:var(--text-primary);
     font-family:"Segoe UI","Malgun Gothic",sans-serif;height:100vh;overflow:hidden;}
   #popout-root{position:fixed;inset:0;display:flex;flex-direction:column;
     overflow:hidden;}
@@ -29,12 +29,12 @@
   .sqm-rh{display:none!important;}
   /* 상단 상태바 */
   #popout-statusbar{flex-shrink:0;padding:4px 12px;font-size:11px;
-    color:var(--text-muted,#94a3b8);background:var(--panel,#0f1830);
-    border-bottom:1px solid var(--panel-border,#1e293b);
+    color:var(--text-muted);background:var(--bg-header);
+    border-bottom:1px solid var(--border-default);
     display:flex;align-items:center;gap:8px;}
   #popout-statusbar .dot{width:8px;height:8px;border-radius:50%;
-    background:var(--danger,#ef4444);}
-  #popout-statusbar.connected .dot{background:var(--success,#22c55e);}
+    background:var(--danger);}
+  #popout-statusbar.connected .dot{background:var(--success);}
 </style>
 </head>
 <body>

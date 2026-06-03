@@ -3,30 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <title>SQM 정합성 검사</title>
-<link rel="stylesheet" href="../css/design-tokens.css">
+<link rel="stylesheet" href="../css/design-system.css">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg, #0f172a); color: var(--text, #e2e8f0); font-family: 'Malgun Gothic', 'Segoe UI', sans-serif; padding: 16px; overflow-y: auto; }
-.header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border, #334155); }
+body { background: var(--bg-root); color: var(--text-primary); font-family: 'Malgun Gothic', 'Segoe UI', sans-serif; padding: 16px; overflow-y: auto; }
+.header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-default); }
 h1 { font-size: 15px; font-weight: 600; flex: 1; }
-.run-btn { background: var(--accent, #3b82f6); color: #fff; border: none; border-radius: 8px; padding: 8px 18px; cursor: pointer; font-size: 13px; }
+.run-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 18px; cursor: pointer; font-size: 13px; }
 .run-btn:hover { opacity: 0.85; }
-.run-btn.ghost { background: var(--surface, #1e293b); color: var(--text, #e2e8f0); border: 1px solid var(--border, #334155); }
+.run-btn.ghost { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-default); }
 #result { font-size: 13px; line-height: 1.6; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
-.badge-ok { background: rgba(22,163,74,.15); color: #4ade80; border: 1px solid #16a34a; }
-.badge-warn { background: rgba(217,119,6,.15); color: #fb923c; border: 1px solid #d97706; }
-.badge-err { background: rgba(220,38,38,.15); color: #f87171; border: 1px solid #dc2626; }
+.badge-ok   { background: rgba(82,200,126,.12);  color: var(--success); border: 1px solid var(--success); }
+.badge-warn { background: rgba(232,148,58,.12);  color: var(--warning); border: 1px solid var(--warning); }
+.badge-err  { background: rgba(224,104,104,.12); color: var(--danger);  border: 1px solid var(--danger);  }
 table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-th, td { padding: 6px 10px; border: 1px solid var(--border, #334155); font-size: 12px; text-align: left; }
+th, td { padding: 6px 10px; border: 1px solid var(--border-default); font-size: 12px; text-align: left; }
 th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--surface, #1e293b);
-  color: var(--text-muted, #94a3b8);
+  background: var(--bg-card);
+  color: var(--text-muted);
   font-weight: 600;
-  box-shadow: 0 1px 0 var(--border, #334155), 0 2px 8px rgba(0,0,0,.18);
+  box-shadow: 0 1px 0 var(--border-default), 0 2px 8px rgba(0,0,0,.18);
 }
 tr:hover td { background: rgba(255,255,255,.03); }
 </style>
@@ -38,7 +38,7 @@ tr:hover td { background: rgba(255,255,255,.03); }
   <button class="run-btn" onclick="runCheck(true)">&#x1F504; 새로 실행</button>
   <button class="run-btn ghost" onclick="runCheck(false)">캐시 사용</button>
 </div>
-<div id="result"><p style="color:var(--text-muted,#94a3b8)">검사 실행 버튼을 클릭하세요.</p></div>
+<div id="result"><p style="color:var(--text-muted)">검사 실행 버튼을 클릭하세요.</p></div>
 <script>
 var API_BASE = (window.SQM_API_BASE || window.location.origin || '');
 var CACHE_KEY = 'sqm_integrity_cache';
@@ -60,19 +60,19 @@ function renderResult(data) {
   else if (data && Array.isArray(data.rows)) rows = data.rows;
   else if (data && Array.isArray(data.results)) rows = data.results;
   if (!rows.length) {
-    el.innerHTML = '<p style="color:#4ade80;padding:20px 0;font-size:14px">\u2705 \uC815\uD569\uC131 \uC774\uC0C1 \uC5C6\uC74C</p>';
+    el.innerHTML = '<p style="color:var(--success);padding:20px 0;font-size:14px">\u2705 \uC815\uD569\uC131 \uC774\uC0C1 \uC5C6\uC74C</p>';
     return;
   }
-  var html = '<p style="margin-bottom:8px;color:var(--text-muted,#94a3b8);font-size:12px">\uCD1D ' + rows.length + '\uAC74</p>'
+  var html = '<p style="margin-bottom:8px;color:var(--text-muted);font-size:12px">\uCD1D ' + rows.length + '\uAC74</p>'
     + '<table><thead><tr><th>#</th><th>LOT</th><th>\uD56D\uBAA9</th><th>\uC0C1\uD0DC</th><th>\uB0B4\uC6A9</th></tr></thead><tbody>';
   rows.forEach(function(r, i) {
     var status = r.status || r.severity || r.level || 'ERROR';
     html += '<tr>'
-      + '<td style="color:var(--text-muted,#94a3b8)">' + (i+1) + '</td>'
+      + '<td style="color:var(--text-muted)">' + (i+1) + '</td>'
       + '<td style="font-family:monospace">' + (r.lot_no||r.lot||'-') + '</td>'
       + '<td>' + (r.check||r.item||r.field||'-') + '</td>'
       + '<td>' + getBadge(status) + '</td>'
-      + '<td style="color:var(--text-muted,#94a3b8)">' + (r.message||r.detail||r.note||'-') + '</td>'
+      + '<td style="color:var(--text-muted)">' + (r.message||r.detail||r.note||'-') + '</td>'
       + '</tr>';
   });
   html += '</tbody></table>';
@@ -89,7 +89,7 @@ function runCheck(force) {
       }
     } catch(e) {}
   }
-  document.getElementById('result').innerHTML = '<p style="color:var(--text-muted,#94a3b8)">\u23F3 \uAC80\uC0AC \uC911...</p>';
+  document.getElementById('result').innerHTML = '<p style="color:var(--text-muted)">\u23F3 \uAC80\uC0AC \uC911...</p>';
   fetch(API_BASE + '/api/action/integrity-report')
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -97,7 +97,7 @@ function runCheck(force) {
       renderResult(data);
     })
     .catch(function(e) {
-      document.getElementById('result').innerHTML = '<p style="color:#f87171">\u274C \uC624\uB958: ' + (e.message||String(e)) + '</p>';
+      document.getElementById('result').innerHTML = '<p style="color:var(--danger)">\u274C \uC624\uB958: ' + (e.message||String(e)) + '</p>';
     });
 }
 
