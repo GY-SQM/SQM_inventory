@@ -967,3 +967,11 @@ select option { background: var(--bg-card); }
   transition: transform var(--transition);
 }
 #theme-toggle:hover { transform: rotate(20deg); }
+
+/* ── SQM 프로젝트 전용 변수 (테마 무관 — 스플래시/로딩) ── */
+:root {
+  --sqm-loading-highlight:  #4fc3f7;
+  --sqm-splash-muted:       #546e7a;
+  --sqm-loading-bar-bg:     #1e3a5f;
+  --sqm-loading-grad-start: #1565c0;
+}
