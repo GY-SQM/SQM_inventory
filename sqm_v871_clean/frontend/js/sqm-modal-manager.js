@@ -72,6 +72,7 @@
     'tonbag-modal',                // 톤백 보기 모달
     'status-revert-panel',         // 상태 되돌리기 패널
     'sqm-debug-panel',             // 디버그 패널
+    'sqm-ai-chat-panel',           // AI 재고 조회 패널
   ];
   var TARGET_CLASS = 'sqm-managed-window';
 

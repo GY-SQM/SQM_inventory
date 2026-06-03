@@ -24,7 +24,9 @@
 
     var panel = document.createElement('div');
     panel.id = panelId;
-    panel.style.cssText = 'position:fixed;right:20px;bottom:20px;width:420px;max-height:580px;'
+    var _vw = window.innerWidth, _vh = window.innerHeight;
+    panel.style.cssText = 'position:fixed;width:420px;height:520px;'
+      + 'left:' + Math.max(10, _vw - 440) + 'px;top:' + Math.max(10, _vh - 540) + 'px;'
       + 'background:var(--bg-card,#1a2233);border:1px solid var(--border,#2a3a5c);border-radius:12px;'
       + 'box-shadow:0 8px 32px rgba(0,0,0,.5);display:flex;flex-direction:column;z-index:9999;overflow:hidden';
     panel.innerHTML =
