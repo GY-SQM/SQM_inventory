@@ -384,6 +384,15 @@
           cnt.textContent = '— ' + rows.length + ' 건';
           _renderTable(LOT_COLS, rows, body, _onLotRowClick);
           _renderLotFooter(foot, rows);
+          /* ★ v8.7.1 자동 팝아웃 — 데이터 렌더 완료 후 별도 창으로 */
+          setTimeout(function() {
+            if (typeof window.sqmPopOut === 'function' && !window.sqmPopOutIsActive('listview')) {
+              window.sqmPopOut(m, {
+                key: 'listview', title: '📊 LOT 리스트', width: 1200, height: 840,
+                onClose: function() { if (m) m.style.display = 'none'; },
+              });
+            }
+          }, 80);
         })
         .catch(function(e) {
           body.innerHTML = '<div style="text-align:center;color:var(--danger,#f44336);padding:40px;">'
@@ -472,6 +481,16 @@
           cnt.textContent = '— ' + rows.length + ' 건' + (halfTb ? ' · HALF ' + halfTb + '톤백' : '');
           _renderTable(TONBAG_COLS, rows, body);
           _renderTonbagFooter(foot, rows);
+          /* ★ v8.7.1 자동 팝아웃 — 데이터 렌더 완료 후 별도 창으로 */
+          setTimeout(function() {
+            if (typeof window.sqmPopOut === 'function' && !window.sqmPopOutIsActive('listview')) {
+              var ttlStr = lotNo ? '🎒 톤백 — LOT ' + lotNo : '🎒 톤백 리스트';
+              window.sqmPopOut(m, {
+                key: 'listview', title: ttlStr, width: 1200, height: 840,
+                onClose: function() { if (m) m.style.display = 'none'; },
+              });
+            }
+          }, 80);
         })
         .catch(function(e) {
           body.innerHTML = '<div style="text-align:center;color:var(--danger,#f44336);padding:40px;">'

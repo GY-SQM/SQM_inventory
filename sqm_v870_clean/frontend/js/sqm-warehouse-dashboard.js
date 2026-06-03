@@ -912,7 +912,18 @@
     _refreshRackPct(function(){
       _renderLeftNav();
       _renderDetail();
-      _loadAll();
+      /* ★ v8.7.1 자동 팝아웃 — 두 fetch 완료 후 별도 창으로 */
+      var _wh = document.getElementById('sqm-warehouse-dashboard');
+      Promise.all([_loadSummary(), _loadGrid()]).then(function() {
+        setTimeout(function() {
+          if (_wh && typeof window.sqmPopOut === 'function' && !window.sqmPopOutIsActive('wh-dashboard')) {
+            window.sqmPopOut(_wh, {
+              key: 'wh-dashboard', title: '🏭 창고 셀 점유 대시보드', width: 1400, height: 900,
+              onClose: function() { if (_wh) _wh.style.display = 'none'; },
+            });
+          }
+        }, 80);
+      });
     });
   };
 

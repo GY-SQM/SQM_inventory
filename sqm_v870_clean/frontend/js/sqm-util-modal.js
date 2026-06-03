@@ -128,6 +128,12 @@
             + '<button type="button" onclick="document.getElementById(\'sqm-modal\').style.display=\'none\'" style="position:absolute;top:3px;right:10px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-muted);">&#x2715;</button>';
         }
       }
+      /* 다른 스크립트가 먼저 모달을 생성한 경우 popout 버튼이 빠질 수 있으므로 여기서도 보완 */
+      var _inner2 = document.getElementById('sqm-modal-inner');
+      var _header2 = document.getElementById('sqm-modal-header');
+      if (_inner2 && _header2 && typeof window.sqmAddPopOutBtn === 'function') {
+        window.sqmAddPopOutBtn(_inner2, _header2, { key: 'data-modal', title: 'SQM', width: 1280, height: 800 });
+      }
       return m;
     }
     m=document.createElement('div');

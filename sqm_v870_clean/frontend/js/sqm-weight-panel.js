@@ -106,7 +106,7 @@
 
   window._sqmDetachAiChat = function() {
     var API = window.SQM_API_BASE || window.location.origin || '';
-    var url = API + '/frontend/detached/ai_chat.html';
+    var url = API + '/detached/ai_chat.html';
     if (window.pywebview && window.pywebview.api && window.pywebview.api.open_detached_window) {
       window.pywebview.api.open_detached_window('ai_chat', 'SQM AI Chat', url, 900, 650);
     } else {
