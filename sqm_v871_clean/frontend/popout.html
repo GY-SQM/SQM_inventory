@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SQM Popout</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="css/design-system.css?v=20260527pop">
+<link rel="stylesheet" href="css/v864-layout.css?v=20260527pop">
+<style>
+  html,body{margin:0;padding:0;background:var(--bg,#0b1322);color:var(--fg,#e2e8f0);
+    font-family:"Segoe UI","Malgun Gothic",sans-serif;height:100vh;overflow:hidden;}
+  #popout-root{position:fixed;inset:0;display:flex;flex-direction:column;
+    overflow:hidden;}
+  #popout-content{flex:1 1 auto;overflow:auto;padding:8px;}
+  /* 분리 창에서는 패널이 항상 전체 영역 차지 — fixed/absolute 좌표 무시 */
+  #popout-content > div[id]{
+    position:static !important;
+    top:auto!important;left:auto!important;right:auto!important;bottom:auto!important;
+    transform:none!important;
+    width:100%!important;height:100%!important;max-width:100%!important;
+    margin:0!important;border-radius:0!important;
+    box-shadow:none!important;border:none!important;
+  }
+  /* 헤더의 cursor:move 는 무의미하므로 시각적으로 정리 */
+  #popout-content [id$="-hdr"]{cursor:default!important;}
+  /* 메인에서만 보이던 closing X 버튼은 분리창에서 숨김 */
+  .sqm-popout-hide-in-detached{display:none!important;}
+  /* 리사이즈 핸들 숨김 (OS 창이 리사이즈 담당) */
+  .sqm-rh{display:none!important;}
+  /* 상단 상태바 */
+  #popout-statusbar{flex-shrink:0;padding:4px 12px;font-size:11px;
+    color:var(--text-muted,#94a3b8);background:var(--panel,#0f1830);
+    border-bottom:1px solid var(--panel-border,#1e293b);
+    display:flex;align-items:center;gap:8px;}
+  #popout-statusbar .dot{width:8px;height:8px;border-radius:50%;
+    background:var(--danger,#ef4444);}
+  #popout-statusbar.connected .dot{background:var(--success,#22c55e);}
+</style>
+</head>
+<body>
+<div id="popout-root">
+  <div id="popout-statusbar">
+    <span class="dot"></span>
+    <span id="popout-status-text">연결 중...</span>
+    <span style="margin-left:auto" id="popout-key-label"></span>
+  </div>
+  <div id="popout-content"></div>
+</div>
+<!-- 토스트(showToast 호환) — 분리 창 안에서도 알림 표시 -->
+<script src="js/sqm-util-escape.js?v=20260527pop"></script>
+<script src="js/sqm-util-toast.js?v=20260527pop"></script>
+<script src="js/sqm-detached-host.js?v=20260527pop"></script>
+</body>
+</html>

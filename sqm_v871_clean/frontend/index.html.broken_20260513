@@ -1,0 +1,4 @@
+손상 백업 placeholder. 원본은 git HEAD(946a712) frontend/index.html 에서 git show 로 복구 가능.
+- 현재 파일: 510줄, line 510에서 border-ra 로 잘림
+- NULL 바이트 오프셋 ~35,952 (binary 감지)
+- 복구일: 2026-05-13 by Ruby

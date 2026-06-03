@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>SQM AI Chat</title>
+<link rel="stylesheet" href="../css/design-tokens.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg, #0f172a); color: var(--text, #e2e8f0); font-family: 'Malgun Gothic', 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+.header { background: var(--surface, #1e293b); border-bottom: 1px solid var(--border, #334155); padding: 10px 16px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.header h1 { font-size: 14px; font-weight: 600; flex: 1; color: var(--text, #e2e8f0); }
+.dock-btn { background: transparent; border: 1px solid var(--border, #334155); color: var(--text-muted, #94a3b8); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.dock-btn:hover { background: var(--border, #334155); }
+.chat-area { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.msg { padding: 10px 14px; border-radius: 10px; max-width: 85%; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.msg.user { background: var(--accent, #3b82f6); color: #fff; align-self: flex-end; border-radius: 10px 10px 2px 10px; }
+.msg.ai { background: var(--surface, #1e293b); border: 1px solid var(--border, #334155); align-self: flex-start; border-radius: 10px 10px 10px 2px; }
+.input-row { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border, #334155); flex-shrink: 0; }
+.input-row input { flex: 1; padding: 8px 12px; background: var(--surface, #1e293b); border: 1px solid var(--border, #334155); border-radius: 8px; color: var(--text, #e2e8f0); font-size: 13px; outline: none; }
+.send-btn { background: var(--accent, #3b82f6); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+.send-btn:hover { opacity: 0.85; }
+</style>
+</head>
+<body>
+<div class="header">
+  <span>&#x1F916;</span>
+  <h1>SQM AI Assistant</h1>
+  <button class="dock-btn" onclick="dockBack()">&#x1F4CC; 도킹</button>
+</div>
+<div class="chat-area" id="chat-area"></div>
+<div class="input-row">
+  <input type="text" id="chat-input" placeholder="질문을 입력하세요..." autocomplete="off">
+  <button class="send-btn" onclick="sendMsg()">전송</button>
+</div>
+<script>
+var API_BASE = (window.SQM_API_BASE || window.location.origin || '');
+var HIST_KEY = 'sqm_ai_chat_history';
+
+function loadHistory() {
+  try {
+    var h = JSON.parse(localStorage.getItem(HIST_KEY) || '[]');
+    h.forEach(function(m) { appendMsg(m.role, m.content, false); });
+  } catch(e) {}
+}
+
+function saveHistory() {
+  var msgs = Array.from(document.querySelectorAll('.msg')).map(function(el) {
+    return { role: el.classList.contains('user') ? 'user' : 'ai', content: el.textContent };
+  });
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(msgs.slice(-20))); } catch(e) {}
+}
+
+function appendMsg(role, text, save) {
+  var el = document.createElement('div');
+  el.className = 'msg ' + (role === 'user' ? 'user' : 'ai');
+  el.textContent = text;
+  document.getElementById('chat-area').appendChild(el);
+  el.scrollIntoView({ behavior: 'smooth' });
+  if (save !== false) saveHistory();
+}
+
+function sendMsg() {
+  var inp = document.getElementById('chat-input');
+  var msg = (inp.value || '').trim();
+  if (!msg) return;
+  inp.value = '';
+  appendMsg('user', msg);
+  var aiEl = document.createElement('div');
+  aiEl.className = 'msg ai';
+  aiEl.textContent = '\u23F3 \uC751\uB2F5 \uC911...';
+  document.getElementById('chat-area').appendChild(aiEl);
+  aiEl.scrollIntoView({ behavior: 'smooth' });
+  fetch(API_BASE + '/api/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: msg })
+  }).then(function(r) { return r.json(); }).then(function(res) {
+    aiEl.textContent = res.answer || res.reply || res.message || JSON.stringify(res);
+    saveHistory();
+  }).catch(function(e) {
+    aiEl.textContent = '\u274C \uC624\uB958: ' + (e.message || String(e));
+  });
+}
+
+function dockBack() {
+  try {
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.close_detached_window('ai_chat');
+    }
+  } catch(e) {}
+  window.close();
+}
+
+document.getElementById('chat-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+});
+
+loadHistory();
+</script>
+</body>
+</html>

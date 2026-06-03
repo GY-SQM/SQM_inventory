@@ -1,0 +1,357 @@
+// dashboard-warehouse-embed.js  (v8.7.0-r2)
+// =============================================================
+// 대시보드 인라인 창고 히트맵
+//
+// 구조:
+//   [1단계] 동·랙 히트맵  — /api/warehouse/rack-heatmap
+//           5동/6동 한 줄 나란히, 랙 블록 40×56px, LOT별 색상
+//   [2단계] 랙 확대 뷰    — /api/warehouse/cell-grid
+//           랙 클릭 시 31열×N층 전체, 셀 28×28px, LOT 색상
+//   [3단계] 셀 툴팁       — 클릭 위치 근처 팝업
+//           LOT NO / Sub-LOT NO / 상태, 외부 클릭 닫기
+// =============================================================
+
+(function () {
+  'use strict';
+  if (window.__SQM_WH_EMBED__) return;
+  window.__SQM_WH_EMBED__ = true;
+
+  // ── 상수 ────────────────────────────────────────────────────
+  var API_BASE    = '';
+  var REFRESH_MS  = 60000;
+
+  // LOT 색상 팔레트 (20색 순환)
+  var LOT_PALETTE = [
+    '#1565c0','#6a1b9a','#00695c','#e65100','#558b2f',
+    '#ad1457','#0277bd','#4527a0','#2e7d32','#c62828',
+    '#37474f','#4e342e','#00838f','#ef6c00','#5c6bc0',
+    '#7b1fa2','#0288d1','#388e3c','#d84315','#1976d2',
+  ];
+  var _lotColorMap = {};
+  var _colorIdx   = 0;
+  var _lotSortDir  = 'asc';   // LOT 패널 정렬 방향
+
+  function _lotColor(lot) {
+    if (!lot) return '#263238';
+    if (!_lotColorMap[lot]) {
+      _lotColorMap[lot] = LOT_PALETTE[_colorIdx % LOT_PALETTE.length];
+      _colorIdx++;
+    }
+    return _lotColorMap[lot];
+  }
+
+  // ── DOM 헬퍼 ────────────────────────────────────────────────
+  function _el(id) { return document.getElementById(id); }
+  function _esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                          .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── API 호출 ─────────────────────────────────────────────────
+  function _get(url, cb) {
+    fetch(API_BASE + url)
+      .then(function(r){ return r.json(); })
+      .then(function(d){ cb(null, d); })
+      .catch(function(e){ cb(e, null); });
+  }
+
+  // ── 툴팁 ────────────────────────────────────────────────────
+  var _tip = null;
+  function _showTip(ev, cell) {
+    _hideTip();
+    var t = document.createElement('div');
+    t.id = 'wh-embed-tip';
+    var lot   = _esc(cell.lot_no || '—');
+    var sub   = cell.sub_lt != null ? _esc(String(cell.sub_lt)) : '—';
+    var state = _esc(cell.state || '—');
+    var cnt   = cell.active_count != null ? cell.active_count : '—';
+    var cap   = cell.capacity    != null ? cell.capacity    : '—';
+    t.innerHTML =
+      '<div style="font-size:12px;font-weight:700;color:var(--accent,#4fc3f7);margin-bottom:5px;">📍 ' + _esc(cell.location) + '</div>'
+    + '<div style="font-size:12px;margin-bottom:3px;"><span style="color:var(--text-muted,#90a4ae);">LOT&nbsp;&nbsp;&nbsp;&nbsp;:</span> <b>' + lot + '</b></div>'
+    + '<div style="font-size:12px;margin-bottom:3px;"><span style="color:var(--text-muted,#90a4ae);">Sub-LOT :</span> <b>' + sub + '</b></div>'
+    + '<div style="font-size:12px;margin-bottom:3px;"><span style="color:var(--text-muted,#90a4ae);">상태&nbsp;&nbsp;&nbsp;&nbsp;:</span> ' + state + '</div>'
+    + '<div style="font-size:12px;"><span style="color:var(--text-muted,#90a4ae);">점유&nbsp;&nbsp;&nbsp;&nbsp;:</span> ' + cnt + ' / ' + cap + '</div>';
+    t.style.cssText = [
+      'position:fixed',
+      'z-index:9999',
+      'background:var(--bg-card,#1e272e)',
+      'border:1px solid var(--accent,#4fc3f7)',
+      'border-radius:6px',
+      'padding:10px 14px',
+      'box-shadow:0 4px 16px rgba(0,0,0,.5)',
+      'pointer-events:none',
+      'min-width:190px',
+    ].join(';');
+    document.body.appendChild(t);
+    _tip = t;
+    var x = ev.clientX + 14;
+    var y = ev.clientY + 14;
+    var tw = 210, th = 130;
+    if (x + tw > window.innerWidth)  x = ev.clientX - tw - 8;
+    if (y + th > window.innerHeight) y = ev.clientY - th - 8;
+    t.style.left = x + 'px';
+    t.style.top  = y + 'px';
+  }
+
+  function _hideTip() {
+    if (_tip) { _tip.remove(); _tip = null; }
+  }
+
+  document.addEventListener('click', function(ev) {
+    if (_tip && !_tip.contains(ev.target)) _hideTip();
+  });
+
+  // ── 상태 색상 ────────────────────────────────────────────────
+  function _cellBg(cell) {
+    var s = cell.state || 'UNKNOWN';
+    if (s === 'EMPTY' || s === 'UNKNOWN') return 'transparent';
+    if (s === 'OVER')  return '#b71c1c';
+    if (s === 'MIXED') return '#7b1fa2';
+    return _lotColor(cell.lot_no || '');
+  }
+
+  // ── 1단계: 히트맵 렌더 ───────────────────────────────────────
+  var _lastHeatmap = null;
+
+  function _renderHeatmap(data) {
+    var racks = data.racks || [];
+    _lastHeatmap = racks;
+
+    // LOT 색상 미리 배정
+    var allLots = [];
+    racks.forEach(function(r) {
+      (r.lots || []).forEach(function(l) {
+        if (l && allLots.indexOf(l) < 0) allLots.push(l);
+      });
+    });
+    allLots.forEach(function(l) { _lotColor(l); });
+
+    var container = _el('wh-embed-heatmap');
+    if (!container) return;
+
+    // ── 2-컬럼 레이아웃: 왼쪽(랙 그리드) + 오른쪽(LOT 목록) ──
+    var sortedLots = allLots.slice().sort(function(a, b) {
+      return _lotSortDir === 'asc' ? a.localeCompare(b) : b.localeCompare(a);
+    });
+    var html = '<div style="display:flex;gap:16px;align-items:flex-start;">';
+    html += '<div style="flex:1;min-width:0;">';  // 왼쪽: 랙 그리드
+    // ── 5동/6동 한 줄 나란히 ──────────────────────────────────
+
+    [5, 6].forEach(function(dong) {
+      var dongRacks = racks.filter(function(r){ return r.dong === dong; });
+      html += '<div>';
+      // 동 레이블
+      html += '<div style="font-size:14px;font-weight:700;color:#90a4ae;'
+            + 'margin-bottom:6px;letter-spacing:.5px;">' + dong + '동</div>';
+      // 랙 블록들
+      html += '<div style="display:flex;gap:4px;flex-wrap:nowrap;">';
+      dongRacks.forEach(function(r) {
+        var pct     = r.total > 0 ? Math.round(r.occupied / r.total * 100) : 0;
+        var bg      = r.dominant_lot ? _lotColor(r.dominant_lot) : 'transparent';
+        var border  = r.dominant_lot ? '1px solid rgba(255,255,255,.3)' : '1px solid #455a64';
+        var opacity = r.occupied > 0 ? (0.45 + pct / 100 * 0.55).toFixed(2) : '0.18';
+        html += '<div class="wh-rack-block"'
+              + ' data-dong="' + r.dong + '" data-rack="' + r.rack + '"'
+              + ' title="' + r.dong + '동 ' + r.rack_label + '랙 | LOT: ' + _esc(r.dominant_lot || '빈 랙')
+              +              ' | 점유: ' + r.occupied + '/' + r.total + ' (' + pct + '%)"'
+              + ' style="width:40px;height:56px;border-radius:4px;cursor:pointer;'
+              +         'background:' + bg + ';border:' + border + ';opacity:' + opacity + ';'
+              +         'display:flex;flex-direction:column;align-items:center;justify-content:flex-end;'
+              +         'padding-bottom:5px;transition:transform .12s,box-shadow .12s,opacity .12s;"'
+              + ' onmouseover="this.style.transform=\'scale(1.18)\';this.style.boxShadow=\'0 0 10px rgba(255,255,255,.35)\';this.style.opacity=\'1\'"'
+              + ' onmouseout="this.style.transform=\'\';this.style.boxShadow=\'\';this.style.opacity=\'' + opacity + '\'"'
+              + ' onclick="window._whEmbedOpenRack(' + r.dong + ',' + r.rack + ')">'
+              + '<span style="font-size:10px;color:#fff;font-weight:700;letter-spacing:-.3px;">'
+              + r.rack_label + '</span>'
+              + '</div>';
+      });
+      html += '</div>';
+      html += '</div>';
+    });
+
+    // 5동/6동 랙 그리드 닫기
+    html += '</div>';  // 5동/6동 flex row
+    html += '</div>';  // 왼쪽 컬럼 닫기
+
+    // ── 오른쪽: LOT 목록 패널 ────────────────────────────────
+    html += '<div id="wh-lot-panel" style="'
+          + 'width:170px;flex-shrink:0;'
+          + 'background:var(--bg-card,#1e272e);'
+          + 'border:1px solid rgba(255,255,255,.1);'
+          + 'border-radius:6px;padding:8px 10px;'
+          + 'max-height:300px;display:flex;flex-direction:column;">';
+    // 헤더 + 정렬 버튼
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;'
+          + 'margin-bottom:6px;flex-shrink:0;">';
+    html += '<span style="font-size:11px;font-weight:700;color:#4fc3f7;">LOT 목록 ('
+          + allLots.length + ')</span>';
+    html += '<span>'
+          + '<button onclick="window._whEmbedSortLots('asc')" '
+          + 'style="background:' + (_lotSortDir==='asc'?'#1565c0':'rgba(255,255,255,.08)') + ';'
+          + 'color:#fff;border:none;border-radius:3px;padding:2px 6px;font-size:10px;cursor:pointer;margin-right:2px;">↑ ASC</button>'
+          + '<button onclick="window._whEmbedSortLots('desc')" '
+          + 'style="background:' + (_lotSortDir==='desc'?'#1565c0':'rgba(255,255,255,.08)') + ';'
+          + 'color:#fff;border:none;border-radius:3px;padding:2px 6px;font-size:10px;cursor:pointer;">↓ DESC</button>'
+          + '</span>';
+    html += '</div>';
+    // 스크롤 가능한 LOT 리스트
+    html += '<div style="overflow-y:auto;flex:1;">';
+    sortedLots.forEach(function(l) {
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;'
+            + 'border-bottom:1px solid rgba(255,255,255,.04);">'
+            + '<span style="display:inline-block;width:10px;height:10px;border-radius:2px;'
+            +              'flex-shrink:0;background:' + _lotColor(l) + ';"></span>'
+            + '<span style="font-size:11px;color:#cfd8dc;white-space:nowrap;overflow:hidden;'
+            +              'text-overflow:ellipsis;" title="' + _esc(l) + '">' + _esc(l) + '</span>'
+            + '</div>';
+    });
+    html += '</div>';  // 스크롤 영역
+    html += '</div>';  // LOT 패널
+    html += '</div>';  // 최외곽 2-컬럼 flex
+
+    container.innerHTML = html;
+  }
+
+  window._whEmbedSortLots = function(dir) {
+    _lotSortDir = dir;
+    if (_lastHeatmap) _renderHeatmap({ racks: _lastHeatmap });
+  };
+
+  // ── 2단계: 랙 확대 뷰 렌더 ──────────────────────────────────
+  var _currentRack = null;
+
+  window._whEmbedOpenRack = function(dong, rack) {
+    _currentRack = {dong: dong, rack: rack};
+    var box = _el('wh-embed-rack-detail');
+    if (!box) return;
+    box.innerHTML = '<div style="padding:16px;color:#90a4ae;font-size:13px;">⏳ 로딩중...</div>';
+    box.style.display = 'block';
+
+    _get('/api/warehouse/cell-grid?dong=' + dong + '&rack=' + rack, function(err, res) {
+      if (err || !res || !res.ok) {
+        box.innerHTML = '<div style="padding:12px;color:#e57373;font-size:13px;">❌ 로드 실패</div>';
+        return;
+      }
+      _renderRackGrid(res.data, box);
+    });
+  };
+
+  function _renderRackGrid(data, box) {
+    var cells = data.cells   || [];
+    var maxLv = data.max_level || 1;
+    var dong  = data.dong;
+    var rack  = data.rack;
+
+    // col별 그룹핑
+    var byCol = {};
+    cells.forEach(function(c) {
+      if (!byCol[c.col]) byCol[c.col] = {};
+      byCol[c.col][c.level] = c;
+    });
+    var cols = Object.keys(byCol).map(Number).sort(function(a,b){ return a - b; });
+
+    var html = '<div style="display:flex;align-items:center;justify-content:space-between;'
+             + 'margin-bottom:10px;padding:0 2px;">'
+             + '<span style="font-size:14px;font-weight:700;color:#4fc3f7;">'
+             + '📦 ' + dong + '동 ' + String(rack).padStart(2,'0') + '번 랙</span>'
+             + '<button onclick="window._whEmbedCloseRack()" '
+             + 'style="background:none;border:none;cursor:pointer;color:#90a4ae;font-size:20px;padding:0 4px;line-height:1;">×</button>'
+             + '</div>';
+
+    html += '<div style="overflow-x:auto;">';
+    html += '<table style="border-collapse:collapse;font-size:11px;">';
+
+    // 헤더 (열 번호)
+    html += '<tr><th style="width:32px;color:#90a4ae;padding:2px 4px;font-size:11px;">층↓열→</th>';
+    cols.forEach(function(col) {
+      html += '<th style="width:28px;text-align:center;color:#cfd8dc;padding:2px;font-size:11px;font-weight:700;">'
+            + String(col).padStart(2,'0') + '</th>';
+    });
+    html += '</tr>';
+
+    // 층 행 (높은 층 위)
+    for (var lv = maxLv; lv >= 1; lv--) {
+      html += '<tr>';
+      html += '<td style="text-align:right;color:#90a4ae;padding:2px 6px 2px 2px;font-weight:700;font-size:11px;">L'
+            + String(lv).padStart(2,'0') + '</td>';
+      cols.forEach(function(col) {
+        var cell = (byCol[col] || {})[lv];
+        if (!cell) {
+          html += '<td style="width:28px;height:28px;"></td>';
+          return;
+        }
+        var isEmpty = (cell.state === 'EMPTY' || cell.state === 'UNKNOWN');
+        var bg      = _cellBg(cell);
+        var border  = isEmpty ? 'none' : '1px solid rgba(255,255,255,.25)';
+        var cursor  = isEmpty ? 'default' : 'pointer';
+        var radius  = isEmpty ? '0' : '3px';
+        var cellJson = JSON.stringify({
+          location:     cell.location,
+          lot_no:       cell.lot_no || '',
+          sub_lt:       cell.sub_lt,
+          state:        cell.state,
+          active_count: cell.active_count,
+          capacity:     cell.capacity,
+        }).replace(/'/g, '&#39;');
+        html += '<td onclick="window._whEmbedCellClick(event, \'' + cellJson.replace(/"/g,'&quot;') + '\')"'
+              + ' style="width:28px;height:28px;background:' + bg + ';border:' + border + ';'
+              +         'cursor:' + cursor + ';border-radius:' + radius + ';'
+              +         'transition:filter .1s;"'
+              + ' onmouseover="if(\'' + cursor + '\'===\'pointer\')this.style.filter=\'brightness(1.3)\'"'
+              + ' onmouseout="this.style.filter=\'\'"></td>';
+      });
+      html += '</tr>';
+    }
+    html += '</table></div>';
+    box.innerHTML = html;
+  }
+
+  window._whEmbedCloseRack = function() {
+    var box = _el('wh-embed-rack-detail');
+    if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+    _currentRack = null;
+    _hideTip();
+  };
+
+  window._whEmbedCellClick = function(ev, cellJsonStr) {
+    ev.stopPropagation();
+    try {
+      var cell = JSON.parse(cellJsonStr.replace(/&quot;/g, '"').replace(/&#39;/g, "'"));
+      if (cell.state === 'EMPTY' || cell.state === 'UNKNOWN') { _hideTip(); return; }
+      _showTip(ev, cell);
+    } catch(e) { /* ignore */ }
+  };
+
+  // ── 초기화 + 자동 갱신 ──────────────────────────────────────
+  function _load() {
+    _get('/api/warehouse/rack-heatmap', function(err, res) {
+      if (err || !res || !res.ok) return;
+      _renderHeatmap(res.data);
+    });
+  }
+
+  var _timer = null;
+  function _startAutoRefresh() {
+    if (_timer) clearInterval(_timer);
+    _timer = setInterval(_load, REFRESH_MS);
+  }
+
+  window.initWarehouseEmbed = function() {
+    _load();
+    _startAutoRefresh();
+  };
+
+  window._whEmbedRefresh = function() {
+    _load();
+    if (_currentRack) {
+      window._whEmbedOpenRack(_currentRack.dong, _currentRack.rack);
+    }
+  };
+
+})();
+rrentRack.rack);
+    }
+  };
+
+})();

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>SQM 정합성 검사</title>
+<link rel="stylesheet" href="../css/design-tokens.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg, #0f172a); color: var(--text, #e2e8f0); font-family: 'Malgun Gothic', 'Segoe UI', sans-serif; padding: 16px; overflow-y: auto; }
+.header { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border, #334155); }
+h1 { font-size: 15px; font-weight: 600; flex: 1; }
+.run-btn { background: var(--accent, #3b82f6); color: #fff; border: none; border-radius: 8px; padding: 8px 18px; cursor: pointer; font-size: 13px; }
+.run-btn:hover { opacity: 0.85; }
+.run-btn.ghost { background: var(--surface, #1e293b); color: var(--text, #e2e8f0); border: 1px solid var(--border, #334155); }
+#result { font-size: 13px; line-height: 1.6; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; }
+.badge-ok { background: rgba(22,163,74,.15); color: #4ade80; border: 1px solid #16a34a; }
+.badge-warn { background: rgba(217,119,6,.15); color: #fb923c; border: 1px solid #d97706; }
+.badge-err { background: rgba(220,38,38,.15); color: #f87171; border: 1px solid #dc2626; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+th, td { padding: 6px 10px; border: 1px solid var(--border, #334155); font-size: 12px; text-align: left; }
+th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface, #1e293b);
+  color: var(--text-muted, #94a3b8);
+  font-weight: 600;
+  box-shadow: 0 1px 0 var(--border, #334155), 0 2px 8px rgba(0,0,0,.18);
+}
+tr:hover td { background: rgba(255,255,255,.03); }
+</style>
+</head>
+<body>
+<div class="header">
+  <span>&#x1FA7A;</span>
+  <h1>LOT 정합성 검사</h1>
+  <button class="run-btn" onclick="runCheck(true)">&#x1F504; 새로 실행</button>
+  <button class="run-btn ghost" onclick="runCheck(false)">캐시 사용</button>
+</div>
+<div id="result"><p style="color:var(--text-muted,#94a3b8)">검사 실행 버튼을 클릭하세요.</p></div>
+<script>
+var API_BASE = (window.SQM_API_BASE || window.location.origin || '');
+var CACHE_KEY = 'sqm_integrity_cache';
+var CACHE_TTL = 300000;
+
+function getBadge(status) {
+  if (!status) return '';
+  var s = String(status).toUpperCase();
+  if (s === 'OK') return '<span class="badge badge-ok">OK</span>';
+  if (s === 'WARNING' || s === 'WARN') return '<span class="badge badge-warn">WARNING</span>';
+  return '<span class="badge badge-err">ERROR</span>';
+}
+
+function renderResult(data) {
+  var el = document.getElementById('result');
+  var rows = [];
+  if (Array.isArray(data)) rows = data;
+  else if (data && Array.isArray(data.issues)) rows = data.issues;
+  else if (data && Array.isArray(data.rows)) rows = data.rows;
+  else if (data && Array.isArray(data.results)) rows = data.results;
+  if (!rows.length) {
+    el.innerHTML = '<p style="color:#4ade80;padding:20px 0;font-size:14px">\u2705 \uC815\uD569\uC131 \uC774\uC0C1 \uC5C6\uC74C</p>';
+    return;
+  }
+  var html = '<p style="margin-bottom:8px;color:var(--text-muted,#94a3b8);font-size:12px">\uCD1D ' + rows.length + '\uAC74</p>'
+    + '<table><thead><tr><th>#</th><th>LOT</th><th>\uD56D\uBAA9</th><th>\uC0C1\uD0DC</th><th>\uB0B4\uC6A9</th></tr></thead><tbody>';
+  rows.forEach(function(r, i) {
+    var status = r.status || r.severity || r.level || 'ERROR';
+    html += '<tr>'
+      + '<td style="color:var(--text-muted,#94a3b8)">' + (i+1) + '</td>'
+      + '<td style="font-family:monospace">' + (r.lot_no||r.lot||'-') + '</td>'
+      + '<td>' + (r.check||r.item||r.field||'-') + '</td>'
+      + '<td>' + getBadge(status) + '</td>'
+      + '<td style="color:var(--text-muted,#94a3b8)">' + (r.message||r.detail||r.note||'-') + '</td>'
+      + '</tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function runCheck(force) {
+  if (!force) {
+    try {
+      var cached = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+      if (cached && cached.ts && (Date.now() - cached.ts) < CACHE_TTL && cached.data) {
+        renderResult(cached.data);
+        return;
+      }
+    } catch(e) {}
+  }
+  document.getElementById('result').innerHTML = '<p style="color:var(--text-muted,#94a3b8)">\u23F3 \uAC80\uC0AC \uC911...</p>';
+  fetch(API_BASE + '/api/action/integrity-report')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data })); } catch(e) {}
+      renderResult(data);
+    })
+    .catch(function(e) {
+      document.getElementById('result').innerHTML = '<p style="color:#f87171">\u274C \uC624\uB958: ' + (e.message||String(e)) + '</p>';
+    });
+}
+
+runCheck(false);
+</script>
+</body>
+</html>
