@@ -3057,6 +3057,12 @@
     window.SQM.version = '864.3-phase5';
     window.SQM.renderPage = renderPage;
     window.SQM.dispatchAction = dispatchAction;
+    /* [FIX 20260604] dispatch split-brain 제거:
+       기존엔 window.dispatchAction 을 sqm-tonbag.js 만 등록 → sqm-core.js 의 키보드 단축키(맨 dispatchAction 호출)는
+       tonbag dispatch 로, 메뉴 클릭은 inline dispatch 로 갈려서(원스톱 모달/oo* 불일치 가능) 위험.
+       inline 이 마지막 로드이므로 여기서 window.dispatchAction 을 inline 버전으로 통일한다.
+       (inline ENDPOINTS 가 키보드 액션 onOnBackup/onExport/onIntegrityCheck/onOnQuickOutbound 전부 커버 + 미등록 액션 안전 폴백 확인 완료) */
+    window.dispatchAction = dispatchAction;
     if (typeof window.SQM.currentRoute !== 'function') window.SQM.currentRoute = function(){ return _currentRoute; };
     console.info('[SQM v864.3] boot complete. initial route:', initial);
   }

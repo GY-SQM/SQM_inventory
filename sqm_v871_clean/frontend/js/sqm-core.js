@@ -381,18 +381,33 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     tableEl.dataset._sortBound = '1';
     var headers = tableEl.querySelectorAll('thead th');
     headers.forEach(function(th, colIdx) {
+      // [FIX 20260604] 체크박스·버튼 등 인터랙티브 요소가 든 헤더 칸은 정렬에서 제외.
+      //   기존 코드는 th.textContent 대입으로 화살표를 그렸는데,
+      //   이 대입이 <th> 안의 전체선택 <input type=checkbox> 를 통째로 삭제(텍스트로 치환)해
+      //   "헤더 전체선택이 한 번 정렬 후 사라지는" 버그를 유발했다. (AVAILABLE/PENDING/ALLOCATION 등)
+      if (th.querySelector('input, button, select, label')) return;
+      var _t = (th.textContent || '').trim();
+      if (_t === '' || _t === '#' || _t === '+' || _t === '⋯') return;
       th.style.cursor = 'pointer';
       th.style.userSelect = 'none';
       th.title = 'Click to sort';
+      // [FIX] 화살표는 별도 span 으로 — textContent 대입(자식 노드 파괴) 금지
+      var _arrow = document.createElement('span');
+      _arrow.className = 'sqm-core-sort-arrow';
+      _arrow.style.cssText = 'margin-left:3px;font-size:9px;opacity:.55;pointer-events:none';
+      th.appendChild(_arrow);
       th.addEventListener('click', function() {
         var tbody = tableEl.querySelector('tbody');
         if (!tbody) return;
         var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
         var asc = th.dataset._sortDir !== 'asc';
-        // 모든 th 리셋
-        headers.forEach(function(h){ h.dataset._sortDir=''; h.textContent=h.textContent.replace(/ [▲▼]/g,''); });
+        // 모든 헤더 화살표 리셋 — span 텍스트만 비우고 textContent 는 절대 건드리지 않음
+        headers.forEach(function(h){
+          h.dataset._sortDir = '';
+          var a = h.querySelector('.sqm-core-sort-arrow'); if (a) a.textContent = '';
+        });
         th.dataset._sortDir = asc ? 'asc' : 'desc';
-        th.textContent = th.textContent + (asc ? ' ▲' : ' ▼');
+        _arrow.textContent = asc ? '▲' : '▼';
         rows.sort(function(a, b) {
           var ca = (a.children[colIdx]||{}).textContent||'';
           var cb = (b.children[colIdx]||{}).textContent||'';
