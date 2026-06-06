@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>SQM AI Chat</title>
+<link rel="stylesheet" href="../css/design-system.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg-root); color: var(--text-primary); font-family: 'Malgun Gothic', 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+.header { background: var(--bg-card); border-bottom: 1px solid var(--border-default); padding: 10px 16px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.header h1 { font-size: 14px; font-weight: 600; flex: 1; color: var(--text-primary); }
+.dock-btn { background: transparent; border: 1px solid var(--border-default); color: var(--text-muted); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+.dock-btn:hover { background: var(--bg-card-hover); }
+.chat-area { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.msg { padding: 10px 14px; border-radius: 10px; max-width: 85%; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.msg.user { background: var(--accent); color: #fff; align-self: flex-end; border-radius: 10px 10px 2px 10px; }
+.msg.ai { background: var(--bg-card); border: 1px solid var(--border-default); align-self: flex-start; border-radius: 10px 10px 10px 2px; }
+.input-row { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border-default); flex-shrink: 0; }
+.input-row input { flex: 1; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: 8px; color: var(--text-primary); font-size: 13px; outline: none; }
+.send-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+.send-btn:hover { opacity: 0.85; }
+.lock-btn { background: transparent; border: 1px solid var(--border-default);
+  border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+  color: var(--text-muted); transition: all 0.2s; }
+.lock-btn.unlocked { color: var(--success); border-color: var(--success); }
+.lock-btn.warn { color: var(--warning); border-color: var(--warning); }
+.pin-overlay { display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6); z-index: 999;
+  align-items: center; justify-content: center; }
+.pin-overlay.show { display: flex; }
+.pin-box { background: var(--bg-card); border: 1px solid var(--border-default);
+  border-radius: 12px; padding: 28px 32px; width: 300px; text-align: center; }
+.pin-box h2 { font-size: 15px; margin-bottom: 18px; color: var(--text-primary); }
+.pin-input { width: 100%; padding: 10px; font-size: 20px; letter-spacing: 8px;
+  text-align: center; background: var(--bg-root); color: var(--text-primary);
+  border: 1px solid var(--border-default); border-radius: 8px; outline: none;
+  margin-bottom: 14px; }
+.pin-error { color: var(--danger); font-size: 12px; margin-bottom: 12px;
+  min-height: 18px; }
+.pin-btns { display: flex; gap: 8px; justify-content: center; }
+.pin-btns button { flex: 1; padding: 8px; border-radius: 8px; border: none;
+  cursor: pointer; font-size: 13px; }
+.pin-cancel { background: var(--bg-card-hover); color: var(--text-primary); }
+.pin-confirm { background: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+<div class="pin-overlay" id="pin-overlay">
+  <div class="pin-box">
+    <h2>🔐 수정 모드 잠금 해제</h2>
+    <input class="pin-input" type="password" id="pin-input"
+           maxlength="6" placeholder="••••" autocomplete="off">
+    <div class="pin-error" id="pin-error"></div>
+    <div class="pin-btns">
+      <button class="pin-cancel" onclick="closePinModal()">취소</button>
+      <button class="pin-confirm" onclick="submitPin()">확인</button>
+    </div>
+  </div>
+</div>
+<div class="header">
+  <span>&#x1F916;</span>
+  <h1>SQM AI Assistant</h1>
+  <button class="lock-btn" id="lock-btn" onclick="onLockClick()">🔒 수정 잠김</button>
+  <button class="dock-btn" onclick="dockBack()">&#x1F4CC; 도킹</button>
+</div>
+<div id="fav-box" style="padding:4px 10px;border-bottom:1px solid var(--border-default);display:flex;flex-wrap:wrap;gap:2px;min-height:0"></div>
+<div class="chat-area" id="chat-area"></div>
+<div class="input-row">
+  <input type="text" id="chat-input" placeholder="질문을 입력하세요..." autocomplete="off">
+  <button class="send-btn" title="즐겨찾기 저장" onclick="saveFavorite(document.getElementById('chat-input').value.trim())" style="background:var(--bg-card-hover);color:var(--text-primary);border:1px solid var(--border-default)">⭐</button>
+  <button class="send-btn" onclick="sendMsg()">전송</button>
+</div>
+<script>
+var API_BASE = (window.SQM_API_BASE || window.location.origin || '');
+var writeToken = '';
+var sessionTimer = null;
+
+function onLockClick() {
+  if (writeToken) { lockWrite(); } else { openPinModal(); }
+}
+
+function openPinModal() {
+  document.getElementById('pin-overlay').classList.add('show');
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-error').textContent = '';
+  setTimeout(function() { document.getElementById('pin-input').focus(); }, 100);
+}
+
+function closePinModal() {
+  document.getElementById('pin-overlay').classList.remove('show');
+}
+
+function submitPin() {
+  var pin = document.getElementById('pin-input').value.trim();
+  if (!pin) return;
+  fetch(API_BASE + '/api/ai/write-unlock', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pin: pin })
+  }).then(function(r) { return r.json(); }).then(function(res) {
+    if (res.success) {
+      writeToken = res.token;
+      closePinModal();
+      startSessionTimer();
+    } else {
+      document.getElementById('pin-error').textContent = res.detail || '인증 실패';
+    }
+  }).catch(function(e) {
+    document.getElementById('pin-error').textContent = '서버 오류: ' + e.message;
+  });
+}
+
+function lockWrite() {
+  fetch(API_BASE + '/api/ai/write-lock', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  writeToken = '';
+  clearInterval(sessionTimer);
+  sessionTimer = null;
+  updateLockBtn(false, 0);
+}
+
+function startSessionTimer() {
+  updateLockBtn(true, 600);
+  sessionTimer = setInterval(function() {
+    fetch(API_BASE + '/api/ai/write-status?token=' + writeToken)
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (!res.active) {
+          writeToken = '';
+          clearInterval(sessionTimer);
+          sessionTimer = null;
+          updateLockBtn(false, 0);
+          appendMsg('ai', '⏰ 수정 세션이 만료됐습니다. 다시 인증해 주세요.');
+        } else {
+          updateLockBtn(true, res.remaining_seconds);
+        }
+      });
+  }, 15000);
+}
+
+function updateLockBtn(unlocked, seconds) {
+  var btn = document.getElementById('lock-btn');
+  if (!unlocked) {
+    btn.textContent = '🔒 수정 잠김';
+    btn.className = 'lock-btn';
+  } else {
+    var mins = Math.ceil(seconds / 60);
+    btn.textContent = '🔓 ' + mins + '분 남음';
+    btn.className = 'lock-btn' + (seconds < 90 ? ' warn' : ' unlocked');
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  var overlay = document.getElementById('pin-overlay');
+  if (!overlay || !overlay.classList.contains('show')) return;
+  if (e.key === 'Escape') closePinModal();
+  if (e.key === 'Enter') submitPin();
+});
+
+var HIST_KEY = 'sqm_ai_chat_history';
+
+function loadHistory() {
+  try {
+    var h = JSON.parse(localStorage.getItem(HIST_KEY) || '[]');
+    h.forEach(function(m) { appendMsg(m.role, m.content, false); });
+  } catch(e) {}
+}
+
+function saveHistory() {
+  var msgs = Array.from(document.querySelectorAll('.msg')).map(function(el) {
+    return { role: el.classList.contains('user') ? 'user' : 'ai', content: el.textContent };
+  });
+  try { localStorage.setItem(HIST_KEY, JSON.stringify(msgs.slice(-20))); } catch(e) {}
+}
+
+function appendMsg(role, text, save) {
+  var el = document.createElement('div');
+  el.className = 'msg ' + (role === 'user' ? 'user' : 'ai');
+  el.textContent = text;
+  document.getElementById('chat-area').appendChild(el);
+  el.scrollIntoView({ behavior: 'smooth' });
+  if (save !== false) saveHistory();
+}
+
+function sendMsg() {
+  var inp = document.getElementById('chat-input');
+  var msg = (inp.value || '').trim();
+  if (!msg) return;
+  inp.value = '';
+  appendMsg('user', msg);
+  var aiEl = document.createElement('div');
+  aiEl.className = 'msg ai';
+  aiEl.textContent = '\u23F3 \uC751\uB2F5 \uC911...';
+  document.getElementById('chat-area').appendChild(aiEl);
+  aiEl.scrollIntoView({ behavior: 'smooth' });
+  fetch(API_BASE + '/api/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: msg, write_session_token: writeToken })
+  }).then(function(r) { return r.json(); }).then(function(res) {
+    aiEl.textContent = res.answer || res.reply || res.message || JSON.stringify(res);
+    // Phase 4-1: \uB370\uC774\uD130 \uC788\uC73C\uBA74 \uC5D1\uC140 \uC800\uC7A5 \uBC84\uD2BC \uD45C\uC2DC
+    if (res.data && res.data.length > 0) {
+      window._lastAiResult = res;
+      var btn = document.createElement('button');
+      btn.textContent = '\uD83D\uDCE5 \uC5D1\uC140 \uC800\uC7A5';
+      btn.style.cssText = 'margin-top:6px;padding:3px 10px;background:var(--success);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:11px;display:block';
+      btn.onclick = function() { exportAiExcel(res); };
+      aiEl.appendChild(btn);
+    }
+    saveHistory();
+  }).catch(function(e) {
+    aiEl.textContent = '\u274C \uC624\uB958: ' + (e.message || String(e));
+  });
+}
+
+// Phase 4-1: AI \uACB0\uACFC \uC5D1\uC140 \uB0B4\uBCF4\uB0B4\uAE30
+function exportAiExcel(res) {
+  fetch(API_BASE + '/api/ai/chat/export-excel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ columns: res.columns, data: res.data, query_type: res.query_type || 'AI\uC870\uD68C' })
+  }).then(function(r) {
+    if (!r.ok) throw new Error('\uC11C\uBC84 \uC624\uB958');
+    return r.blob();
+  }).then(function(blob) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'AI_\uC870\uD68C_' + new Date().toISOString().slice(0,10) + '.xlsx';
+    a.click();
+  }).catch(function(e) { alert('\uC5D1\uC140 \uC800\uC7A5 \uC2E4\uD328: ' + e.message); });
+}
+
+// Phase 4-2: \uC790\uB3D9\uC644\uC131
+var _acTimer = null;
+document.addEventListener('DOMContentLoaded', function() {
+  var inp = document.getElementById('chat-input');
+  if (!inp) return;
+  var acBox = document.createElement('div');
+  acBox.id = 'ac-box';
+  acBox.style.cssText = 'position:absolute;background:var(--bg-card);border:1px solid var(--border-default);border-radius:6px;z-index:9999;display:none;max-height:160px;overflow-y:auto;font-size:12px;width:300px';
+  inp.parentNode.style.position = 'relative';
+  inp.parentNode.appendChild(acBox);
+
+  inp.addEventListener('input', function() {
+    clearTimeout(_acTimer);
+    var q = this.value.trim();
+    if (q.length < 2) { acBox.style.display = 'none'; return; }
+    _acTimer = setTimeout(function() {
+      fetch(API_BASE + '/api/ai/autocomplete?q=' + encodeURIComponent(q))
+        .then(function(r) { return r.json(); })
+        .then(function(res) {
+          if (!res.items || !res.items.length) { acBox.style.display='none'; return; }
+          acBox.innerHTML = res.items.map(function(item) {
+            return '<div style="padding:5px 10px;cursor:pointer" onmousedown="document.getElementById(\'chat-input\').value=\'' + item.replace(/'/g,"\\'") + '\';document.getElementById(\'ac-box\').style.display=\'none\'">' + item + '</div>';
+          }).join('');
+          acBox.style.display = 'block';
+        }).catch(function() { acBox.style.display='none'; });
+    }, 300);
+  });
+  inp.addEventListener('blur', function() { setTimeout(function(){ acBox.style.display='none'; }, 200); });
+});
+
+// Phase 4-3: \uC990\uACA8\uCC3E\uAE30 \uC9C8\uBB38 \uC800\uC7A5
+var _FAV_KEY = 'sqm_fav_queries';
+function saveFavorite(query) {
+  var favs = JSON.parse(localStorage.getItem(_FAV_KEY) || '[]');
+  if (!favs.includes(query)) {
+    favs.unshift(query);
+    favs = favs.slice(0, 10);
+    localStorage.setItem(_FAV_KEY, JSON.stringify(favs));
+    renderFavorites();
+  }
+}
+function renderFavorites() {
+  var favs = JSON.parse(localStorage.getItem(_FAV_KEY) || '[]');
+  var box = document.getElementById('fav-box');
+  if (!box) return;
+  box.innerHTML = favs.map(function(q) {
+    return '<button onclick="sendFav(\'' + q.replace(/'/g,"\\'") + '\')" style="font-size:11px;padding:2px 7px;margin:2px;background:var(--bg-card-hover);color:var(--text-primary);border:1px solid var(--border-default);border-radius:4px;cursor:pointer">' + q.slice(0,20) + '</button>';
+  }).join('');
+}
+function sendFav(q) { document.getElementById('chat-input').value = q; sendMsg(); }
+
+function dockBack() {
+  try {
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.close_detached_window('ai_chat');
+    }
+  } catch(e) {}
+  window.close();
+}
+
+document.getElementById('chat-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+});
+
+loadHistory();
+renderFavorites();
+</script>
+</body>
+</html>

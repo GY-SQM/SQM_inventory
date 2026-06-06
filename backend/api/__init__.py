@@ -1,0 +1,869 @@
+"""
+SQM Inventory — FastAPI Backend (PyWebView Edition)
+포트: launcher-selected local port
+"""
+import sys
+import os
+
+# ⚠️ 이 파일은 backend/api/__init__.py — 프로젝트 루트는 부모의 부모의 부모
+# (예: F:/.../Claude_SQM_v864_4/backend/api/__init__.py → F:/.../Claude_SQM_v864_4)
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, PROJECT_ROOT)
+
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from typing import Optional, List
+import logging
+
+# Engine import (기존 Tkinter 엔진 그대로 사용)
+try:
+    from engine_modules.inventory_modular.engine import SQMInventoryEngineV3
+    from config import DB_PATH
+    engine = SQMInventoryEngineV3(str(DB_PATH))
+    ENGINE_AVAILABLE = True
+except Exception as e:
+    # v864.3 Phase 2: log full traceback so silent engine-load failures are visible
+    logging.error(f"Engine load failed: {e}", exc_info=True)
+    ENGINE_AVAILABLE = False
+    engine = None
+
+
+# ── DB 마이그레이션 (앱 시작 시 자동 실행) ──────────────────────────────────
+def _run_db_migrations():
+    """inventory 테이블 신규 컬럼 자동 추가 (ALTER TABLE IF NOT EXISTS 대체)"""
+    try:
+        from config import DB_PATH
+        import sqlite3
+        con = sqlite3.connect(str(DB_PATH))
+        existing = [row[1] for row in con.execute("PRAGMA table_info(inventory)").fetchall()]
+        new_cols = [
+            ("folio",  "TEXT DEFAULT ''"),
+            ("vessel", "TEXT DEFAULT ''"),
+        ]
+        for col, typedef in new_cols:
+            if col not in existing:
+                con.execute(f"ALTER TABLE inventory ADD COLUMN {col} {typedef}")
+                logging.info(f"[Migration] inventory.{col} 컬럼 추가 완료")
+        con.commit()
+
+        # carrier_profile 테이블 (Phase 5 신규)
+        con.execute("""CREATE TABLE IF NOT EXISTS carrier_profile (
+            carrier_id      TEXT PRIMARY KEY,
+            display_name    TEXT NOT NULL DEFAULT '',
+            default_product TEXT DEFAULT '',
+            bag_weight_kg   REAL DEFAULT 500.0,
+            note            TEXT DEFAULT '',
+            is_active       INTEGER DEFAULT 1
+        )""")
+        con.commit()
+
+        # ── carrier_rules 테이블 (v8.6.6) ──────────────────────────────
+        con.execute("""CREATE TABLE IF NOT EXISTS carrier_rules (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            carrier_id  TEXT NOT NULL,
+            doc_type    TEXT NOT NULL DEFAULT 'BL',
+            rule_name   TEXT NOT NULL,
+            pattern     TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            sample_value TEXT DEFAULT '',
+            is_active   INTEGER DEFAULT 1,
+            created_at  TEXT DEFAULT (datetime('now')),
+            updated_at  TEXT DEFAULT (datetime('now'))
+        )""")
+        con.commit()
+
+        # ── ONE BL 패턴 수정: ONEU → ONEY (v8.6.6 bugfix) ───────────
+        # 실제 ONE Sea Waybill 번호는 ONEY 접두사 (예: ONEYSCLG01825300)
+        con.execute("""
+            UPDATE carrier_rules
+            SET pattern      = 'ONEY[A-Z0-9]{8,15}',
+                description  = 'ONE Sea Waybill ONEY 형식 (ONEYSCLG01825300)',
+                sample_value = 'ONEYSCLG01825300',
+                updated_at   = datetime('now')
+            WHERE carrier_id = 'ONE'
+              AND doc_type   = 'BL'
+              AND rule_name  = 'BL_NO_MAIN'
+              AND pattern    = 'ONEU[A-Z0-9]{6,10}'
+        """)
+        # carrier_rules 기본 데이터 없으면 INSERT (최초 실행)
+        existing_rules = con.execute(
+            "SELECT COUNT(*) FROM carrier_rules WHERE carrier_id='ONE' AND doc_type='BL'"
+        ).fetchone()[0]
+        if existing_rules == 0:
+            con.executemany("""
+                INSERT OR IGNORE INTO carrier_rules
+                    (carrier_id, doc_type, rule_name, pattern, description, sample_value)
+                VALUES (?,?,?,?,?,?)
+            """, [
+                ('MAERSK', 'BL', 'BL_NO_MAIN',   r'MAEU\d{9}',           'Maersk BL (MAEU+숫자9자리)',         'MAEU263764814'),
+                ('MSC',    'BL', 'BL_NO_MSCU',   r'MSCU[A-Z0-9]{6,10}',  'MSC BL MSCU 형식',                  'MSCU1234567'),
+                ('MSC',    'BL', 'BL_NO_MEDU',   r'MEDU[A-Z0-9]{6,10}',  'MSC Sea Waybill MEDU 형식',         'MEDUFP963988'),
+                ('ONE',    'BL', 'BL_NO_MAIN',   r'ONEY[A-Z0-9]{8,15}',  'ONE Sea Waybill ONEY 형식',         'ONEYSCLG01825300'),
+                ('HAPAG',  'BL', 'BL_NO_MAIN',   r'HLCU[A-Z0-9]{6,15}',  'Hapag-Lloyd BL HLCU 형식',          'HLCUSCL260148627'),
+            ])
+        con.commit()
+        logging.info("[Migration] carrier_rules ONE BL 패턴 검증/수정 완료")
+
+        # ── 제품 마스터 (Web CRUD) ───────────────────────────────────
+        con.execute("""CREATE TABLE IF NOT EXISTS product_master (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_name TEXT NOT NULL UNIQUE,
+            sap_no TEXT DEFAULT '',
+            spec TEXT DEFAULT '',
+            unit TEXT DEFAULT '',
+            remarks TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )""")
+        con.commit()
+
+        # 창고 표기 통일: 레거시 한글 창고명 → GY (아래 튜플은 DB에만 존재할 수 있는 과거 값; UI에 노출되지 않음)
+        try:
+            _legacy_wh = ("\uad11\uc591", "\uad11\uc591\ucc3d\uace0", "\uad11\uc591 \ucc3d\uace0")
+            cur = con.execute(
+                "UPDATE inventory SET warehouse = 'GY' "
+                "WHERE TRIM(COALESCE(warehouse,'')) IN (?,?,?)",
+                _legacy_wh,
+            )
+            if cur.rowcount:
+                logging.info("[Migration] inventory.warehouse → GY: %s rows", cur.rowcount)
+            con.commit()
+        except Exception as _wh_e:
+            logging.debug("[Migration] warehouse 일괄 갱신 스킵: %s", _wh_e)
+
+        con.close()
+    except Exception as e:
+        logging.warning(f"[Migration] DB 마이그레이션 실패: {e}")
+
+_run_db_migrations()
+
+app = FastAPI(title="SQM Inventory API", version="8.7.0")
+
+
+# ── 정적 파일 캐시 무효화 미들웨어 ──────────────────────────────────────────
+# PyWebView(WebView2)가 .js/.css/.html 을 강하게 캐시해서 코드 변경이
+# 반영 안 되는 문제 방지. 운영 EXE 배포 시 다시 평가.
+@app.middleware("http")
+async def _no_cache_static_assets(request: Request, call_next):
+    response = await call_next(request)
+    try:
+        path = request.url.path or ""
+        if path.endswith((".js", ".css", ".html")) or path == "/" or path == "":
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+    except Exception:
+        pass
+    return response
+
+
+# ── OneStop 파싱 진행 SSE 스트림 ─────────────────────────────────────────────
+# 파싱 시작 시 프론트가 register → onestop-upload(job_id) 호출 → 이 엔드포인트로
+# EventSource 연결 → 백엔드가 단계마다 emit_event(...) → 실시간 push
+from backend.api import parse_progress as _pp
+import asyncio as _asyncio
+
+
+@app.get("/api/onestop/parse-stream/{job_id}", tags=["onestop"],
+         summary="📡 파싱 진행 실시간 스트림 (SSE)")
+async def onestop_parse_stream(job_id: str):
+    """text/event-stream 으로 파싱 진행 이벤트를 push."""
+    async def gen():
+        sent = 0
+        # 백엔드 파싱이 register 보다 약간 늦을 수 있어 최대 3초 대기
+        wait_register_until = _asyncio.get_event_loop().time() + 3.0
+        while True:
+            events, done, exists = _pp.get_events_since(job_id, sent)
+            if not exists:
+                # 아직 등록 안 됨 — 잠시 기다림
+                if _asyncio.get_event_loop().time() > wait_register_until:
+                    yield "event: error\ndata: {\"msg\":\"job_not_found\"}\n\n"
+                    return
+                await _asyncio.sleep(0.1)
+                continue
+            for ev in events:
+                yield _pp.format_sse(ev)
+            sent += len(events)
+            if done:
+                break
+            await _asyncio.sleep(0.15)
+            # heartbeat (긴 대기 시 keep-alive)
+            if len(events) == 0:
+                yield ": keepalive\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store, no-transform",
+            "X-Accel-Buffering": "no",  # nginx 등 buffer 끄기
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@app.post("/api/onestop/parse-progress/register", tags=["onestop"],
+          summary="파싱 진행 job 등록 (프론트가 jobId 사전 등록 용)")
+def onestop_parse_register(payload: dict):
+    job_id = (payload or {}).get("job_id", "").strip()
+    if not job_id:
+        raise HTTPException(400, "job_id 누락")
+    _pp.register_job(job_id)
+    return {"ok": True, "job_id": job_id}
+
+
+# ── Swagger UI 브라우저 열기 ─────────────────────────────────────────────────
+@app.get("/api/system/open-docs", tags=["system"],
+         summary="📖 Swagger UI를 기본 브라우저에서 열기")
+def open_docs_in_browser(request: Request):
+    """SQM API 관리 페이지(Swagger UI)를 기본 브라우저로 엽니다.
+    선사 템플릿 추가·수정·삭제 등 고급 설정에 사용합니다."""
+    import webbrowser as _wb
+    _url = str(request.base_url).rstrip("/") + "/docs"
+    _wb.open(_url)
+    return {"ok": True, "url": _url,
+            "message": f"Swagger UI를 기본 브라우저로 열었습니다: {_url}"}
+
+
+@app.on_event("startup")
+def _init_db_startup():
+    """앱 시작 시 DB 설정 + 기본 선사 프로파일 1회 초기화"""
+    # 3-a: SQLite WAL 모드 설정 — 동시 읽기/쓰기 잠금 최소화
+    try:
+        import sqlite3 as _sqlite3
+        _con = _sqlite3.connect(str(DB_PATH))
+        _con.execute("PRAGMA journal_mode=WAL")
+        _con.close()
+        logging.info("[startup] SQLite WAL 모드 활성화 완료")
+    except Exception as e:
+        logging.warning(f"[startup] WAL 모드 설정 실패: {e}")
+    # 3-b: 자주 조회하는 컬럼 인덱스 생성 (없으면 생성, 있으면 무시)
+    try:
+        import sqlite3 as _sqlite3
+        _con = _sqlite3.connect(str(DB_PATH))
+        _indexes = [
+            ("idx_inventory_lot_no",      "inventory",    "lot_no"),
+            ("idx_inventory_status",       "inventory",    "status"),
+            ("idx_inventory_inbound_date", "inventory",    "inbound_date"),
+            ("idx_inventory_product",      "inventory",    "product"),
+            ("idx_audit_log_created_at",   "audit_log",    "created_at"),
+            ("idx_ai_edit_log_changed_at", "ai_edit_log",  "changed_at"),
+        ]
+        for idx_name, tbl, col in _indexes:
+            try:
+                _con.execute(
+                    f"CREATE INDEX IF NOT EXISTS {idx_name} ON {tbl}({col})"
+                )
+            except Exception:
+                pass  # 테이블 없으면 무시
+        _con.commit()
+        _con.close()
+        logging.info(f"[startup] DB 인덱스 {len(_indexes)}개 확인/생성 완료")
+    except Exception as e:
+        logging.warning(f"[startup] DB 인덱스 생성 실패 (무시): {e}")
+    # C-1: 기본 선사 프로파일 1회 초기화 (GET 요청에서 쓰기 잠금 제거)
+    try:
+        from backend.api.carriers import _ensure_default_carriers_once
+        _ensure_default_carriers_once()
+    except Exception as e:
+        logging.warning(f"[startup] 기본 선사 프로파일 초기화 실패: {e}")
+    # C-2: 오늘 재고 스냅샷 자동 생성 (없을 때만)
+    try:
+        import json as _json
+        import sqlite3 as _sq
+        from datetime import date as _date
+        _today = _date.today().isoformat()
+        _con2 = _sqlite3.connect(str(DB_PATH))
+        _existing = _con2.execute(
+            "SELECT id FROM inventory_snapshot WHERE snapshot_date=?", (_today,)
+        ).fetchone()
+        if not _existing:
+            _stats = _con2.execute("""
+                SELECT COUNT(*) AS tl,
+                       COALESCE(SUM(current_weight),0) AS tw,
+                       COALESCE(SUM(CASE WHEN status NOT IN ('DEPLETED')
+                                    THEN current_weight ELSE 0 END),0) AS aw,
+                       COALESCE(SUM(picked_weight),0) AS pw
+                FROM inventory
+            """).fetchone()
+            _tb = _con2.execute(
+                "SELECT COUNT(*) FROM inventory_tonbag WHERE COALESCE(is_sample,0)=0"
+            ).fetchone()[0]
+            _pr = _con2.execute(
+                "SELECT product, COUNT(*), SUM(current_weight) FROM inventory GROUP BY product"
+            ).fetchall()
+            _ps = _json.dumps([{"product": r[0], "lots": r[1], "weight_kg": r[2]} for r in _pr], ensure_ascii=False)
+            _tl, _tw, _aw, _pw = (_stats[0], _stats[1], _stats[2], _stats[3]) if _stats else (0,0,0,0)
+            _con2.execute(
+                "INSERT INTO inventory_snapshot (snapshot_date,total_lots,total_tonbags,"
+                "total_weight_kg,available_weight_kg,picked_weight_kg,product_summary) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (_today, _tl, _tb, _tw, _aw, _pw, _ps)
+            )
+            _con2.commit()
+            logging.info(f"[startup] 재고 스냅샷 생성 완료: {_today} lots={_tl} weight={_tw:.0f}kg")
+        else:
+            logging.info(f"[startup] 재고 스냅샷 이미 존재: {_today}")
+        _con2.close()
+    except Exception as e:
+        logging.warning(f"[startup] 재고 스냅샷 자동 생성 실패 (무시): {e}")
+
+# ── T8: CORS 설정 ─────────────────────────────────────────────
+# PyWebView는 null origin을 보낼 수 있음 — 명시적으로 포함
+# allow_origins=["*"] 는 null origin을 허용하지 않으므로 명시 추가
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*", "null"],
+    allow_credentials=False,   # credentials=True + wildcard 조합은 브라우저가 거부함
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── v864.3 Debug Visibility: 프론트엔드 에러 수집 라우터 ─────
+try:
+    from backend.api.debug_log import router as debug_log_router
+    app.include_router(debug_log_router)
+    logging.info("debug_log router loaded OK (POST /api/log/frontend-error)")
+except Exception as e:
+    logging.warning(f"debug_log router load failed: {e}")
+
+# ── v864.3 Phase 4-B: Allocation 입력 (F014) 네이티브 ─────
+try:
+    from backend.api.allocation_api import router as allocation_router
+    app.include_router(allocation_router)
+    logging.info("allocation_api router loaded OK (POST /api/allocation/bulk-import-excel)")
+except Exception as e:
+    logging.warning(f"allocation_api router load failed: {e}")
+
+try:
+    from backend.api.status_revert_api import router as status_revert_router
+    app.include_router(status_revert_router)
+    logging.info("status_revert_api router loaded OK (/api/status-revert/*)")
+except Exception as e:
+    logging.warning(f"status_revert_api router load failed: {e}")
+
+# ── v864.3 Phase 4-B: 즉시 출고 (F015) 네이티브 ─────
+try:
+    from backend.api.outbound_api import router as outbound_api_router
+    app.include_router(outbound_api_router)
+    logging.info("outbound_api router loaded OK (POST /api/outbound/quick)")
+except Exception as e:
+    logging.warning(f"outbound_api router load failed: {e}")
+
+try:
+    from backend.api.outbound_picking import router as outbound_picking_router
+    app.include_router(outbound_picking_router)
+    logging.info("outbound_picking router loaded OK (POST /api/outbound/picking)")
+except Exception as e:
+    logging.warning(f"outbound_picking router load failed: {e}")
+
+# ── v864.3 Phase 4-B: 톤백 위치 매핑 (F004) 네이티브 ─────
+try:
+    from backend.api.tonbag_api import router as tonbag_api_router
+    app.include_router(tonbag_api_router)
+    logging.info("tonbag_api router loaded OK (POST /api/tonbag/location-upload)")
+except Exception as e:
+    logging.warning(f"tonbag_api router load failed: {e}")
+
+# ── Tier 2 Stage 2: 자동 생성 라우터 include ─────────────────
+# [Sprint 0] backend.api.menubar was a 634-line NotReadyError stub set and has been removed.
+# Real menu action routing lives in /api/inbound, /api/outbound, /api/allocation, /api/action*, etc.
+
+try:
+    from backend.api.controls import router as controls_router
+    app.include_router(controls_router)
+except Exception as e:
+    logging.warning(f"controls router load failed: {e}")
+
+# Phase 3 Q1: Dashboard KPI 실데이터 라우터
+try:
+    from backend.api.dashboard import router as dashboard_kpi_router
+    app.include_router(dashboard_kpi_router)
+    logging.info("dashboard_kpi router loaded OK")
+except Exception as e:
+    logging.warning(f"dashboard_kpi router load failed: {e}")
+
+# Phase 4-A Group 2: 정적 응답 (info.py — F057~F062)
+try:
+    from backend.api.info import router as info_router
+    app.include_router(info_router)
+    logging.info("info router loaded OK")
+except Exception as e:
+    logging.warning(f"info router load failed: {e}")
+
+# Phase 4-A Group 3: SQL 직접 조회 (queries.py — F009,F023,F025,F031,F034,F037,F038,F046,F047,F055)
+try:
+    from backend.api.queries import router as queries_router
+    app.include_router(queries_router)
+    logging.info("queries router loaded OK")
+except Exception as e:
+    logging.warning(f"queries router load failed: {e}")
+
+# Phase 4-A Group 4: 엔진+SQL 혼합 (actions.py — F013,F029,F035,F050,F061)
+try:
+    from backend.api.actions import router as actions_router
+    app.include_router(actions_router)
+    logging.info("actions router loaded OK")
+except Exception as e:
+    logging.warning(f"actions router load failed: {e}")
+
+try:
+    from backend.api.optional import router as optional_router
+    app.include_router(optional_router)
+except Exception as e:
+    logging.warning(f"optional router load failed: {e}")
+
+# Phase 4-B: queries2 + actions2
+try:
+    from backend.api.queries2 import router as queries2_router
+    app.include_router(queries2_router)
+    logging.info("queries2 router loaded OK")
+except Exception as e:
+    logging.warning(f"queries2 router load failed: {e}")
+
+try:
+    from backend.api.actions2 import router as actions2_router
+    app.include_router(actions2_router)
+    logging.info("actions2 router loaded OK")
+except Exception as e:
+    logging.warning(f"actions2 router load failed: {e}")
+
+# Phase 4-C: queries3 + actions3
+try:
+    from backend.api.queries3 import router as queries3_router
+    app.include_router(queries3_router)
+    logging.info("queries3 router loaded OK")
+except Exception as e:
+    logging.warning(f"queries3 router load failed: {e}")
+
+try:
+    from backend.api.actions3 import router as actions3_router
+    app.include_router(actions3_router)
+    logging.info("actions3 router loaded OK")
+except Exception as e:
+    logging.warning(f"actions3 router load failed: {e}")
+
+# Stage 2/3: Settings (email, backup, table-stats)
+try:
+    from backend.api.settings import router as settings_router
+    app.include_router(settings_router)
+    logging.info("settings router loaded OK (/api/settings/*)")
+except Exception as e:
+    logging.warning(f"settings router load failed: {e}")
+
+# Phase 4-D: inbound (PDF upload)
+try:
+    from backend.api.inbound import router as inbound_router
+    app.include_router(inbound_router)
+    logging.info("inbound router loaded OK")
+except Exception as e:
+    logging.warning(f"inbound router load failed: {e}")
+try:
+    from backend.api.inventory_api import inv_router, alloc_router, tb_router, scan_router, health_router
+    app.include_router(inv_router)
+    app.include_router(alloc_router)
+    app.include_router(tb_router)
+    app.include_router(scan_router)
+    app.include_router(health_router)
+    logging.info("inventory_api routers loaded OK (inventory/allocation/tonbags/scan/health)")
+except Exception as e:
+    logging.warning(f"inventory_api routers load failed: {e}")
+
+# Phase 5: Carrier Profile CRUD
+try:
+    from backend.api.carriers import router as carriers_router
+    app.include_router(carriers_router)
+    logging.info("carriers router loaded OK (/api/carriers/*)")
+except Exception as e:
+    logging.warning(f"carriers router load failed: {e}")
+
+try:
+    from backend.api.scan_api import router as scan_api_router
+    app.include_router(scan_api_router)
+    logging.info("scan_api router loaded OK")
+except Exception as e:
+    logging.warning(f"scan_api router load failed: {e}")
+
+try:
+    from backend.api.integrity_api import router as integrity_api_router
+    app.include_router(integrity_api_router)
+    logging.info("integrity_api router loaded OK")
+except Exception as e:
+    logging.warning(f"integrity_api router load failed: {e}")
+
+# v865 1차: Gemini AI (settings/toggle/test)
+try:
+    from backend.api.product_master import router as product_master_router
+    app.include_router(product_master_router)
+    logging.info("product_master router loaded OK")
+except Exception as e:
+    logging.warning(f"product_master router load failed: {e}")
+
+# v8.7.0: Warehouse cell state API (창고 셀 점유 동적 조회)
+try:
+    from backend.api.warehouse_api import router as warehouse_api_router
+    app.include_router(warehouse_api_router)
+    logging.info("warehouse_api router loaded OK")
+except Exception as e:
+    logging.warning(f"warehouse_api router load failed: {e}")
+
+# v8.7.0: Location Map API (위치재고조회 엑셀 import — 신형식 + [N] + diff)
+try:
+    from backend.api.location_map_api import router as location_map_router
+    app.include_router(location_map_router)
+    logging.info("location_map_api router loaded OK (POST /api/location-map/preview)")
+except Exception as e:
+    logging.warning(f"location_map_api router load failed: {e}")
+
+try:
+    from backend.api.report_templates import router as report_templates_router
+    app.include_router(report_templates_router)
+    logging.info("report_templates router loaded OK")
+except Exception as e:
+    logging.warning(f"report_templates router load failed: {e}")
+
+try:
+    from backend.api.ai_gemini import router as ai_gemini_router
+    app.include_router(ai_gemini_router)
+    logging.info("ai_gemini router loaded OK (/api/ai/*)")
+except Exception as e:
+    logging.warning(f"ai_gemini router load failed: {e}")
+
+try:
+    from backend.api.ai_pl_parser import router as ai_pl_parser_router
+    app.include_router(ai_pl_parser_router)
+    logging.info("ai_pl_parser router loaded OK (/api/ai/parse-pl)")
+except Exception as e:
+    logging.warning(f"ai_pl_parser router load failed: {e}")
+
+# v866: 재고조정 (자연어 파서 + DB/엑셀 실행)
+try:
+    from backend.api.inventory_adjust_api import router as inventory_adjust_router
+    app.include_router(inventory_adjust_router)
+    logging.info("inventory_adjust router loaded OK (/api/inventory/adjust/*)")
+except Exception as e:
+    logging.warning(f"inventory_adjust router load failed: {e}")
+
+try:
+    from backend.api.refresh_excel_api import router as refresh_excel_router
+    app.include_router(refresh_excel_router)
+    logging.info("refresh_excel router loaded OK (/api/inventory/refresh-excel-status)")
+except Exception as e:
+    logging.warning(f"refresh_excel router load failed: {e}")
+
+try:
+    from backend.api.template_ai_api import router as template_ai_router
+    app.include_router(template_ai_router)
+    logging.info("template_ai router loaded OK (POST /api/inbound/templates/generate-from-docs)")
+except Exception as e:
+    logging.warning(f"template_ai router load failed: {e}")
+
+# v8.7.1: Popout (분리 창) Pub/Sub
+try:
+    from backend.api.popout import router as popout_router
+    app.include_router(popout_router)
+    logging.info("popout router loaded OK (/api/popout/*)")
+except Exception as e:
+    logging.warning(f"popout router load failed: {e}")
+
+
+# ── 표준 예외 핸들러 설치 ────────────────────────────────────
+# v864.3 Phase 2: static mount moved to END of file — Starlette matches
+# routes in registration order, so app.mount("/") at this position was
+# shadowing all inline @app.get("/api/...") decorators below (HTTP 404).
+try:
+    from backend.common.errors import install_exception_handlers
+    install_exception_handlers(app)
+except Exception as e:
+    logging.warning(f"exception handlers install failed: {e}")
+
+# ── Health ───────────────────────────────────────────────────
+@app.get("/api/health")
+def health():
+    """
+    v864.3 health probe — Phase 1c-B Modules 카운터 지원.
+    Returns:
+        status: "ok"
+        engine: Bool (legacy 호환)
+        engine_available: Bool (sqm-inline.js 기대 필드)
+        modules_loaded: int — 로드 성공 모듈 수 (현재는 ENGINE_AVAILABLE 기반 8/0 이분법)
+        modules_total: int — 전체 모듈 수 (v864.3 기준 8)
+        version: 버전 문자열
+    """
+    loaded = 8 if ENGINE_AVAILABLE else 0
+    return {
+        "status": "ok",
+        "engine": ENGINE_AVAILABLE,
+        "engine_available": ENGINE_AVAILABLE,
+        "modules_loaded": loaded,
+        "modules_total": 8,
+        "version": "8.7.0",
+    }
+
+# ── Dashboard ────────────────────────────────────────────────
+@app.get("/api/dashboard/stats")
+def dashboard_stats():
+    if not ENGINE_AVAILABLE:
+        return _sample_dashboard()
+    try:
+        summary = engine.get_inventory_summary()
+        return {
+            "available_lots": summary.get("available_count", 0),
+            "reserved_lots":  summary.get("reserved_count", 0),
+            "picked_lots":    summary.get("picked_count", 0),
+            "outbound_lots_month": summary.get("outbound_month", 0),
+            "return_lots":    summary.get("return_count", 0),
+            "available_kg":   summary.get("available_kg", 0),
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Inventory ────────────────────────────────────────────────
+@app.get("/api/inventory")
+def get_inventory(
+    status: Optional[str] = Query(None),
+    product: Optional[str] = Query(None),
+    lot_no: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+):
+    if not ENGINE_AVAILABLE:
+        return _sample_inventory(page=page, page_size=page_size)
+    try:
+        rows = engine.get_inventory(status=status, product=product, lot_no=lot_no)
+        total = len(rows)
+        start = (page - 1) * page_size
+        return {
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "data": rows[start:start + page_size],
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.get("/api/inventory/{lot_no}")
+def get_lot_detail(lot_no: str):
+    if not ENGINE_AVAILABLE:
+        raise HTTPException(503, "Engine unavailable")
+    try:
+        detail = engine.get_lot_detail(lot_no)
+        if not detail:
+            raise HTTPException(404, f"LOT not found: {lot_no}")
+        return detail
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Tonbags ──────────────────────────────────────────────────
+@app.get("/api/tonbags")
+def get_tonbags(
+    lot_no: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+):
+    if not ENGINE_AVAILABLE:
+        return []
+    try:
+        return engine.get_tonbags(lot_no=lot_no, status=status)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Allocation ───────────────────────────────────────────────
+@app.get("/api/allocation")
+def get_allocation():
+    if not ENGINE_AVAILABLE:
+        return _sample_allocation()
+    try:
+        rows = engine.get_inventory(status="RESERVED")
+        return {"total": len(rows), "data": rows}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Outbound ─────────────────────────────────────────────────
+@app.get("/api/outbound/scheduled")
+def get_outbound_scheduled():
+    if not ENGINE_AVAILABLE:
+        return []
+    try:
+        return engine.get_inventory(status="PICKED")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.get("/api/outbound/history")
+def get_outbound_history(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+):
+    if not ENGINE_AVAILABLE:
+        return []
+    try:
+        return engine.get_inventory(status="SOLD")
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Move (Tonbag 위치이동) ────────────────────────────────────
+@app.post("/api/move")
+def move_tonbag(payload: dict):
+    """payload: { barcode: str, destination: str }"""
+    barcode = payload.get("barcode", "").strip()
+    destination = payload.get("destination", "").strip()
+    if not barcode or not destination:
+        raise HTTPException(400, "barcode and destination required")
+    if not ENGINE_AVAILABLE:
+        return {"success": True, "message": f"[DEMO] {barcode} → {destination}"}
+    try:
+        result = engine.move_tonbag(barcode, destination)
+        return {"success": True, "message": result or f"{barcode} 이동 완료"}
+    except AttributeError:
+        return {"success": True, "message": f"[DEMO] {barcode} → {destination}"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.get("/api/move/history")
+def get_move_history(limit: int = Query(50, ge=1, le=500)):
+    if not ENGINE_AVAILABLE:
+        return []
+    try:
+        return engine.get_move_history(limit=limit)
+    except AttributeError:
+        return []
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Allocation Actions ────────────────────────────────────────
+@app.post("/api/allocation/{lot}/cancel")
+def cancel_allocation(lot: str):
+    if not ENGINE_AVAILABLE:
+        return {"success": True, "message": f"[DEMO] {lot} 배정 취소"}
+    try:
+        result = engine.cancel_reservation(lot)
+        return {"success": True, "message": result or f"{lot} 배정 취소 완료"}
+    except AttributeError:
+        return {"success": True, "message": f"[DEMO] {lot} 배정 취소"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Outbound Actions ──────────────────────────────────────────
+@app.post("/api/outbound/{lot_no}/confirm")
+def confirm_outbound(lot_no: str):
+    if not ENGINE_AVAILABLE:
+        return {"success": True, "message": f"[DEMO] {lot_no} 출고 확정"}
+    try:
+        result = engine.confirm_outbound(lot_no)
+        return {"success": True, "message": result or f"{lot_no} 출고 확정 완료"}
+    except AttributeError:
+        return {"success": True, "message": f"[DEMO] {lot_no} 출고 확정"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/outbound/{lot_no}/cancel")
+def cancel_outbound_lot(lot_no: str):
+    if not ENGINE_AVAILABLE:
+        return {"success": True, "message": f"[DEMO] {lot_no} 출고 취소"}
+    try:
+        result = engine.cancel_outbound(lot_no)
+        return {"success": True, "message": result or f"{lot_no} 출고 취소 완료"}
+    except AttributeError:
+        return {"success": True, "message": f"[DEMO] {lot_no} 출고 취소"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Integrity ────────────────────────────────────────────────
+@app.get("/api/integrity/quick")
+def integrity_quick():
+    if not ENGINE_AVAILABLE:
+        return {"status": "ok", "lights": ["green", "green", "yellow", "green"]}
+    try:
+        result = engine.health_check()
+        return {"status": "ok", "detail": result}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+# ── Export ───────────────────────────────────────────────────
+@app.post("/api/export/excel")
+def export_excel(payload: dict):
+    option = payload.get("option", 1)
+    if not ENGINE_AVAILABLE:
+        raise HTTPException(503, "Engine unavailable")
+    try:
+        import tempfile, os
+        from backend.common.excel_alignment import safe_apply_sqm_file
+
+        out = os.path.join(tempfile.gettempdir(), f"sqm_export_option{option}.xlsx")
+        engine.export_to_excel(out, option=option)
+        safe_apply_sqm_file(out)
+        return {"success": True, "path": out}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Activity Log ─────────────────────────────────────────────
+@app.get("/api/log/activity")
+def get_activity_log(limit: int = Query(100, ge=1, le=1000)):
+    if not ENGINE_AVAILABLE:
+        return _sample_activity()
+    try:
+        return engine.get_outbound_event_log(limit=limit)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# ── Sample Data Fallbacks ────────────────────────────────────
+def _sample_dashboard():
+    return {
+        "available_lots": 247, "reserved_lots": 38, "picked_lots": 15,
+        "outbound_lots_month": 89, "return_lots": 3,
+        "available_kg": 12340000,
+    }
+
+def _sample_inventory(page=1, page_size=50):
+    rows = [
+        {"lot": "SQM-2026-0421", "sap": "1000421001", "bl": "COAU2604210",
+         "product": "PP", "status": "AVAILABLE",
+         "balance": 500.0, "net": 500.0, "container": "CRXU1234567",
+         "mxbg_pallet": 20, "avail_bags": 1000,
+         "invoice_no": "", "ship_date": "", "arrival_date": "2026-04-21",
+         "con_return": "", "free_time": 0, "wh": "GY", "customs": "",
+         "initial_weight": 500.0, "outbound_weight": 0.0,
+         "date": "2026-04-21", "location": "A-01",
+         "sale_ref": "", "customer": "", "remarks": ""},
+    ]
+    start = (page - 1) * page_size
+    return {"total": len(rows), "page": page, "page_size": page_size, "data":rows[start:start+page_size]}
+
+def _sample_allocation():
+    return {"total": 0, "data": []}
+
+def _sample_activity():
+    return [
+        {"time": "14:32", "type": "INBOUND", "lot": "SQM-2026-0421", "note": "PP 500KG"},
+    ]
+
+
+# ══════════════════════════════════════════════════════════════
+# ── Static frontend mount (MUST be LAST) ──────────────────────
+# ══════════════════════════════════════════════════════════════
+# v864.3 Phase 2 fix: Starlette matches routes in registration order.
+# Mounting "/" at the END ensures every inline @app.get("/api/...")
+# above is checked FIRST; only unmatched paths fall through to
+# serving frontend/ static files. Previous position (before the
+# @app.get decorators) caused HTTP 404 on /api/health, /api/dashboard,
+# /api/inventory because the mount swallowed every path.
+try:
+    import mimetypes
+    # Windows: fix .js/.css MIME type misidentification
+    mimetypes.add_type("application/javascript", ".js")
+    mimetypes.add_type("text/css", ".css")
+except Exception:
+    pass
+
+from fastapi.staticfiles import StaticFiles as _StaticFiles
+_FRONTEND_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "frontend"
+)
+if os.path.isdir(_FRONTEND_DIR):
+    app.mount("/", _StaticFiles(directory=_FRONTEND_DIR, html=True), name="frontend")
+    logging.info(f"Static frontend mounted: {_FRONTEND_DIR}")
+else:
+    logging.warning(f"frontend/ not found — GET / will return 404: {_FRONTEND_DIR}")

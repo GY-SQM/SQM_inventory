@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+logs/
+*.log
+
+# Temp / output
+temp/
+output/
+*.tmp
+*.bak
+*.bak_*
+*.broken_*
+
+# Database
+data/db/*.db
+data/db/*.sqlite
+
+# Sensitive config
+settings.ini
+
+# Node
+frontend/node_modules/
+frontend/.cache/
+
+# Backup
+backup/

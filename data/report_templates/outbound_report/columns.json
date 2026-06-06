@@ -1,0 +1,64 @@
+{
+  "template_1": [
+    {
+      "header": "Destination",
+      "field": "destination",
+      "enabled": true
+    },
+    {
+      "header": "Delivery Date",
+      "field": "delivery_date",
+      "enabled": true
+    },
+    {
+      "header": "LOT NO",
+      "field": "lot_no",
+      "enabled": true
+    },
+    {
+      "header": "SAP NO",
+      "field": "sap_no",
+      "enabled": true
+    },
+    {
+      "header": "BL NO",
+      "field": "bl_no",
+      "enabled": true
+    },
+    {
+      "header": "Sales order No",
+      "field": "sales_order_no",
+      "enabled": true
+    },
+    {
+      "header": "Picking No",
+      "field": "picking_no",
+      "enabled": true
+    },
+    {
+      "header": "SKU",
+      "field": "sku",
+      "enabled": true
+    },
+    {
+      "header": "Description",
+      "field": "description",
+      "enabled": true
+    },
+    {
+      "header": "NW(MT)",
+      "field": "nw_mt",
+      "enabled": true
+    },
+    {
+      "header": "GW(MT)",
+      "field": "gw_mt",
+      "enabled": true
+    },
+    {
+      "header": "CT/PLT",
+      "field": "qty",
+      "enabled": true
+    }
+  ]
+}

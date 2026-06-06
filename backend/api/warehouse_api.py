@@ -1,0 +1,636 @@
+# -*- coding: utf-8 -*-
+"""
+SQM Warehouse API — 셀 상태 / 창고 점유 요약
+=============================================
+
+v8.6.8 — 창고 셀 상태 조회 (동적 계산 기반)
+
+엔드포인트:
+  GET /api/warehouse/cell-state?location=G5-04-01-07
+      → 특정 셀의 EMPTY/OCCUPIED/HALF 상태 + 활성 톤백 목록
+  GET /api/warehouse/summary
+      → 창고 전체 셀 점유 요약 (대시보드용)
+  GET /api/warehouse/validate-location?location=G5-04-01-07
+      → 위치 형식 검증 (G{동}-{칸}-{열}-{층})
+  GET /api/warehouse/cell-grid?dong=5&rack=4
+      → 동·랙 평면 그리드
+
+응답 포맷: 기존 SQM 컨벤션 (ok_response/err_response) 사용
+
+작성자: Ruby (남기동)
+버전: v8.6.8 (2026-05-13)
+"""
+from fastapi import APIRouter, HTTPException, Query
+from datetime import datetime
+import sqlite3
+import logging
+import os
+
+from backend.common.errors import ok_response, err_response
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix='/api/warehouse', tags=['warehouse'])
+
+
+def _db():
+    """SQLite 연결 — 다른 API와 동일한 DB_PATH 사용."""
+    from config import DB_PATH
+    con = sqlite3.connect(str(DB_PATH))
+    con.row_factory = sqlite3.Row
+    return con
+
+
+# ─────────────────────────────────────────────────────────────────────
+# GET /api/warehouse/validate-location
+# ─────────────────────────────────────────────────────────────────────
+@router.get('/validate-location', summary='📍 위치 형식 검증')
+def api_validate_location(location: str = Query(..., description='G5-04-01-07 형식')):
+    """랙 위치 문자열을 검증."""
+    try:
+        from engine_modules.warehouse_cell_logic import validate_cell_location
+        return ok_response(validate_cell_location(location))
+    except Exception as e:
+        logger.error('validate-location error: %s', e)
+        return err_response(str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────
+# GET /api/warehouse/cell-state
+# ─────────────────────────────────────────────────────────────────────
+@router.get('/cell-state', summary='🔍 특정 셀 상태 조회')
+def api_cell_state(location: str = Query(..., description='G5-04-01-07 형식')):
+    """
+    한 셀의 현재 상태 (EMPTY/OCCUPIED/HALF/OVER/MIXED) 와
+    그 셀에 있는 활성 톤백 목록을 반환.
+    """
+    try:
+        from engine_modules.warehouse_cell_logic import (
+            validate_cell_location, get_cell_state,
+        )
+        v = validate_cell_location(location)
+        if not v.get('ok'):
+            return err_response(v.get('reason') or '위치 형식 오류', detail=v)
+        con = _db()
+        try:
+            state = get_cell_state(con, location)
+        finally:
+            con.close()
+        state['validation'] = v
+        return ok_response(state)
+    except Exception as e:
+        logger.error('cell-state error: %s', e)
+        return err_response(str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────
+# GET /api/warehouse/summary
+# ─────────────────────────────────────────────────────────────────────
+@router.get('/summary', summary='📊 창고 점유 요약')
+def api_warehouse_summary():
+    """대시보드용 셀 점유 요약 (5동/6동, EMPTY/OCCUPIED/HALF/...)."""
+    try:
+        from engine_modules.warehouse_cell_logic import (
+            get_warehouse_summary, WAREHOUSE_TOTAL_CELLS,
+        )
+        con = _db()
+        try:
+            s = get_warehouse_summary(con)
+        finally:
+            con.close()
+        s['total_cells_expected'] = WAREHOUSE_TOTAL_CELLS
+        return ok_response(s)
+    except Exception as e:
+        logger.error('summary error: %s', e)
+        return err_response(str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────
+# GET /api/warehouse/cell-grid
+# ─────────────────────────────────────────────────────────────────────
+@router.get('/cell-grid', summary='🧱 동/랙 평면 그리드')
+def api_cell_grid(dong: int = Query(..., description='5 또는 6'),
+                  rack: int = Query(..., description='1~16')):
+    """
+    동·랙 별 (열 × 층) 격자 — 평면도/대시보드용.
+    각 셀에 대해 state, active_count, capacity 만 가벼운 형태로 반환.
+    """
+    try:
+        from engine_modules.warehouse_cell_logic import (
+            LEVEL_BY_RACK, format_cell_location, get_cell_state,
+            WAREHOUSE_DONGS, RACK_RANGE, COL_RANGE,
+        )
+        if dong not in WAREHOUSE_DONGS:
+            return err_response('동은 5 또는 6만 허용')
+        if not (RACK_RANGE[0] <= rack <= RACK_RANGE[1]):
+            return err_response(f'랙은 {RACK_RANGE[0]}~{RACK_RANGE[1]}')
+        max_lv = LEVEL_BY_RACK.get(rack, 0)
+
+        con = _db()
+        try:
+            # lot_location_map: 해당 동·랙의 셀별 LOT 미리 조회 (실제 재고 위치 우선)
+            loc_rows = con.execute("""
+                SELECT col, level, lot_no
+                FROM lot_location_map
+                WHERE dong=? AND rack=?
+            """, (dong, rack)).fetchall()
+            loc_map = {(int(r['col']), int(r['level'])): r['lot_no'] for r in loc_rows}
+
+            cells = []
+            for col in range(COL_RANGE[0], COL_RANGE[1] + 1):
+                for lv in range(1, max_lv + 1):
+                    loc = format_cell_location(dong, rack, col, lv)
+                    st  = get_cell_state(con, loc)
+                    # lot_location_map 우선 → 없으면 inventory_tonbag 폴백
+                    map_lot = loc_map.get((col, lv))
+                    if map_lot:
+                        primary_lot = map_lot
+                        primary_sub = None
+                        cell_state  = 'OCCUPIED'
+                    else:
+                        tbs = st.get('tonbags') or []
+                        primary_lot = tbs[0]['lot_no'] if tbs else ''
+                        primary_sub = tbs[0]['sub_lt'] if tbs else None
+                        cell_state  = st['state']
+                    cells.append({
+                        'location':     loc,
+                        'col':          col,
+                        'level':        lv,
+                        'state':        cell_state,
+                        'active_count': st['active_count'],
+                        'capacity':     st['capacity'],
+                        'packing_type': st['packing_type'],
+                        'lot_no':       primary_lot,
+                        'sub_lt':       primary_sub,
+                    })
+        finally:
+            con.close()
+        return ok_response({
+            'dong': dong, 'rack': rack, 'max_level': max_lv,
+            'col_range': list(COL_RANGE), 'cells': cells,
+            'total': len(cells),
+        })
+    except Exception as e:
+        logger.error('cell-grid error: %s', e)
+        return err_response(str(e))
+
+# ─────────────────────────────────────────────────────────────────────
+# GET /api/warehouse/rack-heatmap
+#   대시보드 히트맵용 — 랙별 지배 LOT + 점유 통계 (경량 단일 쿼리)
+# ─────────────────────────────────────────────────────────────────────
+@router.get('/rack-heatmap', summary='🗺 랙별 LOT 히트맵 (대시보드 임베드용)')
+def api_rack_heatmap():
+    """
+    전체 창고(5동/6동) 각 랙의 점유 현황과 지배 LOT 반환.
+    셀 단위가 아닌 랙 단위 집계라 매우 빠름 — 대시보드 자동 갱신 적합.
+    """
+    try:
+        from engine_modules.warehouse_cell_logic import (
+            LEVEL_BY_RACK, WAREHOUSE_DONGS, RACK_RANGE, COL_RANGE,
+        )
+        import re as _re
+        # G{dong}-{rack:02d}-{col:02d}-{level:02d} 파싱 패턴
+        _LOC_RE = _re.compile(r'^G(\d+)-(\d+)-(\d+)-(\d+)$')
+
+        con = _db()
+        try:
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # [v8.7.0-r5] 기본: inventory_tonbag.location 기반
+            # 위치 형식 G5-04-01-07 → dong=5, rack=4 파싱
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            tb_rows = con.execute("""
+                SELECT t.lot_no,
+                       t.location,
+                       COALESCE(NULLIF(TRIM(i.product), ''), '-') AS product
+                FROM inventory_tonbag t
+                LEFT JOIN inventory i ON i.lot_no = t.lot_no
+                WHERE t.location IS NOT NULL
+                  AND TRIM(t.location) != ''
+                  AND t.status NOT IN ('SOLD', 'RETURNED', 'PENDING')
+            """).fetchall()
+
+            # lot_location_map 폴백 (inventory_tonbag에 위치 없는 경우 보완)
+            llm_rows = con.execute("""
+                SELECT dong,
+                       rack,
+                       col,
+                       level,
+                       lot_no,
+                       COALESCE(NULLIF(TRIM(product), ''), '-') AS product
+                FROM lot_location_map
+                WHERE dong IS NOT NULL AND rack IS NOT NULL AND lot_no IS NOT NULL
+            """).fetchall()
+
+            # ── 오늘 입고 LOT ──
+            today_lots_rows = con.execute("""
+                SELECT DISTINCT lot_no
+                FROM inventory_tonbag
+                WHERE lot_no IS NOT NULL
+                  AND DATE(COALESCE(inbound_date, created_at), 'localtime')
+                      = DATE('now', 'localtime')
+            """).fetchall()
+            today_inbound_lots = [r['lot_no'] for r in today_lots_rows]
+
+            # ── 미배정 톤백 수 ──
+            unassigned_row = con.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM inventory_tonbag
+                WHERE (location IS NULL OR TRIM(location) = '')
+                  AND status NOT IN ('SOLD', 'RETURNED', 'PENDING')
+            """).fetchone()
+            unassigned_count = int(unassigned_row['cnt'] or 0)
+
+        finally:
+            con.close()
+
+        from collections import defaultdict
+        rack_data = defaultdict(lambda: {
+            'occupied_cells': set(),
+            'lots': [],
+            'lot_cells': defaultdict(set),
+            'lot_products': {},
+        })
+
+        # ── 1차: inventory_tonbag.location 파싱 ──
+        tb_parsed = 0
+        for r in tb_rows:
+            lot = r['lot_no'] or ''
+            loc = r['location'] or ''
+            m   = _LOC_RE.match(loc.strip())
+            if not m:
+                continue
+            dong_v, rack_v = int(m.group(1)), int(m.group(2))
+            col_v, level_v = int(m.group(3)), int(m.group(4))
+            if dong_v not in WAREHOUSE_DONGS:
+                continue
+            if not (RACK_RANGE[0] <= rack_v <= RACK_RANGE[1]):
+                continue
+            if not (COL_RANGE[0] <= col_v <= COL_RANGE[1]):
+                continue
+            max_lv = LEVEL_BY_RACK.get(rack_v, 0)
+            if not (1 <= level_v <= max_lv):
+                continue
+            key = (dong_v, rack_v)
+            cell_key = (col_v, level_v)
+            rack_data[key]['occupied_cells'].add(cell_key)
+            if lot:
+                rack_data[key]['lot_cells'][lot].add(cell_key)
+                product = str(r['product'] or '-').strip()
+                if product and product != '-':
+                    rack_data[key]['lot_products'][lot] = product
+            if lot and lot not in rack_data[key]['lots']:
+                rack_data[key]['lots'].append(lot)
+            tb_parsed += 1
+
+        # ── 2차: lot_location_map 보완 ──
+        # 실제 톤백 위치가 있는 셀은 그대로 두고, 아직 비어 있는 셀만 위치맵으로 채운다.
+        # 특정 동(예: 6동)이 lot_location_map에만 존재해도 동별 현황에서 누락되지 않게 한다.
+        llm_added = 0
+        for r in llm_rows:
+            if r['col'] is None or r['level'] is None:
+                continue
+            d, rk = int(r['dong']), int(r['rack'])
+            col_v, level_v = int(r['col']), int(r['level'])
+            lot = r['lot_no'] or ''
+            if d not in WAREHOUSE_DONGS:
+                continue
+            if not (RACK_RANGE[0] <= rk <= RACK_RANGE[1]):
+                continue
+            if not (COL_RANGE[0] <= col_v <= COL_RANGE[1]):
+                continue
+            max_lv = LEVEL_BY_RACK.get(rk, 0)
+            if not (1 <= level_v <= max_lv):
+                continue
+            key = (d, rk)
+            cell_key = (col_v, level_v)
+            if cell_key in rack_data[key]['occupied_cells']:
+                continue
+            rack_data[key]['occupied_cells'].add(cell_key)
+            if lot:
+                rack_data[key]['lot_cells'][lot].add(cell_key)
+                product = str(r['product'] or '-').strip()
+                if product and product != '-':
+                    rack_data[key]['lot_products'][lot] = product
+            if lot and lot not in rack_data[key]['lots']:
+                rack_data[key]['lots'].append(lot)
+            llm_added += 1
+
+        result = []
+        dong_summary = {}
+        for dong in WAREHOUSE_DONGS:
+            dong_occ, dong_total = 0, 0
+            for rack in range(RACK_RANGE[0], RACK_RANGE[1] + 1):
+                max_lv     = LEVEL_BY_RACK.get(rack, 0)
+                total_cells = (COL_RANGE[1] - COL_RANGE[0] + 1) * max_lv
+                key        = (dong, rack)
+                info       = rack_data.get(key, {})
+                lot_counts = {
+                    lot: len(cells)
+                    for lot, cells in (info.get('lot_cells') or {}).items()
+                }
+                lot_products = info.get('lot_products') or {}
+                product_names = []
+                for lot in sorted(lot_counts.keys()):
+                    product = lot_products.get(lot, '-')
+                    if product and product not in product_names:
+                        product_names.append(product)
+                dominant   = max(lot_counts, key=lot_counts.get) if lot_counts else ''
+                occ        = len(info.get('occupied_cells') or set())
+                rack_pct   = round(occ / total_cells * 100, 1) if total_cells else 0.0
+                dong_occ   += occ
+                dong_total += total_cells
+                result.append({
+                    'dong':         dong,
+                    'rack':         rack,
+                    'rack_label':   f'{rack:02d}',
+                    'dominant_lot': dominant,
+                    'occupied':     occ,
+                    'total':        total_cells,
+                    'occupancy_pct': rack_pct,
+                    'lot_count':    len(lot_counts),
+                    'products':     product_names,
+                    'lots':         info.get('lots', []),
+                })
+            dong_pct = round(dong_occ / dong_total * 100, 1) if dong_total else 0.0
+            dong_summary[str(dong)] = {
+                'occupied':      dong_occ,
+                'total':         dong_total,
+                'occupancy_pct': dong_pct,
+                'alert_90':      dong_pct >= 90.0,
+            }
+
+        return ok_response({
+            'racks':              result,
+            'today_inbound_lots': today_inbound_lots,
+            'unassigned_count':   unassigned_count,
+            'dong_summary':       dong_summary,
+            'data_source':        'tonbag_location+lot_location_map' if tb_parsed and llm_added else (
+                'tonbag_location' if tb_parsed > 0 else 'lot_location_map'
+            ),
+        })
+    except Exception as e:
+        logger.error('rack-heatmap error: %s', e)
+        return err_response(str(e))
+
+
+
+# ─────────────────────────────────────────────────────────────────────
+# GET /api/warehouse/enforce-status
+#   셀 무결성 강제 차단 모드 활성화 여부
+# ─────────────────────────────────────────────────────────────────────
+@router.get('/enforce-status', summary='🛡 셀 무결성 enforce 모드 조회')
+def api_enforce_status():
+    """
+    현재 enforce 모드 활성화 여부와 동작 설명을 반환.
+    """
+    try:
+        from engine_modules.warehouse_cell_logic import is_cell_enforce_enabled
+        enabled = is_cell_enforce_enabled()
+        return ok_response({
+            'enforce_enabled': enabled,
+            'mode':            'STRICT (위반 시 트랜잭션 차단)' if enabled else 'OBSERVER (경고 로그만)',
+            'description':     '입고/이동/스캔/출고/반품 6곳 hook 에 동시 적용',
+            'env_override':    bool(os.environ.get('SQM_CELL_ENFORCE', '').strip()),
+        })
+    except Exception as e:
+        logger.error('enforce-status error: %s', e)
+        return err_response(str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────
+# POST /api/warehouse/enforce-toggle
+#   enforce 모드 즉시 전환 (운영 중)
+# ─────────────────────────────────────────────────────────────────────
+@router.post('/enforce-toggle', summary='🛡 셀 무결성 enforce 모드 전환')
+def api_enforce_toggle(payload: dict):
+    """
+    Payload: { "enabled": true | false }
+    """
+    try:
+        from engine_modules.warehouse_cell_logic import (
+            is_cell_enforce_enabled, set_cell_enforce,
+        )
+        if 'enabled' not in payload:
+            return err_response('enabled 필드 필요')
+        new = bool(payload.get('enabled'))
+        prev = is_cell_enforce_enabled()
+        cur  = set_cell_enforce(new)
+        return ok_response({
+            'previous':        prev,
+            'current':         cur,
+            'changed':         (prev != cur),
+            'message':         f"enforce {prev} → {cur}",
+        })
+    except Exception as e:
+        logger.error('enforce-toggle error: %s', e)
+        return err_response(str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────
+# GET /api/warehouse/migrate-analyze
+#   현재 DB 위치 형식 분포 (옛/신/INVALID/EMPTY)
+# ─────────────────────────────────────────────────────────────────────
+@router.get('/migrate-analyze', summary='📊 위치 형식 분포 분석 (마이그레이션 사전 점검)')
+def api_migrate_analyze():
+    """
+    inventory_tonbag.location + inventory.location 의 형식 분포를 측정.
+    옛 형식이 얼마나 남아있는지 파악해서 마이그레이션 진행 여부 판단.
+
+    형식 분류:
+      NEW    — v8.6.8 신규 (G5-04-01-07)
+      OLD_3  — 3파트 (A-01-01)
+      OLD_4  — 4파트 (A-01-01-10)
+      EMPTY  — NULL/빈 문자열
+      INVALID — 알 수 없는 형식
+    """
+    try:
+        from engine_modules.warehouse_cell_logic import analyze_location_formats
+        con = _db()
+        try:
+            data = analyze_location_formats(con)
+        finally:
+            con.close()
+        return ok_response(data)
+    except Exception as e:
+        logger.error('migrate-analyze error: %s', e)
+        return err_response(str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────
+# GET /api/warehouse/half-cells
+#   현재 HALF 상태인 모든 셀 + 잔여 톤백 목록
+# ─────────────────────────────────────────────────────────────────────
+@router.get('/half-cells', summary='🟨 HALF 셀 전체 목록 (CASE 3 누적)')
+def api_half_cells():
+    """
+    출고 후 잔여 처리가 되지 않은 HALF 셀들을 모두 조회.
+    작업자가 다이얼로그를 놓쳤거나 나중 처리로 미뤘을 경우 추적 용도.
+    """
+    try:
+        from engine_modules.warehouse_cell_logic import (
+            get_cell_state, ACTIVE_STATUSES, _capacity_for,
+        )
+        con = _db()
+        try:
+            # capacity 보다 적은 활성 톤백을 가진 location 후보 추출
+            sql = """
+                SELECT t.location,
+                       COUNT(*) AS active_n,
+                       MAX(COALESCE(i.packing_type, '')) AS any_pt
+                  FROM inventory_tonbag t
+                  LEFT JOIN inventory i ON i.lot_no = t.lot_no
+                 WHERE t.location IS NOT NULL AND TRIM(t.location) != ''
+                   AND COALESCE(t.is_sample, 0) = 0
+                   AND t.status IN ({})
+                 GROUP BY t.location
+            """.format(','.join('?' * len(ACTIVE_STATUSES)))
+            rows = con.execute(sql, ACTIVE_STATUSES).fetchall()
+
+            half = []
+            for r in rows:
+                loc, active_n, any_pt = r[0], r[1], r[2]
+                cap = _capacity_for(any_pt)
+                if active_n < cap:
+                    state = get_cell_state(con, loc)
+                    if state['state'] == 'HALF':
+                        half.append({
+                            'location':     loc,
+                            'packing_type': state['packing_type'],
+                            'capacity':     state['capacity'],
+                            'active_count': state['active_count'],
+                            'remaining':    state['tonbags'],
+                        })
+            return ok_response({'half_cells': half, 'count': len(half)})
+        finally:
+            con.close()
+    except Exception as e:
+        logger.error('half-cells error: %s', e)
+        return err_response(str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────
+# POST /api/warehouse/case3-resolve
+#   CASE 3 잔여 톤백 처리 결정 (STAY 또는 MOVE)
+# ─────────────────────────────────────────────────────────────────────
+@router.post('/case3-resolve', summary='🔁 CASE 3 잔여 톤백 STAY/MOVE 처리')
+def api_case3_resolve(payload: dict):
+    """
+    Payload:
+      {
+        "tonbag_id":      int,       # 잔여 톤백 inventory_tonbag.id (필수)
+        "resolution":     'STAY' | 'MOVE',
+        "to_location":    str,       # MOVE 일 때만 (G5-04-01-07 형식)
+        "operator":       str,       # 작업자 (선택, audit_log 용)
+        "note":           str,       # 비고 (선택)
+      }
+
+    STAY: location 변경 없음, audit_log 만 기록
+    MOVE: location 변경 + stock_movement(RELOCATE) + audit_log
+    """
+    try:
+        from engine_modules.warehouse_cell_logic import (
+            validate_cell_location, check_cell_invariants,
+        )
+
+        tonbag_id  = payload.get('tonbag_id')
+        resolution = (payload.get('resolution') or '').upper()
+        to_loc     = (payload.get('to_location') or '').strip().upper()
+        operator   = (payload.get('operator') or 'user').strip()
+        note       = (payload.get('note') or '').strip()
+
+        if not tonbag_id:
+            return err_response('tonbag_id 필수')
+        if resolution not in ('STAY', 'MOVE'):
+            return err_response("resolution 은 'STAY' 또는 'MOVE'")
+        if resolution == 'MOVE':
+            if not to_loc:
+                return err_response('MOVE 시 to_location 필수')
+            v = validate_cell_location(to_loc)
+            if not v.get('ok'):
+                return err_response(f"to_location 형식 오류: {v.get('reason')}")
+
+        con = _db()
+        ts  = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            row = con.execute(
+                "SELECT id, lot_no, sub_lt, COALESCE(weight_kg,0) AS w, "
+                "       COALESCE(location,'') AS loc "
+                "  FROM inventory_tonbag WHERE id=?",
+                (tonbag_id,)
+            ).fetchone()
+            if not row:
+                return err_response(f'톤백 id={tonbag_id} 없음')
+            from_loc = (row['loc'] or '').strip().upper()
+
+            cell_warnings = []
+            if resolution == 'STAY':
+                # 위치 변경 없음 — audit_log 만
+                con.execute("""
+                    INSERT INTO audit_log
+                        (event_type, event_data, user_note, created_by, created_at)
+                    VALUES ('CASE3_STAY', ?, ?, ?, ?)
+                """, (
+                    f'{{"tonbag_id":{tonbag_id},"lot_no":"{row["lot_no"]}",'
+                    f'"sub_lt":{row["sub_lt"]},"location":"{from_loc}"}}',
+                    note or 'CASE 3 잔여 톤백 원위치 유지',
+                    operator, ts
+                ))
+                con.commit()
+                # 비파괴 검증 (셀이 여전히 HALF 인 게 정상)
+                rep = check_cell_invariants(con, from_loc)
+                if not rep['ok']:
+                    cell_warnings = rep['warnings']
+                return ok_response({
+                    'tonbag_id':     tonbag_id,
+                    'resolution':    'STAY',
+                    'location':      from_loc,
+                    'cell_warnings': cell_warnings,
+                    'message':       f"톤백 {tonbag_id} 원위치({from_loc}) 유지",
+                })
+
+            # MOVE
+            con.execute("""
+                UPDATE inventory_tonbag
+                   SET location=?, location_updated_at=?, updated_at=?
+                 WHERE id=?
+            """, (to_loc, ts, ts, tonbag_id))
+            # stock_movement (RELOCATE)
+            con.execute("""
+                INSERT INTO stock_movement
+                    (lot_no, sub_lt, movement_type, qty_kg,
+                     from_location, to_location,
+                     reason_code, operator, remarks, created_at)
+                VALUES (?, ?, 'RELOCATE', ?, ?, ?, 'CASE3_MOVE', ?, ?, ?)
+            """, (row['lot_no'], row['sub_lt'], row['w'],
+                  from_loc, to_loc, operator,
+                  note or 'CASE 3 잔여 톤백 이동', ts))
+            # audit_log
+            con.execute("""
+                INSERT INTO audit_log
+                    (event_type, event_data, user_note, created_by, created_at)
+                VALUES ('CASE3_MOVE', ?, ?, ?, ?)
+            """, (
+                f'{{"tonbag_id":{tonbag_id},"lot_no":"{row["lot_no"]}",'
+                f'"from":"{from_loc}","to":"{to_loc}"}}',
+                note or 'CASE 3 잔여 톤백 이동', operator, ts
+            ))
+            con.commit()
+            # from/to 셀 모두 비파괴 검증
+            for chk in {from_loc, to_loc}:
+                if not chk:
+                    continue
+                rep = check_cell_invariants(con, chk)
+                if not rep['ok']:
+                    cell_warnings.extend(rep['warnings'])
+            return ok_response({
+                'tonbag_id':     tonbag_id,
+                'resolution':    'MOVE',
+                'from_location': from_loc,
+                'to_location':   to_loc,
+                'cell_warnings': cell_warnings,
+                'message':       f"톤백 {tonbag_id} {from_loc} → {to_loc} 이동",
+            })
+        finally:
+            con.close()
+    except Exception as e:
+        logger.error('case3-resolve error: %s', e)
+        return err_response(str(e))
