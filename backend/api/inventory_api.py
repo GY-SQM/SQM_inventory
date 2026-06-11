@@ -41,7 +41,9 @@ def _rows(cur) -> list:
 
 # ─── 라우터 ──────────────────────────────────────────────────────────
 inv_router  = APIRouter(prefix="/api/inventory",  tags=["inventory"])
-alloc_router = APIRouter(prefix="/api/allocation", tags=["allocation"])
+# [B-7 이관 완료] alloc_router → allocation_api.py router 로 통합됨
+# alloc_router 는 __init__.py 에서 include 제거됨. 기존 엔드포인트는 allocation_api.py 에 있음
+# alloc_router = APIRouter(prefix="/api/allocation", tags=["allocation"])  # DEPRECATED
 tb_router   = APIRouter(prefix="/api/tonbags",    tags=["tonbags"])
 scan_router = APIRouter(prefix="/api/scan",       tags=["scan"])
 health_router = APIRouter(prefix="/api",           tags=["health"])

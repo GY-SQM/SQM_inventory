@@ -460,7 +460,7 @@ try:
 except Exception as e:
     logging.warning(f"inbound router load failed: {e}")
 try:
-    from backend.api.inventory_api import inv_router, alloc_router, tb_router, scan_router, health_router
+    from backend.api.inventory_api import inv_router, tb_router, scan_router, health_router  # [B-7] alloc_router 제거됨
     app.include_router(inv_router)
     # [fix B-7] alloc_router (/api/allocation) 이중 등록 제거
     # allocation_api.py 의 router 가 완전한 구현체 — inventory_api.py 의 alloc_router 는 include 하지 않음

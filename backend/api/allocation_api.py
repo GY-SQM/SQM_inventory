@@ -1246,3 +1246,153 @@ async def template_delete(template_id: str):
         raise HTTPException(404, f"양식을 찾을 수 없습니다: {safe_id}")
     logger.info("[template-delete] 삭제: %s", safe_id)
     return {"ok": True, "id": safe_id, "deleted": deleted}
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# [B-7 이관] inventory_api.py alloc_router → allocation_api.py 통합
+# 6개 엔드포인트: GET /, POST /{lot}/cancel, PATCH /{lot},
+#                POST /{lot}/pick, POST /{lot}/confirm, POST /{lot}/reset
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+_ALLOC_EDITABLE_FIELDS = {
+    "customer", "sale_ref", "qty_mt", "outbound_date", "status",
+}
+
+@router.get("", summary="📋 Allocation 탭 메인 데이터")
+def get_allocation(
+    status:   Optional[str] = None,
+    customer: Optional[str] = None,
+    limit:    int = 200,
+):
+    """allocation_plan 기반 배정 목록. 비어있으면 inventory SOLD/RESERVED 기준."""
+    try:
+        con = _alloc_db()
+        c = con.cursor()
+        plan_count = c.execute("SELECT COUNT(*) FROM allocation_plan").fetchone()[0]
+        if plan_count > 0:
+            sql = """
+                SELECT ap.lot_no AS lot, i.product, ap.customer, ap.sale_ref,
+                       ROUND(ap.qty_mt, 3) AS balance, ap.outbound_date AS ship_date,
+                       ap.status, ap.picking_no, ap.workflow_status
+                FROM allocation_plan ap
+                LEFT JOIN inventory i ON i.lot_no = ap.lot_no
+                WHERE 1=1
+            """
+            params: list = []
+            if status:
+                sql += " AND ap.status = ?"; params.append(status)
+            if customer:
+                sql += " AND ap.customer LIKE ?"; params.append(f"%{customer}%")
+            sql += " ORDER BY ap.created_at DESC LIMIT ?"; params.append(limit)
+        else:
+            sql = """
+                SELECT i.lot_no AS lot, i.product, i.sold_to AS customer, i.sale_ref,
+                       ROUND(i.current_weight/1000.0, 3) AS balance, NULL AS ship_date,
+                       i.status, NULL AS picking_no, NULL AS workflow_status
+                FROM inventory i
+                WHERE i.status IN ('SOLD','RESERVED','PICKING','PICKED')
+            """
+            params = []
+            if customer:
+                sql += " AND i.sold_to LIKE ?"; params.append(f"%{customer}%")
+            sql += " ORDER BY i.inbound_date DESC LIMIT ?"; params.append(limit)
+        rows = [dict(r) for r in c.execute(sql, params).fetchall()]
+        con.close()
+        return rows
+    except Exception as e:
+        logger.error("GET /api/allocation error: %s", e)
+        raise HTTPException(500, str(e))
+
+
+@router.post("/{lot_no}/cancel", summary="❌ 배정 취소 (LOT 단위)")
+def cancel_allocation_by_lot(lot_no: str):
+    try:
+        con = _alloc_db()
+        con.execute(
+            "UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') WHERE lot_no=?",
+            (lot_no,)
+        )
+        con.commit(); con.close()
+        return {"ok": True, "message": f"{lot_no} 배정 취소"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@router.patch("/{lot_no}", summary="✏️ 배정 행 필드 업데이트")
+def update_allocation_by_lot(lot_no: str, updates: dict = Body(...)):
+    fields = {k: v for k, v in (updates or {}).items() if k in _ALLOC_EDITABLE_FIELDS}
+    if not fields:
+        raise HTTPException(400, f"허용 필드: {sorted(_ALLOC_EDITABLE_FIELDS)}")
+    if "qty_mt" in fields:
+        try: fields["qty_mt"] = float(fields["qty_mt"])
+        except (TypeError, ValueError): raise HTTPException(400, "qty_mt는 숫자여야 합니다")
+    sets = ", ".join(f"{k}=?" for k in fields)
+    values = list(fields.values()) + [lot_no]
+    try:
+        con = _alloc_db()
+        cur = con.execute(
+            f"UPDATE allocation_plan SET {sets}, created_at=datetime('now') WHERE lot_no=?",
+            values
+        )
+        if cur.rowcount == 0:
+            con.close(); raise HTTPException(404, f"{lot_no} 찾지 못함")
+        con.commit(); con.close()
+        return {"ok": True, "data": {"lot_no": lot_no, "updated_fields": list(fields)}}
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@router.post("/{lot_no}/pick", summary="📦 배정 → PICKED 전환")
+def pick_allocation_by_lot(lot_no: str):
+    try:
+        con = _alloc_db()
+        cur = con.execute(
+            "UPDATE allocation_plan SET status='PICKED', executed_at=datetime('now') WHERE lot_no=? AND status='RESERVED'",
+            (lot_no,)
+        )
+        con.commit(); con.close()
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"{lot_no}: RESERVED 상태가 아니거나 존재하지 않음")
+        return {"ok": True, "lot_no": lot_no, "message": f"{lot_no} → PICKED"}
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@router.post("/{lot_no}/confirm", summary="✅ 출고 확정 PICKED → SOLD")
+def confirm_allocation_by_lot(lot_no: str):
+    try:
+        con = _alloc_db()
+        cur = con.execute(
+            "UPDATE allocation_plan SET status='SOLD', executed_at=datetime('now') WHERE lot_no=? AND status='PICKED'",
+            (lot_no,)
+        )
+        con.execute("UPDATE inventory SET status='SOLD' WHERE lot_no=?", (lot_no,))
+        con.commit(); con.close()
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"{lot_no}: PICKED 상태가 아니거나 존재하지 않음")
+        return {"ok": True, "lot_no": lot_no, "message": f"{lot_no} → SOLD"}
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@router.post("/{lot_no}/reset", summary="🧹 LOT 배정 완전 초기화")
+def reset_allocation_by_lot(lot_no: str):
+    try:
+        con = _alloc_db()
+        row = con.execute("SELECT status FROM inventory WHERE lot_no=?", (lot_no,)).fetchone()
+        if row and row[0] == "SOLD":
+            raise HTTPException(409, f"{lot_no}: SOLD 상태는 reset 불가")
+        del_cur = con.execute("DELETE FROM allocation_plan WHERE lot_no=?", (lot_no,))
+        con.execute(
+            "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL WHERE lot_no=? AND status!='SOLD'",
+            (lot_no,)
+        )
+        deleted = del_cur.rowcount
+        con.commit(); con.close()
+        return {"ok": True, "lot_no": lot_no,
+                "message": f"{lot_no} 초기화 ({deleted}건 삭제)" if deleted else f"{lot_no}: 배정 없음 (inventory만 초기화)"}
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
