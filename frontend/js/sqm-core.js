@@ -1692,7 +1692,7 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     var HEALTH_URL = '/api/health';
     var INTERVAL_MS = 15000;
     var FAIL_COUNT = 0;
-    var MAX_FAIL = 2;
+    var MAX_FAIL = 3;   // [fix] 2→3 : 일시적 부하/타임아웃에 더 관대하게
     var _banner = null;
 
     function showOfflineBanner() {
@@ -1716,7 +1716,9 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     }
 
     function checkHealth() {
-      fetch(HEALTH_URL, { method: 'GET', cache: 'no-store' })
+      // [fix] 상대경로 대신 _getApiBase() 실시간 읽기 — PyWebView SQM_API_BASE 타이밍 문제 방지
+      var url = (typeof _getApiBase === 'function' ? _getApiBase() : '') + '/api/health';
+      fetch(url, { method: 'GET', cache: 'no-store' })
         .then(function(r) {
           if (r.ok) { FAIL_COUNT = 0; hideOfflineBanner(); }
           else { FAIL_COUNT++; if (FAIL_COUNT >= MAX_FAIL) showOfflineBanner(); }
