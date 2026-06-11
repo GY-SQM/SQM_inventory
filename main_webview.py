@@ -84,7 +84,7 @@ def _acquire_single_instance_lock():
     return True
 
 log = logging.getLogger(__name__)
-log.info(f"=== SQM v8.7.1 시작 — 로그 파일: {LOG_PATH} ===")
+log.info(f"=== SQM v8.7.2 시작 — 로그 파일: {LOG_PATH} ===")
 
 # ─────────────────────────────────────────────────────────────
 # [Patch 3] 전역 예외 훅 — 미포획 예외 전부 로그 파일에 기록
@@ -473,7 +473,7 @@ SPLASH_HTML = '''<!DOCTYPE html>
   <h1>SQM Inventory</h1>
   <p class="sub">서버에 연결하는 중…</p>
   <div class="spinner"></div>
-  <div class="ver">v8.7.1</div>
+  <div class="ver">v8.7.2</div>
 </body>
 </html>
 '''
@@ -640,7 +640,7 @@ def main():
         _win_w, _win_h, _win_max = load_window_state()
         # [P1 PATCH] url= 대신 html=SPLASH_HTML 로 즉시 표시 (API 대기 없음).
         window = webview.create_window(
-            title='SQM Inventory v8.7.1',
+            title='SQM Inventory v8.7.2',
             html=SPLASH_HTML,
             width=_win_w,
             height=_win_h,
