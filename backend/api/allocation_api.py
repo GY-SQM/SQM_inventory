@@ -7,7 +7,7 @@ F014 위치 배정 (Allocation 출고 예약) 네이티브 구현
 import logging
 import os
 import tempfile
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
@@ -545,7 +545,7 @@ def reject_allocation(data: dict = Body(...)):
         updated = 0
         for plan_id in ids:
             cur = con.execute(
-                "UPDATE allocation_plan SET status='REJECTED', updated_at=datetime('now') WHERE id=?",  -- [fix B-1] approve와 동일 컬럼(status) 사용
+                "UPDATE allocation_plan SET status='REJECTED', updated_at=datetime('now') WHERE id=?",  # [fix B-1] approve와 동일 컬럼(status) 사용
                 (plan_id,)
             )
             updated += cur.rowcount
