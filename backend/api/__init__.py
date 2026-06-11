@@ -843,8 +843,57 @@ def _sample_activity():
 
 
 # ══════════════════════════════════════════════════════════════
-# ── Static frontend mount (MUST be LAST) ──────────────────────
+# ── / 동적 서빙: SQM_API_BASE 주입 (MUST be before static mount)
 # ══════════════════════════════════════════════════════════════
+# [fix] PyWebView에서 on_loaded→evaluate_js 타이밍 문제 근본 해결:
+# JS 파일들이 실행되기 전에 이미 HTML 안에 SQM_API_BASE가 있어야 함.
+# StaticFiles는 HTML에 스크립트를 삽입할 수 없으므로,
+# GET / 를 별도 라우터로 먼저 등록해 동적으로 index.html 반환.
+import os as _os
+from fastapi.responses import HTMLResponse as _HTMLResponse
+
+_FRONTEND_DIR_EARLY = _os.path.join(
+    _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
+    "frontend"
+)
+_INDEX_HTML_PATH = _os.path.join(_FRONTEND_DIR_EARLY, "index.html")
+
+@app.get("/", response_class=_HTMLResponse, include_in_schema=False)
+def serve_index():
+    """index.html 동적 서빙 — SQM_API_BASE를 <head> 최상단에 주입"""
+    try:
+        with open(_INDEX_HTML_PATH, encoding="utf-8") as f:
+            html = f.read()
+        # 1순위: 환경변수 (main_webview.py 가 설정)
+        api_base = _os.environ.get("SQM_API_BASE", "")
+        # 2순위: 환경변수 없으면 uvicorn 소켓에서 실제 포트 자동 감지
+        if not api_base:
+            try:
+                import socket as _socket
+                with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as _s:
+                    # 8765~8799 범위에서 실제 LISTEN 중인 포트 찾기
+                    for _p in range(8765, 8800):
+                        _r = _s.connect_ex(("127.0.0.1", _p))
+                        if _r == 0:
+                            api_base = f"http://127.0.0.1:{_p}"
+                            break
+            except Exception:
+                pass
+        if api_base:
+            inject = (
+                f'<script>'
+                f'window.SQM_API_BASE="{api_base}";'
+                f'console.log("[SQM] API Base(injected):",window.SQM_API_BASE);'
+                f'</script>'
+            )
+            html = html.replace("<head>", f"<head>\n  {inject}", 1)
+        return _HTMLResponse(content=html)
+    except Exception:
+        from fastapi.responses import FileResponse as _FileResponse
+        return _FileResponse(_INDEX_HTML_PATH)
+
+
+
 # v864.3 Phase 2 fix: Starlette matches routes in registration order.
 # Mounting "/" at the END ensures every inline @app.get("/api/...")
 # above is checked FIRST; only unmatched paths fall through to
