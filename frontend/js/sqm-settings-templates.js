@@ -9,7 +9,9 @@
   var sqmConfirm = function() { return window.sqmConfirm.apply(window, arguments); };
   var showDataModal = function() { return window.showDataModal.apply(window, arguments); };
   var sqmShouldOpenXlsxAfterSave = function() { return window.sqmShouldOpenXlsxAfterSave.apply(window, arguments); };
-  var API = window.API || window.SQM_API_BASE || window.location.origin || '';
+  // [fix F-7] window.API 초기캡처 위험 제거 → fetch 시점 실시간
+  function _api() { return window.SQM_API_BASE || (window.location && window.location.origin) || ''; }
+  var API = _api(); // 하위 호환 초기값
   function showSettingsDialog(title, icon, fields) {
     var html = '<div style="max-width:480px"><h2 style="margin:0 0 16px 0">' + icon + ' ' + escapeHtml(title) + '</h2>';
     html += '<div style="display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:center;margin-bottom:16px">';
@@ -376,7 +378,7 @@
     var area = document.getElementById('sqm-tpl-table-area');
     if (!area) return;
     area.innerHTML = '<div style="color:var(--text-muted);padding:16px;text-align:center">⏳ 로딩 중...</div>';
-    fetch(API + '/api/inbound/templates')
+    fetch(_api() + '/api/inbound/templates')
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!area) return;
@@ -529,7 +531,7 @@
 
   window._tplDelete = function(tid, name) {
     if (!sqmConfirm(name + ' 템플릿을 삭제하시겠습니까?')) return;
-    fetch(API + '/api/inbound/templates/' + encodeURIComponent(tid), { method: 'DELETE' })
+    fetch(_api() + '/api/inbound/templates/' + encodeURIComponent(tid), { method: 'DELETE' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (d.ok) { showToast('success', '삭제 완료: ' + escapeHtml(name)); _tplLoadList(); }
@@ -545,7 +547,7 @@
     showToast('info', '📄 PDF 파싱 중... 잠시 기다려 주세요');
     var fd = new FormData();
     fd.append('file', file, file.name);
-    fetch(API + '/api/inbound/templates/from-pdf', { method: 'POST', body: fd })
+    fetch(_api() + '/api/inbound/templates/from-pdf', { method: 'POST', body: fd })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!d.ok) { showToast('error', 'PDF 추출 실패: ' + escapeHtml(String(d.detail || d.error || ''))); return; }
@@ -608,7 +610,7 @@
     showToast('info', '📊 Excel 처리 중...');
     var fd = new FormData();
     fd.append('file', file, file.name);
-    fetch(API + '/api/inbound/templates/from-excel', { method: 'POST', body: fd })
+    fetch(_api() + '/api/inbound/templates/from-excel', { method: 'POST', body: fd })
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!d.ok) { showToast('error', 'Excel 실패: ' + escapeHtml(String(d.detail || d.error || ''))); return; }

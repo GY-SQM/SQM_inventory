@@ -164,7 +164,12 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     console.log('[SQM Tooltip] custom dark tooltip ready');
   })();
 
-  var API = window.SQM_API_BASE || (window.location && window.location.origin) || '';
+  // [fix] IIFE 시점에 고정 캡처하지 않고 매 호출 시 실시간으로 읽음
+  // PyWebView에서 on_loaded 후 evaluate_js로 SQM_API_BASE가 뒤늦게 설정되는 타이밍 문제 해결
+  function _getApiBase() {
+    return window.SQM_API_BASE || (window.location && window.location.origin) || '';
+  }
+  var API = _getApiBase(); // 초기값 (하위 호환)
 
   /**
    * Excel/FileResponse 다운로드.
@@ -571,11 +576,11 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     var key = (e.ctrlKey?'C-':'') + (e.shiftKey?'S-':'') + (e.altKey?'A-':'') + e.key;
     switch(key) {
-      case 'C-r': case 'F5': e.preventDefault(); renderPage(_currentRoute||'dashboard'); break;
+      case 'C-r': case 'F5': e.preventDefault(); if(confirm('화면을 새로고침 하시겠습니까?')) renderPage(_currentRoute||'dashboard'); break;
       case 'C-1': e.preventDefault(); renderPage('inventory'); break;
       case 'C-2': e.preventDefault(); renderPage('available'); break;
       case 'C-3': e.preventDefault(); renderPage('allocation'); break;
-      case 'C-3': e.preventDefault(); renderPage('picked'); break;
+      case 'C-p': e.preventDefault(); renderPage('picked'); break;  // [fix F-9] C-3 중복 제거 → C-p
       case 'C-4': e.preventDefault(); renderPage('outbound'); break;
       case 'C-5': e.preventDefault(); renderPage('return'); break;
       case 'C-6': e.preventDefault(); renderPage('move'); break;
@@ -903,7 +908,7 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     opts = opts || {};
     var timeout = opts.timeout || DEFAULT_TIMEOUT;
     var retries = (opts.retries !== undefined) ? opts.retries : 2;
-    var url = (path.indexOf('http') === 0) ? path : API + path;
+    var url = (path.indexOf('http') === 0) ? path : _getApiBase() + path;
     if (opts.noCache && method.toUpperCase() === 'GET') {
       url += (url.indexOf('?') >= 0 ? '&' : '?') + '_ts=' + Date.now();
     }

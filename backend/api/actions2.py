@@ -222,7 +222,7 @@ def outbound_confirm(payload: dict):
 
         weight_kg = row["current_weight"] or 0
         con.execute(
-            "UPDATE inventory SET status='SOLD', sold_to=?, updated_at=? WHERE id=?",
+            "UPDATE inventory SET status='SOLD', sold_to=?, current_weight=0, updated_at=? WHERE id=?",  # [fix B-3] current_weight 0 차감
             (customer or row["sold_to"], ts, row["id"])
         )
         con.execute("""
@@ -258,6 +258,8 @@ def outbound_confirm(payload: dict):
             "message": f"{lot_no} 출고 확정 완료",
         })
     except Exception as e:
+        try: con.rollback()   # [fix B-3] 예외 시 명시적 롤백
+        except Exception: pass
         logger.error("outbound-confirm error: %s", e)
         return err_response(str(e))
 

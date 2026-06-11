@@ -56,35 +56,35 @@ class DatabaseMigrationMixin:
         self._migrate_v632_sales_order_import_log()
         self._migrate_v633_allocation_export_type()   # v2.6.1: export_type 컬럼
         self._migrate_v635_outbound_no()
-        self._migrate_v700_return_log_reinbound()      # v7.0.0: RETURN_AS_REINBOUND 정책
+        # [fix D-2] 버전 번호 오름차순 재정렬 (역순 호출 제거)
         self._migrate_v675_conflict_indexes()           # v6.7.5: ALLOC_CONFLICT 인덱스 2개
+        self._migrate_v686_performance_indexes()       # v6.8.6: 성능 인덱스
+        self._migrate_v691_picking_table_cols()        # v6.9.1
+        self._migrate_v700_return_log_reinbound()      # v7.0.0: RETURN_AS_REINBOUND 정책
         self._migrate_v710_return_history_to_log()     # v7.1.0: return_history → return_log 통합
         self._migrate_v720_inbound_template()          # v7.2.0: 입고 파싱 템플릿 관리
-        self._migrate_v800_template_bl_format()         # v8.0.0: BL 번호 형식 직접 지정
         self._migrate_v740_picking_template()          # v7.4.0: 출고 피킹 템플릿 (고객사 프로파일)
-        self._migrate_v686_performance_indexes()       # v6.8.6: 성능 인덱스
-        self._migrate_v691_picking_table_cols()        # v6.9.1: picking_list_no, gate1_result (status, lot_status, alloc_sale_ref)
+        self._migrate_v800_template_bl_format()        # v8.0.0: BL 번호 형식 직접 지정
         self._migrate_v809_inline_edit()
         self._migrate_v817_tonbag_move_log()           # v8.1.7: 톤백 이동 이력 테이블
         self._migrate_v857_sold_table_outbound_report()  # v8.5.7: 출고 보고서용 컬럼 추가
-        self._migrate_v271_allocation_sc_rcvd()           # v2.7.1: allocation_plan SC RCVD 컬럼
-        self._migrate_v271_add_missing_indexes()          # v2.7.1: 누락 인덱스 3개 추가
-        self._migrate_v870_inventory_bl_invoice_cols()    # v8.7.0: inventory BL/Invoice 6컬럼 추가
-        self._migrate_v870_container_freetime_tables()    # v8.7.0 Phase 3-A: 컨테이너/반납일 1:N 테이블
-        self._migrate_v870_document_invoice()             # v8.7.0 Phase 3-B: Invoice 전필드 보존 테이블
-        self._migrate_v870_document_bl()                  # v8.7.0 Phase 3-B: BL 전필드 보존 테이블
-        self._migrate_v870_document_pl()                  # v8.7.0 Phase 3-B: PL 헤더/요약 보존 테이블
-        self._migrate_v870_document_do()                  # v8.7.0 Phase 3-B: DO 전필드 보존 테이블
-        # P0/P1 보안/데이터 무결성 패치
-        self._migrate_v871_allocation_no_dup_index()      # v8.7.1 P0-4: allocation_plan 중복 예약 방지
-        self._migrate_v871_inventory_weight_floor()        # v8.7.1 P0-5: inventory 음수 중량 방지 트리거
-        self._migrate_v871_allocation_tonbag_id_index()   # v8.7.1 P1-8: allocation_plan.tonbag_id 인덱스
-        # Phase 4-A 회귀 강화 패치
-        self._migrate_v872_inventory_weight_floor_insert()  # v8.7.2 P1: INSERT 경로 음수 방지 트리거
-        self._migrate_v872_sold_table_dedup_index()         # v8.7.2 P4: sold_table 중복 방지 인덱스
-        self._migrate_v868_pending_workflow_columns()        # v8.7.0: PENDING 워크플로우 컬럼 (port_date, inbound_type)
-        self._migrate_v868_packing_type_column()             # v8.7.0: 팔레트 구성 (1pack/2pack) 컬럼
-        self._migrate_v873_carrier_field_coord()             # v8.7.3: BL 선사별 좌표 룰 DB화
+        self._migrate_v868_pending_workflow_columns()  # v8.7.0: PENDING 워크플로우 컬럼
+        self._migrate_v868_packing_type_column()       # v8.7.0: 팔레트 구성 컬럼
+        self._migrate_v870_inventory_bl_invoice_cols() # v8.7.0: inventory BL/Invoice 6컬럼
+        self._migrate_v870_container_freetime_tables() # v8.7.0 Phase 3-A
+        self._migrate_v870_document_invoice()          # v8.7.0 Phase 3-B
+        self._migrate_v870_document_bl()               # v8.7.0 Phase 3-B
+        self._migrate_v870_document_pl()               # v8.7.0 Phase 3-B
+        self._migrate_v870_document_do()               # v8.7.0 Phase 3-B
+        self._migrate_v871_allocation_no_dup_index()   # v8.7.1 P0-4
+        self._migrate_v871_inventory_weight_floor()    # v8.7.1 P0-5
+        self._migrate_v871_allocation_tonbag_id_index() # v8.7.1 P1-8
+        self._migrate_v872_inventory_weight_floor_insert() # v8.7.2 P1
+        self._migrate_v872_sold_table_dedup_index()    # v8.7.2 P4
+        self._migrate_v873_carrier_field_coord()       # v8.7.3
+        # v2.7.1은 번호가 낮지만 후기 추가된 것 — 마지막에 실행해도 IF NOT EXISTS로 안전
+        self._migrate_v271_allocation_sc_rcvd()        # v2.7.1: allocation_plan SC RCVD 컬럼
+        self._migrate_v271_add_missing_indexes()       # v2.7.1: 누락 인덱스 3개
 
     def _migrate_v868_packing_type_column(self) -> None:
         """
@@ -2659,6 +2659,13 @@ class DatabaseMigrationMixin:
                 WHERE status IN ('RESERVED', 'STAGED')
             """)
             logger.info("[v8.7.1] allocation_plan 중복 예약 방지 UNIQUE 인덱스 추가")
+            # [fix D-1] tonbag_id 단독 UNIQUE — 동일 톤백의 다중 고객 이중 예약 완전 차단
+            self.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_alloc_tonbag_no_dup
+                ON allocation_plan(tonbag_id)
+                WHERE status IN ('RESERVED', 'STAGED') AND tonbag_id IS NOT NULL
+            """)
+            logger.info("[v8.7.1] allocation_plan tonbag_id 단독 UNIQUE 인덱스 추가 (이중 예약 차단)")
         except _sq.OperationalError as e:
             err = str(e).lower()
             if "already exists" in err or "unique" in err:
@@ -2908,15 +2915,19 @@ class DatabaseMigrationMixin:
         """
         import sqlite3 as _sq
         try:
+            # [fix D-4] COALESCE(sub_lt,'') 타입 혼용(INTEGER/TEXT) 제거
+            # 기존 인덱스 DROP 후 tonbag_id 기반 partial index 로 교체
+            self.execute("DROP INDEX IF EXISTS idx_sold_dedup")
             self.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_sold_dedup "
-                "ON sold_table(sales_order_no, lot_no, COALESCE(sub_lt, ''))"
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_sold_dedup_v2 "
+                "ON sold_table(sales_order_no, tonbag_id) "
+                "WHERE sales_order_no IS NOT NULL AND tonbag_id IS NOT NULL"
             )
-            logger.info("[v8.7.2] sold_table 중복 방지 UNIQUE 인덱스 추가")
+            logger.info("[v8.7.2] sold_table 중복 방지 UNIQUE 인덱스 v2 추가 (tonbag_id 기반)")
         except _sq.OperationalError as e:
             if "already exists" in str(e).lower():
                 logger.debug("[v8.7.2] sold_table 중복 인덱스 이미 존재")
             elif "unique" in str(e).lower():
-                logger.warning(f"[v8.7.2] sold_table 중복 행 존재로 인덱스 생성 불가 (기존 데이터 정리 필요): {e}")
+                logger.warning(f"[v8.7.2] sold_table 중복 행 존재로 인덱스 생성 불가: {e}")
             else:
                 logger.warning(f"[v8.7.2] sold_table dedup 인덱스 추가 실패: {e}")

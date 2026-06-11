@@ -1,7 +1,8 @@
 (function () {
   'use strict';
 
-  var API = window.API;
+  // [fix F-3] window.API 즉시캡처 제거 → fetch 시점에 실시간 읽기
+  function _api() { return window.SQM_API_BASE || (window.location && window.location.origin) || ''; }
   var apiGet = window.apiGet;
   var apiPost = window.apiPost;
   var extractRows = window.extractRows;
@@ -150,7 +151,7 @@
           var enc = btn.getAttribute('data-enc');
           var name = enc ? decodeURIComponent(enc) : '';
           if (!name || !window.sqmConfirm('파일을 삭제할까요?')) return;
-          fetch(API + '/api/report-templates/file?name=' + encodeURIComponent(name), { method: 'DELETE' })
+          fetch(_api() + '/api/report-templates/file?name=' + encodeURIComponent(name), { method: 'DELETE' })
             .then(function(r){ return r.json(); })
             .then(function(res){
               if (res && res.ok === false) { showToast('error', res.error || '삭제 실패'); return; }
@@ -201,7 +202,7 @@
       if (!fi || !fi.files || !fi.files[0]) { showToast('warning', '파일을 선택하세요'); return; }
       var fd = new FormData();
       fd.append('file', fi.files[0]);
-      fetch(API + '/api/report-templates/upload', { method: 'POST', body: fd })
+      fetch(_api() + '/api/report-templates/upload', { method: 'POST', body: fd })
         .then(function(r){ return r.json(); })
         .then(function(res){
           if (res && res.ok === false) { showToast('error', res.error || '업로드 실패'); return; }
@@ -285,7 +286,7 @@
     function saveColumns() {
       var sel = document.getElementById('tr-template');
       var tmpl = sel && sel.value ? sel.value : 'template_1';
-      return fetch(API + '/api/q3/report-template-columns?report_type=' + encodeURIComponent(reportType) + '&template=' + encodeURIComponent(tmpl), {
+      return fetch(_api() + '/api/q3/report-template-columns?report_type=' + encodeURIComponent(reportType) + '&template=' + encodeURIComponent(tmpl), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ columns: columnState })
@@ -636,7 +637,7 @@
     document.getElementById('tr-template-open').addEventListener('click', function(){
       var sel = document.getElementById('tr-template');
       var tmpl = sel && sel.value ? sel.value : 'template_1';
-      fetch(API + '/api/q3/report-template-open?report_type=' + encodeURIComponent(reportType) + '&template=' + encodeURIComponent(tmpl), { method: 'POST' })
+      fetch(_api() + '/api/q3/report-template-open?report_type=' + encodeURIComponent(reportType) + '&template=' + encodeURIComponent(tmpl), { method: 'POST' })
         .then(function(r) { return r.json(); })
         .then(function(res) {
           if (res && res.ok === false) {
@@ -689,7 +690,7 @@
         ? '기본 템플릿입니다. 삭제하면 기본 양식을 다시 쓰려면 파일을 다시 업로드해야 합니다. 삭제할까요?'
         : '현재 선택한 템플릿을 삭제할까요?';
       if (!confirm(deleteMsg)) return;
-      fetch(API + '/api/q3/report-template?report_type=' + encodeURIComponent(reportType) + '&template=' + encodeURIComponent(tmpl), { method: 'DELETE' })
+      fetch(_api() + '/api/q3/report-template?report_type=' + encodeURIComponent(reportType) + '&template=' + encodeURIComponent(tmpl), { method: 'DELETE' })
         .then(function(r) { return r.json(); })
         .then(function(res) {
           if (res && res.ok === false) {
@@ -744,7 +745,7 @@
       if (modeVal === 'update_default' && !confirm('기본 템플릿(template_1)을 새 파일로 업데이트할까요? 기존 기본 양식 파일 내용은 교체됩니다.')) return;
       var fd = new FormData();
       fd.append('file', fi.files[0]);
-      fetch(API + '/api/q3/report-template-upload?report_type=' + encodeURIComponent(reportType)
+      fetch(_api() + '/api/q3/report-template-upload?report_type=' + encodeURIComponent(reportType)
           + '&display_name=' + encodeURIComponent(name && name.value ? name.value : '')
           + '&mode=' + encodeURIComponent(modeVal)
           + '&template=' + encodeURIComponent(tmplVal), { method: 'POST', body: fd })

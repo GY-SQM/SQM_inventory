@@ -423,7 +423,7 @@ def get_dashboard_stats():
         }
     except Exception as e:
         logger.error("[dashboard/stats] 집계 실패: %s", e, exc_info=True)
-        return {"error": str(e)}
+        return {"ok": False, "error": str(e)}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -498,7 +498,7 @@ def get_alerts():
         }
     except Exception as e:
         logger.error("[dashboard/alerts] 집계 실패: %s", e, exc_info=True)
-        return {"alerts": [], "total": 0, "error": str(e)}
+        return {"ok": False, "alerts": [], "total": 0, "error": str(e)}
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -528,7 +528,7 @@ def get_sidebar_counts():
                 COALESCE(SUM(weight), 0) / 1000.0                            AS mt,
                 SUM(CASE WHEN COALESCE(is_sample, 0) = 1 THEN 1 ELSE 0 END) AS sample_bags
             FROM inventory_tonbag
-            WHERE status IN ('PENDING', 'AVAILABLE', 'RESERVED', 'PICKED', 'SOLD', 'RETURN')
+            WHERE status IN ('PENDING', 'AVAILABLE', 'RESERVED', 'PICKED', 'SOLD', 'RETURN', 'SHIPPED', 'CONFIRMED')  -- [fix B-8] SHIPPED/CONFIRMED 포함
             GROUP BY status
         """).fetchall()
         con.close()
@@ -554,7 +554,9 @@ def get_sidebar_counts():
         inv_keys = ["available", "reserved", "picked", "return"]
         total_bags = sum(result[k]["bags"] for k in inv_keys)
         total_mt   = round(sum(result[k]["mt"]  for k in inv_keys), 2)
-        result["total"] = {"bags": total_bags, "mt": total_mt, "sample_bags": 0}
+        # [fix D-6] sample_bags 항상 0 하드코딩 → 실제 합산
+        total_sample = sum(result[k]["sample_bags"] for k in inv_keys)
+        result["total"] = {"bags": total_bags, "mt": total_mt, "sample_bags": total_sample}
         return {"ok": True, "data": result}
     except Exception as exc:
         logger.error("[dashboard/sidebar-counts] 집계 실패: %s", exc, exc_info=True)

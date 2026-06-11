@@ -850,6 +850,11 @@ def onestop_complete(req: OneStopCompleteRequest):
             entry["weight_kg"] += float(row_dict.get("weight") or 0)
 
         for lot_no, entry in by_lot.items():
+            # [fix B-4] inventory 상위 테이블 status 도 SOLD 갱신 (tonbag만 갱신하던 버그 수정)
+            db.execute(
+                "UPDATE inventory SET status='SOLD', sold_to=?, current_weight=0, updated_at=? WHERE lot_no=? AND status != 'SOLD'",
+                (customer or None, now, lot_no)
+            )
             _write_audit_log(
                 db,
                 event_type="SOLD",

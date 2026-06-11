@@ -156,6 +156,6 @@ def get_version():
         logger.warning("version.py load failed: %s", e)
         return ok_response(data={
             "app_name": "SQM 재고관리 시스템",
-            "version":  "8.7.0",
+            "version":  "8.7.1",
             "note":     "version.py 로드 실패 — 기본값 표시"
         })

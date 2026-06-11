@@ -837,15 +837,10 @@ class DatabaseSchemaMixin:
                 if "duplicate column" not in str(e).lower():
                     logger.debug(f"[마이그레이션] {table}.{column} 스킵: {e}")
 
-        self._migrate_v289_picking_list()
-        self._migrate_v388_column_unify()
-        self._migrate_v391_sample_tonbag()
-        self._migrate_v396_search_indexes()
-        self._migrate_v588_con_return()
-        self._migrate_v591_tonbag_fk_columns()
-        self._migrate_v593_allocation_plan()
-        self._migrate_v599_missing_columns()
-        self._migrate_v600_picking_sold_tables()
+        # [fix D-7] v289~v600 9개 마이그레이션 이중 실행 제거
+        # _run_all_migrations()에서 이미 실행하므로 여기서 중복 호출 불필요
+        # (각 함수가 IF NOT EXISTS로 멱등하나 대용량 DB에서 불필요한 전체 스캔 발생)
+        pass  # → _run_all_migrations() 에서 일괄 처리
 
     def _verify_schema(self) -> Dict[str, Any]:
         """DB 스키마 자동 점검 — 필수 테이블/컬럼 확인"""

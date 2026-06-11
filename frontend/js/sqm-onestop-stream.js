@@ -20,7 +20,10 @@
   if (window.__SQM_ONESTOP_STREAM__) return;
   window.__SQM_ONESTOP_STREAM__ = true;
 
-  var API = window.SQM_API_BASE || window.location.origin || '';
+  function _getApiBase() {
+    return window.SQM_API_BASE || (window.location && window.location.origin) || '';
+  }
+  var API = _getApiBase(); // 초기값 (하위 호환)
 
   /* ── job_id 생성 ───────────────────────────────────────────────────── */
   function _newJobId() {
@@ -157,7 +160,7 @@
 
     // 1) register
     try {
-      fetch(API + '/api/onestop/parse-progress/register', {
+      fetch(_getApiBase() + '/api/onestop/parse-progress/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job_id: jobId }),
@@ -167,7 +170,7 @@
     // 2) EventSource 연결
     if (_es) { try { _es.close(); } catch (_) {} _es = null; }
     try {
-      _es = new EventSource(API + '/api/onestop/parse-stream/' + encodeURIComponent(jobId));
+      _es = new EventSource(_getApiBase() + '/api/onestop/parse-stream/' + encodeURIComponent(jobId));
     } catch (e) {
       _addLine('error', 'EventSource 생성 실패: ' + (e && e.message || e));
       return;

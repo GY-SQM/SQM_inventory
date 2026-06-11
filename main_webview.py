@@ -84,7 +84,7 @@ def _acquire_single_instance_lock():
     return True
 
 log = logging.getLogger(__name__)
-log.info(f"=== SQM v8.7.0 시작 — 로그 파일: {LOG_PATH} ===")
+log.info(f"=== SQM v8.7.1 시작 — 로그 파일: {LOG_PATH} ===")
 
 # ─────────────────────────────────────────────────────────────
 # [Patch 3] 전역 예외 훅 — 미포획 예외 전부 로그 파일에 기록
@@ -155,17 +155,28 @@ def run_api_server():
     try:
         import uvicorn
         from backend.api import app
-        # [P11 PATCH] uvicorn 로거 분리 (SQM root 로거로의 propagate 차단).
-        # uvicorn 은 자체 핸들러로 stdout 에 출력하므로 SQM 로깅이 중복 캡처 안 함.
+        # [P11 PATCH] uvicorn 로거 분리
         for _uv_logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
             logging.getLogger(_uv_logger_name).propagate = False
-        uvicorn.run(
-            app,
-            host=API_HOST,
-            port=API_PORT,
-            log_level="debug",       # warning → debug (모든 요청 보임)
-            access_log=True,         # 요청 로그 활성화
-        )
+        # [fix D-9] TOCTOU 대응: 포트 바인딩 실패 시 다음 포트로 재시도
+        global API_PORT
+        _max_retry = 3
+        for _retry in range(_max_retry):
+            try:
+                uvicorn.run(
+                    app,
+                    host=API_HOST,
+                    port=API_PORT,
+                    log_level="debug",
+                    access_log=True,
+                )
+                break  # 정상 종료
+            except OSError as _oe:
+                if 'address already in use' in str(_oe).lower() and _retry < _max_retry - 1:
+                    API_PORT += 1
+                    log.warning(f"[D-9] 포트 충돌 → 재시도 포트 {API_PORT}")
+                else:
+                    raise
     except Exception as e:
         log.exception(f"API 서버 시작 실패: {e}")
 
@@ -462,7 +473,7 @@ SPLASH_HTML = '''<!DOCTYPE html>
   <h1>SQM Inventory</h1>
   <p class="sub">서버에 연결하는 중…</p>
   <div class="spinner"></div>
-  <div class="ver">v8.7.0</div>
+  <div class="ver">v8.7.1</div>
 </body>
 </html>
 '''
@@ -629,7 +640,7 @@ def main():
         _win_w, _win_h, _win_max = load_window_state()
         # [P1 PATCH] url= 대신 html=SPLASH_HTML 로 즉시 표시 (API 대기 없음).
         window = webview.create_window(
-            title='SQM Inventory v8.7.0',
+            title='SQM Inventory v8.7.1',
             html=SPLASH_HTML,
             width=_win_w,
             height=_win_h,

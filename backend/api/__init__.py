@@ -138,7 +138,7 @@ def _run_db_migrations():
 
 _run_db_migrations()
 
-app = FastAPI(title="SQM Inventory API", version="8.7.0")
+app = FastAPI(title="SQM Inventory API", version="8.7.1")
 
 
 # ── 정적 파일 캐시 무효화 미들웨어 ──────────────────────────────────────────
@@ -462,7 +462,9 @@ except Exception as e:
 try:
     from backend.api.inventory_api import inv_router, alloc_router, tb_router, scan_router, health_router
     app.include_router(inv_router)
-    app.include_router(alloc_router)
+    # [fix B-7] alloc_router (/api/allocation) 이중 등록 제거
+    # allocation_api.py 의 router 가 완전한 구현체 — inventory_api.py 의 alloc_router 는 include 하지 않음
+    # app.include_router(alloc_router)
     app.include_router(tb_router)
     app.include_router(scan_router)
     app.include_router(health_router)
@@ -598,7 +600,7 @@ def health():
         "engine_available": ENGINE_AVAILABLE,
         "modules_loaded": loaded,
         "modules_total": 8,
-        "version": "8.7.0",
+        "version": "8.7.1",
     }
 
 # ── Dashboard ────────────────────────────────────────────────

@@ -685,7 +685,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
                 return result
             except Exception as _ce:
                 # v8.7.1 [VISIBILITY]: 캐시 실패를 debug 로깅 (구조적 수정은 Phase 2.5)
-                logger.warning("[DB.fetchone] 캐시 경로 실패, 비캐시 폴백: %s", _ce, exc_info=True)
+                logger.debug("[DB.fetchone] 캐시 경로 실패, 비캐시 폴백: %s", _ce)  # [fix D-8] warning→debug (빈번 발생 시 로그 폭탄 방지)
         cursor = self.conn.cursor()
         cursor.execute(sql, params)
         row = cursor.fetchone()
@@ -717,7 +717,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
                 return result
             except Exception as _ce:
                 # v8.7.1 [VISIBILITY]: 캐시 실패를 warning 로깅 (구조적 수정은 Phase 2.5)
-                logger.warning("[DB.fetchall] 캐시 경로 실패, 비캐시 폴백: %s", _ce, exc_info=True)
+                logger.debug("[DB.fetchall] 캐시 경로 실패, 비캐시 폴백: %s", _ce)  # [fix D-8] warning→debug
         try:
             from .performance import monitor
             import time

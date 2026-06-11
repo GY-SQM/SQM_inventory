@@ -545,7 +545,7 @@ def reject_allocation(data: dict = Body(...)):
         updated = 0
         for plan_id in ids:
             cur = con.execute(
-                "UPDATE allocation_plan SET approval_status='REJECTED', updated_at=datetime('now') WHERE id=?",
+                "UPDATE allocation_plan SET status='REJECTED', updated_at=datetime('now') WHERE id=?",  -- [fix B-1] approve와 동일 컬럼(status) 사용
                 (plan_id,)
             )
             updated += cur.rowcount
@@ -589,7 +589,7 @@ def patch_allocation(lot_no: str = PathParam(...), data: dict = Body(...)):
                 list(inv_fields.values()) + [lot_no]
             )
         con.commit(); con.close()
-        return {"success": True, "lot_no": lot_no, "updated_fields": list(fields_to_update.keys()), "allocation_rows": updated}
+        return {"ok": True, "data": {"lot_no": lot_no, "updated_fields": list(fields_to_update.keys()), "allocation_rows": updated}}
     except HTTPException:
         raise
     except Exception as e:
@@ -630,6 +630,12 @@ def cancel_by_sale_ref(data: dict = Body(...)):
             con.execute(
                 "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL "
                 "WHERE lot_no=? AND status NOT IN ('SOLD')",
+                (lot_no,)
+            )
+            # [fix B-2] inventory_tonbag 도 AVAILABLE 복구 (누락 수정)
+            con.execute(
+                "UPDATE inventory_tonbag SET status='AVAILABLE' "
+                "WHERE lot_no=? AND status IN ('RESERVED','PICKED','STAGED')",
                 (lot_no,)
             )
         con.commit(); con.close()

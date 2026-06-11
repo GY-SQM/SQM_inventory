@@ -1,7 +1,8 @@
 (function () {
   'use strict';
 
-  var API = window.API;
+  // [fix F-3] window.API 즉시캡처 제거 → fetch 시점에 실시간 읽기
+  function _api() { return window.SQM_API_BASE || (window.location && window.location.origin) || ''; }
   var escapeHtml = window.escapeHtml;
   var showDataModal = window.showDataModal;
   var showToast = window.showToast;

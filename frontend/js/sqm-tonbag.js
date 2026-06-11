@@ -3726,7 +3726,7 @@
       }
       if (ev.key==='F5'&&!ev.ctrlKey&&!ev.metaKey){
         ev.preventDefault();
-        renderPage(window.getCurrentRoute()||'dashboard');
+        if (confirm('화면을 새로고침 하시겠습니까?')) renderPage(window.getCurrentRoute()||'dashboard');
       }
     });
 
@@ -3849,26 +3849,26 @@
     }, 30000);
 
     window.SQM = window.SQM || {};
-    window.SQM.version = '864.3-phase5';
+    window.SQM.version = '8.7.1';
     window.SQM.renderPage = renderPage;
     window.SQM.dispatchAction = dispatchAction;
     window.SQM.currentRoute = function(){ return window.getCurrentRoute(); };
-    console.info('[SQM v8.7.0] boot complete. initial route:', initial);
+    console.info('[SQM v8.7.1-tonbag] boot complete. initial route:', initial);
   }
 
   /* sqm-onestop-inbound.js 의존성 전역 노출 */
   window.showDataModal = showDataModal;
   window._makeDraggableResizable = _makeDraggableResizable;
-  Object.defineProperty(window, 'window.getCurrentRoute()', {
-    get: function() { return window.SQM && window.SQM.currentRoute ? window.SQM.currentRoute() : ''; },
-    configurable: true
-  });
+  // [fix F-6] boot() 제거 후 sqm-inline.js boot()가 window.applyStoredFontScale 호출할 수 있게 노출
+  window.applyStoredFontScale  = applyStoredFontScale;
+  window.applyStoredTablePreset = applyStoredTablePreset;
+  // [fix F-10] 'window.getCurrentRoute()' 오타 property 제거 — 무의미한 defineProperty였음
+  // window.getCurrentRoute 는 sqm-core.js가 function으로 이미 정의함
 
-  if (document.readyState==='loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
+  // [fix F-6] boot() DOMContentLoaded 등록 제거 — sqm-inline.js boot()가 단독 진입점
+  // sqm-tonbag.js는 기능 모듈로만 동작. 이중 boot() 실행 시:
+  //   - KPI API 2회 호출, 초기 페이지 2회 렌더, _dbgBuild() DOM 중복 생성 발생했음
+  // sqm-inline.js의 boot()가 applyStoredFontScale, applyStoredTablePreset 등을 포함하므로 안전
 
   // ═══════════════════════════════════════════════════════════════════
   // 🤖 AI 선사 템플릿 자동 생성 모달

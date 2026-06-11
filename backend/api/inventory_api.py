@@ -32,6 +32,8 @@ def _db_path() -> str:
 def _db() -> sqlite3.Connection:
     db = sqlite3.connect(_db_path(), timeout=10)
     db.row_factory = sqlite3.Row
+    db.execute("PRAGMA journal_mode=WAL")    # [fix B-5] 동시 read/write 허용
+    db.execute("PRAGMA busy_timeout=3000")   # [fix B-5] 잠금 충돌 3초 대기
     return db
 
 def _rows(cur) -> list:

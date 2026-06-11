@@ -9,9 +9,24 @@
   window.__SQM_INLINE_INSTALLED__ = true;
 
 
-  var API = window.SQM_API_BASE || (window.location && window.location.origin) || '';
+  // [fix] IIFE 시점 고정 캡처 → 매 호출 시 실시간 읽기 (PyWebView SQM_API_BASE 타이밍 문제 해결)
+  function _getApiBase() {
+    return window.SQM_API_BASE || (window.location && window.location.origin) || '';
+  }
+  var API = _getApiBase(); // 초기값 (하위 호환)
 
 
+
+  /* ===================================================
+     0. SAFE HELPERS (sqm-core.js 로드 실패 방어)
+     =================================================== */
+  // [fix F-12] sqm-core.js 미로드 시 ReferenceError 방지 — 안전 showToast 폴백
+  function showToast(type, msg) {
+    if (typeof window.showToast === 'function') {
+      return window.showToast.apply(window, arguments);
+    }
+    console.warn('[SQM showToast 폴백]', type, msg);
+  }
 
   /* ===================================================
      1. UTILITIES
@@ -148,13 +163,14 @@
     });
   }
 
+  // [fix F-11] 내부 renderPage → _navigateAndSync 로 별칭 추가해 window.renderPage 혼동 방지
+  // 기존 이름도 유지 (내부 참조 다수이므로 alias 방식)
   function renderPage(route) {
-    // P2-1/P2-2 (2026-05-17): sqm-core.js가 권위 라우터지만,
-    // inline 내부의 레거시 비동기 guard들도 아직 _currentRoute를 읽는다.
-    // 포워딩 전에 로컬 미러를 동기화해 기존 guard가 false-negative로 렌더를 막지 않게 한다.
+    // sqm-core.js의 window.renderPage가 권위 라우터. 로컬 _currentRoute 동기화 후 위임.
     _currentRoute = route;
     window.renderPage(route);
   }
+  var _navigateAndSync = renderPage;  // [fix F-11] 명확한 별칭 — 순환참조 위험 명시 방지용
 
 
   // P2-1 (2026-05-17): window.renderPage 및 getCurrentRoute는 sqm-core.js 버전이 권위
@@ -1160,7 +1176,7 @@
     var form = new FormData();
     form.append('file', file, file.name);
     var xhr = new XMLHttpRequest();
-    xhr.open('POST', API + '/api/outbound/onestop-scan-parse');
+    xhr.open('POST', _getApiBase() + '/api/outbound/onestop-scan-parse');
     xhr.onload = function(){
       var body; try { body = JSON.parse(xhr.responseText); } catch(e){ body = null; }
       if (xhr.status >= 200 && xhr.status < 300 && body && body.ok) {
@@ -1612,7 +1628,7 @@
         var el = document.getElementById('bma-body');
         if (!el) return;
         el.innerHTML = '<span style="color:var(--text-muted)">불러오는 중…</span>';
-        fetch(API + '/api/tonbag/batch-move/pending')
+        fetch(_getApiBase() + '/api/tonbag/batch-move/pending')
           .then(function(r) { return r.json(); })
           .then(function(res) {
             if (el) el.innerHTML = renderBatches(res.data || []);
@@ -1629,7 +1645,7 @@
           reason = prompt('반려 사유를 입력하세요 (선택):', '') || '';
         }
         if (action === 'approve' && !sqmConfirm('배치 ' + batchId + ' 를 승인하시겠습니까?\n승인 즉시 DB에 반영됩니다.')) return;
-        var url = API + '/api/tonbag/batch-move/' + action + '/' + encodeURIComponent(batchId);
+        var url = _getApiBase() + '/api/tonbag/batch-move/' + action + '/' + encodeURIComponent(batchId);
         fetch(url, {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
@@ -1816,7 +1832,7 @@
     function _cpLoad() {
       var listEl = document.getElementById('cp-list');
       if (listEl) listEl.innerHTML = '<p style="color:var(--text-muted);padding:12px">로딩 중...</p>';
-      fetch(API + '/api/carriers')
+      fetch(_getApiBase() + '/api/carriers')
         .then(function(r) { return r.json(); })
         .then(function(d) {
           if (listEl) listEl.innerHTML = _renderCarrierList(d.data || []);
@@ -1862,7 +1878,7 @@
       if (!name.trim()) { showToast('error', '표시명을 입력하세요'); return; }
       var isEdit = window._cpEditId && window._cpEditId === id.trim();
       var method = isEdit ? 'PUT' : 'POST';
-      var url    = isEdit ? (API + '/api/carriers/' + encodeURIComponent(id.trim())) : (API + '/api/carriers');
+      var url    = isEdit ? (_getApiBase() + '/api/carriers/' + encodeURIComponent(id.trim())) : (_getApiBase() + '/api/carriers');
       fetch(url, { method: method, headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ carrier_id: id.trim(), display_name: name.trim(),
           default_product: product.trim(), bag_weight_kg: weight, note: note.trim() }) })
@@ -1882,7 +1898,7 @@
     };
 
     window._cpEdit = function(cid) {
-      fetch(API + '/api/carriers/' + encodeURIComponent(cid))
+      fetch(_getApiBase() + '/api/carriers/' + encodeURIComponent(cid))
         .then(function(r) { return r.json(); })
         .then(function(p) {
           window._cpEditId = cid;
@@ -1899,7 +1915,7 @@
 
     window._cpDelete = function(cid) {
       if (!sqmConfirm(cid + ' 프로파일을 삭제하시겠습니까?')) return;
-      fetch(API + '/api/carriers/' + encodeURIComponent(cid), { method: 'DELETE' })
+      fetch(_getApiBase() + '/api/carriers/' + encodeURIComponent(cid), { method: 'DELETE' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
           if (d.ok || d.success) { showToast('success', cid + ' 삭제 완료'); _cpLoad(); }
@@ -2578,6 +2594,7 @@
     'onApprovalQueue':   {m:'JS',   u:'approval-queue',                            lbl:'승인 대기'},
     'onApplyApproved':   {m:'POST', u:'/api/allocation/apply-approved',            lbl:'예약 반영 (승인분)'},
     'onPickingTemplateManage': {m:'JS', u:'picking-template',                      lbl:'피킹 템플릿 관리'},
+    'onImportAllocationTemplate': {m:'JS', u:'import-alloc-template',                lbl:'📥 양식 가져오기'},  // [fix F-4] tonbag에만 있던 액션 inline에 추가
     'onMoveApprovalQueue': {m:'JS', u:'move-approval-queue',                      lbl:'대량 이동 승인'},
     'onInboundTemplateManage': {m:'JS', u:'inbound-template',                     lbl:'입고 파싱 템플릿'},
     'onFontSizeSettings':    {m:'JS', u:'font-size-settings',                       lbl:'🔤 화면 폰트 크기'},
@@ -2641,7 +2658,7 @@
     if (typeof window.showTonbagListModal === 'function') {
       window.showTonbagListModal();
     } else {
-      sqmDownloadFileUrl(API + '/api/action2/export-tonbag-excel', conf.lbl);
+      sqmDownloadFileUrl(_getApiBase() + '/api/action2/export-tonbag-excel', conf.lbl);
     }
   }
 
@@ -2649,7 +2666,7 @@
     if (typeof window.showLotListModal === 'function') {
       window.showLotListModal();
     } else {
-      sqmDownloadFileUrl(API + '/api/action/export-lot-excel', conf.lbl);
+      sqmDownloadFileUrl(_getApiBase() + '/api/action/export-lot-excel', conf.lbl);
     }
   }
 
@@ -2718,13 +2735,13 @@
     'location-map-import': function(){ if (typeof window.showLocationMapImportModal === 'function') { window.showLocationMapImportModal(); } else { showToast('error', '위치재고 import 모듈 미로드'); } },
 
     /* exports */
-    'export-dl-e1': function(conf){ sqmDownloadFileUrl(API + '/api/action/export-engine-excel?option=1', conf.lbl); },
-    'export-dl-e3': function(conf){ sqmDownloadFileUrl(API + '/api/action/export-engine-excel?option=3', conf.lbl); },
+    'export-dl-e1': function(conf){ sqmDownloadFileUrl(_getApiBase() + '/api/action/export-engine-excel?option=1', conf.lbl); },
+    'export-dl-e3': function(conf){ sqmDownloadFileUrl(_getApiBase() + '/api/action/export-engine-excel?option=3', conf.lbl); },
     'export-dl-e4': function(conf){
       var incSample = window.sqmConfirm('톤백리스트(Sub LOT): 샘플 톤백을 포함할까요?\n\n[확인] 포함 · [취소] 제외');
-      sqmDownloadFileUrl(API + '/api/action/export-engine-excel?option=4&include_sample=' + (incSample ? 'true' : 'false'), conf.lbl);
+      sqmDownloadFileUrl(_getApiBase() + '/api/action/export-engine-excel?option=4&include_sample=' + (incSample ? 'true' : 'false'), conf.lbl);
     },
-    'export-dl-e6': function(conf){ sqmDownloadFileUrl(API + '/api/action/export-engine-excel?option=6', conf.lbl); },
+    'export-dl-e6': function(conf){ sqmDownloadFileUrl(_getApiBase() + '/api/action/export-engine-excel?option=6', conf.lbl); },
     'export-tonbag-simple-dl': function(conf){ _downloadTonbagSimple(conf); },
     'export-lot-excel-dl': function(conf){ _downloadLotExcel(conf); },
 
@@ -2924,7 +2941,7 @@
       }
       if (ev.key==='F5'&&!ev.ctrlKey&&!ev.metaKey){
         ev.preventDefault();
-        renderPage(_currentRoute||'dashboard');
+        if (confirm('화면을 새로고침 하시겠습니까?')) renderPage(_currentRoute||'dashboard');
       }
     });
 
@@ -3031,7 +3048,7 @@
     loadAlerts();
     loadStatusbar();
     startKpiPolling();
-    dbgLog('🚀','SQM v864.3 부팅 완료', 'F8 = 디버그 패널 토글','#4caf50');
+    dbgLog('🚀','SQM v8.7.1 부팅 완료', 'F8 = 디버그 패널 토글','#4caf50');
 
     var hash = location.hash.slice(1);
     var lastTab = null;
@@ -3054,7 +3071,7 @@
     }, 30000);
 
     window.SQM = window.SQM || {};
-    window.SQM.version = '864.3-phase5';
+    window.SQM.version = '8.7.1';
     window.SQM.renderPage = renderPage;
     window.SQM.dispatchAction = dispatchAction;
     /* [FIX 20260604] dispatch split-brain 제거:
@@ -3064,13 +3081,20 @@
        (inline ENDPOINTS 가 키보드 액션 onOnBackup/onExport/onIntegrityCheck/onOnQuickOutbound 전부 커버 + 미등록 액션 안전 폴백 확인 완료) */
     window.dispatchAction = dispatchAction;
     if (typeof window.SQM.currentRoute !== 'function') window.SQM.currentRoute = function(){ return _currentRoute; };
-    console.info('[SQM v864.3] boot complete. initial route:', initial);
+    console.info('[SQM v8.7.1] boot complete. initial route:', initial);
   }
 
   /* sqm-onestop-inbound.js 의존성 전역 노출 */
   window.API = API;
+  // [fix F-5] window._currentRoute getter 단순화:
+  //   sqm-core.js의 window.getCurrentRoute()가 단일 정본이므로 이를 위임
+  //   (기존: window.SQM.currentRoute() 호출 — sqm-inline 로컬 변수만 반영하는 문제)
   Object.defineProperty(window, '_currentRoute', {
-    get: function() { return window.SQM && window.SQM.currentRoute ? window.SQM.currentRoute() : ''; },
+    get: function() {
+      return typeof window.getCurrentRoute === 'function'
+        ? window.getCurrentRoute()
+        : (window.SQM && window.SQM.currentRoute ? window.SQM.currentRoute() : '');
+    },
     configurable: true
   });
 

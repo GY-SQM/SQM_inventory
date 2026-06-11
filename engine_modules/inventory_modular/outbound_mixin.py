@@ -899,7 +899,11 @@ class OutboundMixin(InventoryBaseMixin):
                     )
                     return result
                 
-                weight = tonbag['weight'] or 0
+                weight = float(tonbag['weight'] or 0)
+                # [fix D-5] 복구 weight 음수 방어 — 음수면 DB 트리거 없이도 차단
+                if weight < 0:
+                    raise ValueError(f'복구 무게는 양수여야 합니다: {weight}')
+                weight = abs(weight)  # 방어적 절대값
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 
                 # 1. 톤백: PICKED → AVAILABLE
@@ -915,13 +919,20 @@ class OutboundMixin(InventoryBaseMixin):
                 """, (STATUS_AVAILABLE, now, lot_no, sub_lt))
 
                 # 2. inventory: current_weight 복구
-                self.db.execute("""
-                    UPDATE inventory SET
-                        current_weight = current_weight + ?,
-                        picked_weight = MAX(0, picked_weight - ?),
-                        updated_at = ?
-                    WHERE lot_no = ?
-                """, (weight, weight, now, lot_no))
+                # [fix D-3] trg_inventory_weight_floor RAISE(FAIL) → OperationalError 명시 처리
+                try:
+                    self.db.execute("""
+                        UPDATE inventory SET
+                            current_weight = current_weight + ?,
+                            picked_weight = MAX(0, picked_weight - ?),
+                            updated_at = ?
+                        WHERE lot_no = ?
+                    """, (weight, weight, now, lot_no))
+                except Exception as _trg_e:
+                    _msg = str(_trg_e).lower()
+                    if 'cannot be negative' in _msg or 'weight' in _msg:
+                        raise ValueError(f'재고 음수 차단 트리거: {_trg_e}')
+                    raise
 
                 # v7.2.0 [RT-FIX]: OUTBOUND/SOLD 상태 반품 시 sold_table / picking_table 정리
                 was_sold = tonbag['status'] in (STATUS_OUTBOUND, STATUS_SOLD, 'SHIPPED', 'CONFIRMED')

@@ -57,19 +57,9 @@ export async function navigateTo(pageId, container) {
 }
 
 export function initRouter() {
-  document.querySelectorAll('[data-route]').forEach(el => {
-    el.addEventListener('click', (ev) => {
-      ev.preventDefault();
-      navigateTo(el.dataset.route);
-    });
-  });
-  window.addEventListener('hashchange', () => {
-    const id = location.hash.slice(1);
-    if (id && PAGE_LOADERS[id]) navigateTo(id);
-  });
-  // 초기 진입
-  const initial = location.hash.slice(1)
-    || localStorage.getItem('sqm_last_tab')
-    || 'dashboard';
-  navigateTo(initial);
+  // [fix F-1+F-2] data-route 클릭 바인딩 제거 — sqm-inline.js bindAll()이 단독 권위 라우터
+  // router.js의 navigateTo(ES module 방식)는 sqm-core.js renderPage와 충돌하므로 비활성화
+  // hashchange 이벤트만 sqm-inline.js의 hashchange 핸들러와 중복되지 않게 등록하지 않음
+  // 이 함수는 하위 호환을 위해 존재하나 실질 동작은 없음
+  console.info('[SQM router.js] initRouter: 클릭 바인딩 비활성화 (sqm-inline.js 단독 라우팅)');
 }
