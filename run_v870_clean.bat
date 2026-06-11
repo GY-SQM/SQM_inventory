@@ -15,7 +15,7 @@ echo  PORT  : auto ^(starts from http://127.0.0.1:8765^)
 echo ====================================================
 echo.
 
-python main_webview.py
+pythonw main_webview.py
 
 if errorlevel 1 (
     echo.

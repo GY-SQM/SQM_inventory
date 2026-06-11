@@ -447,32 +447,107 @@ SPLASH_HTML = '''<!DOCTYPE html>
 <meta charset="utf-8">
 <title>SQM Inventory — 시작 중</title>
 <style>
-  html, body { margin:0; padding:0; height:100vh; background:#070e1a; }
-  body {
-    color:#e2e8f0;
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body {
+    height:100vh; background:#070e1a;
     font-family:'Segoe UI','Malgun Gothic',sans-serif;
+    color:#e2e8f0; user-select:none; -webkit-user-select:none;
+  }
+  body {
     display:flex; flex-direction:column;
     justify-content:center; align-items:center;
-    user-select:none; -webkit-user-select:none;
+    gap:0;
   }
-  h1 { font-size:32px; font-weight:800; margin:0 0 8px; color:#f59e0b; }
-  .sub { font-size:16px; color:#94a3b8; margin-bottom:32px; }
-  .spinner {
-    width:48px; height:48px;
-    border:4px solid #1e293b;
-    border-top-color:#f59e0b;
-    border-radius:50%;
-    animation:spin 1s linear infinite;
+
+  /* 로고 */
+  .logo-box {
+    display:flex; align-items:center; gap:14px; margin-bottom:28px;
   }
-  @keyframes spin { to { transform:rotate(360deg); } }
-  .ver { position:absolute; bottom:20px; right:20px;
-         font-size:12px; color:#475569; }
+  .logo-icon {
+    font-size:52px; line-height:1;
+    filter: drop-shadow(0 0 12px rgba(245,158,11,0.5));
+  }
+  .logo-text h1 {
+    font-size:26px; font-weight:800; color:#f59e0b; letter-spacing:1px;
+  }
+  .logo-text p {
+    font-size:12px; color:#64748b; margin-top:2px; letter-spacing:2px;
+    text-transform:uppercase;
+  }
+
+  /* 구분선 */
+  .divider {
+    width:220px; height:1px;
+    background:linear-gradient(90deg, transparent, #f59e0b44, transparent);
+    margin-bottom:28px;
+  }
+
+  /* 모래시계 + 상태 */
+  .status-box {
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+  }
+  .hourglass {
+    font-size:36px;
+    animation: hg-spin 2s steps(1) infinite;
+  }
+  @keyframes hg-spin {
+    0%   { content:'⏳'; opacity:1; }
+    50%  { opacity:0.4; }
+    100% { opacity:1; }
+  }
+  .status-text {
+    font-size:14px; color:#94a3b8; letter-spacing:0.5px;
+    animation: pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity:1; }
+    50%       { opacity:0.4; }
+  }
+
+  /* 진행 바 */
+  .progress-track {
+    width:260px; height:3px;
+    background:#1e293b; border-radius:2px; overflow:hidden;
+  }
+  .progress-bar {
+    height:100%; width:30%;
+    background:linear-gradient(90deg, #f59e0b, #fbbf24);
+    border-radius:2px;
+    animation: slide 1.6s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0%   { margin-left:-30%; }
+    100% { margin-left:100%; }
+  }
+
+  /* 버전 */
+  .ver {
+    position:absolute; bottom:20px; right:24px;
+    font-size:11px; color:#334155; letter-spacing:1px;
+  }
 </style>
 </head>
 <body>
-  <h1>SQM Inventory</h1>
-  <p class="sub">서버에 연결하는 중…</p>
-  <div class="spinner"></div>
+  <!-- 로고 -->
+  <div class="logo-box">
+    <div class="logo-icon">📦</div>
+    <div class="logo-text">
+      <h1>SQM Inventory</h1>
+      <p>Management System</p>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 상태 -->
+  <div class="status-box">
+    <div class="hourglass">⏳</div>
+    <div class="status-text">서버 시작 중 …</div>
+    <div class="progress-track">
+      <div class="progress-bar"></div>
+    </div>
+  </div>
+
   <div class="ver">v8.7.2</div>
 </body>
 </html>
