@@ -1236,9 +1236,14 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
       function _badge(id, data) {
         var el = document.getElementById(id);
         if (!el || !data) return;
-        var txt = '톤백 ' + data.bags + '개';
-        if (data.sample_bags > 0) txt += ' · 샘플 ' + data.sample_bags + '개';
-        el.textContent = txt;
+        // 톤백 개수 (샘플 있으면 2줄로 표시)
+        if (data.sample_bags > 0) {
+          el.innerHTML =
+            '<span style="display:block">톤백 ' + data.bags + '개</span>' +
+            '<span style="display:block;opacity:.7;font-size:9px">샘플 ' + data.sample_bags + '개</span>';
+        } else {
+          el.textContent = '톤백 ' + data.bags + '개';
+        }
       }
       _badge('badge-pending',    d.pending);
       _badge('badge-available',  d.available);

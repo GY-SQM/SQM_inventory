@@ -121,6 +121,7 @@
 
 /* ── 3. 사이드바 — 럭셔리 ──────────────────────────────────── */
 .sidebar, #sidebar {
+  width: 220px !important;  /* 톤백+샘플 배지 표시를 위해 확장 */
   background: linear-gradient(
     180deg,
     rgba(11, 19, 34, 0.99) 0%,
