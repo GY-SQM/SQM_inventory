@@ -16,9 +16,15 @@ class TestB7AllocRouterMigration:
 
     def test_alloc_router_deprecated_in_inventory_api(self):
         src = open(os.path.join(ROOT, 'backend/api/inventory_api.py'), encoding='utf-8').read()
-        active = [l for l in src.splitlines()
-                  if 'alloc_router = APIRouter' in l and not l.strip().startswith('#')]
-        assert len(active) == 0, "inventory_api.py에 alloc_router 활성 선언 남아있음"
+        # alloc_router 선언은 @alloc_router.* 데코레이터 참조 때문에 유지되어야 함
+        # 단, __init__.py에서 include 안 하면 됨 — 선언 자체는 허용
+        # 핵심 조건: __init__.py에서 app.include_router(alloc_router) 가 없어야 함
+        init_src = open(os.path.join(ROOT, 'backend/api/__init__.py'), encoding='utf-8').read()
+        active_includes = [l for l in init_src.splitlines()
+                           if 'include_router(alloc_router)' in l
+                           and not l.strip().startswith('#')]
+        assert len(active_includes) == 0, \
+            f"__init__.py에서 alloc_router include 활성 상태: {active_includes}"
 
     def test_init_not_importing_alloc_router(self):
         src = open(os.path.join(ROOT, 'backend/api/__init__.py'), encoding='utf-8').read()

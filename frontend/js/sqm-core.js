@@ -592,6 +592,7 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
       case 'C-7': e.preventDefault(); renderPage('dashboard'); break;
       case 'C-8': e.preventDefault(); renderPage('log'); break;
       case 'C-9': e.preventDefault(); renderPage('scan'); break;
+      case 'C-f': e.preventDefault(); dispatchAction('onGlobalSearch'); break;  // [신규] 통합 검색
       case 'C-b': e.preventDefault(); dispatchAction('onOnBackup'); break;
       case 'C-e': e.preventDefault(); dispatchAction('onExport'); break;
       case 'C-i': e.preventDefault(); dispatchAction('onIntegrityCheck'); break;

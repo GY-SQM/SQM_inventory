@@ -2515,7 +2515,7 @@
     'onOutboundScheduled': {m:'JS', u:'outbound',                                 lbl:'출고 예정'},
     /* v864.3 Phase 4-B: 출고 확정 네이티브 폼 */
     'onOutboundConfirm': {m:'JS', u:'outbound-confirm', lbl:'출고 확정'},
-    'onOutboundHistory': {m:'GET',  u:'/api/q/outbound-status',                  lbl:'출고 이력'},
+    'onOutboundHistory': {m:'GET',  u:'/api/q/outbound-history',                 lbl:'📜 출고 이력 조회'},  // [UI 연결]
     'onOutboundStatus':  {m:'JS',   u:'outbound',                                 lbl:'출고 현황'},
     'onApprovalHistory': {m:'GET',  u:'/api/q/approval-history',                 lbl:'승인 이력 조회'},
 
@@ -2529,7 +2529,7 @@
     'onInventoryAllocation': {m:'JS', u:'allocation-upload', lbl:'Allocation 입력'},
     'onIntegrityCheck':  {m:'GET',  u:'/api/action/integrity-check',             lbl:'정합성 검사'},
     'onInventoryReport': {m:'GET',  u:'/api/q/inventory-report',                 lbl:'재고 현황 보고서'},
-    'onInventoryTrend':  {m:'GET',  u:'/api/q/inventory-trend',                  lbl:'재고 추이 차트'},
+    'onInventoryTrend':  {m:'GET',  u:'/api/q/inventory-trend',                  lbl:'📈 재고 추이 데이터'},  // [UI 연결]
     'onInventoryAdjust':  {m:'JS',   u:'inventory-adjust',                          lbl:'재고 수정'},
     'onRefreshExcelStatus': {m:'JS',  u:'refresh-excel-status',                     lbl:'Excel 상태 갱신'},
 
@@ -2558,7 +2558,7 @@
        Real settings dialog ships in Sprint 2 (SettingsDialogMixin port, ~5d). */
     'onProductMaster':   {m:'JS',   u:'product-master',                            lbl:'제품 마스터'},
     'onProductInventoryReport': {m:'GET', u:'/api/q/product-inventory',           lbl:'제품별 재고 현황'},
-    'onIntegrityRepair': {m:'GET',  u:'/api/action/integrity-check',                     lbl:'정합성 검사/복구'},
+    'onIntegrityRepair': {m:'POST', u:'/api/action/fix-integrity',                       lbl:'🔧 정합성 자동 복구'},  // [UI 연결]
     'onOptimizeDb':      {m:'POST', u:'/api/action3/optimize-db',                 lbl:'DB 최적화'},
     'onCleanupLogs':     {m:'POST', u:'/api/action3/cleanup-logs',                lbl:'로그 정리'},
     'onDbInfo':          {m:'GET',  u:'/api/info/system-info',                    lbl:'DB 정보'},
@@ -2637,7 +2637,7 @@
     'onLocationMapImport':{m:'JS', u:'location-map-import', lbl:'📥 위치재고 엑셀 Import'},
 
     /* 전역 검색: v866는 Inventory 탭 검색으로 대체 (기능 단위 동등 목표) */
-    'onGlobalSearch':      {m:'JS', u:'inventory',                                lbl:'🔍 전역 검색'},
+    'onGlobalSearch':      {m:'JS', u:'inventory',                                lbl:'🔍 통합 검색'},  // [UI 연결] Ctrl+F
 
     /* View 메뉴 탭 이동 */
     'onGoInventoryTab':  {m:'JS',   u:'inventory',                                lbl:'Inventory 탭'},

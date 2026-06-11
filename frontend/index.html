@@ -178,6 +178,8 @@
         <button class="submenu-parent-btn" type="button">📊 조회/관리</button>
         <div class="submenu-dropdown">
           <button data-action="onOutboundStatus" title="전체 출고 이력을 조회합니다. 날짜·고객사·LOT별 필터 가능">📋 출고 현황 조회</button>
+          <button data-action="onOutboundHistory" title="출고 이력 전체를 날짜·고객사별로 조회합니다">📜 출고 이력 조회</button>
+          <button data-action="onDetailOfOutbound" title="출고 건별 상세 내역을 조회합니다 (LOT·톤백·중량 포함)">🔎 출고 상세 내역</button>
           <button data-action="onOutboundConfirm" title="임시 처리된 출고 건을 최종 확정합니다">✅ 출고 확정</button>
           <button data-action="onPickingTemplateManage" title="출고 피킹 양식 템플릿을 관리합니다">📦 출고 피킹 템플릿 관리</button>
           <button data-action="onSwapReport" title="컨테이너 Swap 처리 내역을 조회합니다">🔁 Swap 리포트</button>
@@ -204,6 +206,7 @@
       <button data-action="onMoveApprovalQueue" title="대량 이동 요청 목록을 확인하고 일괄 승인 처리합니다">✅ 대량 이동 승인</button>
       <hr class="menu-sep">
       <button data-action="onStockTrendChart" title="기간별 재고 증감 추이를 차트로 시각화합니다">📊 재고 추이 차트</button>
+      <button data-action="onInventoryTrend" title="재고 증감 추이를 상세 데이터 테이블로 조회합니다">📈 재고 추이 데이터</button>
       <hr class="menu-sep">
       <button data-action="onInventoryAdjust" title="자연어 입력으로 재고 수량을 조정합니다 (파손·분실·실사 등)">✏️ 재고 수정</button>
       <button data-action="onRefreshExcelStatus" title="DB allocation_plan 기준으로 _int.xlsx STATUS 컬럼을 갱신합니다 (RESERVED/SOLD/AVAILABLE)">🔄 Excel 상태 갱신</button>
@@ -271,6 +274,7 @@
         <button class="submenu-parent-btn" type="button">🩺 정합성</button>
         <div class="submenu-dropdown">
           <button data-action="onIntegrityCheck" title="DB 데이터의 정합성을 시각적으로 확인합니다. 이상 데이터 감지">🩺 데이터 정합성 검사</button>
+          <button data-action="onIntegrityRepair" title="정합성 검사 결과를 바탕으로 이상 데이터를 자동으로 복구합니다">🔧 정합성 자동 복구</button>
           <button data-action="onFixLotIntegrity" title="LOT 상태값 불일치를 자동으로 감지하고 복구합니다">🛠️ LOT 상태 정합성 복구</button>
         </div>
       </div>
@@ -302,6 +306,7 @@
   <div class="menubar-spacer"></div>
   <button id="weight-panel-btn" class="topbar-btn" data-action="show-weight-panel" title="무게 현황 (제고 가치 / PICKED 포함 토글)">⚖️ <span id="weight-nav-label">-- MT</span></button><span id="weight-picked-badge" style="display:none;background:var(--warning);color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:700;margin-left:2px">+<span id="weight-picked-nav">0</span> MT PICKED</span>
   <span class="topbar-sep">|</span>
+  <button class="topbar-btn" data-action="onGlobalSearch" title="LOT·제품·고객사·BL번호 통합 검색 (단축키: Ctrl+F)">🔍 통합 검색</button>
   <button class="topbar-btn" data-action="refresh-all" title="전체 데이터를 서버에서 다시 불러옵니다 (단축키: F5)">🔄 새로고침</button>
   <span class="topbar-sep">|</span>
   <button class="topbar-btn" data-action="theme-dark" title="다크 모드로 전환합니다">🌙 Dark</button>
