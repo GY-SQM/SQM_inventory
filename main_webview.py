@@ -776,26 +776,15 @@ def main():
                     log.info(f"API 준비 완료 -> 메인 URL navigate: {url}")
                     _phase[0] = "main"
                     try:
-                        # [fix] load_url 전에 SQM_API_BASE를 먼저 주입
-                        # on_loaded 이후 evaluate_js는 JS 파일 실행보다 늦어 타이밍 실패
-                        # → load_html로 SQM_API_BASE가 포함된 HTML 직접 로드
-                        import urllib.request as _req
-                        try:
-                            with _req.urlopen(url, timeout=5) as _resp:
-                                _html = _resp.read().decode('utf-8')
-                            _inject = (
-                                f'<script>'
-                                f'window.SQM_API_BASE="http://{API_HOST}:{API_PORT}";'
-                                f'console.log("[SQM] API Base(pre-injected):",window.SQM_API_BASE);'
-                                f'</script>'
-                            )
-                            _html = _html.replace('<head>', f'<head>\n  {_inject}', 1)
-                            # load_html 후 상대경로 리소스(css/js) 해결을 위해 base URL 설정
-                            window.load_html(_html, base_uri=url)
-                            log.info("[fix] SQM_API_BASE HTML 직접 주입 완료")
-                        except Exception as _e:
-                            log.warning(f"HTML 주입 실패, load_url 폴백: {_e}")
-                            window.load_url(url)
+                        # [fix v2] load_html(base_uri) 방식은 PyWebView CSS/JS 경로 깨짐
+                        # → load_url에 sqm_base 파라미터 추가, JS에서 읽어서 사용
+                        url_with_base = (
+                            f'http://{API_HOST}:{API_PORT}/'
+                            f'?sqm_base=http%3A%2F%2F{API_HOST}%3A{API_PORT}'
+                            f'&_t={int(_time.time())}'
+                        )
+                        window.load_url(url_with_base)
+                        log.info("[fix v2] sqm_base 파라미터 포함 load_url 완료")
                     except Exception as e:
                         log.exception(f"window.load_url 실패: {e}")
                 else:

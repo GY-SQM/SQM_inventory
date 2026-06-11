@@ -9,9 +9,14 @@
   window.__SQM_INLINE_INSTALLED__ = true;
 
 
-  // [fix] IIFE 시점 고정 캡처 → 매 호출 시 실시간 읽기 (PyWebView SQM_API_BASE 타이밍 문제 해결)
+  // [fix v2] sqm_base URL 파라미터 → window.SQM_API_BASE → location.origin 순으로 읽기
   function _getApiBase() {
-    return window.SQM_API_BASE || (window.location && window.location.origin) || '';
+    if (window.SQM_API_BASE) return window.SQM_API_BASE;
+    try {
+      var p = new URLSearchParams(location.search).get('sqm_base');
+      if (p) { window.SQM_API_BASE = p; return p; }
+    } catch(_) {}
+    return (window.location && window.location.origin) || '';
   }
   var API = _getApiBase(); // 초기값 (하위 호환)
 

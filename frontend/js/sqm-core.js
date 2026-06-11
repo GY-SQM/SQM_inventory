@@ -165,9 +165,14 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
   })();
 
   // [fix] IIFE 시점에 고정 캡처하지 않고 매 호출 시 실시간으로 읽음
-  // PyWebView에서 on_loaded 후 evaluate_js로 SQM_API_BASE가 뒤늦게 설정되는 타이밍 문제 해결
+  // [fix v2] sqm_base URL 파라미터 → window.SQM_API_BASE → location.origin 순으로 읽기
   function _getApiBase() {
-    return window.SQM_API_BASE || (window.location && window.location.origin) || '';
+    if (window.SQM_API_BASE) return window.SQM_API_BASE;
+    try {
+      var p = new URLSearchParams(location.search).get('sqm_base');
+      if (p) { window.SQM_API_BASE = p; return p; }
+    } catch(_) {}
+    return (window.location && window.location.origin) || '';
   }
   var API = _getApiBase(); // 초기값 (하위 호환)
 
