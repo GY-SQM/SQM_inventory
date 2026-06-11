@@ -2512,7 +2512,7 @@
     /* v864.3 Phase 4-B: Picking List PDF 업로드 */
     'onPickingListUpload':  {m:'JS', u:'picking-list-pdf', lbl:'Picking List 업로드 (PDF)'},
     'onPickingListExcelUpload':  {m:'JS', u:'picking-list-excel', lbl:'Picking List 업로드 (Excel)'},
-    'onOutboundScheduled': {m:'JS', u:'outbound',                                 lbl:'출고 예정'},
+    'onOutboundScheduled': {m:'GET', u:'/api/outbound/scheduled',                 lbl:'📅 출고 예약 목록'},  // [UI 연결]
     /* v864.3 Phase 4-B: 출고 확정 네이티브 폼 */
     'onOutboundConfirm': {m:'JS', u:'outbound-confirm', lbl:'출고 확정'},
     'onOutboundHistory': {m:'GET',  u:'/api/q/outbound-history',                 lbl:'📜 출고 이력 조회'},  // [UI 연결]
@@ -2547,7 +2547,7 @@
     'onDnCrossCheck':    {m:'GET',  u:'/api/q3/dn-cross-check',                  lbl:'DN 교차검증'},
     'onLotDetailPdf':    {m:'GET',  u:'/api/action/lot-detail',                  lbl:'LOT 상세'},
     /* 재고 메뉴: FileResponse — GET+json 모달이 아니라 다운로드 (onExportLot 과 동일 계열) */
-    'onLotListExcel':    {m:'JS',   u:'export-lot-excel-dl',                       lbl:'LOT 리스트 Excel'},
+    'onLotListExcel':    {m:'JS',   u:'export-lot-excel-dl',                       lbl:'📂 LOT 리스트 바로 열기'},  // [UI 연결]
     'onTonbagListExcel': {m:'JS',   u:'export-tonbag-simple-dl',                  lbl:'톤백리스트 Excel'},
     'onReportExport':    {m:'GET',  u:'/api/action2/export-tonbag-excel',          lbl:'Excel 내보내기'},
     'onMovementHistory': {m:'GET',  u:'/api/q/movement-history',                  lbl:'입출고 내역'},
@@ -2557,9 +2557,9 @@
     /* [Sprint 0] 'onSettings' removed — was wired to /api/menu/-on-settings (NotReadyError stub).
        Real settings dialog ships in Sprint 2 (SettingsDialogMixin port, ~5d). */
     'onProductMaster':   {m:'JS',   u:'product-master',                            lbl:'제품 마스터'},
-    'onProductInventoryReport': {m:'GET', u:'/api/q/product-inventory',           lbl:'제품별 재고 현황'},
+    'onProductInventoryReport': {m:'GET', u:'/api/q/product-inventory',           lbl:'📦 품목별 재고 보고서'},  // [UI 연결]
     'onIntegrityRepair': {m:'POST', u:'/api/action/fix-integrity',                       lbl:'🔧 정합성 자동 복구'},  // [UI 연결]
-    'onOptimizeDb':      {m:'POST', u:'/api/action3/optimize-db',                 lbl:'DB 최적화'},
+    'onOptimizeDb':      {m:'POST', u:'/api/action3/optimize-db',                 lbl:'⚡ DB 최적화 (VACUUM)'},  // [UI 연결]
     'onCleanupLogs':     {m:'POST', u:'/api/action3/cleanup-logs',                lbl:'로그 정리'},
     'onDbInfo':          {m:'GET',  u:'/api/info/system-info',                    lbl:'DB 정보'},
     'onOnBackup':        {m:'POST', u:'/api/action/backup-create',                lbl:'백업 생성'},
@@ -2604,7 +2604,7 @@
     'onInboundTemplateManage': {m:'JS', u:'inbound-template',                     lbl:'입고 파싱 템플릿'},
     'onFontSizeSettings':    {m:'JS', u:'font-size-settings',                       lbl:'🔤 화면 폰트 크기'},
     'onEmailConfig':     {m:'JS',   u:'email-config',                              lbl:'이메일 설정'},
-    'onIntegrityReport': {m:'GET',  u:'/api/action/integrity-check',              lbl:'정합성 검증 (시각화)'},
+    'onIntegrityReport': {m:'GET',  u:'/api/action/integrity-report',             lbl:'📋 정합성 리포트'},  // [UI 연결]
     'onFixLotIntegrity': {m:'GET',  u:'/api/action/integrity-check',              lbl:'LOT 정합성 검사'},
     'onExportCustoms':   {m:'JS',   u:'export-dl-e1',                             lbl:'통관요청 양식'},
     'onExportRubyli':    {m:'JS',   u:'export-dl-e3',                             lbl:'루비리 양식'},

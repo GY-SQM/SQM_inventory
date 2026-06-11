@@ -180,6 +180,7 @@
           <button data-action="onOutboundStatus" title="전체 출고 이력을 조회합니다. 날짜·고객사·LOT별 필터 가능">📋 출고 현황 조회</button>
           <button data-action="onOutboundHistory" title="출고 이력 전체를 날짜·고객사별로 조회합니다">📜 출고 이력 조회</button>
           <button data-action="onDetailOfOutbound" title="출고 건별 상세 내역을 조회합니다 (LOT·톤백·중량 포함)">🔎 출고 상세 내역</button>
+          <button data-action="onOutboundScheduled" title="출고 예약·예정 목록을 조회합니다">📅 출고 예약 목록</button>
           <button data-action="onOutboundConfirm" title="임시 처리된 출고 건을 최종 확정합니다">✅ 출고 확정</button>
           <button data-action="onPickingTemplateManage" title="출고 피킹 양식 템플릿을 관리합니다">📦 출고 피킹 템플릿 관리</button>
           <button data-action="onSwapReport" title="컨테이너 Swap 처리 내역을 조회합니다">🔁 Swap 리포트</button>
@@ -192,6 +193,7 @@
   <div class="menu-btn" data-menu="재고" tabindex="0" role="menuitem">📊 <span>재고</span> <span class="caret">▼</span>
     <div class="menu-dropdown">
       <button data-action="onExportLot" title="LOT별 재고 현황을 Excel 파일로 내보냅니다">📊 LOT 리스트 Excel</button>
+      <button data-action="onLotListExcel" title="LOT 목록을 Excel로 바로 열기합니다 (저장 없이 즉시 확인)">📂 LOT 리스트 바로 열기</button>
       <button data-action="onTonbagListExcel" title="전체 톤백 목록을 Excel로 내보냅니다">🎒 톤백리스트 Excel</button>
       <hr class="menu-sep">
       <div class="submenu-parent" tabindex="0">
@@ -207,6 +209,7 @@
       <hr class="menu-sep">
       <button data-action="onStockTrendChart" title="기간별 재고 증감 추이를 차트로 시각화합니다">📊 재고 추이 차트</button>
       <button data-action="onInventoryTrend" title="재고 증감 추이를 상세 데이터 테이블로 조회합니다">📈 재고 추이 데이터</button>
+      <button data-action="onProductInventoryReport" title="품목별 현재 재고 수량 및 비중을 보고서로 조회합니다">📦 품목별 재고 보고서</button>
       <hr class="menu-sep">
       <button data-action="onInventoryAdjust" title="자연어 입력으로 재고 수량을 조정합니다 (파손·분실·실사 등)">✏️ 재고 수정</button>
       <button data-action="onRefreshExcelStatus" title="DB allocation_plan 기준으로 _int.xlsx STATUS 컬럼을 갱신합니다 (RESERVED/SOLD/AVAILABLE)">🔄 Excel 상태 갱신</button>
@@ -274,6 +277,7 @@
         <button class="submenu-parent-btn" type="button">🩺 정합성</button>
         <div class="submenu-dropdown">
           <button data-action="onIntegrityCheck" title="DB 데이터의 정합성을 시각적으로 확인합니다. 이상 데이터 감지">🩺 데이터 정합성 검사</button>
+          <button data-action="onIntegrityReport" title="정합성 검증 결과를 시각화 리포트로 출력합니다">📋 정합성 리포트</button>
           <button data-action="onIntegrityRepair" title="정합성 검사 결과를 바탕으로 이상 데이터를 자동으로 복구합니다">🔧 정합성 자동 복구</button>
           <button data-action="onFixLotIntegrity" title="LOT 상태값 불일치를 자동으로 감지하고 복구합니다">🛠️ LOT 상태 정합성 복구</button>
         </div>
@@ -281,6 +285,7 @@
       <div class="submenu-parent" tabindex="0">
         <button class="submenu-parent-btn" type="button">🛠️ DB</button>
         <div class="submenu-dropdown">
+          <button data-action="onOptimizeDb" title="DB VACUUM 최적화를 실행합니다. 장기 운영 후 DB 크기가 줄고 조회 속도가 향상됩니다">⚡ DB 최적화 (VACUUM)</button>
           <button data-action="onCleanupLogs" title="DB의 audit_log·stock_movement(일부)에서 90일 이전 행을 삭제합니다. 사이드바 Log 화면(조회)과는 별개입니다.">📋 DB 이력 정리 (90일)</button>
           <button data-action="onDbInfo" title="DB 파일 경로, 크기, 테이블 통계를 확인합니다">ℹ️ DB 정보</button>
           <button data-action="onTestDbReset" title="⚠️ 테스트용 DB를 초기화합니다. 실데이터 사용 시 절대 사용 금지">🗑️ 테스트 DB 초기화</button>
