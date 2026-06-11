@@ -445,110 +445,278 @@ SPLASH_HTML = '''<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>SQM Inventory — 시작 중</title>
+<title>SQM Inventory</title>
 <style>
-  * { box-sizing:border-box; margin:0; padding:0; }
-  html, body {
-    height:100vh; background:#070e1a;
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{
+    height:100vh;
+    background:#020817;
     font-family:'Segoe UI','Malgun Gothic',sans-serif;
-    color:#e2e8f0; user-select:none; -webkit-user-select:none;
+    color:#e2e8f0;
+    overflow:hidden;
+    user-select:none;-webkit-user-select:none;
   }
-  body {
-    display:flex; flex-direction:column;
-    justify-content:center; align-items:center;
+
+  /* ── 배경 입자 레이어 ── */
+  .bg-particles{
+    position:fixed;inset:0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(245,158,11,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(56,189,248,0.04) 0%, transparent 50%);
+    pointer-events:none;
+  }
+  .grid-lines{
+    position:fixed;inset:0;
+    background-image:
+      linear-gradient(rgba(245,158,11,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245,158,11,0.03) 1px, transparent 1px);
+    background-size:60px 60px;
+    pointer-events:none;
+  }
+
+  /* ── 메인 컨테이너 ── */
+  .stage{
+    position:relative;z-index:10;
+    height:100vh;
+    display:flex;flex-direction:column;
+    justify-content:center;align-items:center;
     gap:0;
   }
 
-  /* 로고 */
-  .logo-box {
-    display:flex; align-items:center; gap:14px; margin-bottom:28px;
-  }
-  .logo-icon {
-    font-size:52px; line-height:1;
-    filter: drop-shadow(0 0 12px rgba(245,158,11,0.5));
-  }
-  .logo-text h1 {
-    font-size:26px; font-weight:800; color:#f59e0b; letter-spacing:1px;
-  }
-  .logo-text p {
-    font-size:12px; color:#64748b; margin-top:2px; letter-spacing:2px;
-    text-transform:uppercase;
+  /* ── 페이드인 래퍼 ── */
+  .fade-in{opacity:0;transform:translateY(16px);transition:opacity .9s ease, transform .9s ease;}
+  .fade-in.show{opacity:1;transform:translateY(0);}
+
+  /* ── 상단 라벨 ── */
+  .eyebrow{
+    font-size:11px;letter-spacing:4px;text-transform:uppercase;
+    color:rgba(245,158,11,0.6);margin-bottom:20px;
+    font-weight:500;
   }
 
-  /* 구분선 */
-  .divider {
-    width:220px; height:1px;
-    background:linear-gradient(90deg, transparent, #f59e0b44, transparent);
-    margin-bottom:28px;
+  /* ── 로고 ── */
+  .logo-wrap{
+    display:flex;align-items:center;gap:18px;margin-bottom:10px;
+  }
+  .logo-icon{
+    font-size:56px;line-height:1;
+    filter:drop-shadow(0 0 24px rgba(245,158,11,0.5));
+    animation:float 3s ease-in-out infinite;
+  }
+  @keyframes float{
+    0%,100%{transform:translateY(0);}
+    50%{transform:translateY(-5px);}
+  }
+  .logo-title{
+    font-size:36px;font-weight:800;letter-spacing:1px;
+    background:linear-gradient(135deg,#f59e0b,#fbbf24,#fde68a);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;
+    min-width:280px;
   }
 
-  /* 모래시계 + 상태 */
-  .status-box {
-    display:flex; flex-direction:column; align-items:center; gap:14px;
-  }
-  .hourglass {
-    font-size:36px;
-    animation: hg-spin 2s steps(1) infinite;
-  }
-  @keyframes hg-spin {
-    0%   { content:'⏳'; opacity:1; }
-    50%  { opacity:0.4; }
-    100% { opacity:1; }
-  }
-  .status-text {
-    font-size:14px; color:#94a3b8; letter-spacing:0.5px;
-    animation: pulse 1.8s ease-in-out infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { opacity:1; }
-    50%       { opacity:0.4; }
+  /* ── 서브타이틀 ── */
+  .subtitle{
+    font-size:12px;letter-spacing:3px;color:rgba(148,163,184,.5);
+    margin-bottom:40px;text-transform:uppercase;text-align:center;
   }
 
-  /* 진행 바 */
-  .progress-track {
-    width:260px; height:3px;
-    background:#1e293b; border-radius:2px; overflow:hidden;
+  /* ── 황금 구분선 ── */
+  .divider{
+    width:0;height:1px;
+    background:linear-gradient(90deg,transparent,#f59e0b,#fbbf24,transparent);
+    margin-bottom:40px;
+    transition:width 1s cubic-bezier(.4,0,.2,1);
   }
-  .progress-bar {
-    height:100%; width:30%;
-    background:linear-gradient(90deg, #f59e0b, #fbbf24);
+  .divider.expand{width:320px;}
+
+  /* ── 재고 카운터 ── */
+  .counter-box{
+    display:flex;gap:40px;margin-bottom:44px;opacity:0;
+    transition:opacity .6s ease;
+  }
+  .counter-box.show{opacity:1;}
+  .counter-item{text-align:center;}
+  .counter-val{
+    font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;
+    background:linear-gradient(135deg,#f59e0b,#fbbf24);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    background-clip:text;
+    letter-spacing:-1px;
+  }
+  .counter-label{
+    font-size:10px;letter-spacing:2px;color:rgba(148,163,184,.5);
+    text-transform:uppercase;margin-top:4px;
+  }
+  .counter-sep{width:1px;background:rgba(245,158,11,.2);align-self:stretch;}
+
+  /* ── 상태 바 ── */
+  .status-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;}
+  .status-text{
+    font-size:12px;letter-spacing:1px;color:rgba(148,163,184,.6);
+    min-height:16px;
+  }
+  .progress-track{
+    width:280px;height:2px;
+    background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;width:0;
+    background:linear-gradient(90deg,#b45309,#f59e0b,#fde68a);
     border-radius:2px;
-    animation: slide 1.6s ease-in-out infinite;
-  }
-  @keyframes slide {
-    0%   { margin-left:-30%; }
-    100% { margin-left:100%; }
+    transition:width .4s ease;
+    box-shadow:0 0 8px rgba(245,158,11,.5);
   }
 
-  /* 버전 */
-  .ver {
-    position:absolute; bottom:20px; right:24px;
-    font-size:11px; color:#334155; letter-spacing:1px;
+  /* ── 버전 ── */
+  .ver{
+    position:absolute;bottom:24px;right:28px;
+    font-size:11px;letter-spacing:2px;color:rgba(148,163,184,.25);
+  }
+
+  /* ── 전체 페이드아웃 ── */
+  body.fade-out{
+    animation:bodyFade .7s ease forwards;
+  }
+  @keyframes bodyFade{
+    to{opacity:0;transform:scale(1.02);}
   }
 </style>
 </head>
 <body>
-  <!-- 로고 -->
-  <div class="logo-box">
-    <div class="logo-icon">📦</div>
-    <div class="logo-text">
-      <h1>SQM Inventory</h1>
-      <p>Management System</p>
+  <div class="bg-particles"></div>
+  <div class="grid-lines"></div>
+
+  <div class="stage">
+    <div class="eyebrow fade-in" id="ey">Precision Inventory Management</div>
+
+    <div class="logo-wrap fade-in" id="lw" style="transition-delay:.15s">
+      <div class="logo-icon">📦</div>
+      <div class="logo-title" id="lt"></div>
+    </div>
+
+    <div class="subtitle fade-in" id="st" style="transition-delay:.3s">
+      S.I.M.S &nbsp;·&nbsp; v8.7.2
+    </div>
+
+    <div class="divider" id="div"></div>
+
+    <div class="counter-box" id="cb">
+      <div class="counter-item">
+        <div class="counter-val" id="c-lot">0</div>
+        <div class="counter-label">LOT</div>
+      </div>
+      <div class="counter-sep"></div>
+      <div class="counter-item">
+        <div class="counter-val" id="c-bag">0</div>
+        <div class="counter-label">톤백</div>
+      </div>
+      <div class="counter-sep"></div>
+      <div class="counter-item">
+        <div class="counter-val" id="c-mt">0.00</div>
+        <div class="counter-label">MT</div>
+      </div>
+    </div>
+
+    <div class="status-wrap">
+      <div class="status-text" id="st2">초기화 중 …</div>
+      <div class="progress-track">
+        <div class="progress-fill" id="pf"></div>
+      </div>
     </div>
   </div>
 
-  <div class="divider"></div>
+  <div class="ver">SQM Inventory v8.7.2</div>
 
-  <!-- 상태 -->
-  <div class="status-box">
-    <div class="hourglass">⏳</div>
-    <div class="status-text">서버 시작 중 …</div>
-    <div class="progress-track">
-      <div class="progress-bar"></div>
-    </div>
-  </div>
+<script>
+(function(){
+  var API_BASE = ''; // main_webview.py 에서 채워짐 (sqm_base 파라미터)
 
-  <div class="ver">v8.7.2</div>
+  /* 유틸 */
+  function $(id){ return document.getElementById(id); }
+  function delay(ms){ return new Promise(function(r){setTimeout(r,ms);}); }
+
+  function typeText(el, text, speed){
+    return new Promise(function(resolve){
+      var i=0;
+      el.textContent='';
+      var t=setInterval(function(){
+        if(i>=text.length){clearInterval(t);resolve();return;}
+        el.textContent+=text[i++];
+      }, speed||60);
+    });
+  }
+
+  function countUp(el, target, duration, decimals){
+    return new Promise(function(resolve){
+      var start=0, steps=40, step=0;
+      var inc=target/steps;
+      var t=setInterval(function(){
+        step++;
+        start=Math.min(start+inc, target);
+        el.textContent = decimals ? start.toFixed(decimals) : Math.round(start).toLocaleString();
+        if(step>=steps){el.textContent=decimals?target.toFixed(decimals):target.toLocaleString();clearInterval(t);resolve();}
+      }, duration/steps);
+    });
+  }
+
+  function setProgress(pct, text){
+    $('pf').style.width = pct+'%';
+    if(text) $('st2').textContent = text;
+  }
+
+  /* 인트로 시퀀스 */
+  async function intro(){
+    await delay(100);
+
+    // 1) 상단 라벨 + 로고 페이드인
+    $('ey').classList.add('show');
+    $('lw').classList.add('show');
+    $('st').classList.add('show');
+    setProgress(10, '시스템 초기화 중 …');
+
+    // 2) 타이핑 효과
+    await delay(300);
+    await typeText($('lt'), 'SQM Inventory', 55);
+
+    // 3) 구분선 확장
+    await delay(200);
+    $('div').classList.add('expand');
+    setProgress(30, 'DB 연결 중 …');
+
+    // 4) 카운터 등장 + 카운트업 (API에서 실제 데이터)
+    await delay(500);
+    $('cb').classList.add('show');
+    setProgress(55, '재고 데이터 로드 중 …');
+
+    // API 호출 (실패해도 0으로 표시)
+    var lots=0, bags=0, mt=0;
+    try{
+      var base = (new URLSearchParams(location.search)).get('sqm_base') || location.origin;
+      var res = await fetch(base+'/api/health', {cache:'no-store'});
+      var d = await res.json();
+      lots = d.lots||0; bags = d.tonbags||0;
+      // KPI에서 MT 가져오기
+      var r2 = await fetch(base+'/api/dashboard/kpi', {cache:'no-store'});
+      var d2 = await r2.json();
+      mt = (d2.data && d2.data.current_stock_mt) ? d2.data.current_stock_mt : 0;
+    } catch(e){}
+
+    await Promise.all([
+      countUp($('c-lot'), lots, 800, 0),
+      countUp($('c-bag'), bags, 800, 0),
+      countUp($('c-mt'), mt, 800, 2),
+    ]);
+
+    setProgress(85, '화면 준비 중 …');
+    await delay(400);
+    setProgress(100, '준비 완료 ✓');
+    await delay(600);
+  }
+
+  intro();
+})();
+</script>
 </body>
 </html>
 '''
