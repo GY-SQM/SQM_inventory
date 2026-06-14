@@ -17,6 +17,9 @@ import traceback
 import json
 import subprocess
 import queue as _queue_mod
+# pythonw 실행 시 subprocess 로 외부 명령(netstat/wmic/powershell/taskkill) 호출 시
+# 검은 콘솔 창이 반짝이는 현상 방지용 플래그
+_CNOW = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
 _DETACH_QUEUE = _queue_mod.Queue()
 _DETACHED_WINDOWS: dict = {}
 import ctypes as _ctypes
@@ -39,12 +42,20 @@ else:
 LOG_PATH = os.path.join(LOG_DIR, 'sqm_debug.log')
 WINDOW_STATE_PATH = os.path.join(BASE_DIR, 'window_state.json')
 
-# PyInstaller frozen exe (console=False) 에서 stdout/stderr가 None →
-# logging StreamHandler가 터지는 것을 방지: 로그 파일로 리다이렉트
-if getattr(sys, 'frozen', False) and sys.stdout is None:
+# stdout/stderr 가 None 이면(=콘솔 없는 실행) 로그 파일로 리다이렉트.
+#  - PyInstaller frozen exe (console=False)
+#  - pythonw.exe 실행 (콘솔 없음)
+#  - wscript 등에서 숨김(style 0) 으로 띄운 경우
+# 이 처리가 없으면 uvicorn(access_log)/print 가 None.write 로 크래시 →
+# API 는 떠도 창이 안 뜨고 포트만 점유한 좀비가 됨 (과거 pythonw 증상의 진짜 원인).
+# 리다이렉트 전에 "진짜 콘솔이 있었는지" 기록 → 아래 로그 콘솔핸들러 중복 방지.
+_HAS_REAL_CONSOLE = (sys.stdout is not None) and (sys.stderr is not None)
+if sys.stdout is None or sys.stderr is None:
     _log_file = open(LOG_PATH, 'a', encoding='utf-8', buffering=1)
-    sys.stdout = _log_file
-    sys.stderr = _log_file
+    if sys.stdout is None:
+        sys.stdout = _log_file
+    if sys.stderr is None:
+        sys.stderr = _log_file
 
 # ─────────────────────────────────────────────────────────────
 # [Patch 2] 로그 설정 — 콘솔 + 파일 동시 기록 (DEBUG 레벨)
@@ -55,11 +66,14 @@ _root_logger.setLevel(logging.DEBUG)
 # 중복 방지: 기존 핸들러 제거
 for _h in list(_root_logger.handlers):
     _root_logger.removeHandler(_h)
-# 콘솔 핸들러 (INFO 이상)
-_console_h = logging.StreamHandler()
-_console_h.setLevel(logging.INFO)
-_console_h.setFormatter(logging.Formatter(_fmt))
-_root_logger.addHandler(_console_h)
+# 콘솔 핸들러 (INFO 이상) — 진짜 콘솔이 있을 때만.
+# pythonw/숨김 실행 시엔 stderr 가 로그파일로 리다이렉트돼 있어 콘솔핸들러를
+# 추가하면 같은 파일에 이중 기록되므로 건너뜀.
+if _HAS_REAL_CONSOLE:
+    _console_h = logging.StreamHandler()
+    _console_h.setLevel(logging.INFO)
+    _console_h.setFormatter(logging.Formatter(_fmt))
+    _root_logger.addHandler(_console_h)
 # 파일 핸들러 (DEBUG 이상 전부)
 try:
     _file_h = logging.FileHandler(LOG_PATH, encoding='utf-8')
@@ -84,7 +98,7 @@ def _acquire_single_instance_lock():
     return True
 
 log = logging.getLogger(__name__)
-log.info(f"=== SQM v8.7.2 시작 — 로그 파일: {LOG_PATH} ===")
+log.info(f"=== SQM v8.7.4 시작 — 로그 파일: {LOG_PATH} ===")
 
 # ─────────────────────────────────────────────────────────────
 # [Patch 3] 전역 예외 훅 — 미포획 예외 전부 로그 파일에 기록
@@ -142,6 +156,64 @@ def save_window_state(width, height, maximized=False):
         log.debug(f'창 상태 저장: {width}x{height} 최대화={maximized}')
     except Exception as e:
         log.warning(f'창 상태 저장 실패: {e}')
+
+
+def _force_show_main_window():
+    """[v8.7.4] 현재 프로세스의 메인 창(SQM Inventory)을 강제로 표시 + 앞으로.
+
+    숨김(SW_HIDE) 으로 띄우는 런처(wscript style 0, pythonw 등)에서는 STARTUPINFO 의
+    숨김 플래그가 앱이 만드는 창에 전파돼 pywebview 창이 visible=0 으로 생성된다.
+    이 경우 JS/백엔드는 정상 동작하지만 창만 화면에 안 보인다. 어떤 런처로 띄워도
+    창이 보이도록 ShowWindow(SW_SHOW) + foreground 처리.
+    """
+    if os.name != 'nt':
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        u = ctypes.windll.user32
+        k = ctypes.windll.kernel32
+        SW_SHOW = 5
+        my_pid = os.getpid()
+        targets = []
+
+        @ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+        def _enum(hwnd, _lp):
+            pid = wintypes.DWORD()
+            u.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if pid.value != my_pid:
+                return True
+            n = u.GetWindowTextLengthW(hwnd)
+            if not n:
+                return True
+            buf = ctypes.create_unicode_buffer(n + 1)
+            u.GetWindowTextW(hwnd, buf, n + 1)
+            if 'SQM Inventory' in buf.value:
+                targets.append(hwnd)
+            return True
+
+        u.EnumWindows(_enum, 0)
+        for hwnd in targets:
+            if not u.IsWindowVisible(hwnd):
+                u.ShowWindow(hwnd, SW_SHOW)
+            try:
+                fg = u.GetForegroundWindow()
+                cur_t = k.GetCurrentThreadId()
+                fg_t = u.GetWindowThreadProcessId(fg, None)
+                u.AttachThreadInput(cur_t, fg_t, True)
+                u.BringWindowToTop(hwnd)
+                u.SetForegroundWindow(hwnd)
+                u.SetActiveWindow(hwnd)
+                u.AttachThreadInput(cur_t, fg_t, False)
+            except Exception:
+                pass
+        if targets:
+            log.info('메인 창 강제 표시 완료 (%d개)', len(targets))
+        else:
+            log.warning('메인 창을 찾지 못함 — 강제 표시 생략')
+    except Exception as e:
+        log.warning('메인 창 강제 표시 실패: %s', e)
+
 
 def run_api_server():
     """FastAPI 서버를 별도 스레드에서 실행
@@ -209,7 +281,8 @@ def _pids_listening_on_port(port):
     try:
         out = subprocess.check_output(
             ['netstat', '-ano', '-p', 'tcp'],
-            text=True, encoding='cp949', errors='ignore', timeout=5
+            text=True, encoding='cp949', errors='ignore', timeout=5,
+            creationflags=_CNOW
         )
     except Exception as e:
         log.warning(f"netstat 실패: {e}")
@@ -228,7 +301,8 @@ def _get_process_command_line(pid):
         out = subprocess.check_output(
             ['wmic', 'process', 'where', f'ProcessId={pid}', 'get', 'CommandLine', '/value'],
             text=True, encoding='utf-8', errors='ignore', timeout=5,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            creationflags=_CNOW
         )
         for line in out.splitlines():
             if line.startswith('CommandLine='):
@@ -242,7 +316,8 @@ def _get_process_command_line(pid):
                 f"(Get-CimInstance Win32_Process -Filter \"ProcessId = {pid}\").CommandLine"
             ],
             text=True, encoding='utf-8', errors='ignore', timeout=5,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            creationflags=_CNOW
         )
         return out.strip()
     except Exception as e:
@@ -257,7 +332,8 @@ def _get_process_executable_path(pid):
                 f"(Get-Process -Id {pid} -ErrorAction Stop).Path"
             ],
             text=True, encoding='utf-8', errors='ignore', timeout=5,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
+            creationflags=_CNOW
         )
         return out.strip()
     except Exception as e:
@@ -344,7 +420,8 @@ def cleanup_stale_sqm_background_processes():
                 ['taskkill', '/F', '/PID', pid],
                 check=False, timeout=5,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                text=True, encoding='utf-8', errors='ignore'
+                text=True, encoding='utf-8', errors='ignore',
+                creationflags=_CNOW
             )
             if result.returncode == 0:
                 cleaned = True
@@ -405,7 +482,8 @@ def kill_zombie_on_port(port):
         try:
             subprocess.run(['taskkill', '/F', '/PID', pid],
                            check=False, timeout=5,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           creationflags=_CNOW)
             killed = True
         except Exception as e:
             log.error(f"taskkill PID={pid} 실패: {e}")
@@ -596,7 +674,7 @@ SPLASH_HTML = '''<!DOCTYPE html>
     </div>
 
     <div class="subtitle fade-in" id="st" style="transition-delay:.3s">
-      S.I.M.S &nbsp;·&nbsp; v8.7.2
+      S.I.M.S &nbsp;·&nbsp; v8.7.4
     </div>
 
     <div class="divider" id="div"></div>
@@ -626,7 +704,7 @@ SPLASH_HTML = '''<!DOCTYPE html>
     </div>
   </div>
 
-  <div class="ver">SQM Inventory v8.7.2</div>
+  <div class="ver">SQM Inventory v8.7.4</div>
 
 <script>
 (function(){
@@ -887,7 +965,7 @@ def main():
         _win_w, _win_h, _win_max = load_window_state()
         # [P1 PATCH] url= 대신 html=SPLASH_HTML 로 즉시 표시 (API 대기 없음).
         window = webview.create_window(
-            title='SQM Inventory v8.7.2',
+            title='SQM Inventory v8.7.4',
             html=SPLASH_HTML,
             width=_win_w,
             height=_win_h,
@@ -905,6 +983,10 @@ def main():
 
         def on_loaded():
             if _phase[0] == "splash":
+                # [v8.7.4] 창 강제 표시 — 숨김(SW_HIDE) 런처(wscript style 0)로 띄우면
+                # STARTUPINFO 가 전파돼 pywebview 창이 visible=0 으로 생성됨 → JS 는
+                # 돌지만 창이 안 보이는 증상. 어떤 런처로 띄워도 보이도록 강제 Show.
+                _force_show_main_window()
                 # 1차 발화: 스플래시 페이지 로드 완료 -> 최대화 복원만 처리.
                 if _win_max:
                     try:
@@ -1009,6 +1091,15 @@ def main():
 
         window.events.loaded += on_loaded
         window.events.closing += on_closing
+
+        def on_closed():
+            # [zombie-fix] pywebview가 Windows에서 webview.start()를 리턴하지 않고
+            # 멈추는 경우가 있음 → 창이 실제로 닫힌 시점에 직접 프로세스를 종료해
+            # uvicorn 포트 좀비 현상을 원천 차단.
+            log.info('on_closed: 창 완전히 닫힘 — 프로세스 종료')
+            os._exit(0)
+
+        window.events.closed += on_closed
 
         # [P1 PATCH] webview.start(func=...) 콜백으로 API 대기 + URL 네비게이션.
         # 메인 스레드는 webview 이벤트 루프를 돌리고, on_window_started 는 별도 스레드에서 실행됨.
