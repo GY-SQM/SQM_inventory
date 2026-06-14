@@ -52,3 +52,7 @@ frontend/.cache/
 
 # Backup
 backup/
+
+# SQLite WAL 사이드카 (런타임 자동 생성 — 버전관리 제외)
+data/db/*.db-shm
+data/db/*.db-wal
