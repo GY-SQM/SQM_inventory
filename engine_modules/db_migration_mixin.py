@@ -82,6 +82,7 @@ class DatabaseMigrationMixin:
         self._migrate_v872_inventory_weight_floor_insert() # v8.7.2 P1
         self._migrate_v872_sold_table_dedup_index()    # v8.7.2 P4
         self._migrate_v873_carrier_field_coord()       # v8.7.3
+        self._migrate_v874_outbound_reality()          # v8.7.4: 출고 현실반영(스캔선택/위치미상/LOT수량)
         # v2.7.1은 번호가 낮지만 후기 추가된 것 — 마지막에 실행해도 IF NOT EXISTS로 안전
         self._migrate_v271_allocation_sc_rcvd()        # v2.7.1: allocation_plan SC RCVD 컬럼
         self._migrate_v271_add_missing_indexes()       # v2.7.1: 누락 인덱스 3개
@@ -116,6 +117,67 @@ class DatabaseMigrationMixin:
             )
         except Exception as e:
             logger.warning(f"[v8.7.0] packing_type 컬럼 마이그레이션 실패: {e}")
+
+    def _migrate_v874_outbound_reality(self) -> None:
+        """
+        v8.7.4: 출고 현실반영 — 스캔 선택 / 위치 미상 / LOT 수량 출고 지원.
+
+        현재 출고는 "모든 화물이 랙 보관 + 바코드 스캔" 을 전제하지만 현실은 다름:
+          ① 비-랙 일반창고 보관 → location 미상 (스캔 불가)
+          ② 입고 즉시 출고 → 스캔 없이 LOT 단위로 나감
+          ③ LOT 부분 출고 → 전량이 아닌 일부 수량만 출고
+
+        MVP-1: 컬럼/인덱스 추가만 (모두 nullable 또는 DEFAULT) → 기존 동작 무영향.
+          - allocation_plan.fulfillment_mode : 'SCAN_TONBAG'(기본)/'LOT_QTY'/'DIRECT'
+          - allocation_plan.scan_required    : 1(기본)/0
+          - allocation_plan.outbound_qty_mt  : LOT_QTY 경로 실제 출고 무게(MT) 누적
+          - inventory_tonbag.location_state  : NULL(일반)/'UNLOCATED'(위치 미상)
+          - inventory.location_state         : NULL/'UNLOCATED'/'MIXED' (LOT 요약)
+          - idx_alloc_lotqty_dedup           : 톤백 없는 LOT 출고 이중출고 방지(Partial UNIQUE)
+
+        멱등성: PRAGMA table_info 체크 후 ALTER + CREATE INDEX IF NOT EXISTS.
+        설계 문서: docs/SQM_출고_현실반영_설계_MVP1.md
+        """
+        try:
+            ap_cols = {r[1].lower() for r in
+                       self.execute("PRAGMA table_info(allocation_plan)").fetchall()}
+            if "fulfillment_mode" not in ap_cols:
+                self.execute("ALTER TABLE allocation_plan "
+                             "ADD COLUMN fulfillment_mode TEXT DEFAULT 'SCAN_TONBAG'")
+                logger.info("[v8.7.4] allocation_plan.fulfillment_mode 컬럼 추가")
+            if "scan_required" not in ap_cols:
+                self.execute("ALTER TABLE allocation_plan "
+                             "ADD COLUMN scan_required INTEGER DEFAULT 1")
+                logger.info("[v8.7.4] allocation_plan.scan_required 컬럼 추가")
+            if "outbound_qty_mt" not in ap_cols:
+                self.execute("ALTER TABLE allocation_plan "
+                             "ADD COLUMN outbound_qty_mt REAL DEFAULT 0")
+                logger.info("[v8.7.4] allocation_plan.outbound_qty_mt 컬럼 추가")
+
+            tb_cols = {r[1].lower() for r in
+                       self.execute("PRAGMA table_info(inventory_tonbag)").fetchall()}
+            if "location_state" not in tb_cols:
+                self.execute("ALTER TABLE inventory_tonbag ADD COLUMN location_state TEXT")
+                logger.info("[v8.7.4] inventory_tonbag.location_state 컬럼 추가")
+
+            inv_cols = {r[1].lower() for r in
+                        self.execute("PRAGMA table_info(inventory)").fetchall()}
+            if "location_state" not in inv_cols:
+                self.execute("ALTER TABLE inventory ADD COLUMN location_state TEXT")
+                logger.info("[v8.7.4] inventory.location_state 컬럼 추가")
+
+            # 톤백 없는 LOT 수량 출고의 이중출고 방지 (tonbag_id 기반 인덱스가 못 막는 영역).
+            self.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_alloc_lotqty_dedup
+                ON allocation_plan(lot_no, customer, sale_ref, outbound_date)
+                WHERE fulfillment_mode='LOT_QTY' AND status IN ('PICKED','OUTBOUND','SOLD')
+            """)
+            logger.info("[v8.7.4] 출고 현실반영 컬럼/인덱스 마이그레이션 완료")
+        except sqlite3.OperationalError as e:
+            if "duplicate column" not in str(e).lower():
+                logger.warning(f"[v8.7.4] 출고 현실반영 마이그레이션 오류: {e}")
+        except OSError as e:
+            logger.warning(f"[v8.7.4] 출고 현실반영 마이그레이션 OS 오류: {e}")
 
     def _migrate_v873_carrier_field_coord(self) -> None:
         """
