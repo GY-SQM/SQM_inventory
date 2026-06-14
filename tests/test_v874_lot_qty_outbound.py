@@ -139,3 +139,28 @@ def test_unlocated_marks_location_state(eng):
         "SELECT location_state FROM inventory_tonbag "
         "WHERE lot_no='LOTX' AND status='PICKED' LIMIT 1")
     assert _val(row, "location_state", 0) == "UNLOCATED"
+
+
+def test_confirm_true_goes_straight_to_sold(eng):
+    _seed_lot(eng, normals=3)
+    r = eng.outbound_lot_qty("LOTX", count=2, customer="ACME",
+                             sale_ref="SC-CF", confirm=True)
+    assert r["success"], r["errors"]
+    assert r.get("sold") is True
+    assert r.get("confirmed") == 2
+    counts = _status_counts(eng)
+    assert counts.get("SOLD") == 2          # PICKED 거치지 않고 SOLD 까지
+    assert counts.get("PICKED", 0) == 0
+    assert eng.verify_lot_integrity("LOTX")["valid"]
+    sold = eng.db.fetchall("SELECT status FROM sold_table WHERE lot_no='LOTX'")
+    assert len(sold) == 2
+
+
+def test_confirm_false_stays_picked(eng):
+    _seed_lot(eng, normals=3)
+    r = eng.outbound_lot_qty("LOTX", count=2, customer="ACME", sale_ref="SC-PK")
+    assert r["success"], r["errors"]
+    assert not r.get("sold")
+    counts = _status_counts(eng)
+    assert counts.get("PICKED") == 2        # 기본은 PICKED 까지만
+    assert counts.get("SOLD", 0) == 0

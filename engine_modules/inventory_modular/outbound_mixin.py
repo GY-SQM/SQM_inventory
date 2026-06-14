@@ -4217,6 +4217,7 @@ class OutboundMixin(InventoryBaseMixin):
     def outbound_lot_qty(self, lot_no: str, count=None, customer: str = '',
                          sale_ref: str = '', outbound_date: str = None,
                          include_sample=None, unlocated: bool = False,
+                         confirm: bool = False,
                          reason: str = '', operator: str = '') -> Dict:
         """
         v8.7.4 MVP-2: 스캔 없는 LOT 수량 출고.
@@ -4233,6 +4234,8 @@ class OutboundMixin(InventoryBaseMixin):
             include_sample: 샘플(is_sample=1) 동반 출고 여부.
                             None이면 전량출고 시 True, 부분출고 시 False (자동).
             unlocated:    위치 미상(비-랙 일반창고) → 톤백 location_state='UNLOCATED'.
+            confirm:      True 면 PICKED 후 곧바로 confirm_outbound 호출하여 SOLD 까지
+                          한 번에 확정(입고 즉시 출고). 기본 False(PICKED 까지만).
             reason/operator: 비고.
 
         무결성: quick_outbound 와 동일 회계(AVAILABLE→PICKED + _recalc_current_weight)
@@ -4402,6 +4405,29 @@ class OutboundMixin(InventoryBaseMixin):
         except Exception as e:
             result['errors'].append(f"예기치 않은 오류: {e}")
             logger.error(f"LOT 수량 출고 미예상 오류: {e}", exc_info=True)
+
+        # confirm=True: PICKED → SOLD 까지 한 번에 확정 (별도 트랜잭션).
+        # "입고 즉시 출고"처럼 바로 완전히 나가는 경우. 실패해도 PICKED 상태는
+        # 보존되어 '출고 확정' 메뉴로 재시도 가능.
+        # 주의: confirm_outbound 는 해당 LOT 의 PICKED 톤백 전체를 확정한다.
+        if confirm and result.get('success'):
+            try:
+                conf = self.confirm_outbound(lot_no)
+                result['confirmed'] = int(conf.get('confirmed', 0))
+                result['sold'] = bool(conf.get('success'))
+                if conf.get('errors'):
+                    result['confirm_errors'] = conf['errors']
+                if conf.get('post_check_errors'):
+                    result['post_check_errors'] = conf['post_check_errors']
+                if conf.get('success'):
+                    result['message'] = (result.get('message', '')
+                                         + f" · 확정 {result['confirmed']}건 SOLD")
+                else:
+                    result['message'] = (result.get('message', '')
+                                         + " · ⚠ 확정 실패(PICKED 유지)")
+            except Exception as ce:
+                result['confirm_errors'] = [str(ce)]
+                logger.error(f"LOT 수량 출고 confirm 단계 오류: {ce}", exc_info=True)
         return result
 
     # =========================================================================

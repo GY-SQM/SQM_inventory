@@ -199,6 +199,7 @@ class LotQtyOutboundRequest(BaseModel):
     outbound_date: Optional[str] = Field(None, description="출고일 YYYY-MM-DD (null=오늘)")
     include_sample: Optional[bool] = Field(None, description="샘플 동반 출고 (null=전량시 자동 포함)")
     unlocated: bool = Field(False, description="위치 미상(비-랙 일반창고)")
+    confirm: bool = Field(False, description="True면 PICKED→SOLD까지 한 번에 확정")
     reason: str = Field("", description="사유 (선택)")
     operator: str = Field("", description="작업자 (선택)")
 
@@ -228,6 +229,7 @@ def outbound_lot_qty(req: LotQtyOutboundRequest):
             outbound_date=req.outbound_date,
             include_sample=req.include_sample,
             unlocated=bool(req.unlocated),
+            confirm=bool(req.confirm),
             reason=req.reason or "",
             operator=req.operator or "",
         )
@@ -254,6 +256,9 @@ def outbound_lot_qty(req: LotQtyOutboundRequest):
                 "customer": req.customer,
                 "ref": result.get("ref", ""),
                 "outbound_date": result.get("outbound_date", ""),
+                "sold": bool(result.get("sold", False)),
+                "confirmed": int(result.get("confirmed", 0)),
+                "confirm_errors": result.get("confirm_errors", []),
             },
             "message": result.get("message", f"{picked}개 출고 완료"),
         }

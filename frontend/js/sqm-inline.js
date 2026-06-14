@@ -2076,8 +2076,11 @@
       '  <label style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:6px">',
       '    <input type="checkbox" id="lq-sample" checked> 🧪 샘플도 함께 출고 <span style="color:var(--text-muted)">(전량 시 기본 포함)</span>',
       '  </label>',
-      '  <label style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:10px">',
+      '  <label style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:6px">',
       '    <input type="checkbox" id="lq-unlocated"> 📍 위치 미상 (비-랙 일반창고)',
+      '  </label>',
+      '  <label style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:10px">',
+      '    <input type="checkbox" id="lq-confirm"> ✅ 출고 확정까지 (SOLD) <span style="color:var(--text-muted)">(체크 시 바로 완전 출고, 미체크 시 PICKED까지)</span>',
       '  </label>',
       '  <div id="lq-result" style="margin-bottom:12px"></div>',
       '  <div style="display:flex;gap:8px;justify-content:flex-end">',
@@ -2095,6 +2098,7 @@
     var dateEl = document.getElementById('lq-date');
     var sampleEl = document.getElementById('lq-sample');
     var unlocEl = document.getElementById('lq-unlocated');
+    var confirmEl = document.getElementById('lq-confirm');
     var result = document.getElementById('lq-result');
     var submit = document.getElementById('lq-submit');
     var cancel = document.getElementById('lq-cancel');
@@ -2135,10 +2139,11 @@
         sale_ref: saleref.value.trim(),
         outbound_date: dateEl.value || null,
         include_sample: sampleEl.checked,
-        unlocated: unlocEl.checked
+        unlocated: unlocEl.checked,
+        confirm: confirmEl.checked
       };
       var desc = full ? '전량' : (payload.count + '개');
-      var extra = (payload.include_sample ? ' + 샘플' : '') + (payload.unlocated ? ' / 위치미상' : '');
+      var extra = (payload.include_sample ? ' + 샘플' : '') + (payload.unlocated ? ' / 위치미상' : '') + (payload.confirm ? ' / 확정(SOLD)' : '');
       if (!sqmConfirm('LOT ' + payload.lot_no + ' 을(를) ' + desc + extra + ' 로 ' + payload.customer + ' 에게 출고합니다. 계속?')) return;
 
       submit.disabled = true; cancel.disabled = true;
@@ -2150,7 +2155,10 @@
             '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)">' +
             '<div style="font-weight:600;margin-bottom:4px">✅ ' + escapeHtml(res.message || '출고 완료') + '</div>' +
             '<div style="color:var(--text-muted);font-size:.85rem">일반 ' + ((d.picked_count || 0) - (d.sample_picked || 0)) +
-            '개 · 샘플 ' + (d.sample_picked || 0) + '개 · ' + (d.total_weight_mt || 0).toFixed(3) + ' MT · ref=' + escapeHtml(d.ref || '') + '</div>' +
+            '개 · 샘플 ' + (d.sample_picked || 0) + '개 · ' + (d.total_weight_mt || 0).toFixed(3) + ' MT · ' +
+            (d.sold ? '<span style="color:var(--success)">SOLD 확정 ' + (d.confirmed || 0) + '건</span>' : 'PICKED (미확정)') +
+            ' · ref=' + escapeHtml(d.ref || '') + '</div>' +
+            ((d.confirm_errors && d.confirm_errors.length) ? '<div style="color:var(--warning);font-size:.8rem;margin-top:4px">⚠ 확정 일부 실패: ' + escapeHtml(d.confirm_errors.join('; ')) + '</div>' : '') +
             '</div>';
           showToast('success', res.message || '출고 완료');
           if (typeof dbgLog === 'function') dbgLog('🟢', 'LOT-QTY', res.message, '#66bb6a');
