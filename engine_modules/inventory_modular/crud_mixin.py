@@ -74,11 +74,15 @@ class CRUDMixin:
             )
             avail_kg = float(row_avail.get('s', 0) if isinstance(row_avail, dict) else (row_avail[0] or 0))
 
-            # PICKED 합계 → picked_weight
+            # 출고(나간) 합계 → picked_weight
+            # [BUGFIX v8.7.4] 기존엔 PICKED 만 합산 → SOLD 전환 시 무게가 current/picked
+            # 어디에도 없어 initial=current+picked 가 깨졌다(LOT_TOTAL_MISMATCH).
+            # verify_lot_integrity 는 picked = PICKED+CONFIRMED+SHIPPED+SOLD 를 기대하므로
+            # 동일 집계로 맞춘다. (picked_weight = "가용재고에서 빠져나간 무게")
             row_picked = self.db.fetchone(
                 "SELECT COALESCE(SUM(weight), 0) AS s "
                 "FROM inventory_tonbag "
-                "WHERE lot_no = ? AND status = 'PICKED'",
+                "WHERE lot_no = ? AND status IN ('PICKED','CONFIRMED','SHIPPED','SOLD')",
                 (lot_no,)
             )
             picked_kg = float(row_picked.get('s', 0) if isinstance(row_picked, dict) else (row_picked[0] or 0))

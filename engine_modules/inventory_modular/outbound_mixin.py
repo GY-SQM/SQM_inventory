@@ -3006,19 +3006,32 @@ class OutboundMixin(InventoryBaseMixin):
         )
 
     def _co_insert_sold_row(self, tb: dict, now: str):
-        """sold_table에 출고 이력 1건 INSERT."""
+        """sold_table에 출고 이력 1건 INSERT.
+
+        [BUGFIX v8.7.4] 기존 INSERT 는 컬럼 20개 vs 값 19개(18 placeholder + 'system'
+        리터럴)로 "19 values for 20 columns" 에러 → sold_table 기록이 조용히 실패했음.
+        또 'system' 이 status 컬럼에 잘못 들어갔음. payload 18값 순서에 맞춰 컬럼을
+        재정렬하고, status='SOLD' / created_by='system' 을 리터럴로 분리.
+        _co_build_sold_row_payload 반환 순서:
+          lot_no, tonbag_id, sub_lt, tonbag_uid, picking_id,
+          sold_qty_kg, sold_qty_mt, gross_weight_kg, sold_date,
+          sap_no, bl_no, customer, sku, sales_order_no, picking_no,
+          delivery_date, ct_plt, is_sample  (= 18개)
+        """
         try:
             values = self._co_build_sold_row_payload(tb, now)
             self.db.execute(
                 """INSERT INTO sold_table
                 (lot_no, tonbag_id, sub_lt, tonbag_uid, picking_id,
-                 sold_qty_kg, sold_qty_mt, gross_weight_kg, sold_date, status, created_by,
+                 sold_qty_kg, sold_qty_mt, gross_weight_kg, sold_date,
                  sap_no, bl_no, customer, sku, sales_order_no, picking_no,
-                 delivery_date, ct_plt, is_sample)
+                 delivery_date, ct_plt, is_sample,
+                 status, created_by)
                 VALUES (?, ?, ?, ?, ?,
-                        ?, ?, ?, ?, 'system',
+                        ?, ?, ?, ?,
                         ?, ?, ?, ?, ?, ?,
-                        ?, ?, ?)""",
+                        ?, ?, ?,
+                        'SOLD', 'system')""",
                 values
             )
         except sqlite3.OperationalError as e:
@@ -3030,11 +3043,16 @@ class OutboundMixin(InventoryBaseMixin):
                 )
 
     def _co_insert_outbound_movement(self, tb: dict, now: str):
-        """stock_movement에 OUTBOUND 이력 INSERT."""
+        """stock_movement에 OUTBOUND 이력 INSERT.
+
+        [BUGFIX v8.7.4] 기존: 5개 컬럼에 값 4개(movement_type 누락) → "4 values for 5 columns"
+        로 confirm_outbound 전체가 롤백되어 PICKED→SOLD 확정이 작동하지 않았음.
+        movement_type='OUTBOUND' 추가로 정정.
+        """
         self.db.execute(
             "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) "
-            "VALUES (?, ?, ?, ?)",
-            (tb['lot_no'], tb.get('weight', 0),
+            "VALUES (?, ?, ?, ?, ?)",
+            (tb['lot_no'], 'OUTBOUND', tb.get('weight', 0),
              f"confirm_outbound, sub_lt={tb.get('sub_lt', 0)}", now))
 
     def _co_run_post_checks(self, touched_lots: set, result: dict):
