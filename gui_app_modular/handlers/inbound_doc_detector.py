@@ -85,12 +85,20 @@ class InboundDocDetector:
 
     # ── 지원 확장자 (대소문자 .lower() 비교) ────────────────────
     EXT_ALLOW: set[str] = {".pdf", ".png", ".jpg", ".jpeg"}
+    GENERATED_ARTIFACT_DIR_MARKERS: tuple[str, ...] = (
+        "_gpt_candidate_picker",
+        "_gpt_file_classification",
+    )
 
     def __init__(self, log_fn=None):
         self._log_fn = log_fn or (lambda msg: logger.info(msg))
 
     def _log(self, msg: str) -> None:
         self._log_fn(msg)
+
+    def _is_generated_artifact_dir(self, path: str) -> bool:
+        name = os.path.basename(os.path.normpath(path)).lower()
+        return any(marker in name for marker in self.GENERATED_ARTIFACT_DIR_MARKERS)
 
     # ══════════════════════════════════════════════════════════
     # Public API
@@ -105,6 +113,9 @@ class InboundDocDetector:
         v6.4.3: 대소문자 확장자 모두 허용 (.PDF / .JPG 등)
         """
         def _files_in(d: str) -> list[str]:
+            if self._is_generated_artifact_dir(d):
+                self._log(f"GPT 테스트 산출물 폴더 제외: {d}")
+                return []
             try:
                 return [
                     os.path.join(d, n) for n in os.listdir(d)
@@ -126,6 +137,7 @@ class InboundDocDetector:
             subdirs = [
                 os.path.join(folder, n) for n in os.listdir(folder)
                 if os.path.isdir(os.path.join(folder, n))
+                and not self._is_generated_artifact_dir(os.path.join(folder, n))
             ]
         except Exception:
             return []
@@ -148,6 +160,10 @@ class InboundDocDetector:
 
         반환: {"PACKING_LIST": "/path/...", "INVOICE": "...", "BL": "...", "DO": "..."}
         """
+        if self._is_generated_artifact_dir(folder):
+            self._log(f"GPT 테스트 산출물 폴더 제외: {folder}")
+            return {}
+
         bucket: dict[str, list] = {k: [] for k in self.FILENAME_KEYWORD_MAP}
 
         for name in file_names:
