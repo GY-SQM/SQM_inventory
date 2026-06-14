@@ -191,6 +191,83 @@ def quick_outbound(req: QuickOutboundRequest):
         }
 
 
+class LotQtyOutboundRequest(BaseModel):
+    lot_no: str = Field(..., min_length=1, description="LOT 번호")
+    count: Optional[int] = Field(None, description="일반 톤백 개수 (null=전량)")
+    customer: str = Field(..., min_length=1, description="고객명")
+    sale_ref: str = Field("", description="판매참조 (이중출고 판별 키)")
+    outbound_date: Optional[str] = Field(None, description="출고일 YYYY-MM-DD (null=오늘)")
+    include_sample: Optional[bool] = Field(None, description="샘플 동반 출고 (null=전량시 자동 포함)")
+    unlocated: bool = Field(False, description="위치 미상(비-랙 일반창고)")
+    reason: str = Field("", description="사유 (선택)")
+    operator: str = Field("", description="작업자 (선택)")
+
+
+@router.post("/lot-qty", summary="📦 LOT 수량 출고 — 스캔 없음 (v8.7.4 MVP-2)")
+def outbound_lot_qty(req: LotQtyOutboundRequest):
+    """
+    바코드 스캔 없이 LOT 단위로 톤백을 자동선택하여 출고 (AVAILABLE → PICKED).
+    전량(count=null)/부분(count=N)/샘플동반(include_sample)/위치미상(unlocated) 지원.
+    engine.outbound_lot_qty() 트랜잭션 호출.
+    """
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진 사용 불가")
+    if not hasattr(engine, "outbound_lot_qty"):
+        raise HTTPException(500, "엔진에 outbound_lot_qty 메서드 없음")
+
+    try:
+        result = engine.outbound_lot_qty(
+            lot_no=req.lot_no.strip(),
+            count=req.count,
+            customer=req.customer.strip(),
+            sale_ref=(req.sale_ref or "").strip(),
+            outbound_date=req.outbound_date,
+            include_sample=req.include_sample,
+            unlocated=bool(req.unlocated),
+            reason=req.reason or "",
+            operator=req.operator or "",
+        )
+    except Exception as e:
+        logger.exception(f"[lot-qty-outbound] engine 에러: {e}")
+        raise HTTPException(500, f"Engine error: {e}")
+
+    if result.get("success"):
+        picked = int(result.get("picked_count", 0))
+        sample = int(result.get("sample_picked", 0))
+        total_kg = float(result.get("total_weight_kg", 0))
+        logger.info(
+            f"[lot-qty-outbound] OK: LOT={req.lot_no}, picked={picked}, "
+            f"sample={sample}, total_weight={total_kg}kg, customer={req.customer}"
+        )
+        return {
+            "ok": True,
+            "data": {
+                "lot_no": req.lot_no,
+                "picked_count": picked,
+                "sample_picked": sample,
+                "total_weight_kg": total_kg,
+                "total_weight_mt": round(total_kg / 1000.0, 3),
+                "customer": req.customer,
+                "ref": result.get("ref", ""),
+                "outbound_date": result.get("outbound_date", ""),
+            },
+            "message": result.get("message", f"{picked}개 출고 완료"),
+        }
+    else:
+        errors = result.get("errors", [])
+        return {
+            "ok": False,
+            "data": {"lot_no": req.lot_no, "errors": errors},
+            "error": "LOT 수량 출고 실패",
+            "detail": {"code": "LOT_QTY_OUTBOUND_FAILED", "errors": errors},
+            "message": "; ".join(errors) if errors else "LOT 수량 출고 실패",
+        }
+
+
 @router.get("/quick/info", summary="즉시 출고 — LOT 가용 정보 (F015 보조)")
 def quick_outbound_info(lot_no: str):
     """

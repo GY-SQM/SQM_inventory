@@ -4196,6 +4196,196 @@ class OutboundMixin(InventoryBaseMixin):
             logger.error(f"빠른 출고 미예상 오류: {e}", exc_info=True)
         return result
 
+    def outbound_lot_qty(self, lot_no: str, count=None, customer: str = '',
+                         sale_ref: str = '', outbound_date: str = None,
+                         include_sample=None, unlocated: bool = False,
+                         reason: str = '', operator: str = '') -> Dict:
+        """
+        v8.7.4 MVP-2: 스캔 없는 LOT 수량 출고.
+
+        바코드 스캔 없이 LOT 단위로 톤백을 자동선택하여 AVAILABLE → PICKED 출고.
+        (PICKED = 기존 quick_outbound '즉시 출고'와 동일한 출고 상태 — 무결성 입증됨)
+
+        Args:
+            lot_no:       LOT 번호
+            count:        일반 톤백 출고 개수. None이면 **전량 출고**.
+            customer:     고객명 (필수)
+            sale_ref:     판매참조(SC RCVD 등). 이중출고 판별 키.
+            outbound_date: 출고일 (YYYY-MM-DD). None이면 오늘.
+            include_sample: 샘플(is_sample=1) 동반 출고 여부.
+                            None이면 전량출고 시 True, 부분출고 시 False (자동).
+            unlocated:    위치 미상(비-랙 일반창고) → 톤백 location_state='UNLOCATED'.
+            reason/operator: 비고.
+
+        무결성: quick_outbound 와 동일 회계(AVAILABLE→PICKED + _recalc_current_weight)
+                → initial = current + picked 유지. 트랜잭션 끝에 verify_lot_integrity,
+                실패 시 롤백.
+
+        Returns: {success, picked_count, sample_picked, total_weight_kg, ref, errors, ...}
+        """
+        import uuid
+        result = {
+            'success': False, 'picked_count': 0, 'sample_picked': 0,
+            'total_weight_kg': 0.0, 'errors': []
+        }
+
+        customer = (customer or '').strip()
+        lot_no = str(lot_no or '').strip()
+        sale_ref = (sale_ref or '').strip()
+        if not lot_no:
+            result['errors'].append("LOT 번호 필요")
+            return result
+        if not customer:
+            result['errors'].append("고객명 필수")
+            return result
+        if count is not None:
+            try:
+                count = int(count)
+            except (ValueError, TypeError):
+                result['errors'].append("count 는 정수 또는 None(전량)")
+                return result
+            if count <= 0:
+                result['errors'].append("count 는 1 이상 또는 None(전량)")
+                return result
+
+        is_full = (count is None)            # 전량 출고 여부
+        if include_sample is None:
+            include_sample = is_full          # 전량이면 샘플 포함 기본 ON
+        if outbound_date is None:
+            outbound_date = datetime.now().strftime('%Y-%m-%d')
+
+        try:
+            with self.db.transaction("IMMEDIATE"):
+                # [이중출고 방지] 동일 (lot, customer, sale_ref, date) LOT_QTY 출고가 이미 있으면 차단
+                if sale_ref:
+                    dup = self.db.fetchone(
+                        "SELECT COUNT(*) AS c FROM allocation_plan "
+                        "WHERE fulfillment_mode='LOT_QTY' AND lot_no=? AND customer=? "
+                        "AND COALESCE(sale_ref,'')=? AND COALESCE(outbound_date,'')=?",
+                        (lot_no, customer, sale_ref, outbound_date))
+                    _dc = dup.get('c', 0) if isinstance(dup, dict) else (dup[0] if dup else 0)
+                    if _dc:
+                        raise ValueError(
+                            f"[DUP_LOT_OUTBOUND] 이미 동일 출고건 존재: "
+                            f"{lot_no}/{customer}/{sale_ref}/{outbound_date}")
+
+                # 1) 일반 톤백 선택 (샘플 제외)
+                if is_full:
+                    normals = self.db.fetchall(
+                        "SELECT id, sub_lt, weight, tonbag_uid FROM inventory_tonbag "
+                        "WHERE lot_no=? AND status=? AND COALESCE(is_sample,0)=0 "
+                        "ORDER BY sub_lt", (lot_no, STATUS_AVAILABLE))
+                else:
+                    normals = self.db.fetchall(
+                        "SELECT id, sub_lt, weight, tonbag_uid FROM inventory_tonbag "
+                        "WHERE lot_no=? AND status=? AND COALESCE(is_sample,0)=0 "
+                        "ORDER BY sub_lt LIMIT ?", (lot_no, STATUS_AVAILABLE, count))
+                    if len(normals) < count:
+                        raise ValueError(
+                            f"가용 일반 톤백 부족: {len(normals)}개 (요청 {count}개)")
+                if is_full and not normals and not include_sample:
+                    raise ValueError(f"출고할 가용 톤백 없음: {lot_no}")
+
+                selected = list(normals)
+
+                # 2) 샘플 톤백 선택 (옵션)
+                if include_sample:
+                    samples = self.db.fetchall(
+                        "SELECT id, sub_lt, weight, tonbag_uid FROM inventory_tonbag "
+                        "WHERE lot_no=? AND status=? AND COALESCE(is_sample,0)=1",
+                        (lot_no, STATUS_AVAILABLE))
+                    selected.extend(samples)
+                    result['sample_picked'] = len(samples)
+
+                if not selected:
+                    raise ValueError(f"출고할 가용 톤백 없음: {lot_no}")
+
+                now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                ref = sale_ref or f"LOTQTY-{now.replace(' ', '_').replace(':', '')}-{uuid.uuid4().hex[:6]}"
+                loc_state = 'UNLOCATED' if unlocated else None
+                total_weight = 0.0
+
+                for tb in selected:
+                    tb_w = tb['weight'] or 0
+                    # AVAILABLE → PICKED (quick_outbound 와 동일 회계)
+                    self.db.execute(
+                        "UPDATE inventory_tonbag "
+                        "SET status=?, picked_to=?, sale_ref=?, picked_date=?, "
+                        "    outbound_date=?, location_state=COALESCE(?, location_state), updated_at=? "
+                        "WHERE id=?",
+                        (STATUS_PICKED, customer, ref, now, outbound_date,
+                         loc_state, now, tb['id']))
+                    # picking_table 상세
+                    try:
+                        self.db.execute(
+                            "INSERT INTO picking_table "
+                            "(lot_no, tonbag_id, sub_lt, tonbag_uid, customer, qty_kg, "
+                            " status, picking_date, created_by, remark) "
+                            "VALUES (?,?,?,?,?,?,'ACTIVE',?,'system',?)",
+                            (lot_no, tb['id'], tb['sub_lt'], tb.get('tonbag_uid') or '',
+                             customer, tb_w, now, f"LOT_QTY: {reason}, op={operator}"))
+                    except Exception as _pe:
+                        logger.debug(f"picking_table INSERT 스킵(LOT_QTY): {_pe}")
+                    total_weight += tb_w
+                    result['picked_count'] += 1
+
+                # 3) allocation_plan LOT 수량 원장 1행 (fulfillment_mode='LOT_QTY')
+                self.db.execute(
+                    "INSERT INTO allocation_plan "
+                    "(lot_no, tonbag_id, sub_lt, customer, sale_ref, qty_mt, status, "
+                    " fulfillment_mode, scan_required, outbound_qty_mt, outbound_date, "
+                    " source_file, executed_at, created_at) "
+                    "VALUES (?, NULL, NULL, ?, ?, ?, 'EXECUTED', 'LOT_QTY', 0, ?, ?, ?, ?, ?)",
+                    (lot_no, customer, ref, total_weight / 1000.0,
+                     total_weight / 1000.0, outbound_date,
+                     f"LOT_QTY:reason={reason}:op={operator}", now, now))
+
+                # 4) inventory 위치 상태 (전량 위치미상이면 LOT 레벨에도 표시)
+                if unlocated:
+                    self.db.execute(
+                        "UPDATE inventory SET location_state='UNLOCATED', updated_at=? "
+                        "WHERE lot_no=? AND COALESCE(location_state,'')=''",
+                        (now, lot_no))
+
+                # 5) stock_movement (LOT_OUTBOUND)
+                self.db.execute(
+                    "INSERT INTO stock_movement (lot_no, movement_type, qty_kg, remarks, created_at) "
+                    "VALUES (?, 'LOT_OUTBOUND', ?, ?, ?)",
+                    (lot_no, total_weight,
+                     f"customer={customer}, ref={ref}, normal={len(normals)}, "
+                     f"sample={result['sample_picked']}, full={is_full}, unlocated={unlocated}", now))
+
+                # 6) 무게 재계산 + LOT 상태 + 무결성 검증 (실패 시 롤백)
+                if hasattr(self, '_recalc_current_weight'):
+                    self._recalc_current_weight(lot_no, reason='LOT_QTY_OUTBOUND')
+                self._recalc_lot_status(lot_no)
+                if hasattr(self, 'verify_lot_integrity'):
+                    integ = self.verify_lot_integrity(lot_no)
+                    if not integ.get('valid', True):
+                        errs = "; ".join(str(x) for x in integ.get('errors', [])[:3])
+                        raise ValueError(f"LOT 수량 출고 정합성 실패 ({lot_no}): {errs}")
+
+                result['success'] = True
+                result['total_weight_kg'] = total_weight
+                result['ref'] = ref
+                result['outbound_date'] = outbound_date
+                result['message'] = (
+                    f"LOT 수량 출고: 일반 {len(normals)}개"
+                    + (f" + 샘플 {result['sample_picked']}개" if result['sample_picked'] else "")
+                    + f" → PICKED ({total_weight:,.0f}kg)")
+                logger.info(result['message'])
+
+        except (ValueError, TypeError) as e:
+            result['errors'].append(str(e))
+            logger.error(f"LOT 수량 출고 검증 오류: {e}")
+        except (sqlite3.OperationalError, sqlite3.IntegrityError) as e:
+            result['errors'].append(f"DB 오류: {e}")
+            logger.error(f"LOT 수량 출고 DB 오류: {e}", exc_info=True)
+        except Exception as e:
+            result['errors'].append(f"예기치 않은 오류: {e}")
+            logger.error(f"LOT 수량 출고 미예상 오류: {e}", exc_info=True)
+        return result
+
     # =========================================================================
     # v7.0.0: _preflight_alloc_cols — allocation_plan 테이블 컬럼 존재 검사
     # =========================================================================

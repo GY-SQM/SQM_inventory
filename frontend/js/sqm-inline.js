@@ -2046,6 +2046,135 @@
   window.showQuickOutboundPasteModal = showQuickOutboundPasteModal;
 
   /* ===================================================
+     8h-2. v8.7.4 MVP-2: LOT 수량 출고 (스캔 없음)
+     전량/부분 + 샘플 동반 + 위치 미상 — POST /api/outbound/lot-qty
+     =================================================== */
+  function showLotQtyOutboundModal() {
+    var today = new Date().toISOString().slice(0, 10);
+    var html = [
+      '<div style="max-width:560px">',
+      '  <h2 style="margin:0 0 6px 0">📦 LOT 수량 출고 <span style="font-size:.8rem;color:var(--text-muted)">(스캔 없음)</span></h2>',
+      '  <p style="color:var(--text-muted);margin:0 0 12px 0;font-size:.85rem">',
+      '    바코드 스캔 없이 LOT 단위로 출고합니다. 일반창고(위치 미상)·입고 즉시 출고·부분 출고에 사용하세요.',
+      '  </p>',
+      '  <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:10px">',
+      '    <label style="font-weight:600">LOT 번호</label>',
+      '    <input type="text" id="lq-lot" placeholder="예: 1126013063" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '    <label style="font-weight:600">출고 방식</label>',
+      '    <div style="display:flex;gap:14px;align-items:center">',
+      '      <label style="display:flex;align-items:center;gap:5px"><input type="radio" name="lq-mode" value="full" checked> 전량</label>',
+      '      <label style="display:flex;align-items:center;gap:5px"><input type="radio" name="lq-mode" value="part"> 부분</label>',
+      '      <input type="number" id="lq-count" min="1" placeholder="개수" disabled style="width:90px;padding:6px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    </div>',
+      '    <label style="font-weight:600">고객명</label>',
+      '    <input type="text" id="lq-customer" placeholder="예: ACME Corp" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    <label style="font-weight:600">판매참조 <span style="color:var(--text-muted);font-weight:400;font-size:.8rem">(선택)</span></label>',
+      '    <input type="text" id="lq-saleref" placeholder="SC RCVD 등 — 이중출고 방지 키" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '    <label style="font-weight:600">출고일</label>',
+      '    <input type="date" id="lq-date" value="' + today + '" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '  </div>',
+      '  <label style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:6px">',
+      '    <input type="checkbox" id="lq-sample" checked> 🧪 샘플도 함께 출고 <span style="color:var(--text-muted)">(전량 시 기본 포함)</span>',
+      '  </label>',
+      '  <label style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:10px">',
+      '    <input type="checkbox" id="lq-unlocated"> 📍 위치 미상 (비-랙 일반창고)',
+      '  </label>',
+      '  <div id="lq-result" style="margin-bottom:12px"></div>',
+      '  <div style="display:flex;gap:8px;justify-content:flex-end">',
+      '    <button id="lq-cancel" class="btn btn-ghost">닫기</button>',
+      '    <button id="lq-submit" class="btn btn-primary" disabled>출고</button>',
+      '  </div>',
+      '</div>'
+    ].join('\n');
+    showDataModal('', html);
+
+    var lot = document.getElementById('lq-lot');
+    var countEl = document.getElementById('lq-count');
+    var cust = document.getElementById('lq-customer');
+    var saleref = document.getElementById('lq-saleref');
+    var dateEl = document.getElementById('lq-date');
+    var sampleEl = document.getElementById('lq-sample');
+    var unlocEl = document.getElementById('lq-unlocated');
+    var result = document.getElementById('lq-result');
+    var submit = document.getElementById('lq-submit');
+    var cancel = document.getElementById('lq-cancel');
+    var modeRadios = document.getElementsByName('lq-mode');
+
+    function isFull() {
+      for (var i = 0; i < modeRadios.length; i++)
+        if (modeRadios[i].checked) return modeRadios[i].value === 'full';
+      return true;
+    }
+    function refresh() {
+      var full = isFull();
+      countEl.disabled = full;
+      // 전량이면 샘플 기본 체크, 부분이면 기본 해제 (사용자가 다시 바꿀 수 있음)
+      var ok = !!lot.value.trim() && !!cust.value.trim() &&
+               (full || (parseInt(countEl.value, 10) > 0));
+      submit.disabled = !ok;
+    }
+    for (var i = 0; i < modeRadios.length; i++) {
+      modeRadios[i].addEventListener('change', function() {
+        sampleEl.checked = isFull();   // 모드 전환 시 샘플 기본값 갱신
+        refresh();
+      });
+    }
+    lot.addEventListener('input', refresh);
+    cust.addEventListener('input', refresh);
+    countEl.addEventListener('input', refresh);
+
+    cancel.addEventListener('click', function() {
+      document.getElementById('sqm-modal').style.display = 'none';
+    });
+    submit.addEventListener('click', function() {
+      var full = isFull();
+      var payload = {
+        lot_no: lot.value.trim(),
+        count: full ? null : parseInt(countEl.value, 10),
+        customer: cust.value.trim(),
+        sale_ref: saleref.value.trim(),
+        outbound_date: dateEl.value || null,
+        include_sample: sampleEl.checked,
+        unlocated: unlocEl.checked
+      };
+      var desc = full ? '전량' : (payload.count + '개');
+      var extra = (payload.include_sample ? ' + 샘플' : '') + (payload.unlocated ? ' / 위치미상' : '');
+      if (!sqmConfirm('LOT ' + payload.lot_no + ' 을(를) ' + desc + extra + ' 로 ' + payload.customer + ' 에게 출고합니다. 계속?')) return;
+
+      submit.disabled = true; cancel.disabled = true;
+      result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 출고 처리 중...</div>';
+      apiPost('/api/outbound/lot-qty', payload).then(function(res) {
+        var d = (res && res.data) || {};
+        if (res && res.ok) {
+          result.innerHTML =
+            '<div style="padding:12px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--success)">' +
+            '<div style="font-weight:600;margin-bottom:4px">✅ ' + escapeHtml(res.message || '출고 완료') + '</div>' +
+            '<div style="color:var(--text-muted);font-size:.85rem">일반 ' + ((d.picked_count || 0) - (d.sample_picked || 0)) +
+            '개 · 샘플 ' + (d.sample_picked || 0) + '개 · ' + (d.total_weight_mt || 0).toFixed(3) + ' MT · ref=' + escapeHtml(d.ref || '') + '</div>' +
+            '</div>';
+          showToast('success', res.message || '출고 완료');
+          if (typeof dbgLog === 'function') dbgLog('🟢', 'LOT-QTY', res.message, '#66bb6a');
+          if (_currentRoute === 'inventory' && typeof loadInventoryPage === 'function') loadInventoryPage();
+          if (typeof loadKpi === 'function') loadKpi();
+        } else {
+          var errs = (d.errors || []).map(escapeHtml).join('<br>');
+          result.innerHTML = '<div style="padding:12px;color:var(--danger);background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--danger)">❌ ' +
+            escapeHtml(res.message || '출고 실패') + (errs ? '<div style="font-size:.85rem;margin-top:4px">' + errs + '</div>' : '') + '</div>';
+          showToast('warning', res.message || '출고 실패');
+        }
+        cancel.disabled = false;
+        refresh();
+      }).catch(function(e) {
+        result.innerHTML = '<div style="padding:12px;color:var(--danger)">❌ ' + escapeHtml(e.message || String(e)) + '</div>';
+        showToast('error', '실패: ' + (e.message || String(e)));
+        cancel.disabled = false; refresh();
+      });
+    });
+    refresh();
+  }
+  window.showLotQtyOutboundModal = showLotQtyOutboundModal;
+
+  /* ===================================================
      8i. F028 출고 확정 — PICKED → SOLD
      =================================================== */
   function showOutboundConfirmModal() {
@@ -2509,6 +2638,8 @@
     'onOnQuickOutbound': {m:'JS', u:'quick-outbound', lbl:'즉시 출고'},
     /* v864.3 Phase 4-B: 빠른 출고 (붙여넣기) — 여러 LOT 일괄 */
     'onQuickOutboundPaste': {m:'JS', u:'quick-outbound-paste', lbl:'빠른 출고 (붙여넣기)'},
+    /* v8.7.4 MVP-2: LOT 수량 출고 (스캔 없음) */
+    'onLotQtyOutbound': {m:'JS', u:'lot-qty-outbound', lbl:'LOT 수량 출고 (스캔없음)'},
     /* v864.3 Phase 4-B: Picking List PDF 업로드 */
     'onPickingListUpload':  {m:'JS', u:'picking-list-pdf', lbl:'Picking List 업로드 (PDF)'},
     'onPickingListExcelUpload':  {m:'JS', u:'picking-list-excel', lbl:'Picking List 업로드 (Excel)'},
@@ -2710,6 +2841,7 @@
     'apply-approved-allocation': function(){ showApplyApprovedAllocationModal(); },
     'pdf-inbound-upload': function(){ showOneStopInboundModal(); },
     'quick-outbound-paste': function(){ showQuickOutboundPasteModal(); },
+    'lot-qty-outbound': function(){ showLotQtyOutboundModal(); },
     'outbound-confirm': function(){ showOutboundConfirmModal(); },
     'approval-queue': function(){ showApprovalQueueModal(); },
     'return-dialog': function(){ showReturnDialog(); },

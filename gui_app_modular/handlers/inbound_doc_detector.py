@@ -134,11 +134,15 @@ class InboundDocDetector:
         # 2차: 하위 1단계
         self._log("🔍 현재 폴더에 파일 없음 → 하위 폴더 자동 탐색 중...")
         try:
-            subdirs = [
-                os.path.join(folder, n) for n in os.listdir(folder)
-                if os.path.isdir(os.path.join(folder, n))
-                and not self._is_generated_artifact_dir(os.path.join(folder, n))
-            ]
+            subdirs = []
+            for n in os.listdir(folder):
+                full = os.path.join(folder, n)
+                if not os.path.isdir(full):
+                    continue
+                if self._is_generated_artifact_dir(full):
+                    self._log(f"GPT 테스트 산출물 폴더 제외: {full}")
+                    continue
+                subdirs.append(full)
         except Exception:
             return []
 
