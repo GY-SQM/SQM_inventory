@@ -85,7 +85,7 @@
 - [x] **🔴 B4** `backend/api/allocation_api.py:~363` 모든 행 검증 실패(reserved=0)면 `success=False`로 "전체 실패" 표시 → 부분/정상 케이스 혼동. → processed>0면 부분성공 + 사유 분리.
 - [x] **🟡 B5** `backend/api/allocation_api.py:~372` 예약 후 실제 RESERVED 톤백 수 재검증 없이 카운트만 신뢰 → 일부만 예약돼도 통과(나머지 AVAILABLE에 갇힘). → 예약 직후 상태 재조회 검증.
 - [x] **🟡 B6** `outbound_mixin.py:~2461` `apply_approved`가 AVAILABLE 톤백 부족분을 `continue` 스킵하지만 success=true → 일부 LOT 예약 누락. → 실패건 errors 수집.
-- [ ] **🟡 B7** `backend/api/sales_order_validation.py:~146` 검증만 하고 상태 전환(다음 단계)을 호출 안 함 → 검증 PASS인데 PICKED/SOLD 미진행. → 검증→전환 체이닝 또는 안내.
+- [x] **🟡 B7** `backend/api/sales_order_validation.py:~146` 검증만 하고 상태 전환(다음 단계)을 호출 안 함 → 검증 PASS인데 PICKED/SOLD 미진행. → 검증→전환 체이닝 또는 안내.
 - [ ] **🟡 B8** `backend/api/inbound.py:~438` 반품입고 Excel 일부 행 LOT 못 찾으면 침묵 스킵 → 어느 행 실패인지 미표시. → 행별 사유 반환.
 - [ ] **🟡 B9** `backend/api/allocation_api.py:~815` export 후 원본 상태 유지 → 수정본 재업로드 시 DUPLICATE 충돌. → 편집/스테이징 상태 플래그.
 - [ ] **🟢 B10** `backend/api/location_candidates.py:~24` 최신 batch 없으면 후보 `{}` → 위치 자동배정 흐름 멈춤(추정). → "위치데이터 없음" 명시.
