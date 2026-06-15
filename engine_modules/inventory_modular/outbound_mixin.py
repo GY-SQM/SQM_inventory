@@ -4214,7 +4214,8 @@ class OutboundMixin(InventoryBaseMixin):
             logger.error(f"빠른 출고 미예상 오류: {e}", exc_info=True)
         return result
 
-    def outbound_lot_qty(self, lot_no: str, count=None, customer: str = '',
+    def outbound_lot_qty(self, lot_no: str, count=None, tonbag_ids=None,
+                         customer: str = '',
                          sale_ref: str = '', outbound_date: str = None,
                          include_sample=None, unlocated: bool = False,
                          confirm: bool = False,
@@ -4290,33 +4291,53 @@ class OutboundMixin(InventoryBaseMixin):
                             f"[DUP_LOT_OUTBOUND] 이미 동일 출고건 존재: "
                             f"{lot_no}/{customer}/{sale_ref}/{outbound_date}")
 
-                # 1) 일반 톤백 선택 (샘플 제외)
-                if is_full:
-                    normals = self.db.fetchall(
-                        "SELECT id, sub_lt, weight, tonbag_uid FROM inventory_tonbag "
-                        "WHERE lot_no=? AND status=? AND COALESCE(is_sample,0)=0 "
-                        "ORDER BY sub_lt", (lot_no, STATUS_AVAILABLE))
-                else:
-                    normals = self.db.fetchall(
-                        "SELECT id, sub_lt, weight, tonbag_uid FROM inventory_tonbag "
-                        "WHERE lot_no=? AND status=? AND COALESCE(is_sample,0)=0 "
-                        "ORDER BY sub_lt LIMIT ?", (lot_no, STATUS_AVAILABLE, count))
-                    if len(normals) < count:
+                # 톤백 선택 — 3가지 경로
+                #  (A) tonbag_ids 지정: 사용자가 체크한 특정 톤백만 (부분 출고 정밀 선택)
+                #  (B) 전량(count=None): 가용 일반 톤백 전체 (+옵션 샘플)
+                #  (C) 부분(count=N): 가용 일반 톤백 N개 자동 선택 (+옵션 샘플)
+                if tonbag_ids:
+                    _ids = [int(x) for x in tonbag_ids]
+                    _ph = ','.join('?' * len(_ids))
+                    rows = self.db.fetchall(
+                        f"SELECT id, sub_lt, weight, tonbag_uid, "
+                        f"COALESCE(is_sample,0) AS is_sample FROM inventory_tonbag "
+                        f"WHERE id IN ({_ph}) AND lot_no=? AND status=?",
+                        tuple(_ids) + (lot_no, STATUS_AVAILABLE))
+                    if len(rows) != len(_ids):
                         raise ValueError(
-                            f"가용 일반 톤백 부족: {len(normals)}개 (요청 {count}개)")
-                if is_full and not normals and not include_sample:
-                    raise ValueError(f"출고할 가용 톤백 없음: {lot_no}")
-
-                selected = list(normals)
-
-                # 2) 샘플 톤백 선택 (옵션)
-                if include_sample:
-                    samples = self.db.fetchall(
-                        "SELECT id, sub_lt, weight, tonbag_uid FROM inventory_tonbag "
-                        "WHERE lot_no=? AND status=? AND COALESCE(is_sample,0)=1",
-                        (lot_no, STATUS_AVAILABLE))
-                    selected.extend(samples)
+                            f"선택한 톤백 중 일부가 가용(AVAILABLE)이 아니거나 LOT 불일치: "
+                            f"요청 {len(_ids)}개 / 유효 {len(rows)}개")
+                    normals = [r for r in rows
+                               if int(r['is_sample'] if isinstance(r, dict) else r[4]) == 0]
+                    samples = [r for r in rows
+                               if int(r['is_sample'] if isinstance(r, dict) else r[4]) == 1]
+                    selected = list(rows)
                     result['sample_picked'] = len(samples)
+                else:
+                    # 1) 일반 톤백 선택 (샘플 제외)
+                    if is_full:
+                        normals = self.db.fetchall(
+                            "SELECT id, sub_lt, weight, tonbag_uid FROM inventory_tonbag "
+                            "WHERE lot_no=? AND status=? AND COALESCE(is_sample,0)=0 "
+                            "ORDER BY sub_lt", (lot_no, STATUS_AVAILABLE))
+                    else:
+                        normals = self.db.fetchall(
+                            "SELECT id, sub_lt, weight, tonbag_uid FROM inventory_tonbag "
+                            "WHERE lot_no=? AND status=? AND COALESCE(is_sample,0)=0 "
+                            "ORDER BY sub_lt LIMIT ?", (lot_no, STATUS_AVAILABLE, count))
+                        if len(normals) < count:
+                            raise ValueError(
+                                f"가용 일반 톤백 부족: {len(normals)}개 (요청 {count}개)")
+                    selected = list(normals)
+
+                    # 2) 샘플 톤백 선택 (옵션)
+                    if include_sample:
+                        samples = self.db.fetchall(
+                            "SELECT id, sub_lt, weight, tonbag_uid FROM inventory_tonbag "
+                            "WHERE lot_no=? AND status=? AND COALESCE(is_sample,0)=1",
+                            (lot_no, STATUS_AVAILABLE))
+                        selected.extend(samples)
+                        result['sample_picked'] = len(samples)
 
                 if not selected:
                     raise ValueError(f"출고할 가용 톤백 없음: {lot_no}")

@@ -2052,20 +2052,31 @@
   function showLotQtyOutboundModal() {
     var today = new Date().toISOString().slice(0, 10);
     var html = [
-      '<div style="max-width:560px">',
+      '<div style="max-width:580px">',
       '  <h2 style="margin:0 0 6px 0">📦 LOT 수량 출고 <span style="font-size:.8rem;color:var(--text-muted)">(스캔 없음)</span></h2>',
       '  <p style="color:var(--text-muted);margin:0 0 12px 0;font-size:.85rem">',
       '    바코드 스캔 없이 LOT 단위로 출고합니다. 일반창고(위치 미상)·입고 즉시 출고·부분 출고에 사용하세요.',
       '  </p>',
       '  <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:10px">',
       '    <label style="font-weight:600">LOT 번호</label>',
-      '    <input type="text" id="lq-lot" placeholder="예: 1126013063" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '    <div style="display:flex;gap:6px">',
+      '      <input type="text" id="lq-lot" placeholder="직접 입력 또는 →" style="flex:1;min-width:0;padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '      <select id="lq-lot-select" style="flex:1.2;min-width:0;padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px"><option value="">⏳ 가용 LOT 불러오는 중...</option></select>',
+      '    </div>',
       '    <label style="font-weight:600">출고 방식</label>',
       '    <div style="display:flex;gap:14px;align-items:center">',
       '      <label style="display:flex;align-items:center;gap:5px"><input type="radio" name="lq-mode" value="full" checked> 전량</label>',
-      '      <label style="display:flex;align-items:center;gap:5px"><input type="radio" name="lq-mode" value="part"> 부분</label>',
-      '      <input type="number" id="lq-count" min="1" placeholder="개수" disabled style="width:90px;padding:6px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '      <label style="display:flex;align-items:center;gap:5px"><input type="radio" name="lq-mode" value="part"> 부분(톤백 선택)</label>',
       '    </div>',
+      '  </div>',
+      '  <div id="lq-tonbag-wrap" style="display:none;margin-bottom:10px">',
+      '    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">',
+      '      <span style="font-weight:600;font-size:.85rem">출고할 톤백 선택</span>',
+      '      <span style="font-size:.8rem;color:var(--text-muted)"><a href="#" id="lq-tb-all" style="color:var(--accent)">전체</a> · <a href="#" id="lq-tb-none" style="color:var(--accent)">해제</a> · <span id="lq-tb-sum">0개</span></span>',
+      '    </div>',
+      '    <div id="lq-tonbags" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px;background:var(--bg-hover);font-size:.85rem">LOT을 먼저 선택하세요.</div>',
+      '  </div>',
+      '  <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:10px">',
       '    <label style="font-weight:600">고객명</label>',
       '    <input type="text" id="lq-customer" placeholder="예: ACME Corp" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
       '    <label style="font-weight:600">판매참조 <span style="color:var(--text-muted);font-weight:400;font-size:.8rem">(선택)</span></label>',
@@ -2073,8 +2084,8 @@
       '    <label style="font-weight:600">출고일</label>',
       '    <input type="date" id="lq-date" value="' + today + '" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
       '  </div>',
-      '  <label style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:6px">',
-      '    <input type="checkbox" id="lq-sample" checked> 🧪 샘플도 함께 출고 <span style="color:var(--text-muted)">(전량 시 기본 포함)</span>',
+      '  <label id="lq-sample-row" style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:6px">',
+      '    <input type="checkbox" id="lq-sample" checked> 🧪 샘플도 함께 출고 <span style="color:var(--text-muted)">(전량 시 기본 포함 / 부분은 위 목록에서 선택)</span>',
       '  </label>',
       '  <label style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:6px">',
       '    <input type="checkbox" id="lq-unlocated"> 📍 위치 미상 (비-랙 일반창고)',
@@ -2092,57 +2103,118 @@
     showDataModal('', html);
 
     var lot = document.getElementById('lq-lot');
-    var countEl = document.getElementById('lq-count');
+    var lotSel = document.getElementById('lq-lot-select');
     var cust = document.getElementById('lq-customer');
     var saleref = document.getElementById('lq-saleref');
     var dateEl = document.getElementById('lq-date');
     var sampleEl = document.getElementById('lq-sample');
+    var sampleRow = document.getElementById('lq-sample-row');
     var unlocEl = document.getElementById('lq-unlocated');
     var confirmEl = document.getElementById('lq-confirm');
     var result = document.getElementById('lq-result');
     var submit = document.getElementById('lq-submit');
     var cancel = document.getElementById('lq-cancel');
     var modeRadios = document.getElementsByName('lq-mode');
+    var tbWrap = document.getElementById('lq-tonbag-wrap');
+    var tbBox = document.getElementById('lq-tonbags');
+    var tbSum = document.getElementById('lq-tb-sum');
+    var _tonbagsLoadedFor = '';
 
     function isFull() {
       for (var i = 0; i < modeRadios.length; i++)
         if (modeRadios[i].checked) return modeRadios[i].value === 'full';
       return true;
     }
+    function checkedTonbags() {
+      return Array.prototype.slice.call(tbBox.querySelectorAll('input.lq-tb:checked'));
+    }
+    function updateTbSum() {
+      var n = checkedTonbags().length;
+      var kg = checkedTonbags().reduce(function(s, c){ return s + (parseFloat(c.getAttribute('data-w')) || 0); }, 0);
+      tbSum.textContent = n + '개 · ' + (kg / 1000).toFixed(3) + ' MT';
+    }
+    // 가용 LOT 목록 채우기
+    apiGet('/api/outbound/lot-qty/lots').then(function(res) {
+      var items = (res && res.data && res.data.items) || [];
+      if (!items.length) { lotSel.innerHTML = '<option value="">가용 LOT 없음</option>'; return; }
+      var opts = ['<option value="">— 목록에서 선택 —</option>'];
+      items.forEach(function(it) {
+        var label = it.lot_no + (it.product ? ' · ' + it.product : '') +
+                    ' · 가용 ' + it.avail_normal + '개' + (it.avail_sample ? '(+샘플)' : '');
+        opts.push('<option value="' + escapeHtml(it.lot_no) + '">' + escapeHtml(label) + '</option>');
+      });
+      lotSel.innerHTML = opts.join('');
+    }).catch(function() { lotSel.innerHTML = '<option value="">목록 로드 실패 (직접 입력)</option>'; });
+
+    function loadTonbags() {
+      var l = lot.value.trim();
+      if (!l) { tbBox.innerHTML = 'LOT을 먼저 선택하세요.'; _tonbagsLoadedFor=''; updateTbSum(); return; }
+      if (_tonbagsLoadedFor === l) return;
+      tbBox.innerHTML = '⏳ 톤백 불러오는 중...';
+      apiGet('/api/outbound/lot-qty/tonbags?lot_no=' + encodeURIComponent(l)).then(function(res) {
+        var items = (res && res.data && res.data.items) || [];
+        _tonbagsLoadedFor = l;
+        if (!items.length) { tbBox.innerHTML = '<span style="color:var(--text-muted)">가용 톤백 없음</span>'; updateTbSum(); return; }
+        tbBox.innerHTML = items.map(function(t) {
+          var tag = t.is_sample ? ' 🧪샘플' : '';
+          var loc = t.location ? ' · ' + escapeHtml(t.location) : '';
+          return '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;border-radius:4px;cursor:pointer">' +
+                 '<input type="checkbox" class="lq-tb" value="' + t.id + '" data-w="' + (t.weight||0) + '" data-sample="' + t.is_sample + '">' +
+                 '<span style="font-family:monospace">#' + t.sub_lt + '</span>' +
+                 '<span style="color:var(--text-muted)">' + (t.weight||0).toFixed(0) + 'kg' + loc + tag + '</span></label>';
+        }).join('');
+        Array.prototype.forEach.call(tbBox.querySelectorAll('input.lq-tb'), function(c) {
+          c.addEventListener('change', function(){ updateTbSum(); refresh(); });
+        });
+        updateTbSum();
+        refresh();
+      }).catch(function(){ tbBox.innerHTML = '<span style="color:var(--danger)">톤백 로드 실패</span>'; });
+    }
+
+    document.getElementById('lq-tb-all').addEventListener('click', function(e){ e.preventDefault();
+      Array.prototype.forEach.call(tbBox.querySelectorAll('input.lq-tb'), function(c){ c.checked = true; }); updateTbSum(); refresh(); });
+    document.getElementById('lq-tb-none').addEventListener('click', function(e){ e.preventDefault();
+      Array.prototype.forEach.call(tbBox.querySelectorAll('input.lq-tb'), function(c){ c.checked = false; }); updateTbSum(); refresh(); });
+
     function refresh() {
       var full = isFull();
-      countEl.disabled = full;
-      // 전량이면 샘플 기본 체크, 부분이면 기본 해제 (사용자가 다시 바꿀 수 있음)
+      tbWrap.style.display = full ? 'none' : 'block';
+      sampleRow.style.display = full ? 'flex' : 'none';   // 부분은 목록에서 샘플 직접 선택
       var ok = !!lot.value.trim() && !!cust.value.trim() &&
-               (full || (parseInt(countEl.value, 10) > 0));
+               (full || checkedTonbags().length > 0);
       submit.disabled = !ok;
     }
     for (var i = 0; i < modeRadios.length; i++) {
       modeRadios[i].addEventListener('change', function() {
-        sampleEl.checked = isFull();   // 모드 전환 시 샘플 기본값 갱신
+        if (!isFull()) loadTonbags();
         refresh();
       });
     }
-    lot.addEventListener('input', refresh);
+    lot.addEventListener('input', function(){ _tonbagsLoadedFor=''; if(!isFull()) loadTonbags(); refresh(); });
+    lotSel.addEventListener('change', function(){
+      if (lotSel.value) { lot.value = lotSel.value; _tonbagsLoadedFor=''; if(!isFull()) loadTonbags(); }
+      refresh();
+    });
     cust.addEventListener('input', refresh);
-    countEl.addEventListener('input', refresh);
 
     cancel.addEventListener('click', function() {
       document.getElementById('sqm-modal').style.display = 'none';
     });
     submit.addEventListener('click', function() {
       var full = isFull();
+      var ids = full ? null : checkedTonbags().map(function(c){ return parseInt(c.value, 10); });
       var payload = {
         lot_no: lot.value.trim(),
-        count: full ? null : parseInt(countEl.value, 10),
+        count: full ? null : null,
+        tonbag_ids: ids,
         customer: cust.value.trim(),
         sale_ref: saleref.value.trim(),
         outbound_date: dateEl.value || null,
-        include_sample: sampleEl.checked,
+        include_sample: full ? sampleEl.checked : false,
         unlocated: unlocEl.checked,
         confirm: confirmEl.checked
       };
-      var desc = full ? '전량' : (payload.count + '개');
+      var desc = full ? '전량' : (ids.length + '개 톤백 선택');
       var extra = (payload.include_sample ? ' + 샘플' : '') + (payload.unlocated ? ' / 위치미상' : '') + (payload.confirm ? ' / 확정(SOLD)' : '');
       if (!sqmConfirm('LOT ' + payload.lot_no + ' 을(를) ' + desc + extra + ' 로 ' + payload.customer + ' 에게 출고합니다. 계속?')) return;
 
