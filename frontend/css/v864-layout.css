@@ -2175,3 +2175,8 @@ table.sqm-table {
   line-height: 1.2 !important;
   padding: 4px 8px !important;
 }
+
+/* [v8.7.4] 테마 버튼: 현재 테마 버튼은 숨기고 '바뀔 테마' 버튼만 노출 (가독성/직관성)
+   다크 모드 → ☀️ Light 만 표시 / 라이트 모드 → 🌙 Dark 만 표시 */
+html[data-theme="dark"]  .topbar-btn[data-action="theme-dark"]  { display: none; }
+html[data-theme="light"] .topbar-btn[data-action="theme-light"] { display: none; }

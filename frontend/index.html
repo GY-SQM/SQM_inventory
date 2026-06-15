@@ -6,7 +6,7 @@
   <title>S.I.M.S (SQM Inventory Management System) v8.7.2</title>
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="stylesheet" href="css/design-system.css?v=20260427f">
-  <link rel="stylesheet" href="css/v864-layout.css?v=20260615side2">
+  <link rel="stylesheet" href="css/v864-layout.css?v=20260615side3">
   <link rel="stylesheet" href="css/luxury.css?v=20260615theme">
 </head>
 <body data-theme="dark">
@@ -135,8 +135,9 @@
         </div>
       </div>
       <hr class="menu-sep">
-      <button data-action="onInventoryMove" title="창고 내 톤백의 위치(구역/행/열)를 엑셀·지도 형태로 매핑합니다">📍 톤백 위치 매핑</button>
-      <button data-action="onLocationMapImport" title="위치재고조회 엑셀(신형식 G동-칸-열-층 [N])을 업로드하여 LOT 위치 후보 스냅샷을 검증·diff·저장합니다. 톤백별 위치는 출고 바코드 스캔 시 확정됩니다">📥 위치재고 엑셀 Import</button>
+      <!-- [v8.7.4] '📍 톤백 위치 매핑'은 '📥 위치재고 엑셀 Import'로 통합됨.
+           (Import 모달의 '톤백 위치까지 즉시 확정' 옵션으로 동일 기능 수행. 엔진/API는 유지) -->
+      <button data-action="onLocationMapImport" title="위치재고조회 엑셀(신형식 G동-칸-열-층 [N])을 업로드. LOT 위치 후보 스냅샷 저장(검증·diff·롤백) + 옵션 선택 시 톤백 위치까지 즉시 확정">📥 위치재고 엑셀 Import (위치 통합)</button>
       <button data-action="onWarehouseDashboard" title="5동/6동 평면도 + 셀별 점유 현황 (EMPTY/OCCUPIED/HALF)">📊 창고 현황 (대시보드)</button>
 
     </div>
@@ -399,7 +400,7 @@
   <script src="js/sqm-listview.js?v=20260603autopop"></script>
   <script src="js/sqm-case3-dialog.js?v=20260513a"></script>
   <script src="js/sqm-location-mapping.js?v=20260513a"></script>
-  <script src="js/sqm-location-map-import.js?v=20260519a"></script>
+  <script src="js/sqm-location-map-import.js?v=20260615locmerge"></script>
   <script src="js/sqm-warehouse-dashboard.js?v=20260603autopop"></script>
     <script src="js/sqm-revert.js?v=20260512b"></script>
     <script src="js/sqm-weight-panel.js?v=20260603url"></script>

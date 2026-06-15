@@ -320,10 +320,13 @@ async def preview_location_map(file: UploadFile = File(...)):
 async def commit_location_map(
     file: UploadFile = File(...),
     force: bool = Query(False, description='입고 누락(10개 미만) 경고를 무시하고 강제 저장'),
+    apply_tonbag: bool = Query(False, description='True면 LOT 셀 매핑을 톤백 위치까지 즉시 확정(inventory_tonbag.location 갱신)'),
 ):
     """
     검증 통과분을 lot_location_map 에 새 batch 로 저장.
-    inventory_tonbag.location 은 변경하지 않는다.
+    기본은 inventory_tonbag.location 을 변경하지 않는다(LOT 후보 스냅샷).
+    [v8.7.4] apply_tonbag=True 면 각 LOT 의 셀(위치+톤백수)을 가용 톤백에 개수만큼
+    분배하여 inventory_tonbag.location 까지 즉시 확정 — '톤백 위치 매핑' 통합 기능.
     - 치명적 에러(형식/셀중복/LOT중복) 있으면 항상 차단
     - 입고 누락(신규 LOT 10개 미만)은 force=true 가 아니면 차단
     """
@@ -416,18 +419,53 @@ async def commit_location_map(
                          lot['sap_no'], now),
                     )
                     rows += 1
+
+            # [v8.7.4] 옵션: 톤백 위치까지 즉시 확정 (셀 매핑 → 가용 톤백에 개수만큼 분배)
+            applied_tonbags = 0
+            apply_shortfalls = []
+            if apply_tonbag:
+                for lot in doc['lots']:
+                    cells = [c for c in lot['cells'] if c.get('valid')]
+                    if not cells:
+                        continue
+                    tb_ids = [r[0] for r in con.execute(
+                        "SELECT id FROM inventory_tonbag "
+                        "WHERE lot_no=? AND status='AVAILABLE' AND COALESCE(is_sample,0)=0 "
+                        "ORDER BY sub_lt", (lot['lot_no'],)).fetchall()]
+                    mapped_total = sum(int(c.get('tonbag_count') or 0) for c in cells)
+                    idx = 0
+                    for c in cells:
+                        for _ in range(int(c.get('tonbag_count') or 0)):
+                            if idx >= len(tb_ids):
+                                break
+                            con.execute(
+                                "UPDATE inventory_tonbag SET location=?, "
+                                "location_updated_at=?, updated_at=? WHERE id=?",
+                                (c['location'], now, now, tb_ids[idx]))
+                            idx += 1
+                            applied_tonbags += 1
+                    if mapped_total > len(tb_ids):
+                        apply_shortfalls.append(
+                            f"{lot['lot_no']}: 매핑 {mapped_total}개 > 가용 {len(tb_ids)}개 (가용분만 반영)")
+
             con.commit()
         finally:
             con.close()
 
-        logger.info('[location-map/commit] batch=%s rows=%s file=%s force=%s',
-                    batch_id, rows, file.filename, force)
+        logger.info('[location-map/commit] batch=%s rows=%s file=%s force=%s apply_tonbag=%s applied=%s',
+                    batch_id, rows, file.filename, force, apply_tonbag, applied_tonbags)
         report['batch_id'] = batch_id
         report['committed_rows'] = rows
-        return ok_response(
-            report,
-            message=f'배치 #{batch_id} 위치 후보 저장 완료 — {rows}개 셀 매핑 저장'
-        )
+        report['apply_tonbag'] = apply_tonbag
+        report['applied_tonbags'] = applied_tonbags
+        if apply_shortfalls:
+            report['apply_shortfalls'] = apply_shortfalls
+        _msg = f'배치 #{batch_id} 위치 후보 저장 완료 — {rows}개 셀 매핑 저장'
+        if apply_tonbag:
+            _msg += f' · 톤백 위치 확정 {applied_tonbags}개'
+            if apply_shortfalls:
+                _msg += f' (가용부족 {len(apply_shortfalls)}건)'
+        return ok_response(report, message=_msg)
     except ValueError as ve:
         return err_response(
             str(ve),
