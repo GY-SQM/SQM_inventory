@@ -3,6 +3,17 @@
 import { apiGet } from '../api-client.js';
 import { showToast } from '../toast.js';
 
+function extractRows(res) {
+  if (Array.isArray(res)) return res;
+  if (!res) return [];
+  if (Array.isArray(res.data)) return res.data;
+  if (res.data && Array.isArray(res.data.rows)) return res.data.rows;
+  if (res.data && Array.isArray(res.data.items)) return res.data.items;
+  if (Array.isArray(res.rows)) return res.rows;
+  if (Array.isArray(res.items)) return res.items;
+  return [];
+}
+
 export async function mount(container) {
   container.innerHTML = `
     <section class="page" data-page="picked">
@@ -32,7 +43,9 @@ async function load() {
     table.style.display = 'none';
     empty.style.display = 'none';
     const res = await apiGet('/api/outbound/scheduled?status=picked');
-    const rows = (res?.data ?? res?.rows ?? []) || [];
+    if (res?.ok === false || res?.success === false) throw new Error(res.message || res.error || 'picked response failed');
+    const extractedRows = extractRows(res);
+    const rows = Array.isArray(extractedRows) ? extractedRows : [];
     if (rows.length === 0) {
       empty.style.display = 'block';
       return;
@@ -50,6 +63,7 @@ async function load() {
         + (_pqty > 0 ? '<span style="'+_ps+'">📦 수량 '+_pqty.toLocaleString('ko-KR')+'</span>' : '');
     }
   } catch (e) {
+    console.error('[picked] load failed', e);
     empty.textContent = `불러오기 실패: ${e.message}`;
     empty.style.display = 'block';
     showToast?.('error', 'Picked 데이터 로드 실패');

@@ -54,11 +54,14 @@ SQM v7.0.0 — RETURN_AS_REINBOUND 정책 엔진
         logger.warning(f"오류: {result.error}")
 """
 from engine_modules.constants import STATUS_AVAILABLE
+import logging
 import sqlite3
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional, List
+
+logger = logging.getLogger(__name__)
 
 
 # ─── 결과 데이터클래스 ────────────────────────────────────────────────────────
@@ -161,14 +164,11 @@ class ReturnReinboundEngine:
             )
 
             # v8.0.5 [ATOMIC-FIX]: tonbag restore 후 recalc를 COMMIT 전에 실행
-            # GPT 지적: DETAIL변경 ≠ SUMMARY갱신 원자성 보장
-            try:
-                _eng = getattr(self, '_engine', None) or getattr(self, 'engine', None)
-                if _eng and hasattr(_eng, '_recalc_current_weight'):
-                    _eng._recalc_current_weight(lot_no, reason='P2_REINBOUND_ATOMIC')
-            except Exception as _re:
-                import logging
-                logging.getLogger(__name__).debug(f'[ATOMIC] reinbound atomic recalc 스킵: {_re}')
+            # v8.0.5 [ATOMIC-FIX] + D5: 재계산 실패 시 COMMIT 중단 및 롤백
+            _eng = getattr(self, '_engine', None) or getattr(self, 'engine', None)
+            if _eng and hasattr(_eng, '_recalc_current_weight'):
+                # try-except 제거 → 에러 발생 시 outer catch로 이동하여 ROLLBACK 수행
+                _eng._recalc_current_weight(lot_no, reason='P2_REINBOUND_ATOMIC')
 
             self.conn.execute("COMMIT")
 
@@ -243,6 +243,27 @@ class ReturnReinboundEngine:
         if not tonbags:
             errors.append(f"톤백 없음: {lot_no}")
 
+        # 6) v7.6.0 원인2 방어: 샘플 사전 검증 (D8: Preflight 단계로 이동)
+        try:
+            _sample_row = self.conn.execute(
+                "SELECT id, COALESCE(weight, 0) as w, status, tonbag_uid FROM inventory_tonbag "
+                "WHERE lot_no = ? AND COALESCE(is_sample,0) = 1 LIMIT 1",
+                (lot_no,)
+            ).fetchone()
+            
+            if _sample_row is None:
+                errors.append(f"[v7.6.0] 샘플 정책 위반: LOT {lot_no}에 샘플 tonbag 없음. DB 수동 확인 필요.")
+            else:
+                _s = dict(_sample_row)
+                _sw = float(_s.get('w') or 0)
+                if _sw > 0 and abs(_sw - 1.0) > 0.01:
+                    errors.append(f"[v7.6.0] 샘플 무게 오류: LOT {lot_no} 샘플 weight={_sw}kg (필수 1.000kg)")
+                
+                if _s.get('status') == STATUS_AVAILABLE:
+                    logger.warning(f"[v7.6.0] 샘플 이중 복구 감지: LOT {lot_no} 샘플이 이미 AVAILABLE 상태.")
+        except Exception as _e:
+            errors.append(f"샘플 검증 중 오류: {_e}")
+
         if errors:
             return PreflightResult(ok=False, errors=errors)
 
@@ -262,63 +283,11 @@ class ReturnReinboundEngine:
     ) -> tuple[int, float]:
         """
         tonbag_uid UNIQUE 제약 준수: 신규 INSERT 없이 UPDATE만 사용.
-        v7.6.0: UPDATE 전 샘플 tonbag 상태 사전 검증 추가.
+        v7.6.0: (D8) 샘플 사전 검증은 _preflight에서 수행됨.
 
         Returns:
             (복구된 톤백 수, 복구된 총 중량 kg)
         """
-        # ★ v7.6.0 원인2 방어: UPDATE 전 샘플 사전 검증
-        # (1) 샘플 tonbag 존재 확인 — weight/weight_kg 양쪽 컬럼 허용
-        try:
-            _sample_row = self.conn.execute(
-                "SELECT id, COALESCE(weight, 0) as w, "
-                "status, tonbag_uid FROM inventory_tonbag "
-                "WHERE lot_no = ? AND COALESCE(is_sample,0) = 1 LIMIT 1",
-                (lot_no,)
-            ).fetchone()
-        except Exception:
-            # 컬럼 조합 실패 시 단순 쿼리로 재시도
-            _sample_row = self.conn.execute(
-                "SELECT id, status, tonbag_uid FROM inventory_tonbag "
-                "WHERE lot_no = ? AND COALESCE(is_sample,0) = 1 LIMIT 1",
-                (lot_no,)
-            ).fetchone()
-
-        if _sample_row is None:
-            raise ValueError(
-                f"[v7.6.0] RETURN_AS_REINBOUND 샘플 정책 위반: "
-                f"LOT {lot_no}에 샘플 tonbag 없음. DB 수동 확인 필요."
-            )
-
-        _s = dict(_sample_row) if hasattr(_sample_row, 'keys') else {}
-
-        # (2) 샘플 무게 검증 (weight 컬럼이 있을 때만)
-        _sw = float(_s.get('w') or _s.get('weight') or _s.get('weight_kg') or 0)
-        if _sw > 0 and abs(_sw - 1.0) > 0.01:
-            raise ValueError(
-                f"[v7.6.0] RETURN_AS_REINBOUND 샘플 무게 오류: "
-                f"LOT {lot_no} 샘플 weight={_sw}kg (필수 1.000kg). "
-                f"tonbag_uid={_s.get('tonbag_uid')}"
-            )
-
-        # (3) tonbag_uid 형식 검증 (경고만)
-        _expected_uid = f"{lot_no}-S00"
-        _actual_uid = str(_s.get('tonbag_uid') or '')
-        if _actual_uid and _actual_uid != _expected_uid:
-            import logging as _log
-            _log.getLogger(__name__).warning(
-                f"[v7.6.0] 샘플 tonbag_uid 불일치: "
-                f"expected={_expected_uid}, actual={_actual_uid}"
-            )
-
-        # (4) 샘플 이중 복구 경고 (ERROR 아닌 WARNING)
-        if _s.get('status') == STATUS_AVAILABLE:
-            import logging as _log
-            _log.getLogger(__name__).warning(
-                f"[v7.6.0] 샘플 이중 복구 감지: LOT {lot_no} 샘플이 "
-                f"이미 AVAILABLE 상태. 반품 중복 처리 가능성 확인 필요."
-            )
-
         total_weight = sum(t['weight_kg'] for t in tonbag_rows)
         count = len(tonbag_rows)
 
@@ -372,14 +341,10 @@ class ReturnReinboundEngine:
             """,
             (lot_no,)
         )
-        # v8.0.2 [P2]: 중앙 재계산으로 current_weight 복구
-        try:
-            engine = getattr(self, '_engine', None) or getattr(self, 'engine', None)
-            if engine and hasattr(engine, '_recalc_current_weight'):
-                engine._recalc_current_weight(lot_no, reason='P2_REINBOUND_RESTORE')
-        except Exception as _e:
-            import logging
-            logging.getLogger(__name__).debug(f'[P2] reinbound recalc 스킵: {_e}')
+        # v8.0.2 [P2] + D5: 중앙 재계산으로 current_weight 복구 (실패 시 상위에서 롤백)
+        engine = getattr(self, '_engine', None) or getattr(self, 'engine', None)
+        if engine and hasattr(engine, '_recalc_current_weight'):
+            engine._recalc_current_weight(lot_no, reason='P2_REINBOUND_RESTORE')
 
     # ── 반품 이력 기록 ────────────────────────────────────────────────────────
     def _write_return_log(

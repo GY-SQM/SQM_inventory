@@ -306,7 +306,7 @@ def _update_inventory_db(
 
     with db.transaction("IMMEDIATE"):
         # inventory 수정
-        db.execute(
+        cursor_upd = db.execute(
             """
             UPDATE inventory
             SET mxbg_pallet    = ?,
@@ -318,6 +318,9 @@ def _update_inventory_db(
             """,
             (new_count, new_net, new_gross, new_current, now, lot_no),
         )
+        # D7: rowcount 검증 추가
+        if hasattr(cursor_upd, "rowcount") and cursor_upd.rowcount == 0:
+            raise ValueError(f"재고 테이블 업데이트 실패 (0행 수정): {lot_no}")
 
         # stock_movement 기록 (movement_type='ADJUSTMENT')
         cursor = db.execute(

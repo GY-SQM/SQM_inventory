@@ -22,8 +22,63 @@ async function loadModules() {
       mods[name] = await fn();
       console.info(`[SQM] OK 모듈: ${name}`);
     } catch (e) {
+      mods[name] = null;
       console.error(`[SQM] FAIL 모듈: ${name}`, e);
+      if (name === 'router') {
+        reportRouterProblem('라우터 모듈 로드 실패 — 탭 전환 기능이 제한될 수 있습니다.', e);
+      }
     }
+  }
+}
+
+function reportRouterProblem(message, error) {
+  window.SQM = window.SQM || {};
+  window.SQM.routerInitFailed = true;
+  window.SQM.routerInitError = String(error?.message || error || message);
+  console.error('[SQM] router init failed:', message, error || '');
+
+  const show = mods.toast?.showToast || window.showToast;
+  if (typeof show === 'function') show('error', message);
+
+  const target = document.getElementById('page-container');
+  if (target && !document.getElementById('router-error-banner')) {
+    const banner = document.createElement('div');
+    banner.id = 'router-error-banner';
+    banner.className = 'empty router-error-banner';
+    banner.style.cssText = 'color:var(--status-error);padding:10px 12px;border-bottom:1px solid var(--panel-border);';
+    banner.textContent = message;
+    target.prepend(banner);
+  }
+}
+
+function initRouterSafely() {
+  const inlineRouterAvailable =
+    typeof window.SQM?.renderPage === 'function' || typeof window.renderPage === 'function';
+  if (!mods.router) {
+    reportRouterProblem(
+      inlineRouterAvailable
+        ? 'router.js 모듈 누락 — 기존 라우터로 계속 진행합니다.'
+        : 'router.js 모듈 누락 — 화면 전환 기능이 제한될 수 있습니다.'
+    );
+    return;
+  }
+  if (typeof mods.router.initRouter !== 'function') {
+    reportRouterProblem(
+      inlineRouterAvailable
+        ? 'initRouter 없음 — 기존 라우터로 계속 진행합니다.'
+        : 'initRouter 없음 — 화면 전환 기능이 제한될 수 있습니다.'
+    );
+    return;
+  }
+  try {
+    mods.router.initRouter();
+  } catch (e) {
+    reportRouterProblem(
+      inlineRouterAvailable
+        ? '라우터 초기화 실패 — 기존 라우터로 계속 진행합니다.'
+        : '라우터 초기화 실패 — 화면 전환 기능이 제한될 수 있습니다.',
+      e
+    );
   }
 }
 
@@ -44,7 +99,9 @@ function installFailSafe() {
   // 사이드바 라우트도 fail-safe
   document.querySelectorAll('[data-route]').forEach(el => {
     el.addEventListener('click', (ev) => {
-      if (!el.dataset._bound) {
+      const hasRouteBinding = el.dataset._bound || el.dataset._sqmBound ||
+        typeof window.SQM?.renderPage === 'function' || typeof window.renderPage === 'function';
+      if (!hasRouteBinding) {
         ev.preventDefault();
         document.querySelectorAll('[data-route]').forEach(e => e.classList.remove('active'));
         el.classList.add('active');
@@ -73,7 +130,7 @@ async function boot() {
   try { mods.toolbar?.bindToolbar?.(document); } catch (e) { console.error('toolbar bind', e); }
   try { mods.topbar?.bindTopbar?.(document); } catch (e) { console.error('topbar bind', e); }
   try { mods.short?.initShortcuts?.(); } catch (e) { console.error('shortcuts', e); }
-  try { mods.router?.initRouter?.(); } catch (e) { console.error('router', e); }
+  initRouterSafely();
   try { mods.refresh?.startAutoRefresh?.(); } catch (e) { console.error('autorefresh', e); }
   console.info('[SQM v8.7.1] boot 완료');
   console.info('  로드된 모듈:', Object.keys(mods).filter(k => mods[k]).join(', '));

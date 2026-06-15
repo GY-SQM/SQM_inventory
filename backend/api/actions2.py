@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query as QP, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
 from backend.common.errors import ok_response, err_response
 from backend.common.excel_alignment import safe_apply_sqm_workbook
-from .location_candidates import expand_candidates_for_sublots, load_latest_candidates
+from .location_candidates import NO_LOCATION_DATA_MESSAGE, expand_candidates_for_sublots, load_latest_candidate_status, load_latest_candidates
 
 router = APIRouter(prefix="/api/action2", tags=["actions2"])
 logger = logging.getLogger(__name__)
@@ -341,6 +341,7 @@ def _tonbag_sql(lot_no_filter: Optional[str]) -> tuple:
 def _append_tonbag_rack_candidates(rows, con: sqlite3.Connection):
     """Add row-level rack location candidate after actual location column."""
     candidates = load_latest_candidates(con)
+    candidate_status = load_latest_candidate_status(con)
     sub_lts_by_lot: dict[str, list[int]] = {}
     for r in rows:
         # idx 16 = t.lot_no, idx 17 = t.is_sample (arrival_date 추가로 idx 15→16 이동)
@@ -367,6 +368,8 @@ def _append_tonbag_rack_candidates(rows, con: sqlite3.Connection):
             rack_candidate = expanded_by_lot.get(lot_no, {}).get(int(row[5]), "")
         except Exception:
             rack_candidate = ""
+        if not rack_candidate and not candidate_status.get("has_data"):
+            rack_candidate = NO_LOCATION_DATA_MESSAGE
         # Drop hidden lot_no/is_sample (idx 16,17) and rebuild output tuple.
         is_sample = row[17] if len(row) > 17 else 0
         # v8.7.0+: arrival_date(SQL idx 15) 삽입 — inbound_date(10) 바로 뒤

@@ -526,8 +526,16 @@ async def picking_list_pdf(file: UploadFile = File(...)):
                 "data": {
                     "filename": file.filename,
                     "total_lots": doc.get("total_lots", 0),
+                    "items": doc.get("items", [])[:30],
+                    "details": result.get("details", [])[:30],
                     "errors": result.get("errors", []),
                     "warnings": doc.get("warnings", []),
+                    "allocation_validation": allocation_validation,
+                    "partial_result": {
+                        "parse_ok": bool(doc.get("parse_ok")),
+                        "parsed_items": len(doc.get("items", []) or []),
+                        "applied": int(result.get("applied", 0) or result.get("picked", 0) or 0),
+                    },
                 },
                 "error": "Picking List 반영 실패",
                 "detail": {"code": "APPLY_FAILED", "errors": result.get("errors", [])},
@@ -634,8 +642,16 @@ async def picking_import_excel(file: UploadFile = File(...)):
             "data": {
                 "filename": file.filename,
                 "total_lots": doc.get("total_lots", 0),
+                "items": doc.get("items", [])[:30],
+                "details": result.get("details", [])[:30],
                 "errors": result.get("errors", []),
                 "warnings": doc.get("warnings", []),
+                "allocation_validation": allocation_validation,
+                "partial_result": {
+                    "parse_ok": bool(doc.get("parse_ok")),
+                    "parsed_items": len(doc.get("items", []) or []),
+                    "applied": int(result.get("applied", 0) or result.get("picked", 0) or 0),
+                },
             },
             "error": "Picking List 반영 실패",
             "detail": {"code": "APPLY_FAILED", "errors": result.get("errors", [])},
@@ -1039,11 +1055,15 @@ def onestop_complete(req: OneStopCompleteRequest):
             entry["weight_kg"] += float(row_dict.get("weight") or 0)
 
         for lot_no, entry in by_lot.items():
-            # [fix B-4] inventory 상위 테이블 status 도 SOLD 갱신 (tonbag만 갱신하던 버그 수정)
+            # C7: 부분 출고/잔량 LOT 보호 — 무게 하드코딩 대신 엔진 재계산 사용
             db.execute(
-                "UPDATE inventory SET status='SOLD', sold_to=?, current_weight=0, updated_at=? WHERE lot_no=? AND status != 'SOLD'",
+                "UPDATE inventory SET sold_to=?, updated_at=? WHERE lot_no=?",
                 (customer or None, now, lot_no)
             )
+            if hasattr(engine, '_recalc_current_weight'):
+                engine._recalc_current_weight(lot_no, reason='C7_ONESTOP_COMPLETE')
+            if hasattr(engine, '_recalc_lot_status'):
+                engine._recalc_lot_status(lot_no)
             _write_audit_log(
                 db,
                 event_type="SOLD",

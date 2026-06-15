@@ -1552,12 +1552,36 @@ def pdf_inbound(req: PdfInboundRequest):
         # 5. Response
         if parsed is not None:
             fallback_note = " [Gemini fallback]" if gemini_used else ""
+            lots_total = len(getattr(parsed, "lots", []) or []) if parse_type == "PackingListData" else None
+            if parse_type == "PackingListData" and lots_total == 0:
+                return {
+                    "ok": False,
+                    "success": False,
+                    "message": "파싱된 LOT이 없습니다. PDF 품질/양식 또는 Gemini 설정을 확인하세요.",
+                    "error": "PDF_PARSE_ZERO_LOTS",
+                    "detail": {
+                        "code": "PDF_PARSE_ZERO_LOTS",
+                        "parse_method": parse_method,
+                        "gemini_fallback_used": gemini_used,
+                        "hint": "LOT 목록이 0건이면 성공으로 저장하지 않습니다. PDF가 이미지 스캔본인지, 텍스트 레이어/양식이 맞는지 확인하세요.",
+                    },
+                    "data": {
+                        "filename": req.filename,
+                        "size_bytes": len(pdf_bytes),
+                        "parse_type": parse_type,
+                        "parse_method": parse_method,
+                        "saved_count": 0,
+                        "lots_total": 0,
+                        "errors": save_errors[:50],
+                    },
+                }
             return {
                 "ok": True,
                 "success": True,
                 "message": (
                     f"PDF parse OK ({req.filename}){fallback_note} "
-                    f"saved={saved_count} failed={len(save_errors)}"
+                    f"saved={saved_count} failed={len(save_errors)} — "
+                    "PENDING 저장됨, Pending 탭에서 입고확정 필요"
                 ),
                 "data": {
                     "filename": req.filename,
@@ -1569,10 +1593,14 @@ def pdf_inbound(req: PdfInboundRequest):
                     "tier1_lots": tier1_lots,
                     "saved_count": saved_count,
                     "saved_lots": saved_lots[:50],
+                    "saved_status": "PENDING",
+                    "requires_inbound_confirm": saved_count > 0,
+                    "next_step": "Pending 탭에서 저장된 LOT을 확인한 뒤 입고확정을 실행하면 AVAILABLE 재고로 전환됩니다.",
+                    "confirm_endpoint_template": "/api/inbound/confirm/{lot_no}",
                     "errors": save_errors[:50],
                     "folio": getattr(parsed, "folio", "") if parse_type == "PackingListData" else None,
                     "product": getattr(parsed, "product", "") if parse_type == "PackingListData" else None,
-                    "lots_total": len(getattr(parsed, "lots", []) or []) if parse_type == "PackingListData" else None,
+                    "lots_total": lots_total,
                 },
             }
         else:

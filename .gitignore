@@ -53,7 +53,7 @@ frontend/.cache/
 # Backup
 backup/
 
-# SQLite 런타임 WAL/SHM (메인 .db 는 위에서 ignore)
+# SQLite 런타임 WAL/SHM 사이드카 (자동 생성 — 버전관리 제외)
 data/db/*.db-wal
 data/db/*.db-shm
 

@@ -307,7 +307,8 @@ class PreflightMixin:
                 # v8.7.0 [FIX D-1.5 CRITICAL]: LOTInfo 필드는 net_weight_kg. 'net_weight'는 존재 안 함 → 항상 0 반환 버그
                 lots_data.append({
                     'lot_no': getattr(lot, 'lot_no', ''),
-                    'net_weight': getattr(lot, 'net_weight_kg', 0) or getattr(lot, 'net_weight', 0),
+                    'sub_lt': getattr(lot, 'list_no', 1), # Preflight validator requires sub_lt
+                    'weight': getattr(lot, 'net_weight_kg', 0) or getattr(lot, 'net_weight', 0),
                     'container_no': getattr(lot, 'container_no', '')
                 })
 
@@ -321,31 +322,85 @@ class PreflightMixin:
         if preflight_result.has_blocking_errors():
             error_msg = f"Inbound preflight failed: {preflight_result.error_count} errors"
             result['errors'].append(error_msg)
-            for err in preflight_result.errors[:5]:
-                result['errors'].append(str(err))
+            for issue in preflight_result.issues[:5]:
+                result['errors'].append(str(issue))
             logger.warning(f"[PREFLIGHT] {error_msg}")
             raise PreflightError(error_msg, preflight_result)
 
         logger.info(f"[PREFLIGHT] Inbound validated: {preflight_result.valid_rows}/{preflight_result.total_rows}")
 
         # ========================================
-        # PHASE 2: Execute (delegate to regular process_inbound)
+        # PHASE 2: Execute (All-or-Nothing)
         # ========================================
         try:
-            inbound_result = self.process_inbound(packing_data, invoice_data, bl_data, do_data)
+            with self.db.transaction("IMMEDIATE"):
+                # D6: PackingListData 내의 모든 LOT을 원자적으로 처리한다.
+                # process_inbound는 단일 LOT 처리에 최적화되어 있으므로 루프를 돈다.
+                lots = getattr(packing_data, 'lots', [])
+                if not lots:
+                    # lots가 없는 경우 (단일 dict 형태 등) 기존처럼 통째로 전달 시도
+                    inbound_result = self.process_inbound(packing_data, invoice_data, bl_data, do_data)
+                    if not inbound_result.get('success'):
+                        raise ValueError(f"Inbound failed: {inbound_result.get('errors')}")
+                    
+                    result.update({
+                        'success': True,
+                        'lots_created': inbound_result.get('lots_created', 0),
+                        'lots_skipped': inbound_result.get('lots_skipped', 0),
+                        'total_weight': inbound_result.get('total_weight', 0),
+                    })
+                    result['errors'].extend(inbound_result.get('errors', []))
+                    result['warnings'].extend(inbound_result.get('warnings', []))
+                else:
+                    # 복수 LOT 루프
+                    total_created = 0
 
-            result['success'] = inbound_result.get('success', False)
-            result['shipment_id'] = inbound_result.get('shipment_id')
-            result['lots_created'] = inbound_result.get('lots_created', 0)
-            result['lots_skipped'] = inbound_result.get('lots_skipped', 0)
-            result['total_weight'] = inbound_result.get('total_weight', 0)
-            result['errors'].extend(inbound_result.get('errors', []))
-            result['warnings'].extend(inbound_result.get('warnings', []))
+                    # D6 교차검증: preflight에서 검증된 행 수와 실제 처리 대상 수가 일치해야 함
+                    if len(lots) != preflight_result.total_rows:
+                        logger.warning(f"[PREFLIGHT-D6] Count mismatch: preflight={preflight_result.total_rows}, actual={len(lots)}")
+
+                    for lot in lots:
+                        # D6: 개별 LOT 처리를 위한 packing dict 준비 (헤더 정보 병합)
+                        # process_inbound의 초기 필수값 체크(IB-01, IB-02, IB-08) 통과를 위해 필요.
+                        lot_packing = {
+                            'lot_no': getattr(lot, 'lot_no', ''),
+                            'net_weight': getattr(lot, 'net_weight_kg', 0) or getattr(lot, 'net_weight', 0),
+                            'mxbg_pallet': getattr(lot, 'mxbg_pallet', 0),
+                            'container_no': getattr(lot, 'container_no', ''),
+                            'lot_sqm': getattr(lot, 'lot_sqm', ''),
+                            # 헤더/문서 공통 정보 주입
+                            'bl_no': (bl_data.get('bl_no') if isinstance(bl_data, dict) else getattr(bl_data, 'bl_no', '')) or getattr(packing_data, 'bl_no', ''),
+                            'sap_no': getattr(packing_data, 'sap_no', ''),
+                            'product': getattr(packing_data, 'product', ''),
+                            'product_code': getattr(packing_data, 'product_code', ''),
+                            'vessel': getattr(packing_data, 'vessel', ''),
+                            'warehouse': getattr(packing_data, 'warehouse', ''),
+                            'arrival_date': getattr(packing_data, 'arrival_date', ''),
+                            'ship_date': getattr(packing_data, 'ship_date', ''),
+                        }
+                        
+                        res = self.process_inbound(lot_packing, invoice_data, bl_data, do_data)
+                        if not res.get('success'):
+                            errs = res.get('errors', [])
+                            msg = f"LOT {lot_packing['lot_no']} 처리 실패: {errs}"
+                            result['errors'].append(msg)
+                            raise ValueError(msg) # 트랜잭션 롤백
+                            
+                        _cls = res.get('created_lots') or []
+                        total_created += len(_cls)
+                        result['warnings'].extend(res.get('warnings', []))
+                    result.update({
+                        'success': True,
+                        'lots_created': total_created,
+                        'total_tonbags': sum(getattr(l, 'mxbg_pallet', 0) or 0 for l in lots),
+                        'total_weight': sum(getattr(l, 'net_weight_kg', 0) or getattr(l, 'net_weight', 0) for l in lots),
+                    })
 
         except PreflightError:
             raise
-        except (ValueError, TypeError, KeyError) as e:
-            result['errors'].append(f"Inbound processing error: {e}")
+        except (ValueError, TypeError, KeyError, sqlite3.Error) as e:
+            result['success'] = False
+            result['errors'].append(f"Inbound processing error (rolled back): {e}")
             logger.exception("Inbound processing error")
 
         return result

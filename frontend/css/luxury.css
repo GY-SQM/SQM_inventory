@@ -35,8 +35,6 @@ html[data-theme="dark"] .menubar {
   box-shadow:
     0 1px 0 rgba(245, 158, 11, 0.06),
     0 4px 24px rgba(0, 0, 0, 0.4) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 /* 메뉴 버튼 호버 — 앰버 글로우 */
@@ -53,16 +51,13 @@ html[data-theme="dark"] .menu-btn > span:first-of-type {
 }
 
 /* 드롭다운 */
-html[data-theme="dark"] .menu-dropdown,
-html[data-theme="dark"] .submenu-dropdown {
-  background: rgba(11, 19, 34, 0.98) !important;
+.menu-dropdown, .submenu-dropdown {
+  background: var(--menu-bg) !important;
   border: 1px solid rgba(245, 158, 11, 0.14) !important;
   box-shadow:
     0 8px 32px rgba(0,0,0,0.6),
     0 0 0 1px rgba(245,158,11,0.06) !important;
   border-radius: 8px !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 html[data-theme="dark"] .menu-dropdown button:hover,
 html[data-theme="dark"] .submenu-dropdown button:hover {
@@ -186,7 +181,6 @@ html[data-theme="dark"] [class*="kpi-"] {
     0 4px 24px rgba(0,0,0,0.3),
     0 0 0 1px rgba(56,189,248,0.06) !important;
   transition: all .25s ease !important;
-  backdrop-filter: blur(4px);
 }
 html[data-theme="dark"] .kpi-card:hover,
 html[data-theme="dark"] .card:hover {
@@ -204,10 +198,10 @@ html[data-theme="dark"] table {
   border-collapse: separate !important;
   border-spacing: 0 !important;
 }
-html[data-theme="dark"] thead th {
-  background: rgba(13,22,40,0.95) !important;
-  border-bottom: 2px solid rgba(245,158,11,0.2) !important;
-  color: rgba(245,158,11,0.8) !important;
+thead th {
+  background: var(--table-header) !important;
+  border-bottom: 2px solid rgba(245,158,11,0.35) !important;
+  color: var(--text-secondary) !important;
   font-size: 11px !important;
   letter-spacing: 1.2px !important;
   text-transform: uppercase !important;
@@ -262,18 +256,14 @@ html[data-theme="dark"] .btn.btn-warning {
 
 
 /* ── 7. 모달 — 딥 글래스 ───────────────────────────────────── */
-html[data-theme="dark"] .modal,
-html[data-theme="dark"] .modal-overlay > div,
-html[data-theme="dark"] [class*="modal-content"] {
-  background: rgba(13, 22, 40, 0.97) !important;
+.modal, .modal-overlay > div, [class*="modal-content"] {
+  background: var(--modal-surface) !important;
   border: 1px solid rgba(245,158,11,0.14) !important;
   border-radius: 14px !important;
   box-shadow:
     0 32px 80px rgba(0,0,0,0.7),
     0 0 0 1px rgba(245,158,11,0.07),
     inset 0 1px 0 rgba(255,255,255,0.04) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
 }
 html[data-theme="dark"] .modal-header,
 html[data-theme="dark"] [class*="modal-header"] {
@@ -290,15 +280,12 @@ html[data-theme="dark"] .modal-header h3 {
 
 
 /* ── 8. 입력 필드 — 정제된 스타일 ──────────────────────────── */
-html[data-theme="dark"] input[type="text"],
-html[data-theme="dark"] input[type="number"],
-html[data-theme="dark"] input[type="date"],
-html[data-theme="dark"] select,
-html[data-theme="dark"] textarea {
-  background: rgba(7,14,26,0.7) !important;
-  border: 1px solid rgba(56,189,248,0.15) !important;
+input[type="text"], input[type="number"], input[type="date"],
+select, textarea {
+  background: var(--field-bg) !important;
+  border: 1px solid var(--field-border) !important;
   border-radius: 6px !important;
-  color: #dce8fa !important;
+  color: var(--field-fg) !important;
   transition: all .18s ease !important;
   padding: 7px 10px !important;
 }
@@ -308,7 +295,7 @@ html[data-theme="dark"] textarea:focus {
   outline: none !important;
   border-color: rgba(245,158,11,0.4) !important;
   box-shadow: 0 0 0 3px rgba(245,158,11,0.1) !important;
-  background: rgba(11,19,34,0.8) !important;
+  background: var(--field-bg) !important;
 }
 
 
@@ -326,7 +313,6 @@ html[data-theme="dark"] [id*="alert"] {
     rgba(220,38,38,0.12) 0%,
     rgba(127,29,29,0.08) 100%
   ) !important;
-  backdrop-filter: blur(8px);
   font-size: 12px !important;
   letter-spacing: 0.2px !important;
 }
@@ -363,8 +349,8 @@ html[data-theme="dark"] ::selection {
 
 
 /* ── 12. 타이틀바 — 미니멀 ─────────────────────────────────── */
-html[data-theme="dark"] .app-titlebar {
-  background: #020817 !important;
+.app-titlebar {
+  background: var(--menubar-bg) !important;
   border-bottom: 1px solid rgba(245,158,11,0.07) !important;
 }
 html[data-theme="dark"] .app-title {

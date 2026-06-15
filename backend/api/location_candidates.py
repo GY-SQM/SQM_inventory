@@ -8,6 +8,9 @@ import sqlite3
 from typing import Iterable
 
 
+NO_LOCATION_DATA_MESSAGE = "위치데이터 없음"
+
+
 def _table_exists(con: sqlite3.Connection, name: str) -> bool:
     row = con.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
@@ -44,6 +47,24 @@ def load_latest_candidates(con: sqlite3.Connection) -> dict[str, list[dict]]:
             "tonbag_count": int(r["tonbag_count"] or 0),
         })
     return out
+
+
+def load_latest_candidate_status(con: sqlite3.Connection) -> dict:
+    """Return explicit latest location-map availability status for UI/export messages."""
+    if not _table_exists(con, "lot_location_import_batch") or not _table_exists(con, "lot_location_map"):
+        return {"has_data": False, "batch_id": None, "message": NO_LOCATION_DATA_MESSAGE}
+    batch = con.execute("SELECT MAX(id) AS id FROM lot_location_import_batch").fetchone()
+    batch_id = batch["id"] if batch and batch["id"] is not None else None
+    if not batch_id:
+        return {"has_data": False, "batch_id": None, "message": NO_LOCATION_DATA_MESSAGE}
+    row = con.execute("SELECT COUNT(*) AS cnt FROM lot_location_map WHERE batch_id=?", (batch_id,)).fetchone()
+    count = int(row["cnt"] or 0) if row else 0
+    return {
+        "has_data": count > 0,
+        "batch_id": batch_id,
+        "row_count": count,
+        "message": "" if count > 0 else NO_LOCATION_DATA_MESSAGE,
+    }
 
 
 def summarize_candidates(candidates: Iterable[dict]) -> str:

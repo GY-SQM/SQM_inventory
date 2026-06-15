@@ -60,6 +60,24 @@ async def parse_pl(file: UploadFile = File(...)):
 
         result = parse_pl_with_confidence(tmp_path, api_key=key, model=model)
         result["filename"] = fname
+
+        # P1(v8.8.x): 문서 신뢰도 점수를 parsing_log 에 영속화 — 역추적용.
+        # 비치명: 기록 실패해도 파싱 응답엔 영향 없음.
+        try:
+            from backend.api import engine, ENGINE_AVAILABLE
+            if ENGINE_AVAILABLE and engine is not None:
+                _lots = result.get("lots") or []
+                engine.db.execute(
+                    """INSERT INTO parsing_log
+                       (doc_type, source_file, success, lot_count, method,
+                        error_msg, confidence_score)
+                       VALUES ('PL', ?, ?, ?, 'gemini_confidence', '', ?)""",
+                    (fname, 1 if result.get("success") else 0,
+                     len(_lots), result.get("doc_confidence")),
+                )
+        except Exception as _le:
+            logger.debug("parse_pl: parsing_log 신뢰도 기록 스킵: %s", _le)
+
         return result
     except Exception as e:
         logger.exception("parse_pl error")

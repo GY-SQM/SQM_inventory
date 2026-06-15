@@ -40,6 +40,9 @@ from engine_modules.constants import (
     normalize_customer,
     get_tonbag_unit_weight,
     QUICK_OUTBOUND_MAX_TONBAGS,
+    ALLOC_STAGED,
+    ALLOC_WF_APPROVED,
+    ALLOC_WF_APPLIED,
 )
 
 from .base import InventoryBaseMixin
@@ -752,7 +755,13 @@ class OutboundMixin(InventoryBaseMixin):
             )
         except (sqlite3.OperationalError, OSError) as e:
             if "allocation_plan" in str(e) and "source" in str(e).lower():
-                logger.debug("allocation_plan.source 미존재 시 무시: %s", e)
+                logger.warning("[C3_ALLOC_PLAN_LEGACY_NO_SOURCE] allocation_plan.source 미존재 — source 제외 fallback INSERT 수행: %s", e)
+                self.db.execute(
+                    """INSERT INTO allocation_plan
+                    (lot_no, tonbag_id, customer, sale_ref, qty_mt, outbound_date, status, executed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 'PICKED', ?)""",
+                    (lot_no, first_tonbag_id, customer, sale_ref, qty_mt_val, now, now)
+                )
             else:
                 raise
         
@@ -2387,7 +2396,7 @@ class OutboundMixin(InventoryBaseMixin):
         """
         승인 완료(STAGED + APPROVED) 건을 실제 RESERVED로 반영.
         """
-        result = {"success": False, "applied": 0, "errors": []}
+        result = {"success": False, "applied": 0, "attempted": 0, "failed": 0, "partial_success": False, "errors": []}
         try:
             alloc_plan_cols = set()
             rows = self.db.fetchall("PRAGMA table_info(allocation_plan)")
@@ -2441,6 +2450,7 @@ class OutboundMixin(InventoryBaseMixin):
             if limit and int(limit) > 0:
                 q += f" LIMIT {int(limit)}"
             staged_rows = self.db.fetchall(q) or []
+            result["attempted"] = len(staged_rows)
             if not staged_rows:
                 result["errors"].append("반영할 승인 완료(STAGED/APPROVED) 건이 없습니다.")
                 return result
@@ -2468,6 +2478,7 @@ class OutboundMixin(InventoryBaseMixin):
                         avail_cnt = 0
                     if avail_cnt <= 0:
                         result["errors"].append(f"미반영: {lot_no} 판매가능 톤백 없음 (plan_id={plan_id})")
+                        result["failed"] += 1
                         continue
 
                     # allocation_plan만 상태 전환 (tonbag_id/sub_lt는 NULL 유지)
@@ -2476,9 +2487,9 @@ class OutboundMixin(InventoryBaseMixin):
                            SET status='RESERVED',
                                tonbag_id=NULL,
                                sub_lt=NULL,
-                               workflow_status=ALLOC_WF_APPLIED
-                           WHERE id=? AND status=ALLOC_STAGED AND workflow_status=ALLOC_WF_APPROVED""",
-                        (plan_id,),
+                               workflow_status=?
+                           WHERE id=? AND status=? AND workflow_status=?""",
+                        (ALLOC_WF_APPLIED, plan_id, ALLOC_STAGED, ALLOC_WF_APPROVED),
                     )
                     result["applied"] += 1
                     try:
@@ -2505,6 +2516,11 @@ class OutboundMixin(InventoryBaseMixin):
                     self._recalc_lot_status(lot_no)
 
             result["success"] = result["applied"] > 0
+            result["partial_success"] = result["applied"] > 0 and result["failed"] > 0
+            if result["partial_success"]:
+                result["errors"].append(
+                    f"[APPLY_APPROVED_PARTIAL] 승인 반영 일부 완료: applied={result['applied']} failed={result['failed']} attempted={result['attempted']}"
+                )
             if not result["success"] and not result["errors"]:
                 result["errors"].append("반영된 건이 없습니다.")
             return result

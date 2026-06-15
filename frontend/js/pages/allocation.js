@@ -6,11 +6,49 @@ const AllocationPage = (() => {
   let data = [];
   let selected = new Set();
 
+  async function fetchJsonChecked(url, opts) {
+    const res = await fetch(url, opts);
+    const text = await res.text();
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (!text || text.trim() === '') throw new Error('empty allocation response');
+    const payload = JSON.parse(text);
+    if (payload?.ok === false || payload?.success === false) {
+      throw new Error(payload.message || payload.error || 'allocation response failed');
+    }
+    return payload;
+  }
+
+  function extractRows(res) {
+    if (Array.isArray(res)) return res;
+    if (!res) return [];
+    if (Array.isArray(res.data)) return res.data;
+    if (res.data && Array.isArray(res.data.rows)) return res.data.rows;
+    if (res.data && Array.isArray(res.data.items)) return res.data.items;
+    if (Array.isArray(res.rows)) return res.rows;
+    if (Array.isArray(res.items)) return res.items;
+    return [];
+  }
+
+  function renderLoadError(err) {
+    console.error('[allocation] load failed', err);
+    window.showToast?.('error', '배정 데이터 로드 실패');
+    const tbody = document.getElementById('allocation-tbody');
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--status-error)">불러오기 실패: ${err.message}</td></tr>`;
+    }
+  }
+
   async function load() {
     try {
-      const res = await fetch(API + '/api/allocation');
-      if (res.ok) { const j = await res.json(); data = j.data || []; }
-    } catch { data = []; }
+      const j = await fetchJsonChecked(API + '/api/allocation');
+      if (j?.ok === false || j?.success === false) throw new Error(j.message || j.error || 'allocation response failed');
+      const rows = extractRows(j);
+      data = Array.isArray(rows) ? rows : [];
+    } catch (err) {
+      data = [];
+      renderLoadError(err);
+      return;
+    }
     render();
   }
 

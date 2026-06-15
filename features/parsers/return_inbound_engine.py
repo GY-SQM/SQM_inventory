@@ -44,6 +44,7 @@ def process_return_inbound(engine: Any, parsed: dict, source_file: str = "") -> 
     # 1) 각 행별로 picking_table에서 (lot_no, sub_lt, tonbag_id, weight, ...) 목록 확보
     return_rows = []  # (lot_no, sub_lt, reason, remark, picking_id, tb_weight, tonbag_row)
     for row in items:
+        line_no = row.get("line_no")
         lot_no = row["lot_no"]
         picking_no = row["picking_no"]
         tonbag_count = row["tonbag_count"]
@@ -64,8 +65,17 @@ def process_return_inbound(engine: Any, parsed: dict, source_file: str = "") -> 
         if not rows_pt or len(rows_pt) < tonbag_count:
             need, got = tonbag_count, len(rows_pt) if rows_pt else 0
             result["errors"].append(
-                f"LOT {lot_no} / PICKING NO {picking_no}: 필요 {need}개, 매칭 {got}개 — 전체 중단"
+                f"행 {line_no}: LOT {lot_no} / PICKING NO {picking_no}: 필요 {need}개, 매칭 {got}개 — 전체 중단"
             )
+            result["details"].append({
+                "line_no": line_no,
+                "fail_code": "RETURN_MATCH_NOT_FOUND",
+                "reason": "picking_table에서 LOT/PICKING 매칭 행 부족",
+                "lot_no": lot_no,
+                "picking_no": picking_no,
+                "required": need,
+                "matched": got,
+            })
             return result
 
         # v9.1: N+1 쿼리 → 일괄 조회로 개선

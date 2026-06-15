@@ -13,23 +13,63 @@ const InventoryPage = (() => {
   let page = 1;
   const PAGE_SIZE = 50;
 
+  function extractRows(res) {
+    if (Array.isArray(res)) return res;
+    if (!res) return [];
+    if (Array.isArray(res.data)) return res.data;
+    if (res.data && Array.isArray(res.data.rows)) return res.data.rows;
+    if (res.data && Array.isArray(res.data.items)) return res.data.items;
+    if (Array.isArray(res.rows)) return res.rows;
+    if (Array.isArray(res.items)) return res.items;
+    return [];
+  }
+
+  function normalizeInventoryRow(row) {
+    const r = row || {};
+    const net = Number(r.net ?? r.net_mt ?? r.net_weight_mt ?? ((r.net_weight != null) ? Number(r.net_weight) / 1000 : 0));
+    const balance = Number(r.balance ?? r.current_weight_mt ?? ((r.current_weight != null) ? Number(r.current_weight) / 1000 : 0));
+    return {
+      ...r,
+      lot: String(r.lot ?? r.lot_no ?? ''),
+      sap: String(r.sap ?? r.sap_no ?? ''),
+      bl: String(r.bl ?? r.bl_no ?? ''),
+      container: String(r.container ?? r.container_no ?? ''),
+      product: String(r.product ?? r.product_name ?? ''),
+      status: String(r.status ?? ''),
+      net: Number.isFinite(net) ? net : 0,
+      balance: Number.isFinite(balance) ? balance : 0,
+      bags: r.bags ?? r.total_bags ?? r.mxbg_pallet ?? r.tonbag_count ?? r.avail_bags ?? 0,
+      date: String(r.date ?? r.inbound_date ?? r.stock_date ?? ''),
+      location: String(r.location ?? r.warehouse ?? ''),
+    };
+  }
+
   async function load() {
     try {
       const res = await fetch(API + '/api/inventory');
-      allData = res.ok ? await res.json() : SAMPLE_INVENTORY;
-    } catch { allData = window.SAMPLE_INVENTORY || []; }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const payload = await res.json();
+      const rows = extractRows(payload);
+      allData = Array.isArray(rows) ? rows.map(normalizeInventoryRow) : [];
+    } catch (err) {
+      console.error('[inventory] load failed', err);
+      window.showToast?.('warning', '재고 API 로드 실패 — 샘플 데이터를 표시합니다.');
+      const sampleRows = extractRows(window.SAMPLE_INVENTORY || []);
+      allData = Array.isArray(sampleRows) ? sampleRows.map(normalizeInventoryRow) : [];
+    }
     applyFilters();
   }
 
   function applyFilters() {
-    filtered = allData.filter(row => {
+    const rows = Array.isArray(allData) ? allData : [];
+    filtered = rows.filter(row => {
       if (currentStatus !== 'ALL' && row.status !== currentStatus) return false;
       if (currentProduct && row.product !== currentProduct) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        if (!row.lot.toLowerCase().includes(q) &&
-            !row.sap.toLowerCase().includes(q) &&
-            !row.bl.toLowerCase().includes(q)) return false;
+        if (!String(row.lot || '').toLowerCase().includes(q) &&
+            !String(row.sap || '').toLowerCase().includes(q) &&
+            !String(row.bl || '').toLowerCase().includes(q)) return false;
       }
       return true;
     });

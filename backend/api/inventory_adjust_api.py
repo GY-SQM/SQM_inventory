@@ -91,6 +91,16 @@ def simple_action(req: SimpleActionRequest):
             conn.commit()
             conn.close()
             logger.info("[SimpleAction] %s return_to_available: %d tonbags updated", req.lot_no, updated)
+
+            # D9: 무게 재계산 추가
+            try:
+                from backend.api import engine, ENGINE_AVAILABLE
+                if ENGINE_AVAILABLE and engine:
+                    engine._recalc_current_weight(req.lot_no, reason='D9_RETURN_TO_AVAIL')
+                    engine._recalc_lot_status(req.lot_no)
+            except Exception as re_exc:
+                logger.warning("[SimpleAction] %s 재계산 실패: %s", req.lot_no, re_exc)
+
             return {"ok": True, "updated_tonbags": updated, "lot_no": req.lot_no}
         except Exception as exc:
             logger.error("[SimpleAction] return_to_available 오류: %s", exc, exc_info=True)

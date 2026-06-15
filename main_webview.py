@@ -540,18 +540,25 @@ def wait_for_api(timeout=10):
     """API 서버가 준비될 때까지 대기. /api/health 없으면 루트 '/' 로 폴백."""
     import urllib.request
     deadline = time.time() + timeout
-    probes = [f'http://{API_HOST}:{API_PORT}/api/health',
-              f'http://{API_HOST}:{API_PORT}/']
+    last_url = None
+    last_error = None
     while time.time() < deadline:
+        probes = [f'http://{API_HOST}:{API_PORT}/api/health',
+                  f'http://{API_HOST}:{API_PORT}/']
         for url in probes:
             try:
                 urllib.request.urlopen(url, timeout=1)
                 log.info(f"API 서버 준비 완료 ({url})")
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                last_url = url
+                last_error = e
         time.sleep(0.3)
-    log.warning("API 서버 연결 타임아웃 — 오프라인 모드로 진행")
+    log.warning(
+        "API 서버 연결 타임아웃 — 오류 화면 표시 예정. last_url=%s last_error=%r",
+        last_url,
+        last_error,
+    )
     return False
 
 # ===========================================================================
@@ -788,6 +795,27 @@ SPLASH_HTML = '''<!DOCTYPE html>
     if(text) $('st2').textContent = text;
   }
 
+  function reportSplashError(message, detail){
+    var text = message || '재고 요약 로드 실패';
+    setProgress(55, text + ' — 로그 확인');
+    try{
+      console.error('[splash]', text, detail || '');
+      var base = (new URLSearchParams(location.search)).get('sqm_base') || location.origin;
+      fetch(base+'/api/log/frontend-error', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          source:'splash',
+          message:text,
+          detail: detail && (detail.stack || detail.message || String(detail)),
+          url: location.href,
+          ts: new Date().toISOString()
+        }),
+        keepalive:true
+      }).catch(function(){});
+    } catch(_e){}
+  }
+
   /* 인트로 시퀀스 */
   async function intro(){
     await delay(100);
@@ -812,18 +840,28 @@ SPLASH_HTML = '''<!DOCTYPE html>
     $('cb').classList.add('show');
     setProgress(55, '재고 데이터 로드 중 …');
 
-    // API 호출 (실패해도 0으로 표시)
+    // API 호출 (실패 시 화면/로그에 표시하고 카운터는 안전 기본값 유지)
     var lots=0, bags=0, mt=0;
     try{
       var base = (new URLSearchParams(location.search)).get('sqm_base') || location.origin;
       var res = await fetch(base+'/api/health', {cache:'no-store'});
+      if(!res.ok){ throw new Error('/api/health HTTP '+res.status); }
       var d = await res.json();
-      lots = d.lots||0; bags = d.tonbags||0;
+      if(d.status && d.status !== 'ok'){
+        throw new Error('/api/health status '+d.status+(d.message ? ': '+d.message : ''));
+      }
+      lots = Number(d.lots||0); bags = Number(d.tonbags||0);
+      if(!Number.isFinite(lots) || !Number.isFinite(bags)){
+        throw new Error('/api/health invalid counters');
+      }
       // KPI에서 MT 가져오기
       var r2 = await fetch(base+'/api/dashboard/kpi', {cache:'no-store'});
+      if(!r2.ok){ throw new Error('/api/dashboard/kpi HTTP '+r2.status); }
       var d2 = await r2.json();
-      mt = (d2.data && d2.data.current_stock_mt) ? d2.data.current_stock_mt : 0;
-    } catch(e){}
+      if(d2.ok === false){ throw new Error('/api/dashboard/kpi failed'+(d2.error ? ': '+d2.error : '')); }
+      mt = Number(d2.data && d2.data.current_stock_mt);
+      if(!Number.isFinite(mt)){ throw new Error('/api/dashboard/kpi invalid current_stock_mt'); }
+    } catch(e){ reportSplashError('재고 요약 로드 실패', e); }
 
     await Promise.all([
       countUp($('c-lot'), lots, 800, 0),
@@ -1045,6 +1083,7 @@ def main():
 
             if _phase[0] == "error":
                 # 오류 화면: JS 브릿지 설치하지 않음 (죽은 백엔드에 fetch 루프 방지).
+                _force_show_main_window()
                 log.info('on_loaded: error 페이지 로드 — JS 브릿지 비설치')
                 return
 
@@ -1171,6 +1210,10 @@ def main():
                 else:
                     log.error("API 시작 실패 -> 오류 화면 표시")
                     _phase[0] = "error"
+                    try:
+                        _force_show_main_window()
+                    except Exception as e:
+                        log.warning(f"오류 화면 표시 전 창 강제 표시 실패: {e}")
                     error_html = (
                         '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">'
                         '<title>SQM 시작 실패</title>'
@@ -1178,8 +1221,18 @@ def main():
                         'font-family:"Segoe UI","Malgun Gothic",sans-serif;'
                         'padding:50px;line-height:1.6;}'
                         'h1{color:#fda4af;}code{background:#1e293b;padding:2px 6px;'
-                        'border-radius:4px;}li{margin:8px 0;}</style></head><body>'
+                        'border-radius:4px;}li{margin:8px 0;}'
+                        '.banner{background:#451a03;border:1px solid #f59e0b;color:#fde68a;'
+                        'border-radius:10px;padding:14px 16px;margin:18px 0;}'
+                        '.actions{margin-top:22px;display:flex;gap:10px;}'
+                        'button{background:#f59e0b;color:#111827;border:0;border-radius:8px;'
+                        'padding:10px 16px;font-weight:700;cursor:pointer;}</style>'
+                        f'<script>function retryApi(){{window.location.href="http://{API_HOST}:{API_PORT}/?sqm_base=http%3A%2F%2F{API_HOST}%3A{API_PORT}&_retry=1";}}</script>'
+                        '</head><body>'
                         '<h1>API 서버 시작 실패</h1>'
+                        '<div id="api-timeout-banner" class="banner">'
+                        'API 연결 타임아웃입니다. 백엔드가 늦게 시작됐거나 포트가 점유되어 화면 전환을 중단했습니다.'
+                        '</div>'
                         '<p>로그 파일: <code>sqm_debug.log</code></p>'
                         '<h2>해결 방법</h2>'
                         '<ol>'
@@ -1189,12 +1242,20 @@ def main():
                         '<li>관리자 권한 CMD에서 강제 종료: <code>taskkill /F /PID &lt;확인한 PID&gt;</code></li>'
                         '<li>종료 후 <code>run.bat</code>를 다시 실행하세요.</li>'
                         '</ol>'
+                        '<div class="actions"><button id="retry-api" onclick="retryApi()">다시 시도</button></div>'
                         '</body></html>'
                     )
                     try:
+                        window.html = error_html
                         window.load_html(error_html)
+                        log.error("API 시작 실패 오류 HTML 로드 완료")
                     except Exception as e:
                         log.exception(f"오류 HTML 로드 실패: {e}")
+                    finally:
+                        try:
+                            _force_show_main_window()
+                        except Exception as e:
+                            log.warning(f"오류 화면 표시 후 창 강제 표시 실패: {e}")
             except Exception as e:
                 log.exception(f"on_window_started 실패: {e}")
 

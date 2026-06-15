@@ -35,6 +35,20 @@ def _normalize_sublt(value) -> str:
         return s
 
 
+def _scan_target_tolerance_kg(target_kg: float) -> float:
+    """C6: 스캔 목표 중량 허용오차(kg).
+
+    기존 max(1.0, target*0.001)는 1~100kg 소량 LOT에서 1kg까지 초과 허용되어
+    TARGET_EXCEEDED 판정이 흐려졌다. 0.1% 기준은 유지하되 50g~500g으로 제한한다.
+    """
+    try:
+        target = abs(float(target_kg or 0))
+    except (TypeError, ValueError):
+        target = 0.0
+    # 50g lower bound / 500g upper bound
+    return min(0.5, max(0.05, target * 0.001))
+
+
 class BarcodeScanEngine:
     """바코드 스캔 대조 + uid_verify_history 관리"""
 
@@ -279,12 +293,28 @@ class BarcodeScanEngine:
         target_mt = float(target.get('qty_mt_sum', 0) or 0)
         target_kg = target_mt * 1000.0
         if target_kg <= 0:
-            return {"ok": False, "uid": uid, "reason": "LOT_SCAN_BLOCKED", "lot_no": lot_no}
+            msg = (
+                f"[LOT_SCAN_BLOCKED] LOT {lot_no}는 Allocation/배분 예약 계획이 없어 "
+                "스캔 출고를 진행할 수 없습니다. 먼저 배분 업로드 또는 Picking List 반영을 완료하세요."
+            )
+            return {
+                "ok": False,
+                "uid": uid,
+                "reason": "LOT_SCAN_BLOCKED",
+                "lot_no": lot_no,
+                "message": msg,
+                "errors": [msg],
+                "next_step": {
+                    "action": "CREATE_ALLOCATION_PLAN",
+                    "label": "배분/예약 계획 생성 후 다시 스캔",
+                    "hint": "Allocation Excel 업로드 또는 Picking List 반영으로 allocation_plan을 먼저 생성하세요.",
+                },
+            }
 
         weight_kg = float(row.get('weight', 0) or 0)
         confirmed_kg = self._get_confirmed_weight_kg(lot_no, sale_ref=sale_ref)
-        # 0.1% 또는 최소 1kg 허용 오차
-        tolerance_kg = max(1.0, target_kg * 0.001)
+        # C6: 0.1% 기준 + 50g~500g 상/하한 허용 오차
+        tolerance_kg = _scan_target_tolerance_kg(target_kg)
         if confirmed_kg + weight_kg > target_kg + tolerance_kg:
             return {
                 "ok": False,
@@ -921,6 +951,7 @@ class BarcodeScanEngine:
         no_plan = []
         bangsong_lots = []   # v6.3.4 RUBI: 반송 건 수집
         sd08_warnings = []   # v6.9.7 [SD-08]: warehouse mismatch
+        processed_lots = set()  # C5: 성공 처리된 LOT만 직접 수집해 재계산 누락 방지
 
         with self.db.transaction("IMMEDIATE"):
             for code in uniq_codes:
@@ -1106,6 +1137,15 @@ class BarcodeScanEngine:
                 except Exception as e:
                     logger.debug(f"picking_table insert skipped (lot_mode): {e}")
 
+                # C2: STEP1(RESERVED→PICKED) 직후 상위 LOT 상태/무게 재계산.
+                # 이후 STEP2(SOLD)까지 진행되더라도, 중간 검증/예외/화면 갱신 경로에서
+                # inventory_tonbag만 PICKED이고 inventory 상태가 예전 값으로 남는 혼선을 막는다.
+                self._recalc_inventory_lot_weights(
+                    lot_no,
+                    now=now,
+                    reason='C2_SCAN_STEP1_PICKED',
+                )
+
                 # ── STEP 2: PICKED → SOLD ──────────────────────────────
                 self.db.execute(
                     "UPDATE inventory_tonbag "
@@ -1146,22 +1186,19 @@ class BarcodeScanEngine:
                     bangsong_lots.append(lot_no)
 
                 sold_count += 1
+                processed_lots.add(lot_no)
 
-            # v7.9.9 [C-3]: STEP2 후 inventory.current_weight + LOT status 재계산
-            # 기존: inventory_tonbag만 OUTBOUND로 변경 → inventory.current_weight 미갱신
-            # 수정: 스캔된 LOT들 일괄 재계산 (트랜잭션 밖에서 처리)
-            processed_lots = list({r.get('lot_no') for r in [
-                self.db.fetchone(
-                    "SELECT lot_no FROM inventory_tonbag WHERE (tonbag_uid=? OR CAST(sub_lt AS TEXT)=?)",
-                    (code, code)
-                ) for code in uniq_codes
-            ] if r})
-            for _lot in processed_lots:
+            # v7.9.9 [C-3] + C5: STEP2 후 inventory.current_weight + LOT status 재계산
+            # 기존: uniq_codes를 다시 조회하며 not_found/빈 LOT이 섞여 일부 재계산 누락 가능
+            # 수정: 성공 루프에서 직접 수집한 LOT만 None/빈값 필터 후 재계산
+            for _lot in sorted(processed_lots):
+                if not _lot:
+                    continue
                 self._recalc_inventory_lot_weights(_lot, now=now, reason='P2_SCAN_BATCH')
-            try:
-                self.db.conn.commit()
-            except Exception:
-                logger.debug("[SUPPRESSED] exception in barcode_scan_engine.py")  # noqa
+
+            # C9_TRANSACTION_CONTEXT_OWNS_COMMIT:
+            # self.db.transaction("IMMEDIATE") 컨텍스트가 commit/rollback을 소유한다.
+            # 내부 명시 commit은 중복 commit/부분 commit 오해를 만들 수 있어 호출하지 않는다.
 
         return {
             'success': sold_count > 0,

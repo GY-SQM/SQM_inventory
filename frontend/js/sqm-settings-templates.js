@@ -270,7 +270,7 @@
   function applyStoredFontScale() {
     var stored = null;
     try { stored = getStore().getItem('sqm_font_scale'); } catch {}
-    applyFontScale(stored || 100, false);
+    applyFontScale(stored || 110, false);  // 기본값 110% (작아 보임 보완, 사용자 설정값 있으면 유지)
   }
   window.applyStoredFontScale = applyStoredFontScale;
 

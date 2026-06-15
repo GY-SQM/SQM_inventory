@@ -105,11 +105,23 @@ def _finalize(issue_rows: list[dict], context: dict) -> dict:
     counts = defaultdict(int)
     for issue in issue_rows:
         counts[issue.get("severity") or "info"] += 1
+    mode = context.get("mode") or ""
+    next_step = {
+        "transition_required": level == "ok",
+        "message": (
+            "검증 PASS입니다. 이 검증은 상태 전환은 별도로 수행하므로 "
+            "업무 흐름에 맞게 PICKED 전환 또는 출고확정(SOLD)을 실행하세요."
+        ) if level == "ok" else "검증 이슈를 먼저 확인한 뒤 상태 전환을 진행하세요.",
+        "pick_endpoint": "/api/outbound/manual-pick",
+        "confirm_endpoint": "/api/outbound/confirm",
+        "mode": mode,
+    }
     return {
         "level": level,
         "counts": dict(counts),
         "issues": issue_rows[:80],
         "context": context,
+        "next_step": next_step,
     }
 
 
@@ -182,7 +194,7 @@ def validate_picking_doc(parsed: dict) -> dict:
         issues.append({
             "severity": "ok",
             "code": "MATCHED",
-            "message": "Allocation과 Picking List 매칭 완료",
+            "message": "검증 PASS: Allocation과 Picking List 매칭 완료 — 상태 전환은 별도",
         })
 
     return _finalize(issues, {
@@ -302,7 +314,7 @@ def validate_sales_order_no(sales_order_no: str = "", lot_no: str = "") -> dict:
         issues.append({
             "severity": "ok",
             "code": "MATCHED",
-            "message": "Sales Order No 누적 수량과 Allocation 매칭 완료",
+            "message": "검증 PASS: Sales Order No 누적 수량과 Allocation 매칭 완료 — 상태 전환은 별도",
         })
 
     return _finalize(issues, {

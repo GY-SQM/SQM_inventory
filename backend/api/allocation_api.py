@@ -14,6 +14,20 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/allocation", tags=["allocation"])
 
+AI_MAPPING_STATUS = {"ok": None, "code": "NOT_ATTEMPTED", "message": "AI 컬럼매핑 미시도"}
+
+
+def _set_ai_mapping_status(ok: bool, code: str, message: str) -> dict:
+    AI_MAPPING_STATUS.update({"ok": ok, "code": code, "message": message})
+    return dict(AI_MAPPING_STATUS)
+
+
+def _format_ai_mapping_failure_hint() -> str:
+    status = AI_MAPPING_STATUS
+    msg = status.get("message") or "AI 컬럼매핑 실패"
+    code = status.get("code") or "AI_MAPPING_FAILED"
+    return f"AI 컬럼매핑 실패({code}): {msg}"
+
 
 # Allocation 행 컬럼 별칭 매핑
 _ALLOC_COLUMN_MAP = {
@@ -57,6 +71,49 @@ def _clean_value(v: Any) -> Any:
     return v
 
 
+def _verify_reserved_tonbags(engine, rows: list[dict], expected_reserved: int) -> dict:
+    """Allocation 예약 직후 inventory_tonbag의 실제 RESERVED 수를 재조회한다."""
+    expected_reserved = int(expected_reserved or 0)
+    if expected_reserved <= 0:
+        return {"ok": True, "expected_reserved": expected_reserved, "actual_reserved": 0, "checked_pairs": 0}
+
+    pairs = []
+    seen = set()
+    for row in rows or []:
+        lot_no = str(row.get("lot_no") or "").strip()
+        sale_ref = str(row.get("sale_ref") or "").strip()
+        if not lot_no or not sale_ref:
+            continue
+        key = (lot_no, sale_ref)
+        if key not in seen:
+            seen.add(key)
+            pairs.append(key)
+
+    if not pairs:
+        return {
+            "ok": False,
+            "expected_reserved": expected_reserved,
+            "actual_reserved": 0,
+            "checked_pairs": 0,
+            "reason": "LOT/sale_ref 쌍이 없어 RESERVED 재검증 불가",
+        }
+
+    where = " OR ".join(["(lot_no=? AND sale_ref=?)" for _ in pairs])
+    params = [value for pair in pairs for value in pair]
+    row = engine.db.fetchone(
+        f"SELECT COUNT(*) AS cnt FROM inventory_tonbag WHERE status='RESERVED' AND ({where})",
+        tuple(params),
+    )
+    actual_reserved = int(row.get("cnt", 0) if isinstance(row, dict) else (row[0] if row else 0))
+    return {
+        "ok": actual_reserved >= expected_reserved,
+        "expected_reserved": expected_reserved,
+        "actual_reserved": actual_reserved,
+        "checked_pairs": len(pairs),
+        "reason": "" if actual_reserved >= expected_reserved else "RESERVED 톤백 수가 엔진 결과보다 적음",
+    }
+
+
 def _rows_from_canonical_parser(excel_path: str) -> list[dict]:
     """정본 AllocationParser 결과를 API 입력 행 구조로 변환."""
     try:
@@ -95,12 +152,14 @@ def _ai_match_columns(df, context_rows: int = 3) -> dict:
     try:
         from features.ai.gemini_utils import get_gemini_client, get_model_name, call_gemini_safe
     except ImportError:
-        logger.warning("[AI-mapping] gemini_utils import 실패")
+        _set_ai_mapping_status(False, "GEMINI_UTILS_IMPORT_FAILED", "Gemini 유틸 import 실패 — features.ai.gemini_utils 확인 필요")
+        logger.warning("[AI-mapping] Gemini 유틸 import 실패")
         return {}
 
     client = get_gemini_client()
     if not client:
-        logger.warning("[AI-mapping] Gemini client 없음 (API 키 미설정?)")
+        _set_ai_mapping_status(False, "GEMINI_KEY_MISSING", "Gemini 키 미설정 — GOOGLE_API_KEY 또는 GEMINI_API_KEY 설정 필요")
+        logger.warning("[AI-mapping] Gemini client 없음: Gemini 키 미설정")
         return {}
 
     cols = list(df.columns)
@@ -144,8 +203,10 @@ def _ai_match_columns(df, context_rows: int = 3) -> dict:
             if col and col != "null" and col in cols:
                 valid[key] = col
         logger.info(f"[AI-mapping] 매핑 결과: {valid}")
+        _set_ai_mapping_status(bool(valid), "OK" if valid else "AI_MAPPING_EMPTY", "AI 컬럼매핑 성공" if valid else "AI 컬럼매핑 결과가 비어 있습니다")
         return valid
     except Exception as e:
+        _set_ai_mapping_status(False, "AI_MAPPING_FAILED", f"Gemini 매핑 실패: {e}")
         logger.warning(f"[AI-mapping] Gemini 매핑 실패: {e}")
         return {}
 
@@ -290,6 +351,7 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
         # Stage 3: Gemini AI 폴백 — alias + 정본 파서 + 등록 템플릿 모두 실패 시
         if (df is None or df.empty) and not canonical_rows:
             logger.info("[allocation-import] alias/정본/템플릿 실패 → Gemini AI 폴백 시도")
+            _set_ai_mapping_status(False, "AI_MAPPING_FAILED", "Gemini 키 미설정 또는 AI 컬럼매핑 미완료")
             for header_row in (0, 1, 2, 3, 4, 5):
                 try:
                     candidate = pd.read_excel(tmp_path, header=header_row)
@@ -306,9 +368,18 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                     logger.debug(f"[allocation-import] AI폴백 header={header_row}: {_ae}")
 
         if (df is None or df.empty) and not canonical_rows:
-            raise HTTPException(400,
-                "Excel 헤더 인식 실패 — lot_no + sold_to/qty_mt 컬럼 필요 "
-                "(정본 파서/AI 폴백도 실패. 컬럼명을 확인하거나 표준 양식을 사용하세요)")
+            ai_mapping_status = dict(AI_MAPPING_STATUS)
+            ai_hint = _format_ai_mapping_failure_hint()
+            raise HTTPException(400, {
+                "code": "AI_MAPPING_FAILED",
+                "message": (
+                    "Excel 헤더 인식 실패 — lot_no + sold_to/qty_mt 컬럼 필요 "
+                    f"(정본 파서/AI 폴백도 실패: {ai_hint}. "
+                    "Gemini 키 미설정이면 GOOGLE_API_KEY 또는 GEMINI_API_KEY를 설정하세요. "
+                    "컬럼명을 확인하거나 표준 양식을 사용하세요)"
+                ),
+                "ai_mapping_status": ai_mapping_status,
+            })
 
         col_map = col_map_override if col_map_override else (_match_alloc_columns(df.columns) if df is not None else {})
         _mapping_source = (
@@ -373,20 +444,59 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
 
         success = bool(result.get("success"))
         reserved = int(result.get("reserved", 0))
+        processed = int(result.get("processed", reserved) or 0)
         errors = result.get("errors", [])
         error_details = result.get("error_details", [])
         plan_ids = result.get("plan_ids", [])
+        reserved_recheck = _verify_reserved_tonbags(engine, rows, reserved)
+        if not reserved_recheck.get("ok"):
+            msg = (
+                "[RESERVED_RECHECK_MISMATCH] "
+                f"expected={reserved_recheck.get('expected_reserved')} "
+                f"actual={reserved_recheck.get('actual_reserved')} — "
+                f"{reserved_recheck.get('reason') or '예약 직후 RESERVED 상태 불일치'}"
+            )
+            errors.append(msg)
+            error_details.append({
+                "fail_code": "RESERVED_RECHECK_MISMATCH",
+                "reason": msg,
+                "expected_reserved": reserved_recheck.get("expected_reserved"),
+                "actual_reserved": reserved_recheck.get("actual_reserved"),
+            })
+        recheck_warning = "" if reserved_recheck.get("ok") else " / RESERVED 재검증 경고"
 
         # UNIQUE constraint 에러 → 사용자 친화적 메시지로 변환
         if not success and errors:
             dup_errors = [e for e in errors if 'UNIQUE' in str(e) or 'unique' in str(e).lower() or 'idx_allocation_lot_mode_active_no_dup' in str(e)]
             if dup_errors:
+                edit_dup = _detect_export_edit_duplicate(rows)
+                if edit_dup.get("matched"):
+                    return {
+                        "ok": False,
+                        "data": {
+                            "filename": file.filename,
+                            "total_rows": len(rows),
+                            "reserved": 0,
+                            "processed": processed,
+                            "reserved_recheck": reserved_recheck,
+                            "edit_duplicate": edit_dup,
+                            "errors": errors[:20],
+                            "validation_summary": validation_summary,
+                        },
+                        "error": (
+                            "Export 편집본 재업로드 충돌입니다 — 수정본 재업로드 전 "
+                            "[배분 탭 → 전체 초기화] 또는 /api/allocation/reset-all 로 기존 배정을 정리하세요."
+                        ),
+                        "error_code": "EDIT_EXPORT_DUPLICATE",
+                    }
                 return {
                     "ok": False,
                     "data": {
                         "filename": file.filename,
                         "total_rows": len(rows),
                         "reserved": 0,
+                        "processed": processed,
+                        "reserved_recheck": reserved_recheck,
                         "errors": errors[:20],
                         "validation_summary": validation_summary,
                     },
@@ -407,6 +517,8 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                     "filename": file.filename,
                     "total_rows": len(rows),
                     "reserved": reserved,
+                    "processed": processed,
+                    "reserved_recheck": reserved_recheck,
                     "plan_ids": plan_ids[:50],
                     "header_row": header_used,
                     "matched_columns": list(col_map.keys()) if col_map else ["canonical_parser"],
@@ -416,15 +528,41 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                     "warnings": result.get("warnings", [])[:20],
                     "validation_summary": validation_summary,
                 },
-                "message": f"{reserved}건 Allocation 예약 완료 / 경고 {len(errors)}건",
+                "warning_code": None if reserved_recheck.get("ok") else "RESERVED_RECHECK_MISMATCH",
+                "message": f"{reserved}건 Allocation 예약 완료 / 경고 {len(errors)}건{recheck_warning}",
             }
-        else:
+        partial_success = (not success and processed > 0)
+        if partial_success:
+            return {
+                "ok": True,
+                "data": {
+                    "filename": file.filename,
+                    "total_rows": len(rows),
+                    "reserved": reserved,
+                    "processed": processed,
+                    "partial_success": True,
+                    "reserved_recheck": reserved_recheck,
+                    "plan_ids": plan_ids[:50],
+                    "header_row": header_used,
+                    "matched_columns": list(col_map.keys()) if col_map else ["canonical_parser"],
+                    "mapping_source": _mapping_source,
+                    "errors": errors[:20],
+                    "error_details": error_details[:20],
+                    "warnings": result.get("warnings", [])[:20],
+                    "validation_summary": validation_summary,
+                },
+                "message": f"Allocation 부분 처리: processed={processed}, reserved={reserved}, 실패/경고 {len(errors)}건",
+                "warning_code": "PARTIAL_SUCCESS",
+            }
+        if not partial_success:
             return {
                 "ok": False,
                 "data": {
                     "filename": file.filename,
                     "total_rows": len(rows),
                     "reserved": reserved,
+                    "processed": processed,
+                    "reserved_recheck": reserved_recheck,
                     "errors": errors[:20],
                     "error_details": error_details[:20],
                     "validation_summary": validation_summary,
@@ -474,13 +612,26 @@ def apply_approved_allocation():
         applied = int(result.get("applied", 0))
         return {
             "ok": True,
-            "data": {"applied": applied, "errors": result.get("errors", [])[:20]},
+            "data": {
+                "applied": applied,
+                "attempted": int(result.get("attempted", 0)),
+                "failed": int(result.get("failed", 0)),
+                "partial_success": bool(result.get("partial_success")),
+                "errors": result.get("errors", [])[:20],
+            },
+            "warning_code": "APPLY_APPROVED_PARTIAL" if result.get("partial_success") else None,
             "message": f"{applied}건 승인 예약 반영 완료",
         }
     else:
         return {
             "ok": False,
-            "data": {"applied": int(result.get("applied", 0)), "errors": result.get("errors", [])},
+            "data": {
+                "applied": int(result.get("applied", 0)),
+                "attempted": int(result.get("attempted", 0)),
+                "failed": int(result.get("failed", 0)),
+                "partial_success": bool(result.get("partial_success")),
+                "errors": result.get("errors", []),
+            },
             "error": "예약 반영 실패",
             "detail": {"code": "APPLY_APPROVED_FAILED", "errors": result.get("errors", [])[:10]},
             "message": "; ".join(result.get("errors", []))[:200] or "예약 반영 실패",
@@ -502,6 +653,66 @@ def _alloc_db():
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=3000")
     return con
+
+
+def _allocation_plan_columns(con) -> set[str]:
+    try:
+        return {str(r["name"]).lower() for r in con.execute("PRAGMA table_info(allocation_plan)").fetchall()}
+    except Exception:
+        return set()
+
+
+def _mark_allocation_exported_for_edit(con, plan_ids: list[int]) -> dict:
+    """Export된 allocation_plan 행에 편집용 workflow_status 플래그를 기록한다."""
+    if not plan_ids:
+        return {"supported": False, "marked": 0, "status": "NO_ROWS"}
+    cols = _allocation_plan_columns(con)
+    if "workflow_status" not in cols:
+        return {"supported": False, "marked": 0, "status": "NO_WORKFLOW_STATUS"}
+    placeholders = ",".join("?" * len(plan_ids))
+    sets = ["workflow_status='EXPORTED_FOR_EDIT'"]
+    if "updated_at" in cols:
+        sets.append("updated_at=datetime('now')")
+    cur = con.execute(
+        f"UPDATE allocation_plan SET {', '.join(sets)} WHERE id IN ({placeholders}) AND status NOT IN ('CANCELLED','SOLD')",
+        plan_ids,
+    )
+    return {"supported": True, "marked": int(cur.rowcount or 0), "status": "EXPORTED_FOR_EDIT"}
+
+
+def _detect_export_edit_duplicate(rows: list[dict]) -> dict:
+    """재업로드 행이 EXPORTED_FOR_EDIT 플래그가 있는 기존 배정과 충돌하는지 확인한다."""
+    pairs = []
+    seen = set()
+    for row in rows or []:
+        lot_no = str(row.get("lot_no") or "").strip()
+        sale_ref = str(row.get("sale_ref") or "").strip()
+        if not lot_no:
+            continue
+        key = (lot_no, sale_ref)
+        if key not in seen:
+            seen.add(key)
+            pairs.append(key)
+    if not pairs:
+        return {"matched": False, "count": 0, "lots": []}
+    con = _alloc_db()
+    try:
+        cols = _allocation_plan_columns(con)
+        if "workflow_status" not in cols:
+            return {"matched": False, "count": 0, "lots": []}
+        where = " OR ".join(["(lot_no=? AND COALESCE(sale_ref,'')=?)" for _ in pairs])
+        params = [value for lot_no, sale_ref in pairs for value in (lot_no, sale_ref)]
+        found = con.execute(
+            f"""SELECT DISTINCT lot_no FROM allocation_plan
+                WHERE workflow_status='EXPORTED_FOR_EDIT'
+                  AND status NOT IN ('CANCELLED','SOLD')
+                  AND ({where})""",
+            params,
+        ).fetchall()
+        lots = [str(r[0]) for r in found]
+        return {"matched": bool(lots), "count": len(lots), "lots": lots[:20]}
+    finally:
+        con.close()
 
 
 @router.post("/approve", summary="✅ 할당 승인 (Stage 2)")
@@ -802,7 +1013,7 @@ def export_allocation_excel():
     try:
         con = _alloc_db()
         rows = con.execute("""
-            SELECT ap.lot_no, ap.sub_lt, ap.customer, ap.sale_ref,
+            SELECT ap.id, ap.lot_no, ap.sub_lt, ap.customer, ap.sale_ref,
                    ap.qty_mt, ap.outbound_date, ap.status, ap.created_at,
                    i.sap_no, i.product, i.warehouse
             FROM allocation_plan ap
@@ -810,6 +1021,9 @@ def export_allocation_excel():
             WHERE ap.status NOT IN ('CANCELLED')
             ORDER BY ap.status, ap.lot_no, ap.sub_lt
         """).fetchall()
+        plan_ids = [int(r[0]) for r in rows]
+        export_edit_flag = _mark_allocation_exported_for_edit(con, plan_ids)
+        con.commit()
         con.close()
     except Exception as e:
         raise HTTPException(500, f"DB 오류: {e}")
@@ -818,7 +1032,7 @@ def export_allocation_excel():
     ws = wb.active
     ws.title = "Allocation"
 
-    headers = ["LOT NO", "Sub LOT", "고객사", "SALE REF", "수량(MT)", "출고예정일", "상태", "등록일시", "SAP NO", "제품", "창고"]
+    headers = ["LOT NO", "Sub LOT", "고객사", "SALE REF", "수량(MT)", "출고예정일", "상태", "등록일시", "SAP NO", "제품", "창고", "편집상태", "재업로드 안내"]
     header_fill = PatternFill("solid", fgColor="1565C0")
     header_font = Font(bold=True, color="FFFFFF", name="맑은 고딕")
     center = Alignment(horizontal="center", vertical="center")
@@ -830,7 +1044,10 @@ def export_allocation_excel():
         cell.alignment = center
 
     for row in rows:
-        ws.append(list(row))
+        ws.append(list(row)[1:] + [
+            "EXPORTED_FOR_EDIT",
+            "수정본 재업로드 전 [배분 탭 → 전체 초기화] 또는 /api/allocation/reset-all 실행 필요",
+        ])
         for cell in ws[ws.max_row]:
             cell.alignment = center
 
@@ -851,7 +1068,7 @@ def export_allocation_excel():
 
     logger.info("Allocation Excel 저장+열기: %s (%d 행)", fname, len(rows))
     from backend.common.errors import ok_response
-    return ok_response({"filename": fname, "path": out_path, "rows": len(rows), "opened": True})
+    return ok_response({"filename": fname, "path": out_path, "rows": len(rows), "opened": True, "export_edit_flag": export_edit_flag})
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
