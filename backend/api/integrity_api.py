@@ -22,32 +22,65 @@ def _db():
     return conn
 
 
-@router.get("/check")
+@router.get("/check", summary="🔍 정합성 검증 (F013)")
 async def integrity_check():
+    """
+    D3: verify_lot_integrity 결과를 반영하여 정합성 검사 수행.
+    기존 ABS(initial - (current+picked)) > 1.0 단순 체크에서 엔진의 정밀 검증으로 교체.
+    """
     try:
-        conn = _db()
-        total = conn.execute("SELECT COUNT(*) FROM inventory").fetchone()[0]
-        rows = conn.execute(
-            "SELECT lot_no, initial_weight, current_weight, picked_weight, "
-            "ABS(initial_weight - (current_weight + picked_weight)) AS diff "
-            "FROM inventory "
-            "WHERE ABS(initial_weight - (current_weight + picked_weight)) > 1.0"
-        ).fetchall()
-        conn.close()
-        error_list = [dict(r) for r in rows]
-        return dict(
-            success=True,
-            message="정합성 검사 완료",
-            data=dict(
-                total=total,
-                ok=total - len(error_list),
-                error=len(error_list),
-                details=error_list,
-            )
-        )
+        from backend.api import engine, ENGINE_AVAILABLE
+        if not ENGINE_AVAILABLE or engine is None:
+            # 폴백: 엔진 미사용 시 기존 로직 사용 (최소한의 가동성)
+            conn = _db()
+            total = conn.execute("SELECT COUNT(*) FROM inventory").fetchone()[0]
+            rows = conn.execute(
+                "SELECT lot_no, initial_weight, current_weight, picked_weight, "
+                "ABS(initial_weight - (current_weight + picked_weight)) AS diff "
+                "FROM inventory "
+                "WHERE ABS(initial_weight - (current_weight + picked_weight)) > 1.0"
+            ).fetchall()
+            conn.close()
+            error_list = [dict(r) for r in rows]
+            return {
+                "success": True,
+                "message": "정합성 검사 완료 (폴백 모드)",
+                "data": {
+                    "total": total,
+                    "ok": total - len(error_list),
+                    "error": len(error_list),
+                    "details": error_list,
+                }
+            }
+
+        # 엔진 정밀 검증
+        result = engine.verify_all_integrity()
+        total = result.get('total_lots', 0)
+        error_lots = result.get('error_lots', [])
+        
+        # D3: details에 LOT 정보뿐 아니라 구체적인 에러 메시지도 포함
+        # 프론트엔드 호환성을 위해 형식을 맞춤
+        details = []
+        for item in error_lots:
+            details.append({
+                "lot_no": item['lot_no'],
+                "errors": item['errors'],
+                "message": "; ".join(item['errors'])
+            })
+
+        return {
+            "success": True,
+            "message": "정합성 검사 완료",
+            "data": {
+                "total": total,
+                "ok": total - len(error_lots),
+                "error": len(error_lots),
+                "details": details,
+            }
+        }
     except Exception as e:
-        log.error("integrity_check error: %s", e)
-        return dict(success=False, message=str(e), data=None)
+        log.exception(f"integrity_check error: {e}")
+        return {"success": False, "message": str(e), "data": None}
 
 
 @router.get("/diagnostic")

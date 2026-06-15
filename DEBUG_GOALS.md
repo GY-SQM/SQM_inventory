@@ -113,7 +113,7 @@
 
 - [x] **🔴 D1** `engine_modules/inventory_modular/return_mixin.py:~332` 반품이 `RETURN` 상태에서 멈추고 `finalize_return_to_available` 미호출 → 가용재고로 안 돌아옴(2단계 수동). → 자동 진행 또는 API 공개.
 - [x] **🔴 D2** `backend/api/status_revert_api.py:~291` 상태복원이 inventory 상태만 바꾸고 `current_weight/picked_weight` 미복구 → SOLD→PICKED 복원 시 `initial=current+picked` 깨짐. → 복원 후 재계산.
-- [ ] **🔴 D3** `backend/api/integrity_api.py:~25` `/check`가 `picked>initial` 류 edge case를 못 잡고 `details:[]` 반환 → "이상 없음" 오판. → `verify_lot_integrity` 결과 반영.
+- [x] **🔴 D3** `backend/api/integrity_api.py:~25` `/check`가 `picked>initial` 류 edge case를 못 잡고 `details:[]` 반환 → "이상 없음" 오판. → `verify_lot_integrity` 결과 반영.
 - [ ] **🟡 D4** `backend/api/status_revert_api.py:~396` `execute_status_revert` 후 `_recalc_current_weight` 미호출 → AVAILABLE→PENDING 복원해도 무게 그대로. → 복원 후 lot별 재계산.
 - [ ] **🟡 D5** `engine_modules/return_reinbound_engine.py:~162` 재계산 실패를 debug 로그로 무시한 채 COMMIT → current_weight 미복구 채로 확정(추정). → 재계산 전 engine 검증, 실패 시 롤백.
 - [ ] **🟡 D6** `engine_modules/inventory_modular/preflight_mixin.py:~45` preflight 결과를 process로 전달/재검증 안 함 → 실제 add 단계 초과 감지 시 부분 입고. → preflight↔실행 교차검증.
