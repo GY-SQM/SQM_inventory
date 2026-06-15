@@ -32,8 +32,6 @@
   box-shadow:
     0 1px 0 rgba(245, 158, 11, 0.06),
     0 4px 24px rgba(0, 0, 0, 0.4) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 /* 메뉴 버튼 호버 — 앰버 글로우 */
@@ -56,8 +54,6 @@
     0 8px 32px rgba(0,0,0,0.6),
     0 0 0 1px rgba(245,158,11,0.06) !important;
   border-radius: 8px !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 .menu-dropdown button:hover,
 .submenu-dropdown button:hover {
@@ -170,7 +166,6 @@
     0 4px 24px rgba(0,0,0,0.3),
     0 0 0 1px rgba(56,189,248,0.06) !important;
   transition: all .25s ease !important;
-  backdrop-filter: blur(4px);
 }
 .kpi-card:hover, .card:hover {
   transform: translateY(-2px) !important;
@@ -250,8 +245,6 @@ button:not(:disabled) {
     0 32px 80px rgba(0,0,0,0.7),
     0 0 0 1px rgba(245,158,11,0.07),
     inset 0 1px 0 rgba(255,255,255,0.04) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
 }
 .modal-header, [class*="modal-header"] {
   border-bottom: 1px solid rgba(245,158,11,0.1) !important;
@@ -295,7 +288,6 @@ input:focus, select:focus, textarea:focus {
     rgba(220,38,38,0.12) 0%,
     rgba(127,29,29,0.08) 100%
   ) !important;
-  backdrop-filter: blur(8px);
   font-size: 12px !important;
   letter-spacing: 0.2px !important;
 }
