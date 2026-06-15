@@ -279,7 +279,23 @@ class BarcodeScanEngine:
         target_mt = float(target.get('qty_mt_sum', 0) or 0)
         target_kg = target_mt * 1000.0
         if target_kg <= 0:
-            return {"ok": False, "uid": uid, "reason": "LOT_SCAN_BLOCKED", "lot_no": lot_no}
+            msg = (
+                f"[LOT_SCAN_BLOCKED] LOT {lot_no}는 Allocation/배분 예약 계획이 없어 "
+                "스캔 출고를 진행할 수 없습니다. 먼저 배분 업로드 또는 Picking List 반영을 완료하세요."
+            )
+            return {
+                "ok": False,
+                "uid": uid,
+                "reason": "LOT_SCAN_BLOCKED",
+                "lot_no": lot_no,
+                "message": msg,
+                "errors": [msg],
+                "next_step": {
+                    "action": "CREATE_ALLOCATION_PLAN",
+                    "label": "배분/예약 계획 생성 후 다시 스캔",
+                    "hint": "Allocation Excel 업로드 또는 Picking List 반영으로 allocation_plan을 먼저 생성하세요.",
+                },
+            }
 
         weight_kg = float(row.get('weight', 0) or 0)
         confirmed_kg = self._get_confirmed_weight_kg(lot_no, sale_ref=sale_ref)
