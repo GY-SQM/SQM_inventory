@@ -932,11 +932,15 @@ def onestop_complete(req: OneStopCompleteRequest):
             entry["weight_kg"] += float(row_dict.get("weight") or 0)
 
         for lot_no, entry in by_lot.items():
-            # [fix B-4] inventory 상위 테이블 status 도 SOLD 갱신 (tonbag만 갱신하던 버그 수정)
+            # C7: 부분 출고/잔량 LOT 보호 — 무게 하드코딩 대신 엔진 재계산 사용
             db.execute(
-                "UPDATE inventory SET status='SOLD', sold_to=?, current_weight=0, updated_at=? WHERE lot_no=? AND status != 'SOLD'",
+                "UPDATE inventory SET sold_to=?, updated_at=? WHERE lot_no=?",
                 (customer or None, now, lot_no)
             )
+            if hasattr(engine, '_recalc_current_weight'):
+                engine._recalc_current_weight(lot_no, reason='C7_ONESTOP_COMPLETE')
+            if hasattr(engine, '_recalc_lot_status'):
+                engine._recalc_lot_status(lot_no)
             _write_audit_log(
                 db,
                 event_type="SOLD",
