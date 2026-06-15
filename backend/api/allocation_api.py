@@ -373,6 +373,7 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
 
         success = bool(result.get("success"))
         reserved = int(result.get("reserved", 0))
+        processed = int(result.get("processed", reserved) or 0)
         errors = result.get("errors", [])
         error_details = result.get("error_details", [])
         plan_ids = result.get("plan_ids", [])
@@ -387,6 +388,7 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                         "filename": file.filename,
                         "total_rows": len(rows),
                         "reserved": 0,
+                        "processed": processed,
                         "errors": errors[:20],
                         "validation_summary": validation_summary,
                     },
@@ -407,6 +409,7 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                     "filename": file.filename,
                     "total_rows": len(rows),
                     "reserved": reserved,
+                    "processed": processed,
                     "plan_ids": plan_ids[:50],
                     "header_row": header_used,
                     "matched_columns": list(col_map.keys()) if col_map else ["canonical_parser"],
@@ -418,13 +421,36 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                 },
                 "message": f"{reserved}건 Allocation 예약 완료 / 경고 {len(errors)}건",
             }
-        else:
+        partial_success = (not success and processed > 0)
+        if partial_success:
+            return {
+                "ok": True,
+                "data": {
+                    "filename": file.filename,
+                    "total_rows": len(rows),
+                    "reserved": reserved,
+                    "processed": processed,
+                    "partial_success": True,
+                    "plan_ids": plan_ids[:50],
+                    "header_row": header_used,
+                    "matched_columns": list(col_map.keys()) if col_map else ["canonical_parser"],
+                    "mapping_source": _mapping_source,
+                    "errors": errors[:20],
+                    "error_details": error_details[:20],
+                    "warnings": result.get("warnings", [])[:20],
+                    "validation_summary": validation_summary,
+                },
+                "message": f"Allocation 부분 처리: processed={processed}, reserved={reserved}, 실패/경고 {len(errors)}건",
+                "warning_code": "PARTIAL_SUCCESS",
+            }
+        if not partial_success:
             return {
                 "ok": False,
                 "data": {
                     "filename": file.filename,
                     "total_rows": len(rows),
                     "reserved": reserved,
+                    "processed": processed,
                     "errors": errors[:20],
                     "error_details": error_details[:20],
                     "validation_summary": validation_summary,
