@@ -495,18 +495,25 @@ def wait_for_api(timeout=10):
     """API 서버가 준비될 때까지 대기. /api/health 없으면 루트 '/' 로 폴백."""
     import urllib.request
     deadline = time.time() + timeout
-    probes = [f'http://{API_HOST}:{API_PORT}/api/health',
-              f'http://{API_HOST}:{API_PORT}/']
+    last_url = None
+    last_error = None
     while time.time() < deadline:
+        probes = [f'http://{API_HOST}:{API_PORT}/api/health',
+                  f'http://{API_HOST}:{API_PORT}/']
         for url in probes:
             try:
                 urllib.request.urlopen(url, timeout=1)
                 log.info(f"API 서버 준비 완료 ({url})")
                 return True
-            except Exception:
-                pass
+            except Exception as e:
+                last_url = url
+                last_error = e
         time.sleep(0.3)
-    log.warning("API 서버 연결 타임아웃 — 오프라인 모드로 진행")
+    log.warning(
+        "API 서버 연결 타임아웃 — 오류 화면 표시 예정. last_url=%s last_error=%r",
+        last_url,
+        last_error,
+    )
     return False
 
 # ===========================================================================
@@ -1029,6 +1036,7 @@ def main():
 
             if _phase[0] == "error":
                 # 오류 화면: JS 브릿지 설치하지 않음 (죽은 백엔드에 fetch 루프 방지).
+                _force_show_main_window()
                 log.info('on_loaded: error 페이지 로드 — JS 브릿지 비설치')
                 return
 
@@ -1155,6 +1163,10 @@ def main():
                 else:
                     log.error("API 시작 실패 -> 오류 화면 표시")
                     _phase[0] = "error"
+                    try:
+                        _force_show_main_window()
+                    except Exception as e:
+                        log.warning(f"오류 화면 표시 전 창 강제 표시 실패: {e}")
                     error_html = (
                         '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">'
                         '<title>SQM 시작 실패</title>'
@@ -1176,9 +1188,16 @@ def main():
                         '</body></html>'
                     )
                     try:
+                        window.html = error_html
                         window.load_html(error_html)
+                        log.error("API 시작 실패 오류 HTML 로드 완료")
                     except Exception as e:
                         log.exception(f"오류 HTML 로드 실패: {e}")
+                    finally:
+                        try:
+                            _force_show_main_window()
+                        except Exception as e:
+                            log.warning(f"오류 화면 표시 후 창 강제 표시 실패: {e}")
             except Exception as e:
                 log.exception(f"on_window_started 실패: {e}")
 
