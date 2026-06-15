@@ -1195,10 +1195,10 @@ class BarcodeScanEngine:
                 if not _lot:
                     continue
                 self._recalc_inventory_lot_weights(_lot, now=now, reason='P2_SCAN_BATCH')
-            try:
-                self.db.conn.commit()
-            except Exception:
-                logger.debug("[SUPPRESSED] exception in barcode_scan_engine.py")  # noqa
+
+            # C9_TRANSACTION_CONTEXT_OWNS_COMMIT:
+            # self.db.transaction("IMMEDIATE") 컨텍스트가 commit/rollback을 소유한다.
+            # 내부 명시 commit은 중복 commit/부분 commit 오해를 만들 수 있어 호출하지 않는다.
 
         return {
             'success': sold_count > 0,
