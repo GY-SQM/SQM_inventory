@@ -1557,7 +1557,8 @@ def pdf_inbound(req: PdfInboundRequest):
                 "success": True,
                 "message": (
                     f"PDF parse OK ({req.filename}){fallback_note} "
-                    f"saved={saved_count} failed={len(save_errors)}"
+                    f"saved={saved_count} failed={len(save_errors)} — "
+                    "PENDING 저장됨, Pending 탭에서 입고확정 필요"
                 ),
                 "data": {
                     "filename": req.filename,
@@ -1569,6 +1570,10 @@ def pdf_inbound(req: PdfInboundRequest):
                     "tier1_lots": tier1_lots,
                     "saved_count": saved_count,
                     "saved_lots": saved_lots[:50],
+                    "saved_status": "PENDING",
+                    "requires_inbound_confirm": saved_count > 0,
+                    "next_step": "Pending 탭에서 저장된 LOT을 확인한 뒤 입고확정을 실행하면 AVAILABLE 재고로 전환됩니다.",
+                    "confirm_endpoint_template": "/api/inbound/confirm/{lot_no}",
                     "errors": save_errors[:50],
                     "folio": getattr(parsed, "folio", "") if parse_type == "PackingListData" else None,
                     "product": getattr(parsed, "product", "") if parse_type == "PackingListData" else None,
