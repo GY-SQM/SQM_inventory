@@ -14,6 +14,20 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/allocation", tags=["allocation"])
 
+AI_MAPPING_STATUS = {"ok": None, "code": "NOT_ATTEMPTED", "message": "AI 컬럼매핑 미시도"}
+
+
+def _set_ai_mapping_status(ok: bool, code: str, message: str) -> dict:
+    AI_MAPPING_STATUS.update({"ok": ok, "code": code, "message": message})
+    return dict(AI_MAPPING_STATUS)
+
+
+def _format_ai_mapping_failure_hint() -> str:
+    status = AI_MAPPING_STATUS
+    msg = status.get("message") or "AI 컬럼매핑 실패"
+    code = status.get("code") or "AI_MAPPING_FAILED"
+    return f"AI 컬럼매핑 실패({code}): {msg}"
+
 
 # Allocation 행 컬럼 별칭 매핑
 _ALLOC_COLUMN_MAP = {
@@ -138,12 +152,14 @@ def _ai_match_columns(df, context_rows: int = 3) -> dict:
     try:
         from features.ai.gemini_utils import get_gemini_client, get_model_name, call_gemini_safe
     except ImportError:
-        logger.warning("[AI-mapping] gemini_utils import 실패")
+        _set_ai_mapping_status(False, "GEMINI_UTILS_IMPORT_FAILED", "Gemini 유틸 import 실패 — features.ai.gemini_utils 확인 필요")
+        logger.warning("[AI-mapping] Gemini 유틸 import 실패")
         return {}
 
     client = get_gemini_client()
     if not client:
-        logger.warning("[AI-mapping] Gemini client 없음 (API 키 미설정?)")
+        _set_ai_mapping_status(False, "GEMINI_KEY_MISSING", "Gemini 키 미설정 — GOOGLE_API_KEY 또는 GEMINI_API_KEY 설정 필요")
+        logger.warning("[AI-mapping] Gemini client 없음: Gemini 키 미설정")
         return {}
 
     cols = list(df.columns)
@@ -187,8 +203,10 @@ def _ai_match_columns(df, context_rows: int = 3) -> dict:
             if col and col != "null" and col in cols:
                 valid[key] = col
         logger.info(f"[AI-mapping] 매핑 결과: {valid}")
+        _set_ai_mapping_status(bool(valid), "OK" if valid else "AI_MAPPING_EMPTY", "AI 컬럼매핑 성공" if valid else "AI 컬럼매핑 결과가 비어 있습니다")
         return valid
     except Exception as e:
+        _set_ai_mapping_status(False, "AI_MAPPING_FAILED", f"Gemini 매핑 실패: {e}")
         logger.warning(f"[AI-mapping] Gemini 매핑 실패: {e}")
         return {}
 
@@ -333,6 +351,7 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
         # Stage 3: Gemini AI 폴백 — alias + 정본 파서 + 등록 템플릿 모두 실패 시
         if (df is None or df.empty) and not canonical_rows:
             logger.info("[allocation-import] alias/정본/템플릿 실패 → Gemini AI 폴백 시도")
+            _set_ai_mapping_status(False, "AI_MAPPING_FAILED", "Gemini 키 미설정 또는 AI 컬럼매핑 미완료")
             for header_row in (0, 1, 2, 3, 4, 5):
                 try:
                     candidate = pd.read_excel(tmp_path, header=header_row)
@@ -349,9 +368,18 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                     logger.debug(f"[allocation-import] AI폴백 header={header_row}: {_ae}")
 
         if (df is None or df.empty) and not canonical_rows:
-            raise HTTPException(400,
-                "Excel 헤더 인식 실패 — lot_no + sold_to/qty_mt 컬럼 필요 "
-                "(정본 파서/AI 폴백도 실패. 컬럼명을 확인하거나 표준 양식을 사용하세요)")
+            ai_mapping_status = dict(AI_MAPPING_STATUS)
+            ai_hint = _format_ai_mapping_failure_hint()
+            raise HTTPException(400, {
+                "code": "AI_MAPPING_FAILED",
+                "message": (
+                    "Excel 헤더 인식 실패 — lot_no + sold_to/qty_mt 컬럼 필요 "
+                    f"(정본 파서/AI 폴백도 실패: {ai_hint}. "
+                    "Gemini 키 미설정이면 GOOGLE_API_KEY 또는 GEMINI_API_KEY를 설정하세요. "
+                    "컬럼명을 확인하거나 표준 양식을 사용하세요)"
+                ),
+                "ai_mapping_status": ai_mapping_status,
+            })
 
         col_map = col_map_override if col_map_override else (_match_alloc_columns(df.columns) if df is not None else {})
         _mapping_source = (

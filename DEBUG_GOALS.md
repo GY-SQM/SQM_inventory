@@ -90,7 +90,7 @@
 - [x] **🟡 B9** `backend/api/allocation_api.py:~815` export 후 원본 상태 유지 → 수정본 재업로드 시 DUPLICATE 충돌. → 편집/스테이징 상태 플래그.
 - [x] **🟢 B10** `backend/api/location_candidates.py:~24` 최신 batch 없으면 후보 `{}` → 위치 자동배정 흐름 멈춤(추정). → "위치데이터 없음" 명시.
 - [x] **🟢 B11** `inbound_mixin.py:~173` lot_no 없으면 early return → 나머지 검증 스킵, 어디서 멈췄는지 불명확. → 검증 모아서 한번에 반환.
-- [ ] **🟢 B12** `backend/api/allocation_api.py:~281` AI 컬럼매핑 실패 시 조용한 폴백 → 키 미설정이면 원인 불명. → "Gemini 키 미설정" 명시.
+- [x] **🟢 B12** `backend/api/allocation_api.py:~281` AI 컬럼매핑 실패 시 조용한 폴백 → 키 미설정이면 원인 불명. → "Gemini 키 미설정" 명시.
 
 ---
 
