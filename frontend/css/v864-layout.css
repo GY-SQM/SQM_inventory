@@ -1947,8 +1947,8 @@ html[data-theme="light"] .menubar .menu-dropdown .submenu-dropdown {
 }
 html[data-theme="light"] nav.menubar .menu-dropdown .submenu-dropdown,
 html[data-theme="light"] .menubar .menu-dropdown .submenu-dropdown {
-  background: #172033 !important;
-  border-color: #38bdf8 !important;
+  background: #0f172a !important;   /* 1단계 드롭다운과 동일한 반대색(다크)으로 통일 */
+  border-color: #334155 !important;
 }
 html[data-theme="light"] nav.menubar .menu-dropdown button,
 html[data-theme="light"] nav.menubar .menu-dropdown .submenu-parent-btn,
@@ -1977,8 +1977,8 @@ html[data-theme="dark"] .menubar .menu-dropdown .submenu-dropdown {
 }
 html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-dropdown,
 html[data-theme="dark"] .menubar .menu-dropdown .submenu-dropdown {
-  background: #f1f5f9 !important;
-  border-color: #94a3b8 !important;
+  background: #ffffff !important;   /* 1단계 드롭다운과 동일한 반대색(라이트)으로 통일 */
+  border-color: #cbd5e1 !important;
 }
 html[data-theme="dark"] nav.menubar .menu-dropdown button,
 html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-parent-btn,
