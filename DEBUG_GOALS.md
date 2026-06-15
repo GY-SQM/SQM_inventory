@@ -70,7 +70,7 @@
 - [x] **🔴 A3** `backend/api/__init__.py:~137` DB 마이그레이션 실패를 `logging.warning`만 하고 시작 계속 → 테이블 미생성 → 이후 API "no such table" → UI 빈 상태. → 핵심 마이그레이션 실패 시 명시적 차단/재시도.
 - [x] **🟡 A4** `frontend/js/api-client.js:~45` 빈/204 응답을 `{}`로 반환 → 상위가 "정상"으로 오인. → status·success 명시 검증.
 - [x] **🟡 A5** `frontend/js/pages/inventory.js:~19` 응답을 배열로 가정하나 `{total,data}` 객체일 수 있음 → `filter()` 에러로 화면 멈춤. → `extractRows` 사용.
-- [ ] **🟡 A6** `frontend/js/pages/dashboard.js:~50` / `allocation.js:~12` / `picked.js` 200 OK + `data` 필드 없거나 `{success:false}`인데 빈 테이블로 조용히 진행. → 응답 구조 검증 + 에러 분기.
+- [x] **🟡 A6** `frontend/js/pages/dashboard.js:~50` / `allocation.js:~12` / `picked.js` 200 OK + `data` 필드 없거나 `{success:false}`인데 빈 테이블로 조용히 진행. → 응답 구조 검증 + 에러 분기.
 - [ ] **🟡 A7** `frontend/js/main.js:~76` 라우터 init 실패를 `console.error`만 → 사이드바 탭 무동작(다른 화면 못 감). → fail-safe 또는 에러 배너.
 - [ ] **🟡 A8** `main_webview.py:~509` `wait_for_api` 타임아웃 시 사용자 피드백 없음(흰 화면). → 타임아웃 배너 + 재시도.
 - [ ] **🟢 A9** `outbound.js:~46` 출고확정 fetch 실패 시 토스트만, 재시도 수단 없음. → 재시도 버튼.

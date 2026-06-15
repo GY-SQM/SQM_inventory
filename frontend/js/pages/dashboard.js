@@ -2,6 +2,7 @@
 // 테이블 2개: [좌] 재고 및 확인 (판매가능/판매배정/판매화물/출고완료/Return 대기/합계/샘플)
 //             [우] LOT별 (기초재고/입고/출고/기말재고/검증)
 import { apiGet } from '../api-client.js';
+import { showToast } from '../toast.js';
 
 const SAMPLE = {
   products: [
@@ -27,6 +28,7 @@ export async function mount(container) {
           <tbody id="dash-products"></tbody>
         </table>
         <div id="dash-products-footer" style="padding:5px 12px;background:var(--bg-hover);border-top:1px solid var(--panel-border);font-size:12px;flex-shrink:0;"></div>
+        <div id="dash-error" class="empty" style="display:none;color:var(--status-error);padding:10px 12px;"></div>
       </div>
       <div class="panel-half">
         <table class="data-table">
@@ -43,14 +45,52 @@ export async function mount(container) {
   await loadAll();
 }
 
+function normalizeDashboardStats(res) {
+  const payload = res?.data || res || {};
+  if (payload.ok === false || payload.success === false) {
+    throw new Error(payload.message || payload.error || 'dashboard response failed');
+  }
+  if (Array.isArray(payload.products) || Array.isArray(payload.lots)) {
+    return {
+      products: Array.isArray(payload.products) ? payload.products : [],
+      lots: Array.isArray(payload.lots) ? payload.lots : [],
+    };
+  }
+  if (Array.isArray(payload.product_matrix)) {
+    return {
+      products: payload.product_matrix.map((r) => ({
+        name: r.product || r.name || '-',
+        sellable: Number(r.available_mt || r.sellable || 0),
+        reserved: Number(r.reserved_mt || r.reserved || 0),
+        committed: Number(r.picked_mt || r.committed || 0),
+        outbound_done: Number(r.sold_mt || r.outbound_done || 0),
+        return_wait: Number(r.return_wait || 0),
+        total: Number(r.total_mt || r.total || 0),
+        sample: Number(r.sample || r.sample_bags || 0),
+      })),
+      lots: Array.isArray(payload.lot_weight_summary) ? payload.lot_weight_summary : [],
+    };
+  }
+  throw new Error('invalid dashboard response shape');
+}
+
 async function loadAll() {
   let data = SAMPLE;
+  const errEl = document.getElementById('dash-error');
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
   try {
     const res = await apiGet('/api/dashboard/stats');
-    if (res && (res.data || res.products)) data = res.data || res;
-  } catch { /* 폴백 유지 */ }
-  renderProducts(data.products || SAMPLE.products);
-  renderLots(data.lots || SAMPLE.lots);
+    if (res?.ok === false || res?.success === false) throw new Error(res.message || res.error || 'dashboard response failed');
+    data = normalizeDashboardStats(res);
+  } catch (e) {
+    console.error('[dashboard] load failed', e);
+    showToast?.('error', '대시보드 데이터 로드 실패');
+    if (errEl) { errEl.textContent = `대시보드 로드 실패: ${e.message}`; errEl.style.display = 'block'; }
+  }
+  const products = Array.isArray(data.products) ? data.products : SAMPLE.products;
+  const lots = Array.isArray(data.lots) ? data.lots : SAMPLE.lots;
+  renderProducts(products);
+  renderLots(lots);
 }
 
 function num(v) {
