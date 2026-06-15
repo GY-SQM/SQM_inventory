@@ -2216,24 +2216,7 @@
     cancel.addEventListener('click', function() {
       document.getElementById('sqm-modal').style.display = 'none';
     });
-    submit.addEventListener('click', function() {
-      var full = isFull();
-      var ids = full ? null : checkedTonbags().map(function(c){ return parseInt(c.value, 10); });
-      var payload = {
-        lot_no: lotSel.value,
-        count: full ? null : null,
-        tonbag_ids: ids,
-        customer: cust.value.trim(),
-        sale_ref: saleref.value.trim(),
-        outbound_date: dateEl.value || null,
-        include_sample: full ? sampleEl.checked : false,
-        unlocated: unlocEl.checked,
-        confirm: confirmEl.checked
-      };
-      var desc = full ? '전량' : (ids.length + '개 톤백 선택');
-      var extra = (payload.include_sample ? ' + 샘플' : '') + (payload.unlocated ? ' / 위치미상' : '') + (payload.confirm ? ' / 확정(SOLD)' : '');
-      if (!sqmConfirm('LOT ' + payload.lot_no + ' 을(를) ' + desc + extra + ' 로 ' + payload.customer + ' 에게 출고합니다. 계속?')) return;
-
+    function doLotQtyOutbound(payload) {
       submit.disabled = true; cancel.disabled = true;
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 출고 처리 중...</div>';
       apiPost('/api/outbound/lot-qty', payload).then(function(res) {
@@ -2265,6 +2248,34 @@
         showToast('error', '실패: ' + (e.message || String(e)));
         cancel.disabled = false; refresh();
       });
+    }
+
+    submit.addEventListener('click', function() {
+      var full = isFull();
+      var ids = full ? null : checkedTonbags().map(function(c){ return parseInt(c.value, 10); });
+      var payload = {
+        lot_no: lotSel.value,
+        count: full ? null : null,
+        tonbag_ids: ids,
+        customer: cust.value.trim(),
+        sale_ref: saleref.value.trim(),
+        outbound_date: dateEl.value || null,
+        include_sample: full ? sampleEl.checked : false,
+        unlocated: unlocEl.checked,
+        confirm: confirmEl.checked
+      };
+      var desc = full ? '전량' : (ids.length + '개 톤백 선택');
+      var extra = (payload.include_sample ? ' + 샘플' : '') + (payload.unlocated ? ' / 위치미상' : '') + (payload.confirm ? ' / 확정(SOLD)' : '');
+      // pywebview/WebView2 의 window.confirm 차단 이슈 회피 → 모달 내부 인라인 확인
+      result.innerHTML =
+        '<div style="padding:10px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--warning)">' +
+        '<div style="margin-bottom:8px">⚠️ <b>LOT ' + escapeHtml(payload.lot_no) + '</b> 을(를) <b>' + escapeHtml(desc + extra) +
+        '</b> 로 <b>' + escapeHtml(payload.customer) + '</b> 에게 출고합니다. 진행할까요?</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+        '<button type="button" id="lq-conf-no" class="btn btn-ghost">취소</button>' +
+        '<button type="button" id="lq-conf-yes" class="btn btn-primary">확정 출고</button></div></div>';
+      document.getElementById('lq-conf-no').addEventListener('click', function(){ result.innerHTML = ''; });
+      document.getElementById('lq-conf-yes').addEventListener('click', function(){ doLotQtyOutbound(payload); });
     });
     refresh();
   }
