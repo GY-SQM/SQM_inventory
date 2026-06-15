@@ -153,6 +153,7 @@ class ReturnInboundParser:
                 bl_no = self._safe_str(row, col.get("BL NO")) or ""
 
                 result["items"].append({
+                    "line_no": int(idx) + 1,
                     "lot_no": lot_no,
                     "weight_mt": weight_mt,
                     "tonbag_count": tonbag_count,
