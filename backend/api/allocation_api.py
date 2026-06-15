@@ -441,6 +441,26 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
         if not success and errors:
             dup_errors = [e for e in errors if 'UNIQUE' in str(e) or 'unique' in str(e).lower() or 'idx_allocation_lot_mode_active_no_dup' in str(e)]
             if dup_errors:
+                edit_dup = _detect_export_edit_duplicate(rows)
+                if edit_dup.get("matched"):
+                    return {
+                        "ok": False,
+                        "data": {
+                            "filename": file.filename,
+                            "total_rows": len(rows),
+                            "reserved": 0,
+                            "processed": processed,
+                            "reserved_recheck": reserved_recheck,
+                            "edit_duplicate": edit_dup,
+                            "errors": errors[:20],
+                            "validation_summary": validation_summary,
+                        },
+                        "error": (
+                            "Export 편집본 재업로드 충돌입니다 — 수정본 재업로드 전 "
+                            "[배분 탭 → 전체 초기화] 또는 /api/allocation/reset-all 로 기존 배정을 정리하세요."
+                        ),
+                        "error_code": "EDIT_EXPORT_DUPLICATE",
+                    }
                 return {
                     "ok": False,
                     "data": {
@@ -605,6 +625,66 @@ def _alloc_db():
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA busy_timeout=3000")
     return con
+
+
+def _allocation_plan_columns(con) -> set[str]:
+    try:
+        return {str(r["name"]).lower() for r in con.execute("PRAGMA table_info(allocation_plan)").fetchall()}
+    except Exception:
+        return set()
+
+
+def _mark_allocation_exported_for_edit(con, plan_ids: list[int]) -> dict:
+    """Export된 allocation_plan 행에 편집용 workflow_status 플래그를 기록한다."""
+    if not plan_ids:
+        return {"supported": False, "marked": 0, "status": "NO_ROWS"}
+    cols = _allocation_plan_columns(con)
+    if "workflow_status" not in cols:
+        return {"supported": False, "marked": 0, "status": "NO_WORKFLOW_STATUS"}
+    placeholders = ",".join("?" * len(plan_ids))
+    sets = ["workflow_status='EXPORTED_FOR_EDIT'"]
+    if "updated_at" in cols:
+        sets.append("updated_at=datetime('now')")
+    cur = con.execute(
+        f"UPDATE allocation_plan SET {', '.join(sets)} WHERE id IN ({placeholders}) AND status NOT IN ('CANCELLED','SOLD')",
+        plan_ids,
+    )
+    return {"supported": True, "marked": int(cur.rowcount or 0), "status": "EXPORTED_FOR_EDIT"}
+
+
+def _detect_export_edit_duplicate(rows: list[dict]) -> dict:
+    """재업로드 행이 EXPORTED_FOR_EDIT 플래그가 있는 기존 배정과 충돌하는지 확인한다."""
+    pairs = []
+    seen = set()
+    for row in rows or []:
+        lot_no = str(row.get("lot_no") or "").strip()
+        sale_ref = str(row.get("sale_ref") or "").strip()
+        if not lot_no:
+            continue
+        key = (lot_no, sale_ref)
+        if key not in seen:
+            seen.add(key)
+            pairs.append(key)
+    if not pairs:
+        return {"matched": False, "count": 0, "lots": []}
+    con = _alloc_db()
+    try:
+        cols = _allocation_plan_columns(con)
+        if "workflow_status" not in cols:
+            return {"matched": False, "count": 0, "lots": []}
+        where = " OR ".join(["(lot_no=? AND COALESCE(sale_ref,'')=?)" for _ in pairs])
+        params = [value for lot_no, sale_ref in pairs for value in (lot_no, sale_ref)]
+        found = con.execute(
+            f"""SELECT DISTINCT lot_no FROM allocation_plan
+                WHERE workflow_status='EXPORTED_FOR_EDIT'
+                  AND status NOT IN ('CANCELLED','SOLD')
+                  AND ({where})""",
+            params,
+        ).fetchall()
+        lots = [str(r[0]) for r in found]
+        return {"matched": bool(lots), "count": len(lots), "lots": lots[:20]}
+    finally:
+        con.close()
 
 
 @router.post("/approve", summary="✅ 할당 승인 (Stage 2)")
@@ -905,7 +985,7 @@ def export_allocation_excel():
     try:
         con = _alloc_db()
         rows = con.execute("""
-            SELECT ap.lot_no, ap.sub_lt, ap.customer, ap.sale_ref,
+            SELECT ap.id, ap.lot_no, ap.sub_lt, ap.customer, ap.sale_ref,
                    ap.qty_mt, ap.outbound_date, ap.status, ap.created_at,
                    i.sap_no, i.product, i.warehouse
             FROM allocation_plan ap
@@ -913,6 +993,9 @@ def export_allocation_excel():
             WHERE ap.status NOT IN ('CANCELLED')
             ORDER BY ap.status, ap.lot_no, ap.sub_lt
         """).fetchall()
+        plan_ids = [int(r[0]) for r in rows]
+        export_edit_flag = _mark_allocation_exported_for_edit(con, plan_ids)
+        con.commit()
         con.close()
     except Exception as e:
         raise HTTPException(500, f"DB 오류: {e}")
@@ -921,7 +1004,7 @@ def export_allocation_excel():
     ws = wb.active
     ws.title = "Allocation"
 
-    headers = ["LOT NO", "Sub LOT", "고객사", "SALE REF", "수량(MT)", "출고예정일", "상태", "등록일시", "SAP NO", "제품", "창고"]
+    headers = ["LOT NO", "Sub LOT", "고객사", "SALE REF", "수량(MT)", "출고예정일", "상태", "등록일시", "SAP NO", "제품", "창고", "편집상태", "재업로드 안내"]
     header_fill = PatternFill("solid", fgColor="1565C0")
     header_font = Font(bold=True, color="FFFFFF", name="맑은 고딕")
     center = Alignment(horizontal="center", vertical="center")
@@ -933,7 +1016,10 @@ def export_allocation_excel():
         cell.alignment = center
 
     for row in rows:
-        ws.append(list(row))
+        ws.append(list(row)[1:] + [
+            "EXPORTED_FOR_EDIT",
+            "수정본 재업로드 전 [배분 탭 → 전체 초기화] 또는 /api/allocation/reset-all 실행 필요",
+        ])
         for cell in ws[ws.max_row]:
             cell.alignment = center
 
@@ -954,7 +1040,7 @@ def export_allocation_excel():
 
     logger.info("Allocation Excel 저장+열기: %s (%d 행)", fname, len(rows))
     from backend.common.errors import ok_response
-    return ok_response({"filename": fname, "path": out_path, "rows": len(rows), "opened": True})
+    return ok_response({"filename": fname, "path": out_path, "rows": len(rows), "opened": True, "export_edit_flag": export_edit_flag})
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
