@@ -1,14 +1,22 @@
 # -*- coding: utf-8 -*-
 """SQM 재고관리 시스템 버전 정보"""
 
-__version__ = "8.7.2"
-VERSION = "8.7.2"
-VERSION_TUPLE = (8, 7, 2)
-RELEASE_DATE = "2026-06-11"
+__version__ = "8.7.7"
+VERSION = "8.7.7"
+VERSION_TUPLE = (8, 7, 7)
+RELEASE_DATE = "2026-06-15"
 APP_NAME = "SQM 재고관리 시스템"
 APP_NAME_EN = "SQM Inventory Management System"
 BUILD_DATE = "2026-05-26"
 BUILD_NOTE = (
+    "v8.7.7 (2026-06-15)\n"
+    "앱 시작/응답 흐름 안정화\n"
+    "  [A1] 스플래시 /api/health·KPI 응답 검증 및 실패 보고\n"
+    "  [A2] API 시작 실패 오류 화면 강제 표시 + PyWebView race 보강\n"
+    "  [A3] DB 마이그레이션 실패 시 traceback 기록 후 시작 차단\n"
+    "  [A4] api-client 204/빈 응답/업무 실패 응답 명시 처리\n"
+    "  [TEST] A1~A4 회귀 테스트 추가, 240 passed / 1 deselected\n"
+    "\n"
     "v8.7.0 (2026-05-26)\n"
     "분리창·안정성·편의성 통합 개선\n"
     "  [FEAT] Pending -> AVAILABLE 입고 확정 UI (행별 + 일괄 확정)\n"
