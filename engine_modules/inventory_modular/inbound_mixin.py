@@ -351,8 +351,12 @@ class InboundMixin(InventoryBaseMixin):
                 if hasattr(self, 'verify_lot_integrity'):
                     integrity = self.verify_lot_integrity(lot_no)
                     if not integrity.get('valid', True):
-                        result['warnings'].extend(integrity.get('errors', []))
-                        logger.warning(f"입고 후 정합성 경고 ({lot_no}): {integrity.get('errors')}")
+                        # D10: 정합성 검증 실패 시 입고 차단 (Hard-stop)
+                        _msg = f"입고 후 정합성 검증 실패 ({lot_no}): {integrity.get('errors')}"
+                        result['errors'].extend(integrity.get('errors', []))
+                        result['message'] = "[INBOUND_INTEGRITY_FAILED] 입고 정합성 위반"
+                        logger.error(_msg)
+                        raise ValueError(_msg) # 트랜잭션 롤백
                 
                 # v6.12 Addon-A: 입고 stock_movement 이력 기록 (감사 추적)
                 # v6.12.1: source_type, source_file 추가
