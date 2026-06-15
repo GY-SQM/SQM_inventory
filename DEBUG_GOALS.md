@@ -100,7 +100,7 @@
 - [x] **🔴 C2** `core/barcode_scan_engine.py:~1089` LOT 스캔 STEP1(→PICKED) 후 상위 `inventory.status`/`_recalc_lot_status` 미호출 → LOT 상태 불일치로 다음 단계 혼선. → STEP1 후 재계산 호출.
 - [x] **🔴 C3** `engine_modules/inventory_modular/outbound_mixin.py:~759` `stop_at_picked=True` 경로에서 `allocation_plan` 기록 누락 → 이후 확정 스캔이 target 못 찾아 SOLD 불가. → 해당 경로 allocation_plan INSERT 필수화.
 - [x] **🔴 C4** `backend/api/outbound_api.py:~318` allocation 미등록 LOT 스캔 시 `LOT_SCAN_BLOCKED`만 조용히 반환(errors=[]) → 사용자가 왜 막혔는지 모름. → 차단 사유 메시지 + 선행조건 명확화.
-- [ ] **🟡 C5** `barcode_scan_engine.py:~1154` 대량 스캔 시 `processed_lots`에 None 섞여 `_recalc` 조용히 skip → 일부 current_weight 미갱신(추정). → 루프 내 직접 수집 + None 필터.
+- [x] **🟡 C5** `barcode_scan_engine.py:~1154` 대량 스캔 시 `processed_lots`에 None 섞여 `_recalc` 조용히 skip → 일부 current_weight 미갱신(추정). → 루프 내 직접 수집 + None 필터.
 - [ ] **🟡 C6** `barcode_scan_engine.py:~1036` 소량 LOT 오차허용 `max(1.0, target*0.001)` 과대 → TARGET_EXCEEDED 오판정. → 비율 상/하한 재설정.
 - [ ] **🟡 C7** `outbound_api.py:~802` (onestop) SOLD 전환 시 `current_weight=0` 하드코딩 → PICKED/AVAILABLE 잔량 있어도 0 → 부분반품 복구 불가. → 재계산으로 대체.
 - [ ] **🟡 C8** `outbound_api.py:~396` 피킹리스트 파싱 부분실패 시 warnings/items 미반환 → 어디가 문제인지 불명. → 부분결과 반환.

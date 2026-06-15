@@ -937,6 +937,7 @@ class BarcodeScanEngine:
         no_plan = []
         bangsong_lots = []   # v6.3.4 RUBI: 반송 건 수집
         sd08_warnings = []   # v6.9.7 [SD-08]: warehouse mismatch
+        processed_lots = set()  # C5: 성공 처리된 LOT만 직접 수집해 재계산 누락 방지
 
         with self.db.transaction("IMMEDIATE"):
             for code in uniq_codes:
@@ -1171,17 +1172,14 @@ class BarcodeScanEngine:
                     bangsong_lots.append(lot_no)
 
                 sold_count += 1
+                processed_lots.add(lot_no)
 
-            # v7.9.9 [C-3]: STEP2 후 inventory.current_weight + LOT status 재계산
-            # 기존: inventory_tonbag만 OUTBOUND로 변경 → inventory.current_weight 미갱신
-            # 수정: 스캔된 LOT들 일괄 재계산 (트랜잭션 밖에서 처리)
-            processed_lots = list({r.get('lot_no') for r in [
-                self.db.fetchone(
-                    "SELECT lot_no FROM inventory_tonbag WHERE (tonbag_uid=? OR CAST(sub_lt AS TEXT)=?)",
-                    (code, code)
-                ) for code in uniq_codes
-            ] if r})
-            for _lot in processed_lots:
+            # v7.9.9 [C-3] + C5: STEP2 후 inventory.current_weight + LOT status 재계산
+            # 기존: uniq_codes를 다시 조회하며 not_found/빈 LOT이 섞여 일부 재계산 누락 가능
+            # 수정: 성공 루프에서 직접 수집한 LOT만 None/빈값 필터 후 재계산
+            for _lot in sorted(processed_lots):
+                if not _lot:
+                    continue
                 self._recalc_inventory_lot_weights(_lot, now=now, reason='P2_SCAN_BATCH')
             try:
                 self.db.conn.commit()
