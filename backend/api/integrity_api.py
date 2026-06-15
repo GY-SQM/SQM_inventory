@@ -57,6 +57,7 @@ async def integrity_check():
         result = engine.verify_all_integrity()
         total = result.get('total_lots', 0)
         error_lots = result.get('error_lots', [])
+        warning_lots = result.get('warning_lots', [])
         
         # D3: details에 LOT 정보뿐 아니라 구체적인 에러 메시지도 포함
         # 프론트엔드 호환성을 위해 형식을 맞춤
@@ -68,6 +69,14 @@ async def integrity_check():
                 "message": "; ".join(item['errors'])
             })
 
+        # D11: warnings 포함
+        warnings = []
+        for item in warning_lots:
+            warnings.append({
+                "lot_no": item['lot_no'],
+                "warnings": item['warnings']
+            })
+
         return {
             "success": True,
             "message": "정합성 검사 완료",
@@ -75,7 +84,9 @@ async def integrity_check():
                 "total": total,
                 "ok": total - len(error_lots),
                 "error": len(error_lots),
+                "warning": len(warning_lots),
                 "details": details,
+                "warnings": warnings,
             }
         }
     except Exception as e:
