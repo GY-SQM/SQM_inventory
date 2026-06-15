@@ -755,7 +755,13 @@ class OutboundMixin(InventoryBaseMixin):
             )
         except (sqlite3.OperationalError, OSError) as e:
             if "allocation_plan" in str(e) and "source" in str(e).lower():
-                logger.debug("allocation_plan.source 미존재 시 무시: %s", e)
+                logger.warning("[C3_ALLOC_PLAN_LEGACY_NO_SOURCE] allocation_plan.source 미존재 — source 제외 fallback INSERT 수행: %s", e)
+                self.db.execute(
+                    """INSERT INTO allocation_plan
+                    (lot_no, tonbag_id, customer, sale_ref, qty_mt, outbound_date, status, executed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, 'PICKED', ?)""",
+                    (lot_no, first_tonbag_id, customer, sale_ref, qty_mt_val, now, now)
+                )
             else:
                 raise
         
