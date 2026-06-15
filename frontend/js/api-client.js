@@ -23,6 +23,31 @@ async function withTimeout(promise, ms) {
   ]);
 }
 
+async function parseApiResponse(res, path) {
+  if (res.status === 204 || res.status === 205) {
+    return { ok: true, success: true, status: res.status, data: null, noContent: true };
+  }
+
+  const text = await res.text();
+  if (!text || text.trim() === '') {
+    throw new ApiError('empty response', res.status, { path, status: res.status, empty: true });
+  }
+
+  try {
+    const data = JSON.parse(text);
+    if (data && typeof data === 'object' && !Array.isArray(data) && data.status === undefined) {
+      data.status = res.status;
+    }
+    return data;
+  } catch (e) {
+    throw new ApiError('invalid json response', res.status, {
+      path,
+      status: res.status,
+      text: text.slice(0, 500),
+    });
+  }
+}
+
 export async function apiCall(method, path, body = null, { timeout = DEFAULT_TIMEOUT_MS, retries = 3 } = {}) {
   const url = path.startsWith('http') ? path : API_BASE + path;
   const opts = {
@@ -37,12 +62,19 @@ export async function apiCall(method, path, body = null, { timeout = DEFAULT_TIM
   for (let i = 0; i < retries; i++) {
     try {
       const res = await withTimeout(fetch(url, opts), timeout);
+      const data = await parseApiResponse(res, path);
       if (!res.ok) {
-        let detail = null;
-        try { detail = await res.json(); } catch {}
-        throw new ApiError(`HTTP ${res.status}`, res.status, detail);
+        throw new ApiError(`HTTP ${res.status}`, res.status, data);
       }
-      const data = await (async () => { try { return await res.json(); } catch { return {}; } })();
+      if (data && typeof data === 'object') {
+        if (data.ok === false || data.success === false) {
+          throw new ApiError(data.message || data.error || 'API business failure', res.status, data);
+        }
+        const responseStatus = Number(data.status);
+        if (Number.isFinite(responseStatus) && (responseStatus < 200 || responseStatus >= 300)) {
+          throw new ApiError(data.message || data.error || `API status ${responseStatus}`, responseStatus, data);
+        }
+      }
       if (isWrite) playSuccess();
       return data;
     } catch (e) {
