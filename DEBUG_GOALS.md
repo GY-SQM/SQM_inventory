@@ -105,7 +105,7 @@
 - [x] **🟡 C7** `outbound_api.py:~802` (onestop) SOLD 전환 시 `current_weight=0` 하드코딩 → PICKED/AVAILABLE 잔량 있어도 0 → 부분반품 복구 불가. → 재계산으로 대체.
 - [x] **🟡 C8** `outbound_api.py:~396` 피킹리스트 파싱 부분실패 시 warnings/items 미반환 → 어디가 문제인지 불명. → 부분결과 반환.
 - [x] **🟢 C9** `barcode_scan_engine.py:~1160` 트랜잭션 컨텍스트 내부 명시적 `commit()` 중복(추정). → 구조 정리.
-- [ ] **🟢 C10** `engine_modules/inventory_modular/shipment_mixin.py` 사실상 미구현 + 전용 테스트 0 → 선적-재고 정합 흐름 공백. → 최소 구현 + 테스트.
+- [x] **🟢 C10** `engine_modules/inventory_modular/shipment_mixin.py` 사실상 미구현 + 전용 테스트 0 → 선적-재고 정합 흐름 공백. → 최소 구현 + 테스트.
 
 ---
 
