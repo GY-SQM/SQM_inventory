@@ -187,9 +187,9 @@
         });
       });
       document.querySelectorAll('.pm-del').forEach(function(btn){
-        btn.addEventListener('click', function(){
+        btn.addEventListener('click', async function(){
           var id = parseInt(btn.getAttribute('data-id'), 10);
-          if (!window.sqmConfirm('이 품목 마스터 행을 삭제할까요?')) return;
+          if (!(await window.sqmConfirmAsync('이 품목 마스터 행을 삭제할까요?'))) return;
           apiCall('DELETE', '/api/product-master/' + id, null).then(function(res){
             if (res && res.ok === false) { showToast('error', res.error || '실패'); return; }
             showToast('success', '삭제됨');

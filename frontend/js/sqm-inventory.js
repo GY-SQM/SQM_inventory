@@ -800,7 +800,7 @@
     el.style.display = el.style.display === 'none' ? 'block' : 'none';
   };
 
-  window.confirmPendingGroupFromButton = function(btn) {
+  window.confirmPendingGroupFromButton = async function(btn) {
     var lots = [];
     try {
       lots = JSON.parse(btn.getAttribute('data-lots') || '[]');
@@ -817,7 +817,7 @@
     if (inboundDate > _pendingToday()) {
       showToast('error', '미래 날짜는 입력할 수 없습니다'); return;
     }
-    if (!sqmConfirm('✅ ' + lots.length + '개 LOT를 AVAILABLE로 확정합니다.\n입고일: ' + inboundDate + '\n\n계속하시겠습니까?')) return;
+    if (!(await window.sqmConfirmAsync('✅ ' + lots.length + '개 LOT를 AVAILABLE로 확정합니다.\n입고일: ' + inboundDate + '\n\n계속하시겠습니까?'))) return;
     btn.disabled = true;
     btn.textContent = '진행 중...';
     var done = 0, errs = [];
@@ -1100,11 +1100,11 @@
     cbs.forEach(function(cb) { cb.checked = masterCb.checked; });
   };
 
-  window.availCancelSelected = function() {
+  window.availCancelSelected = async function() {
     var checked = Array.from(document.querySelectorAll('.avail-cb:checked'));
     if (!checked.length) { showToast('warning', '취소할 LOT를 선택하세요'); return; }
     var lots = Array.from(new Set(checked.map(function(cb) { return cb.dataset.lot; }).filter(Boolean)));
-    if (!sqmConfirm('⚠️ 선택 취소 (AVAILABLE → PENDING)\n\n' + lots.length + '개 LOT:\n' + lots.slice(0,20).join('\n') + (lots.length > 20 ? '\n... (외 ' + (lots.length-20) + '개)' : '') + '\n\n입고 확정을 취소합니다. 계속하시겠습니까?')) return;
+    if (!(await window.sqmConfirmAsync('⚠️ 선택 취소 (AVAILABLE → PENDING)\n\n' + lots.length + '개 LOT:\n' + lots.slice(0,20).join('\n') + (lots.length > 20 ? '\n... (외 ' + (lots.length-20) + '개)' : '') + '\n\n입고 확정을 취소합니다. 계속하시겠습니까?'))) return;
     var done = 0, failed = [];
     function next() {
       if (done + failed.length === lots.length) {

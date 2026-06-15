@@ -147,10 +147,10 @@
       tbl += '</tbody></table>';
       box.innerHTML = tbl;
       box.querySelectorAll('.rt-del').forEach(function(btn){
-        btn.addEventListener('click', function(){
+        btn.addEventListener('click', async function(){
           var enc = btn.getAttribute('data-enc');
           var name = enc ? decodeURIComponent(enc) : '';
-          if (!name || !window.sqmConfirm('파일을 삭제할까요?')) return;
+          if (!name || !(await window.sqmConfirmAsync('파일을 삭제할까요?'))) return;
           fetch(_api() + '/api/report-templates/file?name=' + encodeURIComponent(name), { method: 'DELETE' })
             .then(function(r){ return r.json(); })
             .then(function(res){
@@ -679,7 +679,7 @@
       setGenerateNeedsPreview();
       renderSelectedContainers();
     });
-    document.getElementById('tr-delete-template').addEventListener('click', function() {
+    document.getElementById('tr-delete-template').addEventListener('click', async function() {
       var sel = document.getElementById('tr-template');
       var tmpl = sel && sel.value ? sel.value : '';
       if (!tmpl) {
@@ -689,7 +689,7 @@
       var deleteMsg = tmpl === 'template_1'
         ? '기본 템플릿입니다. 삭제하면 기본 양식을 다시 쓰려면 파일을 다시 업로드해야 합니다. 삭제할까요?'
         : '현재 선택한 템플릿을 삭제할까요?';
-      if (!confirm(deleteMsg)) return;
+      if (!await window.sqmConfirmAsync(deleteMsg)) return;
       fetch(_api() + '/api/q3/report-template?report_type=' + encodeURIComponent(reportType) + '&template=' + encodeURIComponent(tmpl), { method: 'DELETE' })
         .then(function(r) { return r.json(); })
         .then(function(res) {
@@ -726,7 +726,7 @@
     document.getElementById('tr-generate').addEventListener('click', function() {
       window.sqmDownloadFileUrl(API + meta.endpoint + '?' + queryParams(), meta.title);
     });
-    document.getElementById('tr-upload').addEventListener('click', function() {
+    document.getElementById('tr-upload').addEventListener('click', async function() {
       var fi = document.getElementById('tr-file');
       if (!fi || !fi.files || !fi.files[0]) {
         showToast('warning', 'xlsx 파일을 선택하세요');
@@ -741,8 +741,8 @@
         showToast('warning', '업데이트할 현재 템플릿을 선택하세요');
         return;
       }
-      if (modeVal === 'update_current' && !confirm('현재 선택한 템플릿을 새 파일로 업데이트할까요? 기존 템플릿 파일 내용은 교체됩니다.')) return;
-      if (modeVal === 'update_default' && !confirm('기본 템플릿(template_1)을 새 파일로 업데이트할까요? 기존 기본 양식 파일 내용은 교체됩니다.')) return;
+      if (modeVal === 'update_current' && !await window.sqmConfirmAsync('현재 선택한 템플릿을 새 파일로 업데이트할까요? 기존 템플릿 파일 내용은 교체됩니다.')) return;
+      if (modeVal === 'update_default' && !await window.sqmConfirmAsync('기본 템플릿(template_1)을 새 파일로 업데이트할까요? 기존 기본 양식 파일 내용은 교체됩니다.')) return;
       var fd = new FormData();
       fd.append('file', fi.files[0]);
       fetch(_api() + '/api/q3/report-template-upload?report_type=' + encodeURIComponent(reportType)

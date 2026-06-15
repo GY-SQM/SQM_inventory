@@ -529,8 +529,8 @@
       .catch(function(e) { showToast('error', '오류: ' + String(e)); });
   };
 
-  window._tplDelete = function(tid, name) {
-    if (!sqmConfirm(name + ' 템플릿을 삭제하시겠습니까?')) return;
+  window._tplDelete = async function(tid, name) {
+    if (!(await window.sqmConfirmAsync(name + ' 템플릿을 삭제하시겠습니까?'))) return;
     fetch(_api() + '/api/inbound/templates/' + encodeURIComponent(tid), { method: 'DELETE' })
       .then(function(r) { return r.json(); })
       .then(function(d) {

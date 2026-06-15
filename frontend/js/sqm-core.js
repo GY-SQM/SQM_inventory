@@ -13,6 +13,69 @@ window.sqmConfirm = window.sqmConfirm || function (msg) {
 };
 
 /* -----------------------------------------------------------------------
+   sqmConfirmAsync — 인페이지 비동기 확인 모달 (Promise<boolean>)
+   이유: pywebview/WebView2 에서 native window.confirm 이 표면화되지 않고
+         WebView2 전체를 블로킹 → "눌러도 멈춤" 증상. native 다이얼로그를
+         쓰지 않는 자체 모달로 대체.
+   사용법: if (!(await sqmConfirmAsync('정말 삭제할까요?'))) return;
+   ----------------------------------------------------------------------- */
+window.sqmConfirmAsync = window.sqmConfirmAsync || function (msg, opts) {
+  opts = opts || {};
+  return new Promise(function (resolve) {
+    var prev = document.getElementById('sqm-confirm-overlay');
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+
+    var ov = document.createElement('div');
+    ov.id = 'sqm-confirm-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483600;display:flex;' +
+      'align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+
+    var box = document.createElement('div');
+    box.style.cssText = 'min-width:300px;max-width:460px;margin:16px;padding:18px 18px 14px;' +
+      'background:var(--bg-card,#1e1e28);color:var(--text,#eee);border:1px solid var(--border,#444);' +
+      'border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.5);font-size:.92rem;line-height:1.5';
+
+    var body = document.createElement('div');
+    body.style.cssText = 'white-space:pre-line;margin-bottom:14px';
+    body.textContent = (msg == null ? '' : String(msg));
+
+    var btns = document.createElement('div');
+    btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
+
+    var no = document.createElement('button');
+    no.type = 'button';
+    no.className = 'btn btn-ghost';
+    no.textContent = opts.cancelText || '취소';
+
+    var yes = document.createElement('button');
+    yes.type = 'button';
+    yes.className = 'btn ' + (opts.danger ? 'btn-danger' : 'btn-primary');
+    yes.textContent = opts.okText || '확인';
+
+    btns.appendChild(no); btns.appendChild(yes);
+    box.appendChild(body); box.appendChild(btns); ov.appendChild(box);
+    document.body.appendChild(ov);
+
+    var done = false;
+    function close(val) {
+      if (done) return; done = true;
+      document.removeEventListener('keydown', onKey, true);
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+      resolve(val);
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(false); }
+      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); close(true); }
+    }
+    no.addEventListener('click', function () { close(false); });
+    yes.addEventListener('click', function () { close(true); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(false); });
+    document.addEventListener('keydown', onKey, true);
+    setTimeout(function () { try { yes.focus(); } catch (e) {} }, 0);
+  });
+};
+
+/* -----------------------------------------------------------------------
    SQM_STATUS_MAP — STATUS 색상·라벨 단일 정본 (D1 구조 단일화)
    향후 design-tokens.css 변수로 전환 시 이 블록만 수정
    ----------------------------------------------------------------------- */
@@ -447,7 +510,7 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
      최상위 스코프에서 ESC 두 번(1.5초 이내) = 앱 종료 확인 다이얼로그. ── */
   var _escLastAt = 0;
   var EXIT_DOUBLE_ESC_WINDOW_MS = 1500;
-  document.addEventListener('keydown', function(e){
+  document.addEventListener('keydown', async function(e){
     if (e.key !== 'Escape' && e.key !== 'Esc') return;
 
     /* 1순위: 컨텍스트 메뉴 (우클릭 팝업) */
@@ -497,7 +560,7 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     if ((now - _escLastAt) < EXIT_DOUBLE_ESC_WINDOW_MS) {
       _escLastAt = 0;
       e.preventDefault();
-      if (sqmConfirm('앱을 종료하시겠습니까?')) {
+      if (await window.sqmConfirmAsync('앱을 종료하시겠습니까?')) {
         if (window.pywebview && window.pywebview.api && window.pywebview.api.exit_app) {
           window.pywebview.api.exit_app();
         } else {
@@ -577,11 +640,11 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     }
   });
 
-  document.addEventListener('keydown', function(e) {
+  document.addEventListener('keydown', async function(e) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
     var key = (e.ctrlKey?'C-':'') + (e.shiftKey?'S-':'') + (e.altKey?'A-':'') + e.key;
     switch(key) {
-      case 'C-r': case 'F5': e.preventDefault(); if(confirm('화면을 새로고침 하시겠습니까?')) renderPage(_currentRoute||'dashboard'); break;
+      case 'C-r': case 'F5': e.preventDefault(); if(await window.sqmConfirmAsync('화면을 새로고침 하시겠습니까?')) renderPage(_currentRoute||'dashboard'); break;
       case 'C-1': e.preventDefault(); renderPage('inventory'); break;
       case 'C-2': e.preventDefault(); renderPage('available'); break;
       case 'C-3': e.preventDefault(); renderPage('allocation'); break;

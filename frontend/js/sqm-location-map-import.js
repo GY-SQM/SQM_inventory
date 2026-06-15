@@ -289,7 +289,7 @@
   }
 
   /* ── commit 요청 ── */
-  function _doCommit() {
+  async function _doCommit() {
     if (_state.busy || !_state.file || !_state.report) return;
     var rep = _state.report;
     var force = document.getElementById('lmi-force').checked;
@@ -301,7 +301,7 @@
     var confirmMsg = applyTonbag
       ? '이 엑셀을 LOT 위치 후보로 저장하고, 각 LOT 셀 매핑을 톤백 위치까지 즉시 확정합니다.\n\ninventory_tonbag.location 이 갱신됩니다. 계속할까요?'
       : '이 엑셀을 LOT 위치 후보 스냅샷으로 저장합니다.\n\n톤백별 실제 위치는 변경하지 않고, 출고 바코드 스캔 시점에 확정됩니다. 계속할까요?';
-    if (!window.sqmConfirm(confirmMsg)) {
+    if (!(await window.sqmConfirmAsync(confirmMsg))) {
       return;
     }
     _state.busy = true;
@@ -356,7 +356,7 @@
     // ① 최신 batch 정보 조회
     fetch(_api() + '/api/location-map/latest')
       .then(function (r) { return r.json(); })
-      .then(function (res) {
+      .then(async function (res) {
         if (!res || !res.ok) {
           _toast('error', '배치 정보 조회 실패: ' + (res && res.error || '알 수 없음'));
           return;
@@ -371,12 +371,12 @@
         var msg = '⚠️ 최신 배치 #' + batchId + ' 를 삭제합니다.\n'
           + 'LOT ' + lotCount + '개의 위치 후보(매핑 데이터)가 제거됩니다.\n\n'
           + '계속할까요?';
-        if (!window.sqmConfirm(msg)) return;
+        if (!(await window.sqmConfirmAsync(msg))) return;
         // ② batch 삭제 API 호출
         _state.busy = true;
         fetch(_api() + '/api/location-map/batch/' + batchId, { method: 'DELETE' })
           .then(function (r) { return r.json(); })
-          .then(function (res2) {
+          .then(async function (res2) {
             _state.busy = false;
             if (!res2 || !res2.ok) {
               _toast('error', '배치 삭제 실패: ' + (res2 && res2.error || '알 수 없음'));
@@ -392,7 +392,7 @@
                 + '톤백 실제 위치(inventory_tonbag.location)도\n'
                 + '초기화(NULL)할까요?\n\n'
                 + '※ 위치 후보만 지우고 실제 위치는 유지하려면 [취소]';
-              if (window.sqmConfirm(msg2)) {
+              if (await window.sqmConfirmAsync(msg2)) {
                 fetch(_api() + '/api/inventory/clear-lot-locations', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },

@@ -251,10 +251,10 @@
       });
     };
 
-    document.getElementById('sr-execute-btn').onclick = function() {
+    document.getElementById('sr-execute-btn').onclick = async function() {
       if (!lastPayload) return;
       var msg = cfg.from + ' → ' + cfg.to + ' 되돌리기를 실행합니다.\n미리보기 대상만 반영됩니다. 계속하시겠습니까?';
-      if (!window.sqmConfirm ? !confirm(msg) : !window.sqmConfirm(msg)) return;
+      if (!(await window.sqmConfirmAsync(msg))) return;
       post('/api/status-revert/execute', lastPayload).then(function(res) {
         toast(res.ok === false ? 'warning' : 'success', res.message || '되돌리기 완료');
         ov.remove();
