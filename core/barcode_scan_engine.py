@@ -1106,6 +1106,15 @@ class BarcodeScanEngine:
                 except Exception as e:
                     logger.debug(f"picking_table insert skipped (lot_mode): {e}")
 
+                # C2: STEP1(RESERVED→PICKED) 직후 상위 LOT 상태/무게 재계산.
+                # 이후 STEP2(SOLD)까지 진행되더라도, 중간 검증/예외/화면 갱신 경로에서
+                # inventory_tonbag만 PICKED이고 inventory 상태가 예전 값으로 남는 혼선을 막는다.
+                self._recalc_inventory_lot_weights(
+                    lot_no,
+                    now=now,
+                    reason='C2_SCAN_STEP1_PICKED',
+                )
+
                 # ── STEP 2: PICKED → SOLD ──────────────────────────────
                 self.db.execute(
                     "UPDATE inventory_tonbag "

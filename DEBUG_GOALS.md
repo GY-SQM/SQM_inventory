@@ -97,7 +97,7 @@
 ### 영역 C — 출고 / 피킹 / 바코드 스캔
 
 - [x] **🔴 C1** `backend/api/outbound_api.py:~801` PICKED→SOLD 전환 후 `stock_movement` INSERT 누락 → 이력 0행(감사추적 끊김). → INSERT 추가 + 재현 테스트.
-- [ ] **🔴 C2** `core/barcode_scan_engine.py:~1089` LOT 스캔 STEP1(→PICKED) 후 상위 `inventory.status`/`_recalc_lot_status` 미호출 → LOT 상태 불일치로 다음 단계 혼선. → STEP1 후 재계산 호출.
+- [x] **🔴 C2** `core/barcode_scan_engine.py:~1089` LOT 스캔 STEP1(→PICKED) 후 상위 `inventory.status`/`_recalc_lot_status` 미호출 → LOT 상태 불일치로 다음 단계 혼선. → STEP1 후 재계산 호출.
 - [ ] **🔴 C3** `engine_modules/inventory_modular/outbound_mixin.py:~759` `stop_at_picked=True` 경로에서 `allocation_plan` 기록 누락 → 이후 확정 스캔이 target 못 찾아 SOLD 불가. → 해당 경로 allocation_plan INSERT 필수화.
 - [ ] **🔴 C4** `backend/api/outbound_api.py:~318` allocation 미등록 LOT 스캔 시 `LOT_SCAN_BLOCKED`만 조용히 반환(errors=[]) → 사용자가 왜 막혔는지 모름. → 차단 사유 메시지 + 선행조건 명확화.
 - [ ] **🟡 C5** `barcode_scan_engine.py:~1154` 대량 스캔 시 `processed_lots`에 None 섞여 `_recalc` 조용히 skip → 일부 current_weight 미갱신(추정). → 루프 내 직접 수집 + None 필터.
