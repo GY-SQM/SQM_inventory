@@ -116,7 +116,7 @@
 - [x] **🔴 D3** `backend/api/integrity_api.py:~25` `/check`가 `picked>initial` 류 edge case를 못 잡고 `details:[]` 반환 → "이상 없음" 오판. → `verify_lot_integrity` 결과 반영.
 - [x] **🟡 D4** `backend/api/status_revert_api.py:~396` `execute_status_revert` 후 `_recalc_current_weight` 미호출 → AVAILABLE→PENDING 복원해도 무게 그대로. → 복원 후 lot별 재계산.
 - [x] **🟡 D5** `engine_modules/return_reinbound_engine.py:~162` 재계산 실패를 debug 로그로 무시한 채 COMMIT → current_weight 미복구 채로 확정(추정). → 재계산 전 engine 검증, 실패 시 롤백.
-- [ ] **🟡 D6** `engine_modules/inventory_modular/preflight_mixin.py:~45` preflight 결과를 process로 전달/재검증 안 함 → 실제 add 단계 초과 감지 시 부분 입고. → preflight↔실행 교차검증.
+- [x] **🟡 D6** `engine_modules/inventory_modular/preflight_mixin.py:~45` preflight 결과를 process로 전달/재검증 안 함 → 실제 add 단계 초과 감지 시 부분 입고. → preflight↔실행 교차검증.
 - [ ] **🟡 D7** `engine_modules/inventory_modular/adjust_executor.py` 조정 시 `rowcount` 검증 없이 success 집계(추정) → 0행인데 성공으로 카운트. → UPDATE 후 rowcount 확인.
 - [ ] **🟡 D8** `engine_modules/return_reinbound_engine.py:~287` `_restore_tonbags` 내부 검증이 UPDATE 사이에 있어 실패 시 부분 변경 후 롤백(원자성 위반 추정). → BEGIN 전 전체 preflight.
 - [ ] **🟢 D9** `backend/api/inventory_adjust_api.py:~79` `return_to_available` 액션이 `_recalc_current_weight` 미호출 → 무게 미복구. → 재계산 추가.
