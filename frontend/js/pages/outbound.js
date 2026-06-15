@@ -3,6 +3,40 @@
 
 const OutboundPage = (() => {
   const API = window.SQM_API_BASE || window.location.origin || '';
+
+  async function fetchJsonChecked(url, opts) {
+    const res = await fetch(url, opts);
+    const text = await res.text();
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    if (!text || text.trim() === '') throw new Error('empty outbound response');
+    const data = JSON.parse(text);
+    if (data?.ok === false || data?.success === false) {
+      throw new Error(data.message || data.error || 'outbound response failed');
+    }
+    return data;
+  }
+
+  function showOutboundRetry(lotNo, action, message) {
+    const id = `outbound-retry-${action}-${String(lotNo || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    let box = document.getElementById(id);
+    if (!box) {
+      box = document.createElement('div');
+      box.id = id;
+      box.className = 'empty outbound-retry';
+      box.style.cssText = 'margin:10px 0;padding:12px;border:1px solid var(--status-error);border-radius:8px;color:var(--status-error);';
+      const target = document.getElementById('page-container') || document.body;
+      target.prepend(box);
+    }
+    box.innerHTML = `
+      <div>${message || '출고 처리 실패'} — LOT ${lotNo}</div>
+      <button type="button" class="btn btn-sm" data-outbound-retry="${action}">다시 시도</button>
+    `;
+    box.querySelector('[data-outbound-retry]')?.addEventListener('click', () => {
+      if (action === 'confirm') confirmOutbound(lotNo);
+      else if (action === 'cancel') cancelOutbound(lotNo);
+    });
+  }
+
   async function loadScheduled() {
     try {
       const res = await fetch(API + '/api/outbound/scheduled');
@@ -40,19 +74,23 @@ const OutboundPage = (() => {
   async function confirmOutbound(lotNo) {
     if (!confirm(`${lotNo} 출고를 확정하시겠습니까?`)) return;
     try {
-      const res = await fetch(`${API}/api/outbound/${lotNo}/confirm`, { method: 'POST' });
-      const data = await res.json();
+      const data = await fetchJsonChecked(`${API}/api/outbound/${lotNo}/confirm`, { method: 'POST' });
       window.showToast?.(data.success ? 'success' : 'error', data.message || '처리 완료');
-    } catch { window.showToast?.('error', '서버 연결 오류'); }
+    } catch (err) {
+      window.showToast?.('error', err.message || '서버 연결 오류');
+      showOutboundRetry(lotNo, 'confirm', err.message || '출고확정 실패');
+    }
   }
 
   async function cancelOutbound(lotNo) {
     if (!confirm(`${lotNo} 출고를 취소하시겠습니까?`)) return;
     try {
-      const res = await fetch(`${API}/api/outbound/${lotNo}/cancel`, { method: 'POST' });
-      const data = await res.json();
+      const data = await fetchJsonChecked(`${API}/api/outbound/${lotNo}/cancel`, { method: 'POST' });
       window.showToast?.(data.success ? 'success' : 'error', data.message || '취소 완료');
-    } catch { window.showToast?.('error', '서버 연결 오류'); }
+    } catch (err) {
+      window.showToast?.('error', err.message || '서버 연결 오류');
+      showOutboundRetry(lotNo, 'cancel', err.message || '출고취소 실패');
+    }
   }
 
 
