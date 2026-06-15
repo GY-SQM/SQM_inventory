@@ -35,6 +35,20 @@ def _normalize_sublt(value) -> str:
         return s
 
 
+def _scan_target_tolerance_kg(target_kg: float) -> float:
+    """C6: 스캔 목표 중량 허용오차(kg).
+
+    기존 max(1.0, target*0.001)는 1~100kg 소량 LOT에서 1kg까지 초과 허용되어
+    TARGET_EXCEEDED 판정이 흐려졌다. 0.1% 기준은 유지하되 50g~500g으로 제한한다.
+    """
+    try:
+        target = abs(float(target_kg or 0))
+    except (TypeError, ValueError):
+        target = 0.0
+    # 50g lower bound / 500g upper bound
+    return min(0.5, max(0.05, target * 0.001))
+
+
 class BarcodeScanEngine:
     """바코드 스캔 대조 + uid_verify_history 관리"""
 
@@ -299,8 +313,8 @@ class BarcodeScanEngine:
 
         weight_kg = float(row.get('weight', 0) or 0)
         confirmed_kg = self._get_confirmed_weight_kg(lot_no, sale_ref=sale_ref)
-        # 0.1% 또는 최소 1kg 허용 오차
-        tolerance_kg = max(1.0, target_kg * 0.001)
+        # C6: 0.1% 기준 + 50g~500g 상/하한 허용 오차
+        tolerance_kg = _scan_target_tolerance_kg(target_kg)
         if confirmed_kg + weight_kg > target_kg + tolerance_kg:
             return {
                 "ok": False,
