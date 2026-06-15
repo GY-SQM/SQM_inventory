@@ -1,7 +1,7 @@
 # CLAUDE.md — SQM 재고관리 시스템
 
 > 새 세션이 탐색 없이 바로 작업을 이어가기 위한 안내서.
-> 디버깅 목표·진행상황은 **`docs/DEBUG_GOALS.md`** 에 골(goal) 형식으로 관리한다.
+> 디버깅 목표·진행상황은 **`DEBUG_GOALS.md`** 에 골(goal) 형식으로 관리한다.
 
 ## 한 줄 요약
 SQM Inventory Management System — 입고/출고/LOT 재고관리 데스크톱 앱.
