@@ -54,11 +54,14 @@ SQM v7.0.0 — RETURN_AS_REINBOUND 정책 엔진
         logger.warning(f"오류: {result.error}")
 """
 from engine_modules.constants import STATUS_AVAILABLE
+import logging
 import sqlite3
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional, List
+
+logger = logging.getLogger(__name__)
 
 
 # ─── 결과 데이터클래스 ────────────────────────────────────────────────────────
