@@ -40,6 +40,9 @@ from engine_modules.constants import (
     normalize_customer,
     get_tonbag_unit_weight,
     QUICK_OUTBOUND_MAX_TONBAGS,
+    ALLOC_STAGED,
+    ALLOC_WF_APPROVED,
+    ALLOC_WF_APPLIED,
 )
 
 from .base import InventoryBaseMixin
@@ -2476,9 +2479,9 @@ class OutboundMixin(InventoryBaseMixin):
                            SET status='RESERVED',
                                tonbag_id=NULL,
                                sub_lt=NULL,
-                               workflow_status=ALLOC_WF_APPLIED
-                           WHERE id=? AND status=ALLOC_STAGED AND workflow_status=ALLOC_WF_APPROVED""",
-                        (plan_id,),
+                               workflow_status=?
+                           WHERE id=? AND status=? AND workflow_status=?""",
+                        (ALLOC_WF_APPLIED, plan_id, ALLOC_STAGED, ALLOC_WF_APPROVED),
                     )
                     result["applied"] += 1
                     try:

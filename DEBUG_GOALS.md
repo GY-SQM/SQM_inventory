@@ -79,7 +79,7 @@
 
 ### 영역 B — 입고확정 / 할당(allocation) / 문서파싱
 
-- [ ] **🔴 B1** `engine_modules/inventory_modular/outbound_mixin.py:~2479` `apply_approved`에서 SQL에 상수명(`ALLOC_WF_APPLIED` 등)을 문자열 대신 식별자로 사용 → **구문 오류로 승인 반영 0건(추정)**. → 파라미터/따옴표로 교정 + 재현 테스트.
+- [x] **🔴 B1** `engine_modules/inventory_modular/outbound_mixin.py:~2479` `apply_approved`에서 SQL에 상수명(`ALLOC_WF_APPLIED` 등)을 문자열 대신 식별자로 사용 → **구문 오류로 승인 반영 0건(추정)**. → 파라미터/따옴표로 교정 + 재현 테스트.
 - [ ] **🔴 B2** `backend/api/inbound.py:~1520` PDF 입고가 `PENDING`으로만 저장되고 AVAILABLE 자동 전환/안내 없음 → 사용자가 수동확정 전까지 가용재고에 안 잡혀 **흐름 끊김**. → 자동 전환 또는 명시적 다음단계 안내.
 - [ ] **🔴 B3** `backend/api/inbound.py:~1484` 파싱 0건인데 `ok:true, saved_count:0` 반환 → 프론트가 성공으로 다음 진행. → 0건이면 경고/실패 상태.
 - [ ] **🔴 B4** `backend/api/allocation_api.py:~363` 모든 행 검증 실패(reserved=0)면 `success=False`로 "전체 실패" 표시 → 부분/정상 케이스 혼동. → processed>0면 부분성공 + 사유 분리.
