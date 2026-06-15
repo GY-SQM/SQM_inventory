@@ -1552,6 +1552,29 @@ def pdf_inbound(req: PdfInboundRequest):
         # 5. Response
         if parsed is not None:
             fallback_note = " [Gemini fallback]" if gemini_used else ""
+            lots_total = len(getattr(parsed, "lots", []) or []) if parse_type == "PackingListData" else None
+            if parse_type == "PackingListData" and lots_total == 0:
+                return {
+                    "ok": False,
+                    "success": False,
+                    "message": "파싱된 LOT이 없습니다. PDF 품질/양식 또는 Gemini 설정을 확인하세요.",
+                    "error": "PDF_PARSE_ZERO_LOTS",
+                    "detail": {
+                        "code": "PDF_PARSE_ZERO_LOTS",
+                        "parse_method": parse_method,
+                        "gemini_fallback_used": gemini_used,
+                        "hint": "LOT 목록이 0건이면 성공으로 저장하지 않습니다. PDF가 이미지 스캔본인지, 텍스트 레이어/양식이 맞는지 확인하세요.",
+                    },
+                    "data": {
+                        "filename": req.filename,
+                        "size_bytes": len(pdf_bytes),
+                        "parse_type": parse_type,
+                        "parse_method": parse_method,
+                        "saved_count": 0,
+                        "lots_total": 0,
+                        "errors": save_errors[:50],
+                    },
+                }
             return {
                 "ok": True,
                 "success": True,
@@ -1577,7 +1600,7 @@ def pdf_inbound(req: PdfInboundRequest):
                     "errors": save_errors[:50],
                     "folio": getattr(parsed, "folio", "") if parse_type == "PackingListData" else None,
                     "product": getattr(parsed, "product", "") if parse_type == "PackingListData" else None,
-                    "lots_total": len(getattr(parsed, "lots", []) or []) if parse_type == "PackingListData" else None,
+                    "lots_total": lots_total,
                 },
             }
         else:
