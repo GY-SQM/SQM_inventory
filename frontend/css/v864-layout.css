@@ -1950,9 +1950,9 @@ nav.menubar .menu-btn > .menu-dropdown,
 nav.menubar .menu-dropdown .submenu-dropdown,
 .menubar .menu-btn > .menu-dropdown,
 .menubar .menu-dropdown .submenu-dropdown {
-  background: #0f172a !important;
-  color: #ffffff !important;
-  border-color: #334155 !important;
+  background: var(--menu-bg) !important;
+  color: var(--menu-fg) !important;
+  border-color: var(--border) !important;
 }
 
 nav.menubar .menu-btn > .menu-dropdown,
@@ -1963,8 +1963,8 @@ nav.menubar .menu-btn > .menu-dropdown,
 
 nav.menubar .menu-dropdown .submenu-dropdown,
 .menubar .menu-dropdown .submenu-dropdown {
-  background: #172033 !important;
-  border-color: #38bdf8 !important;
+  background: var(--menu-bg) !important;
+  border-color: var(--border) !important;
   border-left: 4px solid #f59e0b !important;
   overflow-x: visible !important;
   overflow-y: visible;
@@ -1975,7 +1975,7 @@ nav.menubar .menu-dropdown .submenu-parent-btn,
 .menubar .menu-dropdown button,
 .menubar .menu-dropdown .submenu-parent-btn {
   background: transparent !important;
-  color: #ffffff !important;
+  color: var(--menu-fg) !important;
 }
 
 nav.menubar .menu-dropdown button:hover,
@@ -1996,13 +1996,13 @@ nav.menubar .menu-dropdown .submenu-parent:focus-within > .submenu-parent-btn,
 
 nav.menubar .menu-dropdown .submenu-parent-btn::after,
 .menubar .menu-dropdown .submenu-parent-btn::after {
-  color: #ffffff !important;
+  color: currentColor !important;
 }
 
 /* menu-section-label contrast fix */
 nav.menubar .menu-dropdown .menu-section-label,
 .menubar .menu-dropdown .menu-section-label {
-  color: #94a3b8 !important;
+  color: var(--text-muted) !important;
 }
 
 /* Global table export and scrollbar hardening */

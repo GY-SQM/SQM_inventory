@@ -50,7 +50,7 @@
 
 /* 드롭다운 */
 .menu-dropdown, .submenu-dropdown {
-  background: rgba(11, 19, 34, 0.98) !important;
+  background: var(--menu-bg) !important;
   border: 1px solid rgba(245, 158, 11, 0.14) !important;
   box-shadow:
     0 8px 32px rgba(0,0,0,0.6),
@@ -188,9 +188,9 @@ table {
   border-spacing: 0 !important;
 }
 thead th {
-  background: rgba(13,22,40,0.95) !important;
-  border-bottom: 2px solid rgba(245,158,11,0.2) !important;
-  color: rgba(245,158,11,0.8) !important;
+  background: var(--table-header) !important;
+  border-bottom: 2px solid rgba(245,158,11,0.35) !important;
+  color: var(--text-secondary) !important;
   font-size: 11px !important;
   letter-spacing: 1.2px !important;
   text-transform: uppercase !important;
@@ -243,7 +243,7 @@ button:not(:disabled) {
 
 /* ── 7. 모달 — 딥 글래스 ───────────────────────────────────── */
 .modal, .modal-overlay > div, [class*="modal-content"] {
-  background: rgba(13, 22, 40, 0.97) !important;
+  background: var(--modal-surface) !important;
   border: 1px solid rgba(245,158,11,0.14) !important;
   border-radius: 14px !important;
   box-shadow:
@@ -279,7 +279,7 @@ input:focus, select:focus, textarea:focus {
   outline: none !important;
   border-color: rgba(245,158,11,0.4) !important;
   box-shadow: 0 0 0 3px rgba(245,158,11,0.1) !important;
-  background: rgba(11,19,34,0.8) !important;
+  background: var(--field-bg) !important;
 }
 
 
@@ -332,7 +332,7 @@ input:focus, select:focus, textarea:focus {
 
 /* ── 12. 타이틀바 — 미니멀 ─────────────────────────────────── */
 .app-titlebar {
-  background: #020817 !important;
+  background: var(--menubar-bg) !important;
   border-bottom: 1px solid rgba(245,158,11,0.07) !important;
 }
 .app-title {
