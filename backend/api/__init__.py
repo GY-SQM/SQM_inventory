@@ -32,10 +32,12 @@ except Exception as e:
 # ── DB 마이그레이션 (앱 시작 시 자동 실행) ──────────────────────────────────
 def _run_db_migrations():
     """inventory 테이블 신규 컬럼 자동 추가 (ALTER TABLE IF NOT EXISTS 대체)"""
+    con = None
     try:
         from config import DB_PATH
         import sqlite3
-        con = sqlite3.connect(str(DB_PATH))
+        con = sqlite3.connect(str(DB_PATH), timeout=30)
+        con.execute("PRAGMA busy_timeout=30000")
         existing = [row[1] for row in con.execute("PRAGMA table_info(inventory)").fetchall()]
         new_cols = [
             ("folio",  "TEXT DEFAULT ''"),
@@ -134,7 +136,13 @@ def _run_db_migrations():
 
         con.close()
     except Exception as e:
-        logging.warning(f"[Migration] DB 마이그레이션 실패: {e}")
+        try:
+            if con is not None:
+                con.close()
+        except Exception:
+            pass
+        logging.exception("[Migration] DB 마이그레이션 실패 — 앱 시작을 중단합니다")
+        raise RuntimeError(f"DB 마이그레이션 실패: {e}") from e
 
 _run_db_migrations()
 
