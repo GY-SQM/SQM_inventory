@@ -169,7 +169,8 @@ class ReturnMixin:
             logger.warning(f"[반품] current_weight 복구 실패 {lot_no}: {e}")
 
     def process_return(self, return_data: list,
-                       source_type: str = '', source_file: str = '') -> Dict:
+                       source_type: str = '', source_file: str = '',
+                       auto_finalize_to_available: bool = False) -> Dict:
         """
         반품 처리 (v5.1.5: 정합성 게이트 + stock_movement 이력 + picked_date 초기화)
         
@@ -188,6 +189,7 @@ class ReturnMixin:
             'skipped': 0,
             'errors': [],
             'details': [],
+            'finalized': [],
             'integrity': {},  # v5.1.5: LOT별 정합성 결과
         }
 
@@ -195,6 +197,7 @@ class ReturnMixin:
             result['errors'].append("No return data provided")
             return result
 
+        _auto_finalize_returns = []
         try:
             with self.db.transaction("IMMEDIATE"):
                 # v8.2.0 N+1 최적화: tonbag 일괄 pre-fetch
@@ -419,6 +422,23 @@ class ReturnMixin:
                         'weight': tb_weight,
                         'original_customer': tonbag.get('picked_to', '')
                     })
+                    _return_location = (
+                        item.get('return_location')
+                        or item.get('location')
+                        or item.get('to_location')
+                    )
+                    if (
+                        auto_finalize_to_available
+                        or item.get('auto_finalize_to_available')
+                        or item.get('auto_finalize')
+                        or item.get('finalize_to_available')
+                        or _return_location
+                    ):
+                        _auto_finalize_returns.append({
+                            'lot_no': lot_no,
+                            'sub_lt': sub_lt,
+                            'location': _return_location,
+                        })
                     # v8.3.0 [Phase 9]: RETURN audit_log
                     try:
                         from engine_modules.audit_helper import write_audit, EVT_RETURN
@@ -510,6 +530,23 @@ class ReturnMixin:
                 sqlite3.OperationalError, sqlite3.IntegrityError) as e:
             result['errors'].append(f"Return processing error: {e}")
             logger.exception("Return processing error")
+
+        # D1_AUTO_FINALIZE_RETURN_TO_AVAILABLE:
+        # process_return의 RETURN 기록 트랜잭션이 끝난 뒤 공개 메서드로 AVAILABLE 복귀를 수행한다.
+        # finalize_return_to_available() 자체가 IMMEDIATE 트랜잭션을 열기 때문에 중첩 트랜잭션을 피한다.
+        if result.get('success') and _auto_finalize_returns:
+            for _ret in _auto_finalize_returns:
+                _fin = self.finalize_return_to_available(
+                    _ret['lot_no'],
+                    _ret['sub_lt'],
+                    location=_ret.get('location'),
+                )
+                result['finalized'].append({**_ret, **(_fin or {})})
+                if not (_fin or {}).get('success'):
+                    result.setdefault('warnings', []).append(
+                        f"RETURN→AVAILABLE 자동복귀 실패: {_ret['lot_no']}-{_ret['sub_lt']} "
+                        f"{(_fin or {}).get('message', '')}"
+                    )
 
         return result
 
