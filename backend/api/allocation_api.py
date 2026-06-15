@@ -57,6 +57,49 @@ def _clean_value(v: Any) -> Any:
     return v
 
 
+def _verify_reserved_tonbags(engine, rows: list[dict], expected_reserved: int) -> dict:
+    """Allocation 예약 직후 inventory_tonbag의 실제 RESERVED 수를 재조회한다."""
+    expected_reserved = int(expected_reserved or 0)
+    if expected_reserved <= 0:
+        return {"ok": True, "expected_reserved": expected_reserved, "actual_reserved": 0, "checked_pairs": 0}
+
+    pairs = []
+    seen = set()
+    for row in rows or []:
+        lot_no = str(row.get("lot_no") or "").strip()
+        sale_ref = str(row.get("sale_ref") or "").strip()
+        if not lot_no or not sale_ref:
+            continue
+        key = (lot_no, sale_ref)
+        if key not in seen:
+            seen.add(key)
+            pairs.append(key)
+
+    if not pairs:
+        return {
+            "ok": False,
+            "expected_reserved": expected_reserved,
+            "actual_reserved": 0,
+            "checked_pairs": 0,
+            "reason": "LOT/sale_ref 쌍이 없어 RESERVED 재검증 불가",
+        }
+
+    where = " OR ".join(["(lot_no=? AND sale_ref=?)" for _ in pairs])
+    params = [value for pair in pairs for value in pair]
+    row = engine.db.fetchone(
+        f"SELECT COUNT(*) AS cnt FROM inventory_tonbag WHERE status='RESERVED' AND ({where})",
+        tuple(params),
+    )
+    actual_reserved = int(row.get("cnt", 0) if isinstance(row, dict) else (row[0] if row else 0))
+    return {
+        "ok": actual_reserved >= expected_reserved,
+        "expected_reserved": expected_reserved,
+        "actual_reserved": actual_reserved,
+        "checked_pairs": len(pairs),
+        "reason": "" if actual_reserved >= expected_reserved else "RESERVED 톤백 수가 엔진 결과보다 적음",
+    }
+
+
 def _rows_from_canonical_parser(excel_path: str) -> list[dict]:
     """정본 AllocationParser 결과를 API 입력 행 구조로 변환."""
     try:
@@ -377,6 +420,22 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
         errors = result.get("errors", [])
         error_details = result.get("error_details", [])
         plan_ids = result.get("plan_ids", [])
+        reserved_recheck = _verify_reserved_tonbags(engine, rows, reserved)
+        if not reserved_recheck.get("ok"):
+            msg = (
+                "[RESERVED_RECHECK_MISMATCH] "
+                f"expected={reserved_recheck.get('expected_reserved')} "
+                f"actual={reserved_recheck.get('actual_reserved')} — "
+                f"{reserved_recheck.get('reason') or '예약 직후 RESERVED 상태 불일치'}"
+            )
+            errors.append(msg)
+            error_details.append({
+                "fail_code": "RESERVED_RECHECK_MISMATCH",
+                "reason": msg,
+                "expected_reserved": reserved_recheck.get("expected_reserved"),
+                "actual_reserved": reserved_recheck.get("actual_reserved"),
+            })
+        recheck_warning = "" if reserved_recheck.get("ok") else " / RESERVED 재검증 경고"
 
         # UNIQUE constraint 에러 → 사용자 친화적 메시지로 변환
         if not success and errors:
@@ -389,6 +448,7 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                         "total_rows": len(rows),
                         "reserved": 0,
                         "processed": processed,
+                        "reserved_recheck": reserved_recheck,
                         "errors": errors[:20],
                         "validation_summary": validation_summary,
                     },
@@ -410,6 +470,7 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                     "total_rows": len(rows),
                     "reserved": reserved,
                     "processed": processed,
+                    "reserved_recheck": reserved_recheck,
                     "plan_ids": plan_ids[:50],
                     "header_row": header_used,
                     "matched_columns": list(col_map.keys()) if col_map else ["canonical_parser"],
@@ -419,7 +480,8 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                     "warnings": result.get("warnings", [])[:20],
                     "validation_summary": validation_summary,
                 },
-                "message": f"{reserved}건 Allocation 예약 완료 / 경고 {len(errors)}건",
+                "warning_code": None if reserved_recheck.get("ok") else "RESERVED_RECHECK_MISMATCH",
+                "message": f"{reserved}건 Allocation 예약 완료 / 경고 {len(errors)}건{recheck_warning}",
             }
         partial_success = (not success and processed > 0)
         if partial_success:
@@ -431,6 +493,7 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                     "reserved": reserved,
                     "processed": processed,
                     "partial_success": True,
+                    "reserved_recheck": reserved_recheck,
                     "plan_ids": plan_ids[:50],
                     "header_row": header_used,
                     "matched_columns": list(col_map.keys()) if col_map else ["canonical_parser"],
@@ -451,6 +514,7 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
                     "total_rows": len(rows),
                     "reserved": reserved,
                     "processed": processed,
+                    "reserved_recheck": reserved_recheck,
                     "errors": errors[:20],
                     "error_details": error_details[:20],
                     "validation_summary": validation_summary,
