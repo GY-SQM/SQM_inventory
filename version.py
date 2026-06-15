@@ -1,14 +1,22 @@
 # -*- coding: utf-8 -*-
 """SQM 재고관리 시스템 버전 정보"""
 
-__version__ = "8.8.0"
-VERSION = "8.8.0"
-VERSION_TUPLE = (8, 8, 0)
+__version__ = "8.8.1"
+VERSION = "8.8.1"
+VERSION_TUPLE = (8, 8, 1)
 RELEASE_DATE = "2026-06-15"
 APP_NAME = "SQM 재고관리 시스템"
 APP_NAME_EN = "SQM Inventory Management System"
 BUILD_DATE = "2026-06-15"
 BUILD_NOTE = (
+    "v8.8.1 (2026-06-15)\n"
+    "따뜻한 테마 + 라이트 모드 정합 + 회귀 수정\n"
+    "  [FIX] 반품 재입고 엔진 logger 미정의(NameError)로 반품 흐름 차단되던 회귀 수정\n"
+    "  [UI] 따뜻한 테마 적용 — 순흑/순백 완화, 글씨 웜 톤(대비 AAA), 강조 파랑 유지\n"
+    "  [UI] 라이트 모드 깨짐 수정 — 드롭다운/모달/입력창/테이블헤더/타이틀바 테마 변수화\n"
+    "  [CHORE] v864-layout.css → layout.css 이름 정리(버전 혼동 제거) + 캐시버스터 갱신\n"
+    "  [TEST] 325 passed / 1 deselected (회귀 무영향)\n"
+    "\n"
     "v8.8.0 (2026-06-15)\n"
     "디버깅 백로그 전수 조치 완료 (영역 A-D)\n"
     "  [A1-A9] 앱 시작/백엔드 연결성 및 라우터 안정화\n"
