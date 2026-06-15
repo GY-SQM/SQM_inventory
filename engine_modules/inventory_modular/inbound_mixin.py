@@ -169,20 +169,16 @@ class InboundMixin(InventoryBaseMixin):
             
             logger.info(f"[process_inbound] lot_no={packing.get('lot_no')!r}, keys_count={len(packing)}")
             
-            # 필수 필드 검증
-            if not packing.get('lot_no'):
-                result['errors'].append(f"LOT 번호가 없습니다 (type={type(packing_data).__name__}, keys={list(packing.keys())[:5]})")
-                return result
-            
-            lot_no = normalize_lot(packing.get('lot_no')) or str(packing.get('lot_no') or '').strip()
-            if not lot_no:
-                result['errors'].append("LOT 번호가 비어 있습니다.")
-                return result
-
-            # LOT NO 길이 검증
-            if len(lot_no) > 30:
-                result['errors'].append(f"LOT 번호가 너무 깁니다: {len(lot_no)}자 (최대 30자)")
-                return result
+            # 필수 필드 검증: 하나씩 early return 하지 않고 모아서 원인 전체를 반환
+            preflight_errors = []
+            raw_lot_no = packing.get('lot_no')
+            lot_no = normalize_lot(raw_lot_no) or str(raw_lot_no or '').strip()
+            if not raw_lot_no or not lot_no:
+                preflight_errors.append(
+                    f"[IB-01] LOT 번호 누락 (type={type(packing_data).__name__}, keys={list(packing.keys())[:5]})"
+                )
+            elif len(lot_no) > 30:
+                preflight_errors.append(f"[IB-01] LOT 번호가 너무 깁니다: {len(lot_no)}자 (최대 30자)")
             
             # PC-1: LOT 번호 형식 검증 (SQM: 10자리 숫자, 경고만)
             if lot_no and not re.match(r'^\d{8,11}$', lot_no):  # v8.7.0: 8~11자리
@@ -194,36 +190,8 @@ class InboundMixin(InventoryBaseMixin):
                 packing.get('net_weight')
             )
             if weight <= 0:
-                result['errors'].append(f"유효하지 않은 중량: {weight}")
-                return result
+                preflight_errors.append(f"[IB-02] 무게 0 또는 음수: {weight}")
             
-            # 중복 확인
-            if self._check_lot_exists(lot_no):
-                result['errors'].append(f"이미 존재하는 LOT: {lot_no}")
-                return result
-            
-            # v6.9.8 [IB-09]: SAP 번호 중복 WARNING 강화 (에러코드 명확화)
-            # 동일 SAP가 다른 LOT에 있으면 [IB-09] 코드로 경고
-            sap_no_raw = packing.get('sap_no', '')
-            if sap_no_raw:
-                sap_std = norm_sap_no(sap_no_raw) or str(sap_no_raw).strip()
-                if sap_std:
-                    try:
-                        dup_row = self.db.fetchone(
-                            "SELECT lot_no FROM inventory WHERE sap_no = ? AND lot_no != ?",
-                            (sap_std, lot_no))
-                        if dup_row:
-                            existing_lot = dup_row['lot_no'] if isinstance(dup_row, dict) else dup_row[0]
-                            _ib09_warn = (
-                                f"[IB-09][SAP_DUPLICATE] SAP 번호 중복: '{sap_std}' "
-                                f"— 기존 LOT {existing_lot}에도 동일 SAP 존재 "
-                                f"(의도된 경우 무시 가능, 단 SAP 오입력 여부 확인 권장)"
-                            )
-                            result['warnings'].append(_ib09_warn)
-                            logger.warning(_ib09_warn)
-                    except (sqlite3.OperationalError, KeyError):
-                        pass  # sap_no 컬럼 없는 구버전 DB — 스킵
-
             # v6.9.5 [IB-08 HARD STOP]: B/L 번호 공란 → 입고 차단
             # 기존: 경고만 (WARNING) → 개선: HARD STOP
             # 이유: BL 없으면 통관/LOT 추적 불가 → 재고 사고 위험
@@ -235,9 +203,18 @@ class InboundMixin(InventoryBaseMixin):
                     f"— B/L 번호는 필수 항목입니다. 입고 서류를 확인하세요."
                 )
                 logger.error(_bl_err)
-                result['errors'].append(_bl_err)
+                preflight_errors.append(_bl_err)
+
+            if preflight_errors:
+                result['errors'].extend(preflight_errors)
+                result['message'] = "[INBOUND_PREFLIGHT_FAILED] 입고 필수 검증 실패"
                 result['success'] = False
-                return result  # 해당 LOT 입고 중단 (단일 LOT 처리 함수)
+                return result
+
+            # 중복 확인
+            if self._check_lot_exists(lot_no):
+                result['errors'].append(f"이미 존재하는 LOT: {lot_no}")
+                return result
 
             # v6.9.8 [IB-10]: B/L 번호 형식 검증 경고 강화 ([IB-10] 코드)
             if bl_str_check and not re.match(r'^[A-Z]{4}\d{7,}$', bl_str_check.upper()):
