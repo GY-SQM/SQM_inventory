@@ -262,8 +262,8 @@
       { icon:'📄', label:'LOT 번호 복사',  kbd:'Ctrl+C', fn:function(){ navigator.clipboard&&navigator.clipboard.writeText(lot); showToast('info','LOT 복사: '+lot); } },
       '-',
       { icon:'▶',  label:'배분 상세 열기', kbd:'Space',  color:'#3b82f6', fn:function(){ window.toggleAllocDetail(lot); } },
-      { icon:'❌', label:'배분 취소',       kbd:'Del',    color:'#ef5350', fn:function(){
-          if(!sqmConfirm(lot+' 배분을 취소하시겠습니까?')) return;
+      { icon:'❌', label:'배분 취소',       kbd:'Del',    color:'#ef5350', fn:async function(){
+          if(!(await window.sqmConfirmAsync(lot+' 배분을 취소하시겠습니까?'))) return;
           window._allocState && window._allocState.selectedLots.add(lot);
           window.allocCancelSelected && window.allocCancelSelected();
         }
@@ -354,8 +354,8 @@
   };
 
   /* ── 전체 초기화 ── */
-  window.allocResetAll = function() {
-    if (!sqmConfirm('⚠️ 전체 초기화\n\n모든 RESERVED/PICKED/SOLD 배정을 취소하고 AVAILABLE로 원복합니다.\n(SOLD는 보호됩니다)\n\n계속하시겠습니까?')) return;
+  window.allocResetAll = async function() {
+    if (!(await window.sqmConfirmAsync('⚠️ 전체 초기화\n\n모든 RESERVED/PICKED/SOLD 배정을 취소하고 AVAILABLE로 원복합니다.\n(SOLD는 보호됩니다)\n\n계속하시겠습니까?'))) return;
     apiPost('/api/allocation/reset-all', {})
       .then(function(res){
         showToast('success', '⚠️ ' + (res.message || '전체 초기화 완료'));
@@ -365,11 +365,11 @@
   };
 
   /* ── SALE REF 일괄 취소 ── */
-  window.allocCancelBySaleRef = function() {
+  window.allocCancelBySaleRef = async function() {
     var saleRef = prompt('SALE REF 번호를 입력하세요 (예: SC-2026-001)');
     if (!saleRef || !saleRef.trim()) return;
     saleRef = saleRef.trim();
-    if (!sqmConfirm('🔖 SALE REF 취소\n\n"' + saleRef + '" 에 해당하는 모든 배정을 취소하고 AVAILABLE로 원복합니다.\n계속하시겠습니까?')) return;
+    if (!(await window.sqmConfirmAsync('🔖 SALE REF 취소\n\n"' + saleRef + '" 에 해당하는 모든 배정을 취소하고 AVAILABLE로 원복합니다.\n계속하시겠습니까?'))) return;
     apiPost('/api/allocation/cancel-by-sale-ref', { sale_ref: saleRef })
       .then(function(res){
         if (res.ok === false) { showToast('warning', res.message || '취소 대상 없음'); }
@@ -413,10 +413,10 @@
   };
 
   /* ── 단계 되돌리기 ── */
-  window.allocRevertStep = function(fromStatus) {
+  window.allocRevertStep = async function(fromStatus) {
     var labels = { RESERVED: 'RESERVED → AVAILABLE', PICKED: 'PICKED → RESERVED', SOLD: 'SOLD → PICKED' };
     var label = labels[fromStatus] || fromStatus;
-    if (!sqmConfirm('↩️ 단계 되돌리기\n\n' + label + '\n\n' + fromStatus + ' 상태의 모든 배정을 한 단계 되돌립니다.\n계속하시겠습니까?')) return;
+    if (!(await window.sqmConfirmAsync('↩️ 단계 되돌리기\n\n' + label + '\n\n' + fromStatus + ' 상태의 모든 배정을 한 단계 되돌립니다.\n계속하시겠습니까?'))) return;
     apiPost('/api/allocation/revert-step', { from_status: fromStatus })
       .then(function(res){
         if (res.ok === false) { showToast('warning', res.message || '되돌릴 대상 없음'); }
@@ -437,11 +437,11 @@
   };
 
   /* 공통 다중 선택 액션 헬퍼 */
-  function _allocBulkAction(opts) {
+  async function _allocBulkAction(opts) {
     var selected = Array.from(_allocState.selectedLots);
     if (!selected.length) { showToast('warning', opts.label + ': 대상을 먼저 선택하세요'); return; }
     var preview = selected.slice(0, 5).join(', ') + (selected.length > 5 ? ' …외 ' + (selected.length - 5) + '건' : '');
-    if (!sqmConfirm(opts.icon + ' ' + opts.label + '\n\n' + selected.length + opts.confirmMsg + '\n\n' + preview)) return;
+    if (!(await window.sqmConfirmAsync(opts.icon + ' ' + opts.label + '\n\n' + selected.length + opts.confirmMsg + '\n\n' + preview))) return;
 
     var okCount = 0, errors = [];
     var promises = selected.map(function(lot){
@@ -581,8 +581,8 @@
       }
     });
 
-    mi('❌ 이 행 배정 취소', function(){
-      if (!sqmConfirm('❌ ' + lot + '\n배정 취소하시겠습니까?')) return;
+    mi('❌ 이 행 배정 취소', async function(){
+      if (!(await window.sqmConfirmAsync('❌ ' + lot + '\n배정 취소하시겠습니까?'))) return;
       apiPost('/api/allocation/' + encodeURIComponent(lot) + '/cancel', {})
         .then(function(){ showToast('success', lot + ' 취소됨'); loadAllocationPage(); })
         .catch(function(err){ showToast('error', '취소 실패: ' + (err.message || err)); });
@@ -643,8 +643,8 @@
     });
   };
 
-  window.cancelAllocation = function(lot) {
-    if (!sqmConfirm(lot + ': cancel allocation?')) return;
+  window.cancelAllocation = async function(lot) {
+    if (!(await window.sqmConfirmAsync(lot + ': cancel allocation?'))) return;
     apiPost('/api/allocation/' + encodeURIComponent(lot) + '/cancel', {})
       .then(function(){ showToast('success', lot + ' allocation cancelled'); loadAllocationPage(); })
       .catch(function(e){ showToast('error', 'Cancel failed: ' + (e.message||String(e))); });
@@ -746,8 +746,8 @@
         .catch(function(){ listDiv.innerHTML = '<div style="padding:10px 12px;color:var(--danger);font-size:.85rem">목록 불러오기 실패</div>'; });
     }
 
-    window._atplDelete = function(id) {
-      if (!sqmConfirm('양식 [' + id + '] 을(를) 삭제하시겠습니까?')) return;
+    window._atplDelete = async function(id) {
+      if (!(await window.sqmConfirmAsync('양식 [' + id + '] 을(를) 삭제하시겠습니까?'))) return;
       fetch(window.API + '/api/allocation/template/' + encodeURIComponent(id), { method:'DELETE' })
         .then(function(r){ return r.json(); })
         .then(function(res){

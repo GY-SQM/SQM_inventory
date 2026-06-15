@@ -1125,12 +1125,29 @@
   };
 
   /* DRAFT → WAIT_SCAN 전환 */
-  window.ooMoveToScan = function() {
+  window.ooMoveToScan = async function() {
     if (_ooState.selectedTonbags.size === 0) {
       showToast('warning', '선택된 톤백이 없습니다');
       return;
     }
-    if (!sqmConfirm('📦 WAIT_SCAN 진입\n\n선택된 톤백 ' + _ooState.selectedTonbags.size + '개로 스캔 검증 단계로 이동합니다.\n계속하시겠습니까?')) return;
+    // Case B 가드: 선택 재고의 LOT 이 전부 일반창고(위치 미상)면 스캔 위치검증 의미가 적음 → 경고
+    try {
+      var _lots = {};
+      _ooState.selectedTonbags.forEach(function(k){
+        var s = String(k); var lot = s.substring(0, s.lastIndexOf('.')) || s; _lots[lot] = 1;
+      });
+      var _lotKeys = Object.keys(_lots);
+      if (_lotKeys.length) {
+        var _res = await apiGet('/api/outbound/lot-qty/lots');
+        var _items = (_res && _res.data && _res.data.items) || [];
+        var _locMap = {}; _items.forEach(function(it){ _locMap[it.lot_no] = !!it.located; });
+        var _anyLocated = _lotKeys.some(function(l){ return _locMap[l]; });
+        if (!_anyLocated) {
+          if (!(await window.sqmConfirmAsync('⚠️ 선택한 재고가 모두 일반창고(위치 미상)입니다.\n\n랙 위치가 없어 스캔 위치 검증의 의미가 적습니다.\n위치 추적이 필요 없다면 「📦 LOT 수량 출고(스캔없음)」이 더 적합합니다.\n\n그래도 스캔 검증으로 진행할까요?'))) return;
+        }
+      }
+    } catch (e) { /* 조회 실패 시 가드 생략, 정상 흐름 유지 */ }
+    if (!(await window.sqmConfirmAsync('📦 WAIT_SCAN 진입\n\n선택된 톤백 ' + _ooState.selectedTonbags.size + '개로 스캔 검증 단계로 이동합니다.\n계속하시겠습니까?'))) return;
     _ooSetState('WAIT_SCAN');
     _ooUpdateT3Stats();
     setTimeout(function(){ window.ooSwitchTab(3); }, 300);
@@ -1388,7 +1405,7 @@
   }
 
   /* WAIT_SCAN → FINALIZED 전환 */
-  window.ooMoveToFinalize = function() {
+  window.ooMoveToFinalize = async function() {
     var hasStop = _ooState.validationResults.some(function(r){ return r.level === 'stop'; });
     if (hasStop) {
       showToast('error', '🚫 하드스톱 발견 — FINALIZED 진입 불가');
@@ -1398,7 +1415,7 @@
     var msg = '✅ FINALIZED 진입\n\n검증 통과: ' + _ooState.selectedTonbags.size + '개 톤백\n' +
               (hasWarn ? '⚠️ 일부 경고 있음 — 검토하셨나요?\n' : '') +
               'Tab 4 에서 출고 확정합니다. 계속하시겠습니까?';
-    if (!sqmConfirm(msg)) return;
+    if (!(await window.sqmConfirmAsync(msg))) return;
     _ooSetState('FINALIZED');
     setTimeout(function(){ window.ooSwitchTab(4); }, 300);
     showToast('success', 'FINALIZED 진입 — Tab 4 에서 출고 확정 (Sprint 1-3-D 예정)');
@@ -1506,7 +1523,7 @@
       document.getElementById('sqm-modal').style.display = 'none';
     });
 
-    submitBtn.addEventListener('click', function() {
+    submitBtn.addEventListener('click', async function() {
       var payload = {
         lot_no: lotInput.value.trim(),
         count: parseInt(cntInput.value, 10),
@@ -1514,7 +1531,7 @@
         reason: reasonInput.value.trim(),
         operator: operatorInput.value.trim(),
       };
-      if (!sqmConfirm('LOT ' + payload.lot_no + ' 에서 ' + payload.count + '개 톤백을 ' + payload.customer + ' 로 출고하시겠습니까?')) return;
+      if (!(await window.sqmConfirmAsync('LOT ' + payload.lot_no + ' 에서 ' + payload.count + '개 톤백을 ' + payload.customer + ' 로 출고하시겠습니까?'))) return;
 
       submitBtn.disabled = true;
       cancelBtn.disabled = true;
@@ -1643,13 +1660,13 @@
           });
       };
 
-      window._batchMoveAction = function(action, batchId) {
+      window._batchMoveAction = async function(action, batchId) {
         var label = action === 'approve' ? '승인' : '반려';
         var reason = '';
         if (action === 'reject') {
           reason = prompt('반려 사유를 입력하세요 (선택):', '') || '';
         }
-        if (action === 'approve' && !sqmConfirm('배치 ' + batchId + ' 를 승인하시겠습니까?\n승인 즉시 DB에 반영됩니다.')) return;
+        if (action === 'approve' && !(await window.sqmConfirmAsync('배치 ' + batchId + ' 를 승인하시겠습니까?\n승인 즉시 DB에 반영됩니다.'))) return;
         var url = _getApiBase() + '/api/tonbag/batch-move/' + action + '/' + encodeURIComponent(batchId);
         fetch(url, {
           method: 'POST',
@@ -1778,8 +1795,8 @@
     var submit = document.getElementById('aa-submit-btn');
     var result = document.getElementById('aa-result');
     cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submit.addEventListener('click', function(){
-      if (!sqmConfirm('승인 완료된 Allocation 을 모두 RESERVED 로 반영합니다. 계속할까요?')) return;
+    submit.addEventListener('click', async function(){
+      if (!(await window.sqmConfirmAsync('승인 완료된 Allocation 을 모두 RESERVED 로 반영합니다. 계속할까요?'))) return;
       submit.disabled = true; cancel.disabled = true;
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
       apiPost('/api/allocation/apply-approved', {})
@@ -1918,8 +1935,8 @@
         .catch(function(e) { showToast('error', '조회 실패: ' + String(e)); });
     };
 
-    window._cpDelete = function(cid) {
-      if (!sqmConfirm(cid + ' 프로파일을 삭제하시겠습니까?')) return;
+    window._cpDelete = async function(cid) {
+      if (!(await window.sqmConfirmAsync(cid + ' 프로파일을 삭제하시겠습니까?'))) return;
       fetch(_getApiBase() + '/api/carriers/' + encodeURIComponent(cid), { method: 'DELETE' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
@@ -2003,12 +2020,12 @@
     cust.addEventListener('input', updatePreview);
 
     cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submit.addEventListener('click', function(){
+    submit.addEventListener('click', async function(){
       var rows = parseRows();
       if (!rows.length) return;
       var customer = cust.value.trim();
       var totalN = rows.reduce(function(s,r){return s+r.count;},0);
-      if (!sqmConfirm('총 ' + rows.length + '개 LOT · ' + totalN + '개 톤백을 ' + customer + ' 로 출고합니다. 계속?')) return;
+      if (!(await window.sqmConfirmAsync('총 ' + rows.length + '개 LOT · ' + totalN + '개 톤백을 ' + customer + ' 로 출고합니다. 계속?'))) return;
 
       submit.disabled = true; cancel.disabled = true;
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 일괄 출고 중...</div>';
@@ -2052,20 +2069,32 @@
   function showLotQtyOutboundModal() {
     var today = new Date().toISOString().slice(0, 10);
     var html = [
-      '<div style="max-width:560px">',
+      '<div style="max-width:580px">',
       '  <h2 style="margin:0 0 6px 0">📦 LOT 수량 출고 <span style="font-size:.8rem;color:var(--text-muted)">(스캔 없음)</span></h2>',
       '  <p style="color:var(--text-muted);margin:0 0 12px 0;font-size:.85rem">',
       '    바코드 스캔 없이 LOT 단위로 출고합니다. 일반창고(위치 미상)·입고 즉시 출고·부분 출고에 사용하세요.',
       '  </p>',
       '  <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:10px">',
       '    <label style="font-weight:600">LOT 번호</label>',
-      '    <input type="text" id="lq-lot" placeholder="예: 1126013063" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px;font-family:monospace">',
+      '    <div style="display:flex;gap:6px;align-items:center">',
+      '      <select id="lq-lot-select" style="flex:1;min-width:0;padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px"><option value="">⏳ 가용 LOT 불러오는 중...</option></select>',
+      '      <button type="button" id="lq-lot-sort" class="btn btn-ghost" style="padding:7px 10px;white-space:nowrap" title="LOT 번호 정렬 전환">↑ 오름차순</button>',
+      '    </div>',
       '    <label style="font-weight:600">출고 방식</label>',
       '    <div style="display:flex;gap:14px;align-items:center">',
       '      <label style="display:flex;align-items:center;gap:5px"><input type="radio" name="lq-mode" value="full" checked> 전량</label>',
-      '      <label style="display:flex;align-items:center;gap:5px"><input type="radio" name="lq-mode" value="part"> 부분</label>',
-      '      <input type="number" id="lq-count" min="1" placeholder="개수" disabled style="width:90px;padding:6px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
+      '      <label style="display:flex;align-items:center;gap:5px"><input type="radio" name="lq-mode" value="part"> 부분(톤백 선택)</label>',
       '    </div>',
+      '  </div>',
+      '  <div id="lq-loc-warn" style="display:none;margin:-4px 0 10px 0;padding:9px 11px;border-radius:6px;font-size:.84rem;line-height:1.45"></div>',
+      '  <div id="lq-tonbag-wrap" style="display:none;margin-bottom:10px">',
+      '    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">',
+      '      <span style="font-weight:600;font-size:.85rem">출고할 톤백 선택</span>',
+      '      <span style="font-size:.8rem;color:var(--text-muted)"><a href="#" id="lq-tb-all" style="color:var(--accent)">전체</a> · <a href="#" id="lq-tb-none" style="color:var(--accent)">해제</a> · <span id="lq-tb-sum">0개</span></span>',
+      '    </div>',
+      '    <div id="lq-tonbags" style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px;background:var(--bg-hover);font-size:.85rem">LOT을 먼저 선택하세요.</div>',
+      '  </div>',
+      '  <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin-bottom:10px">',
       '    <label style="font-weight:600">고객명</label>',
       '    <input type="text" id="lq-customer" placeholder="예: ACME Corp" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
       '    <label style="font-weight:600">판매참조 <span style="color:var(--text-muted);font-weight:400;font-size:.8rem">(선택)</span></label>',
@@ -2073,8 +2102,8 @@
       '    <label style="font-weight:600">출고일</label>',
       '    <input type="date" id="lq-date" value="' + today + '" style="padding:8px;background:var(--bg-hover);color:var(--text);border:1px solid var(--border);border-radius:6px">',
       '  </div>',
-      '  <label style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:6px">',
-      '    <input type="checkbox" id="lq-sample" checked> 🧪 샘플도 함께 출고 <span style="color:var(--text-muted)">(전량 시 기본 포함)</span>',
+      '  <label id="lq-sample-row" style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:6px">',
+      '    <input type="checkbox" id="lq-sample" checked> 🧪 샘플도 함께 출고 <span style="color:var(--text-muted)">(전량 시 기본 포함 / 부분은 위 목록에서 선택)</span>',
       '  </label>',
       '  <label style="display:flex;align-items:center;gap:8px;padding:7px;background:var(--bg-hover);border-radius:6px;font-size:.85rem;margin-bottom:6px">',
       '    <input type="checkbox" id="lq-unlocated"> 📍 위치 미상 (비-랙 일반창고)',
@@ -2091,61 +2120,153 @@
     ].join('\n');
     showDataModal('', html);
 
-    var lot = document.getElementById('lq-lot');
-    var countEl = document.getElementById('lq-count');
+    var lotSel = document.getElementById('lq-lot-select');
+    var lotSortBtn = document.getElementById('lq-lot-sort');
+    var _lotItems = [];
+    var _lotSortAsc = true;
     var cust = document.getElementById('lq-customer');
     var saleref = document.getElementById('lq-saleref');
     var dateEl = document.getElementById('lq-date');
     var sampleEl = document.getElementById('lq-sample');
+    var sampleRow = document.getElementById('lq-sample-row');
     var unlocEl = document.getElementById('lq-unlocated');
     var confirmEl = document.getElementById('lq-confirm');
     var result = document.getElementById('lq-result');
     var submit = document.getElementById('lq-submit');
     var cancel = document.getElementById('lq-cancel');
     var modeRadios = document.getElementsByName('lq-mode');
+    var tbWrap = document.getElementById('lq-tonbag-wrap');
+    var tbBox = document.getElementById('lq-tonbags');
+    var tbSum = document.getElementById('lq-tb-sum');
+    var _tonbagsLoadedFor = '';
 
     function isFull() {
       for (var i = 0; i < modeRadios.length; i++)
         if (modeRadios[i].checked) return modeRadios[i].value === 'full';
       return true;
     }
+    function checkedTonbags() {
+      return Array.prototype.slice.call(tbBox.querySelectorAll('input.lq-tb:checked'));
+    }
+    function updateTbSum() {
+      var n = checkedTonbags().length;
+      var kg = checkedTonbags().reduce(function(s, c){ return s + (parseFloat(c.getAttribute('data-w')) || 0); }, 0);
+      tbSum.textContent = n + '개 · ' + (kg / 1000).toFixed(3) + ' MT';
+    }
+    // 가용 LOT 목록 — 정렬 적용해 드롭다운 옵션 렌더 (선택값 유지)
+    function renderLotOptions() {
+      if (!_lotItems.length) { lotSel.innerHTML = '<option value="">가용 LOT 없음</option>'; return; }
+      var cur = lotSel.value;
+      var arr = _lotItems.slice().sort(function(a, b) {
+        var r = String(a.lot_no).localeCompare(String(b.lot_no), undefined, { numeric: true });
+        return _lotSortAsc ? r : -r;
+      });
+      var opts = ['<option value="">— 목록에서 선택 —</option>'];
+      arr.forEach(function(it) {
+        var label = it.lot_no + (it.product ? ' · ' + it.product : '') +
+                    ' · 가용 ' + it.avail_normal + '개' + (it.avail_sample ? '(+샘플)' : '') +
+                    (it.located ? ' · 📍' + (it.location || '위치지정') : ' · 🏬일반창고');
+        opts.push('<option value="' + escapeHtml(it.lot_no) + '"' +
+                  (it.lot_no === cur ? ' selected' : '') + '>' + escapeHtml(label) + '</option>');
+      });
+      lotSel.innerHTML = opts.join('');
+    }
+    apiGet('/api/outbound/lot-qty/lots').then(function(res) {
+      _lotItems = (res && res.data && res.data.items) || [];
+      renderLotOptions();
+    }).catch(function() { lotSel.innerHTML = '<option value="">목록 로드 실패</option>'; });
+    lotSortBtn.addEventListener('click', function() {
+      _lotSortAsc = !_lotSortAsc;
+      lotSortBtn.textContent = _lotSortAsc ? '↑ 오름차순' : '↓ 내림차순';
+      renderLotOptions();
+    });
+
+    function loadTonbags() {
+      var l = lotSel.value;
+      if (!l) { tbBox.innerHTML = 'LOT을 먼저 선택하세요.'; _tonbagsLoadedFor=''; updateTbSum(); return; }
+      if (_tonbagsLoadedFor === l) return;
+      tbBox.innerHTML = '⏳ 톤백 불러오는 중...';
+      apiGet('/api/outbound/lot-qty/tonbags?lot_no=' + encodeURIComponent(l)).then(function(res) {
+        var items = (res && res.data && res.data.items) || [];
+        _tonbagsLoadedFor = l;
+        if (!items.length) { tbBox.innerHTML = '<span style="color:var(--text-muted)">가용 톤백 없음</span>'; updateTbSum(); return; }
+        tbBox.innerHTML = items.map(function(t) {
+          var tag = t.is_sample ? ' 🧪샘플' : '';
+          var loc = t.location ? ' · ' + escapeHtml(t.location) : '';
+          return '<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;border-radius:4px;cursor:pointer">' +
+                 '<input type="checkbox" class="lq-tb" value="' + t.id + '" data-w="' + (t.weight||0) + '" data-sample="' + t.is_sample + '">' +
+                 '<span style="font-family:monospace">#' + t.sub_lt + '</span>' +
+                 '<span style="color:var(--text-muted)">' + (t.weight||0).toFixed(0) + 'kg' + loc + tag + '</span></label>';
+        }).join('');
+        Array.prototype.forEach.call(tbBox.querySelectorAll('input.lq-tb'), function(c) {
+          c.addEventListener('change', function(){ updateTbSum(); refresh(); });
+        });
+        updateTbSum();
+        refresh();
+      }).catch(function(){ tbBox.innerHTML = '<span style="color:var(--danger)">톤백 로드 실패</span>'; });
+    }
+
+    document.getElementById('lq-tb-all').addEventListener('click', function(e){ e.preventDefault();
+      Array.prototype.forEach.call(tbBox.querySelectorAll('input.lq-tb'), function(c){ c.checked = true; }); updateTbSum(); refresh(); });
+    document.getElementById('lq-tb-none').addEventListener('click', function(e){ e.preventDefault();
+      Array.prototype.forEach.call(tbBox.querySelectorAll('input.lq-tb'), function(c){ c.checked = false; }); updateTbSum(); refresh(); });
+
     function refresh() {
       var full = isFull();
-      countEl.disabled = full;
-      // 전량이면 샘플 기본 체크, 부분이면 기본 해제 (사용자가 다시 바꿀 수 있음)
-      var ok = !!lot.value.trim() && !!cust.value.trim() &&
-               (full || (parseInt(countEl.value, 10) > 0));
+      tbWrap.style.display = full ? 'none' : 'block';
+      sampleRow.style.display = full ? 'flex' : 'none';   // 부분은 목록에서 샘플 직접 선택
+      var ok = !!lotSel.value && !!cust.value.trim() &&
+               (full || checkedTonbags().length > 0);
       submit.disabled = !ok;
     }
     for (var i = 0; i < modeRadios.length; i++) {
       modeRadios[i].addEventListener('change', function() {
-        sampleEl.checked = isFull();   // 모드 전환 시 샘플 기본값 갱신
+        if (!isFull()) loadTonbags();
         refresh();
       });
     }
-    lot.addEventListener('input', refresh);
+    var locWarn = document.getElementById('lq-loc-warn');
+    function selectedLotItem() {
+      for (var i = 0; i < _lotItems.length; i++)
+        if (_lotItems[i].lot_no === lotSel.value) return _lotItems[i];
+      return null;
+    }
+    function updateLocWarn() {
+      var it = selectedLotItem();
+      if (!it || !lotSel.value) { locWarn.style.display = 'none'; return; }
+      locWarn.style.display = 'block';
+      if (it.located) {
+        // Case A 가드: 랙 위치 지정 재고를 스캔없이 출고하려는 경우 경고
+        locWarn.style.background = 'rgba(245,158,11,.13)';
+        locWarn.style.border = '1px solid var(--warning)';
+        locWarn.style.color = 'var(--text)';
+        locWarn.innerHTML = '⚠️ 이 LOT은 <b>위치 지정(랙)</b> 재고입니다' +
+          (it.location ? ' (📍 ' + escapeHtml(it.location) + ')' : '') +
+          '.<br>스캔 없는 LOT 수량 출고는 <b>위치 검증이 생략</b>됩니다. 정확한 위치 추적이 필요하면 ' +
+          '<b>피킹 리스트(스캔) 출고</b>를 권장합니다. 실제로 일반창고로 옮겨졌다면 아래 ' +
+          '<b>📍 위치 미상</b>을 체크하고 진행하세요.';
+      } else {
+        locWarn.style.background = 'rgba(76,175,80,.10)';
+        locWarn.style.border = '1px solid var(--success)';
+        locWarn.style.color = 'var(--text-muted)';
+        locWarn.innerHTML = '🏬 이 LOT은 <b>일반창고(위치 미상)</b> 재고 — LOT 수량 출고에 적합합니다.';
+      }
+    }
+    lotSel.addEventListener('change', function(){
+      _tonbagsLoadedFor = '';
+      var it = selectedLotItem();
+      // 위치 상태에 따라 '위치 미상' 자동 설정(사용자 수동 변경 가능)
+      if (it) unlocEl.checked = !it.located;
+      updateLocWarn();
+      if (lotSel.value && !isFull()) loadTonbags();
+      refresh();
+    });
     cust.addEventListener('input', refresh);
-    countEl.addEventListener('input', refresh);
 
     cancel.addEventListener('click', function() {
       document.getElementById('sqm-modal').style.display = 'none';
     });
-    submit.addEventListener('click', function() {
-      var full = isFull();
-      var payload = {
-        lot_no: lot.value.trim(),
-        count: full ? null : parseInt(countEl.value, 10),
-        customer: cust.value.trim(),
-        sale_ref: saleref.value.trim(),
-        outbound_date: dateEl.value || null,
-        include_sample: sampleEl.checked,
-        unlocated: unlocEl.checked,
-        confirm: confirmEl.checked
-      };
-      var desc = full ? '전량' : (payload.count + '개');
-      var extra = (payload.include_sample ? ' + 샘플' : '') + (payload.unlocated ? ' / 위치미상' : '') + (payload.confirm ? ' / 확정(SOLD)' : '');
-      if (!sqmConfirm('LOT ' + payload.lot_no + ' 을(를) ' + desc + extra + ' 로 ' + payload.customer + ' 에게 출고합니다. 계속?')) return;
-
+    function doLotQtyOutbound(payload) {
       submit.disabled = true; cancel.disabled = true;
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 출고 처리 중...</div>';
       apiPost('/api/outbound/lot-qty', payload).then(function(res) {
@@ -2177,6 +2298,37 @@
         showToast('error', '실패: ' + (e.message || String(e)));
         cancel.disabled = false; refresh();
       });
+    }
+
+    submit.addEventListener('click', function() {
+      var full = isFull();
+      var ids = full ? null : checkedTonbags().map(function(c){ return parseInt(c.value, 10); });
+      var payload = {
+        lot_no: lotSel.value,
+        count: full ? null : null,
+        tonbag_ids: ids,
+        customer: cust.value.trim(),
+        sale_ref: saleref.value.trim(),
+        outbound_date: dateEl.value || null,
+        include_sample: full ? sampleEl.checked : false,
+        unlocated: unlocEl.checked,
+        confirm: confirmEl.checked,
+        // 불일치 감사 기록: 위치 지정(랙) LOT 을 스캔없이 출고하면 사유 자동 부착
+        reason: (function(){ var it = selectedLotItem(); return (it && it.located)
+                   ? '위치지정 LOT 스캔없이 출고(위치검증 생략)' + (it.location ? ' @' + it.location : '') : ''; })()
+      };
+      var desc = full ? '전량' : (ids.length + '개 톤백 선택');
+      var extra = (payload.include_sample ? ' + 샘플' : '') + (payload.unlocated ? ' / 위치미상' : '') + (payload.confirm ? ' / 확정(SOLD)' : '');
+      // pywebview/WebView2 의 window.confirm 차단 이슈 회피 → 모달 내부 인라인 확인
+      result.innerHTML =
+        '<div style="padding:10px;background:var(--bg-hover);border-radius:6px;border-left:4px solid var(--warning)">' +
+        '<div style="margin-bottom:8px">⚠️ <b>LOT ' + escapeHtml(payload.lot_no) + '</b> 을(를) <b>' + escapeHtml(desc + extra) +
+        '</b> 로 <b>' + escapeHtml(payload.customer) + '</b> 에게 출고합니다. 진행할까요?</div>' +
+        '<div style="display:flex;gap:8px;justify-content:flex-end">' +
+        '<button type="button" id="lq-conf-no" class="btn btn-ghost">취소</button>' +
+        '<button type="button" id="lq-conf-yes" class="btn btn-primary">확정 출고</button></div></div>';
+      document.getElementById('lq-conf-no').addEventListener('click', function(){ result.innerHTML = ''; });
+      document.getElementById('lq-conf-yes').addEventListener('click', function(){ doLotQtyOutbound(payload); });
     });
     refresh();
   }
@@ -2255,11 +2407,11 @@
     loadSummary();
 
     cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submit.addEventListener('click', function(){
+    submit.addEventListener('click', async function(){
       var payload = { lot_no: lot.value.trim(), force_all: force.checked };
       var msg = payload.lot_no ? ('LOT ' + payload.lot_no + ' 의 PICKED 톤백을 SOLD 로 확정합니다.') :
                                   '⚠️ LOT 미지정 — 전체 PICKED 일괄 확정입니다! 매우 위험.';
-      if (!sqmConfirm(msg + '\n계속하시겠습니까?')) return;
+      if (!(await window.sqmConfirmAsync(msg + '\n계속하시겠습니까?'))) return;
 
       submit.disabled = true; cancel.disabled = true;
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 확정 중...</div>';
@@ -2357,11 +2509,11 @@
       _sqmSyncModalHeaderFromContent();
 
       document.getElementById('restore-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-      document.getElementById('restore-submit').addEventListener('click', function(){
+      document.getElementById('restore-submit').addEventListener('click', async function(){
         var sel = document.querySelector('input[name="restore-sel"]:checked');
         if (!sel) { showToast('warning', '복원할 백업 파일을 선택하세요'); return; }
         var fname = sel.dataset.file;
-        if (!sqmConfirm('⚠️ ' + fname + ' 으로 DB를 복원합니다.\n현재 데이터가 모두 덮어씌워집니다.\n\n정말 계속할까요?')) return;
+        if (!(await window.sqmConfirmAsync('⚠️ ' + fname + ' 으로 DB를 복원합니다.\n현재 데이터가 모두 덮어씌워집니다.\n\n정말 계속할까요?'))) return;
         var btn = document.getElementById('restore-submit');
         btn.disabled = true;
         document.getElementById('restore-result').innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 복원 중...</div>';
@@ -2477,10 +2629,10 @@
       window.showReturnInboundUploadModal();
     });
     document.getElementById('ret-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submitBtn.addEventListener('click', function(){
+    submitBtn.addEventListener('click', async function(){
       var lot = document.getElementById('ret-lot').value.trim();
       if (!lot) { showToast('warning', 'LOT 번호를 입력하세요'); return; }
-      if (!sqmConfirm('LOT ' + lot + ' 반품 처리를 진행합니다.')) return;
+      if (!(await window.sqmConfirmAsync('LOT ' + lot + ' 반품 처리를 진행합니다.'))) return;
       submitBtn.disabled = true;
       var result = document.getElementById('ret-result');
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
@@ -2573,8 +2725,8 @@
     var submit = document.getElementById('dbr-submit');
     chk.addEventListener('change', function(){ submit.disabled = !chk.checked; });
     document.getElementById('dbr-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submit.addEventListener('click', function(){
-      if (!sqmConfirm('정말로 DB를 완전 초기화할까요?\n\n이 작업은 되돌릴 수 없습니다!')) return;
+    submit.addEventListener('click', async function(){
+      if (!(await window.sqmConfirmAsync('정말로 DB를 완전 초기화할까요?\n\n이 작업은 되돌릴 수 없습니다!'))) return;
       submit.disabled = true;
       document.getElementById('dbr-result').innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 초기화 중...</div>';
       apiPost('/api/action3/db-reset', { confirm: true })
@@ -2882,8 +3034,8 @@
     /* exports */
     'export-dl-e1': function(conf){ sqmDownloadFileUrl(_getApiBase() + '/api/action/export-engine-excel?option=1', conf.lbl); },
     'export-dl-e3': function(conf){ sqmDownloadFileUrl(_getApiBase() + '/api/action/export-engine-excel?option=3', conf.lbl); },
-    'export-dl-e4': function(conf){
-      var incSample = window.sqmConfirm('톤백리스트(Sub LOT): 샘플 톤백을 포함할까요?\n\n[확인] 포함 · [취소] 제외');
+    'export-dl-e4': async function(conf){
+      var incSample = await window.sqmConfirmAsync('톤백리스트(Sub LOT): 샘플 톤백을 포함할까요?\n\n[확인] 포함 · [취소] 제외');
       sqmDownloadFileUrl(_getApiBase() + '/api/action/export-engine-excel?option=4&include_sample=' + (incSample ? 'true' : 'false'), conf.lbl);
     },
     'export-dl-e6': function(conf){ sqmDownloadFileUrl(_getApiBase() + '/api/action/export-engine-excel?option=6', conf.lbl); },
@@ -2913,7 +3065,7 @@
     }
   };
 
-  function dispatchAction(action) {
+  async function dispatchAction(action) {
     var conf = ENDPOINTS[action];
     if (!conf) {
       dbgLog('⚠️','[unregistered] '+action,'ENDPOINTS에 없는 액션','#ffa726');
@@ -2935,7 +3087,7 @@
       return;
     }
     if (action === 'tb-backup' || action === 'onOnBackup') {
-      var ok = window.sqmConfirm('💾 DB 백업을 생성합니다.\n\nOK를 누르면 백업 파일이 생성됩니다.');
+      var ok = await window.sqmConfirmAsync('💾 DB 백업을 생성합니다.\n\nOK를 누르면 백업 파일이 생성됩니다.');
       if (!ok) return;
     }
     apiCall(conf.m, conf.u, {})
@@ -3071,7 +3223,7 @@
     });
 
     // F5 shortcut — F8: debug panel toggle (handled in _dbgBuild)
-    document.addEventListener('keydown', function(ev){
+    document.addEventListener('keydown', async function(ev){
       if (ev.key === 'Escape') {
         closeAllMenus();
         return;
@@ -3086,7 +3238,7 @@
       }
       if (ev.key==='F5'&&!ev.ctrlKey&&!ev.metaKey){
         ev.preventDefault();
-        if (confirm('화면을 새로고침 하시겠습니까?')) renderPage(_currentRoute||'dashboard');
+        if (await window.sqmConfirmAsync('화면을 새로고침 하시겠습니까?')) renderPage(_currentRoute||'dashboard');
       }
     });
 
@@ -3161,7 +3313,7 @@
     const btn = document.getElementById('adjustExecuteBtn');
     const items = JSON.parse(btn.dataset.items || '[]');
     if (!items.length) { showToast('조정 항목이 없습니다', 'warning'); return; }
-    if (!sqmConfirm(items.length+'건의 재고를 조정합니다. DB와 엑셀이 모두 수정됩니다. 계속하시겠습니까?')) return;
+    if (!(await window.sqmConfirmAsync(items.length+'건의 재고를 조정합니다. DB와 엑셀이 모두 수정됩니다. 계속하시겠습니까?'))) return;
     try {
       const res = await fetch('/api/inventory/adjust/execute', {
         method: 'POST',

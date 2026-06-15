@@ -164,3 +164,30 @@ def test_confirm_false_stays_picked(eng):
     counts = _status_counts(eng)
     assert counts.get("PICKED") == 2        # 기본은 PICKED 까지만
     assert counts.get("SOLD", 0) == 0
+
+
+def test_outbound_specific_tonbag_ids(eng):
+    # 10개 중 사용자가 체크한 특정 3개만 출고
+    _seed_lot(eng, normals=10)
+    rows = eng.db.fetchall(
+        "SELECT id FROM inventory_tonbag WHERE lot_no='LOTX' AND is_sample=0 ORDER BY sub_lt")
+    ids = [_val(r, "id", 0) for r in rows[:3]]
+    r = eng.outbound_lot_qty("LOTX", tonbag_ids=ids, customer="ACME", sale_ref="SC-IDS")
+    assert r["success"], r["errors"]
+    assert r["picked_count"] == 3
+    counts = _status_counts(eng)
+    assert counts.get("PICKED") == 3
+    assert counts.get("AVAILABLE") == 8     # 일반 7 + 샘플 1
+    assert eng.verify_lot_integrity("LOTX")["valid"]
+    # 정확히 그 3개가 PICKED 인지
+    picked = eng.db.fetchall(
+        "SELECT id FROM inventory_tonbag WHERE lot_no='LOTX' AND status='PICKED'")
+    assert sorted(_val(r, "id", 0) for r in picked) == sorted(ids)
+
+
+def test_tonbag_ids_rejects_invalid(eng):
+    # 존재하지 않거나 다른 LOT 톤백 ID → 차단
+    _seed_lot(eng, normals=3)
+    r = eng.outbound_lot_qty("LOTX", tonbag_ids=[999999], customer="ACME", sale_ref="SC-BAD")
+    assert not r["success"]
+    assert any("유효" in e or "AVAILABLE" in e for e in r["errors"])

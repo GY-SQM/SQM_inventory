@@ -2,6 +2,8 @@
 <html lang="ko" data-theme="dark">
 <head>
 <meta charset="UTF-8">
+<!-- [v8.7.4] 메인 창과 테마 동기화 (localStorage 공유, 같은 origin) -->
+<script>(function(){try{var t=localStorage.getItem('sqm_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <title>SQM AI Chat</title>
 <link rel="stylesheet" href="../css/design-system.css?v=20260615theme2">
 <style>

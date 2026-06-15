@@ -1,12 +1,16 @@
 {
   "version": "3.0",
-  "lastUpdated": "2026-06-06T04:46:45.804Z",
+  "lastUpdated": "2026-06-15T04:13:41.534Z",
   "activeFeatures": [
     "api",
     "js",
     "ai",
     "tests",
-    "SQM_inventory"
+    "SQM_inventory",
+    "sqm_v871_clean",
+    "engine_modules",
+    "inventory_modular",
+    "handlers"
   ],
   "primaryFeature": "api",
   "features": {
@@ -19,9 +23,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-05-27T13:00:04.661Z",
-        "lastUpdated": "2026-06-03T12:02:38.619Z"
+        "lastUpdated": "2026-06-15T04:12:22.514Z"
       },
-      "lastFile": "D:\\program\\SQM_inventory\\sqm_v871_clean\\backend\\api\\ai_write_session.py"
+      "lastFile": "D:\\program\\SQM_inventory\\sqm_v871_clean\\backend\\api\\location_map_api.py"
     },
     "js": {
       "phase": "do",
@@ -32,9 +36,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-05-27T13:01:12.651Z",
-        "lastUpdated": "2026-06-04T06:10:55.845Z"
+        "lastUpdated": "2026-06-15T04:13:41.533Z"
       },
-      "lastFile": "D:\\program\\SQM_inventory\\sqm_v871_clean\\frontend\\js\\sqm-inline.js"
+      "lastFile": "D:\\program\\SQM_inventory\\sqm_v871_clean\\frontend\\js\\sqm-location-map-import.js"
     },
     "ai": {
       "phase": "do",
@@ -58,9 +62,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-06-03T11:30:19.503Z",
-        "lastUpdated": "2026-06-03T12:03:01.705Z"
+        "lastUpdated": "2026-06-15T03:40:59.807Z"
       },
-      "lastFile": "D:\\program\\SQM_inventory\\sqm_v871_clean\\tests\\test_phase2_integration.py"
+      "lastFile": "D:\\program\\SQM_inventory\\sqm_v871_clean\\tests\\test_v874_lot_qty_outbound.py"
     },
     "SQM_inventory": {
       "phase": "do",
@@ -74,6 +78,58 @@
         "lastUpdated": "2026-06-06T04:46:45.802Z"
       },
       "lastFile": "D:\\program\\SQM_inventory\\inject_to_manual.py"
+    },
+    "sqm_v871_clean": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-06-14T01:34:04.702Z",
+        "lastUpdated": "2026-06-14T01:54:18.186Z"
+      },
+      "lastFile": "D:\\program\\SQM_inventory\\sqm_v871_clean\\main_webview.py"
+    },
+    "engine_modules": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-06-14T12:53:35.841Z",
+        "lastUpdated": "2026-06-14T12:54:06.354Z"
+      },
+      "lastFile": "D:\\program\\SQM_inventory\\sqm_v871_clean\\engine_modules\\db_migration_mixin.py"
+    },
+    "inventory_modular": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-06-14T13:34:02.569Z",
+        "lastUpdated": "2026-06-15T03:36:46.424Z"
+      },
+      "lastFile": "D:\\program\\SQM_inventory\\sqm_v871_clean\\engine_modules\\inventory_modular\\outbound_mixin.py"
+    },
+    "handlers": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-06-14T13:46:41.844Z",
+        "lastUpdated": "2026-06-14T13:46:41.844Z"
+      },
+      "lastFile": "D:\\program\\SQM_inventory\\sqm_v871_clean\\gui_app_modular\\handlers\\inbound_doc_detector.py"
     }
   },
   "pipeline": {
@@ -84,7 +140,7 @@
   "session": {
     "startedAt": "2026-05-27T12:40:27.681Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-06-06T04:46:45.804Z"
+    "lastActivity": "2026-06-15T04:13:41.534Z"
   },
   "history": [
     {
@@ -480,6 +536,288 @@
     {
       "timestamp": "2026-06-06T04:46:45.804Z",
       "feature": "SQM_inventory",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T01:34:04.724Z",
+      "feature": "sqm_v871_clean",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T01:44:19.289Z",
+      "feature": "sqm_v871_clean",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T01:44:25.941Z",
+      "feature": "sqm_v871_clean",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T01:53:50.913Z",
+      "feature": "sqm_v871_clean",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T01:54:18.187Z",
+      "feature": "sqm_v871_clean",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T12:53:35.855Z",
+      "feature": "engine_modules",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T12:54:06.355Z",
+      "feature": "engine_modules",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T12:54:49.999Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T12:56:36.227Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:34:02.597Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:36:12.443Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:37:53.694Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:38:25.635Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:39:14.036Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:40:15.565Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:43:27.312Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:43:43.356Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:43:48.884Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:46:41.845Z",
+      "feature": "handlers",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:52:02.185Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:52:13.845Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:52:38.621Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:53:47.004Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:56:55.177Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:57:11.305Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:57:21.470Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:57:31.837Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:57:38.342Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:57:46.364Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:58:00.559Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:58:06.597Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:58:14.689Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:58:27.191Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-14T13:58:44.464Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T03:36:26.377Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T03:36:46.426Z",
+      "feature": "inventory_modular",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T03:36:59.263Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T03:37:05.661Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T03:37:41.413Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T03:39:30.044Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T03:40:59.809Z",
+      "feature": "tests",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T04:01:53.059Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T04:12:08.554Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T04:12:22.515Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T04:13:07.321Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T04:13:31.614Z",
+      "feature": "js",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-06-15T04:13:41.534Z",
+      "feature": "js",
       "phase": "do",
       "action": "updated"
     }

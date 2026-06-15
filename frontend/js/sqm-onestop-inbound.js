@@ -415,7 +415,7 @@
   };
 
   /* [Sprint 1-2-D] D/O 나중에 — 수동 정보 입력 프롬프트 체인 */
-  window.onestopSkipDo = function() {
+  window.onestopSkipDo = async function() {
     var cur = _onestopState.manualDo || {};
     var ft = prompt('📋 D/O 수동 입력 (1/3) — Free Time (일수)\n\n예: 7\n(취소 → 전체 입력 취소)', cur.free_time || '');
     if (ft === null) return;
@@ -428,7 +428,7 @@
     ar = String(ar || '').trim();
     /* 도착일 형식 검증 (빈값 OK, 입력된 경우 YYYY-MM-DD) */
     if (ar && !/^\d{4}-\d{2}-\d{2}$/.test(ar)) {
-      if (!sqmConfirm('도착일 형식이 YYYY-MM-DD가 아닙니다: "' + ar + '"\n그래도 저장하시겠습니까?')) return;
+      if (!(await window.sqmConfirmAsync('도착일 형식이 YYYY-MM-DD가 아닙니다: "' + ar + '"\n그래도 저장하시겠습니까?'))) return;
     }
     _onestopState.manualDo = { free_time: ft, warehouse: wh, arrival_date: ar };
     /* 파싱된 rows 가 있으면 DO 누락 필드에 수동 값 채우기 */
@@ -494,9 +494,9 @@
     showToast('info', '↷ 다시 실행: ' + entry.field + ' · row ' + (entry.rowIdx + 1));
   };
 
-  window.onestopResetAll = function() {
+  window.onestopResetAll = async function() {
     if (!_onestopState.history.length) { showToast('info', '편집 내역이 없습니다'); return; }
-    if (!sqmConfirm('⟲ 원본 초기화\n\n모든 편집 내용을 파싱 직후 상태로 되돌립니다. 계속하시겠습니까?')) return;
+    if (!(await window.sqmConfirmAsync('⟲ 원본 초기화\n\n모든 편집 내용을 파싱 직후 상태로 되돌립니다. 계속하시겠습니까?'))) return;
     _onestopState.previewRows = JSON.parse(JSON.stringify(_onestopState.originalRows));
     _onestopState.editedCells = {};
     _onestopState.history = [];
@@ -765,14 +765,14 @@
     if (list[idx]) { _applyTemplate(list[idx], carrier); document.getElementById('sqm-modal').style.display='none'; }
   };
 
-  window._onestopDeleteTpl = function(idx, carrier) {
+  window._onestopDeleteTpl = async function(idx, carrier) {
     var list = _loadTplList(carrier);
     var t = list[idx];
     if (t && t._is_db) {
       showToast('error', 'DB 템플릿은 여기서 삭제할 수 없습니다 (관리자 화면 사용)');
       return;
     }
-    if (!sqmConfirm('이 템플릿을 삭제하시겠습니까?')) return;
+    if (!(await window.sqmConfirmAsync('이 템플릿을 삭제하시겠습니까?'))) return;
     list.splice(idx, 1);
     _saveTplList(carrier, list);
     window.onestopOpenTemplatePicker();
@@ -1412,7 +1412,7 @@
     window.onestopParseStart();
   };
   /* [Sprint 1-2-C] 편집된 미리보기 rows → /onestop-save POST → DB 저장 */
-  window.onestopSaveDb = function() {
+  window.onestopSaveDb = async function() {
     if (!_onestopState.parsed || !_onestopState.previewRows.length) {
       showToast('warning', '파싱된 데이터가 없습니다. ▶ 파싱 시작을 먼저 실행하세요');
       return;
@@ -1436,7 +1436,7 @@
     var confirmMsg = '💾 DB 저장 확인\n\n' +
       '총 ' + rowCount + ' LOT (편집된 셀 ' + editedCount + '개)\n' +
       '실제 재고 DB에 등록됩니다. 계속하시겠습니까?';
-    if (!sqmConfirm(confirmMsg)) return;
+    if (!(await window.sqmConfirmAsync(confirmMsg))) return;
 
     var saveBtn = document.getElementById('onestop-save-btn');
     if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ 저장 중...'; }

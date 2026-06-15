@@ -434,6 +434,51 @@ def cleanup_stale_sqm_background_processes():
         time.sleep(0.7)
     return cleaned
 
+def terminate_other_sqm_instances():
+    """[v8.7.4] '항상 새로 띄우기' — 이 프로젝트의 다른 SQM 인스턴스를 창 유무와
+    무관하게(자기 자신 제외) 모두 종료. run.bat 재실행 시 항상 단일 새 인스턴스 보장.
+
+    포트 범위(8765~8799)에서 LISTEN 중인 이 프로젝트 SQM 프로세스를 찾아 taskkill.
+    종료 후 포트/뮤텍스 해제를 위해 잠깐 대기. 비-Windows 는 no-op.
+    """
+    if os.name != 'nt':
+        return False
+    killed = False
+    me = os.getpid()
+    seen = set()
+    for port in range(API_DEFAULT_PORT, API_PORT_MAX + 1):
+        if not is_port_open(API_HOST, port):
+            continue
+        for pid in _pids_listening_on_port(port):
+            try:
+                ipid = int(pid)
+            except (TypeError, ValueError):
+                continue
+            if ipid == me or ipid in seen:
+                continue
+            seen.add(ipid)
+            command_line = _get_process_command_line(pid)
+            is_sqm = _is_this_project_main_webview(command_line)
+            if not is_sqm:
+                is_sqm = _is_python_executable(_get_process_executable_path(pid))
+            if not is_sqm:
+                log.warning(f"[새로띄우기] 포트 {port} 점유 PID={pid} 는 SQM 으로 확인 안 됨 -> 보존")
+                continue
+            log.warning(f"[새로띄우기] 기존 SQM 인스턴스 종료 PID={pid} (port {port})")
+            try:
+                subprocess.run(
+                    ['taskkill', '/F', '/PID', pid],
+                    check=False, timeout=5,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, encoding='utf-8', errors='ignore',
+                    creationflags=_CNOW)
+                killed = True
+            except Exception as e:
+                log.error(f"[새로띄우기] 기존 인스턴스 종료 실패 PID={pid}: {e}")
+    if killed:
+        time.sleep(0.8)  # 포트/뮤텍스 해제 대기
+    return killed
+
 def _visible_sqm_process_exists():
     for port in range(API_DEFAULT_PORT, API_PORT_MAX + 1):
         if not is_port_open(API_HOST, port):
@@ -840,6 +885,8 @@ SPLASH_HTML = '''<!DOCTYPE html>
 
 def main():
     global API_PORT
+    # [v8.7.4] 항상 새로 띄우기: 기존 SQM 인스턴스(창 유무 무관)를 먼저 종료.
+    terminate_other_sqm_instances()
     cleanup_stale_sqm_background_processes()
     API_PORT = select_available_api_port()
     if not _acquire_single_instance_lock():

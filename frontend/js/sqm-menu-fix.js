@@ -76,6 +76,11 @@
     var maxH = Math.max(180, viewportH - VIEWPORT_GAP - Math.max(VIEWPORT_GAP, rect.top));
     submenu.style.maxHeight = maxH + 'px';
     submenu.style.overflowY = rect.height > maxH ? 'auto' : 'visible';
+
+    // [BUGFIX v8.7.4] 측정용으로 강제한 인라인 display:block 을 해제해 CSS(:hover/
+    // :focus-within)가 표시를 제어하게 한다. 안 그러면 인라인 block 이 CSS 의 hover-off
+    // 를 무시하고 남아, 마우스로 다른 하위메뉴로 이동해도 이전 하위메뉴가 안 닫힌다.
+    submenu.style.display = '';
   }
 
   function installMenuFix() {

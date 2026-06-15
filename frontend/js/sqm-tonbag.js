@@ -534,7 +534,7 @@
       document.getElementById('sqm-modal').style.display = 'none';
     });
 
-    submitBtn.addEventListener('click', function() {
+    submitBtn.addEventListener('click', async function() {
       var payload = {
         lot_no: lotInput.value.trim(),
         count: parseInt(cntInput.value, 10),
@@ -542,7 +542,7 @@
         reason: reasonInput.value.trim(),
         operator: operatorInput.value.trim(),
       };
-      if (!sqmConfirm('LOT ' + payload.lot_no + ' 에서 ' + payload.count + '개 톤백을 ' + payload.customer + ' 로 출고하시겠습니까?')) return;
+      if (!(await window.sqmConfirmAsync('LOT ' + payload.lot_no + ' 에서 ' + payload.count + '개 톤백을 ' + payload.customer + ' 로 출고하시겠습니까?'))) return;
 
       submitBtn.disabled = true;
       cancelBtn.disabled = true;
@@ -689,13 +689,13 @@
           });
       };
 
-      window._batchMoveAction = function(action, batchId) {
+      window._batchMoveAction = async function(action, batchId) {
         var label = action === 'approve' ? '승인' : '반려';
         var reason = '';
         if (action === 'reject') {
           reason = prompt('반려 사유를 입력하세요 (선택):', '') || '';
         }
-        if (action === 'approve' && !sqmConfirm('배치 ' + batchId + ' 를 승인하시겠습니까?\n승인 즉시 DB에 반영됩니다.')) return;
+        if (action === 'approve' && !(await window.sqmConfirmAsync('배치 ' + batchId + ' 를 승인하시겠습니까?\n승인 즉시 DB에 반영됩니다.'))) return;
         var url = window.API + '/api/tonbag/batch-move/' + action + '/' + encodeURIComponent(batchId);
         fetch(url, {
           method: 'POST',
@@ -824,8 +824,8 @@
     var submit = document.getElementById('aa-submit-btn');
     var result = document.getElementById('aa-result');
     cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submit.addEventListener('click', function(){
-      if (!sqmConfirm('승인 완료된 Allocation 을 모두 RESERVED 로 반영합니다. 계속할까요?')) return;
+    submit.addEventListener('click', async function(){
+      if (!(await window.sqmConfirmAsync('승인 완료된 Allocation 을 모두 RESERVED 로 반영합니다. 계속할까요?'))) return;
       submit.disabled = true; cancel.disabled = true;
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
       apiPost('/api/allocation/apply-approved', {})
@@ -1115,8 +1115,8 @@
         .catch(function(e) { showToast('error', '조회 실패: ' + String(e)); });
     };
 
-    window._cpDelete = function(cid) {
-      if (!sqmConfirm(cid + ' 프로파일을 삭제하시겠습니까?')) return;
+    window._cpDelete = async function(cid) {
+      if (!(await window.sqmConfirmAsync(cid + ' 프로파일을 삭제하시겠습니까?'))) return;
       fetch(window.API + '/api/carriers/' + encodeURIComponent(cid), { method: 'DELETE' })
         .then(function(r) { return r.json(); })
         .then(function(d) {
@@ -1219,12 +1219,12 @@
     cust.addEventListener('input', updatePreview);
 
     cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submit.addEventListener('click', function(){
+    submit.addEventListener('click', async function(){
       var rows = parseRows();
       if (!rows.length) return;
       var customer = cust.value.trim();
       var totalN = rows.reduce(function(s,r){return s+r.count;},0);
-      if (!sqmConfirm('총 ' + rows.length + '개 LOT · ' + totalN + '개 톤백을 ' + customer + ' 로 출고합니다. 계속?')) return;
+      if (!(await window.sqmConfirmAsync('총 ' + rows.length + '개 LOT · ' + totalN + '개 톤백을 ' + customer + ' 로 출고합니다. 계속?'))) return;
 
       submit.disabled = true; cancel.disabled = true;
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 일괄 출고 중...</div>';
@@ -1334,11 +1334,11 @@
     loadSummary();
 
     cancel.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submit.addEventListener('click', function(){
+    submit.addEventListener('click', async function(){
       var payload = { lot_no: lot.value.trim(), force_all: force.checked };
       var msg = payload.lot_no ? ('LOT ' + payload.lot_no + ' 의 PICKED 톤백을 SOLD 로 확정합니다.') :
                                   '⚠️ LOT 미지정 — 전체 PICKED 일괄 확정입니다! 매우 위험.';
-      if (!sqmConfirm(msg + '\n계속하시겠습니까?')) return;
+      if (!(await window.sqmConfirmAsync(msg + '\n계속하시겠습니까?'))) return;
 
       submit.disabled = true; cancel.disabled = true;
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 확정 중...</div>';
@@ -1432,11 +1432,11 @@
       _sqmSyncModalHeaderFromContent();
 
       document.getElementById('restore-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-      document.getElementById('restore-submit').addEventListener('click', function(){
+      document.getElementById('restore-submit').addEventListener('click', async function(){
         var sel = document.querySelector('input[name="restore-sel"]:checked');
         if (!sel) { showToast('warning', '복원할 백업 파일을 선택하세요'); return; }
         var fname = sel.dataset.file;
-        if (!sqmConfirm('⚠️ ' + fname + ' 으로 DB를 복원합니다.\n현재 데이터가 모두 덮어씌워집니다.\n\n정말 계속할까요?')) return;
+        if (!(await window.sqmConfirmAsync('⚠️ ' + fname + ' 으로 DB를 복원합니다.\n현재 데이터가 모두 덮어씌워집니다.\n\n정말 계속할까요?'))) return;
         var btn = document.getElementById('restore-submit');
         btn.disabled = true;
         document.getElementById('restore-result').innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 복원 중...</div>';
@@ -1552,10 +1552,10 @@
       showReturnInboundUploadModal();
     });
     document.getElementById('ret-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submitBtn.addEventListener('click', function(){
+    submitBtn.addEventListener('click', async function(){
       var lot = document.getElementById('ret-lot').value.trim();
       if (!lot) { showToast('warning', 'LOT 번호를 입력하세요'); return; }
-      if (!sqmConfirm('LOT ' + lot + ' 반품 처리를 진행합니다.')) return;
+      if (!(await window.sqmConfirmAsync('LOT ' + lot + ' 반품 처리를 진행합니다.'))) return;
       submitBtn.disabled = true;
       var result = document.getElementById('ret-result');
       result.innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 처리 중...</div>';
@@ -1648,8 +1648,8 @@
     var submit = document.getElementById('dbr-submit');
     chk.addEventListener('change', function(){ submit.disabled = !chk.checked; });
     document.getElementById('dbr-cancel').addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
-    submit.addEventListener('click', function(){
-      if (!sqmConfirm('정말로 DB를 완전 초기화할까요?\n\n이 작업은 되돌릴 수 없습니다!')) return;
+    submit.addEventListener('click', async function(){
+      if (!(await window.sqmConfirmAsync('정말로 DB를 완전 초기화할까요?\n\n이 작업은 되돌릴 수 없습니다!'))) return;
       submit.disabled = true;
       document.getElementById('dbr-result').innerHTML = '<div style="padding:8px;color:var(--text-muted)">⏳ 초기화 중...</div>';
       apiPost('/api/action3/db-reset', { confirm: true })
@@ -2184,8 +2184,8 @@
       .catch(function(e) { showToast('error', '오류: ' + String(e)); });
   };
 
-  window._tplDelete = function(tid, name) {
-    if (!sqmConfirm(name + ' 템플릿을 삭제하시겠습니까?')) return;
+  window._tplDelete = async function(tid, name) {
+    if (!(await window.sqmConfirmAsync(name + ' 템플릿을 삭제하시겠습니까?'))) return;
     fetch(window.API + '/api/inbound/templates/' + encodeURIComponent(tid), { method: 'DELETE' })
       .then(function(r) { return r.json(); })
       .then(function(d) {
@@ -2521,9 +2521,9 @@
         });
       });
       document.querySelectorAll('.pm-del').forEach(function(btn){
-        btn.addEventListener('click', function(){
+        btn.addEventListener('click', async function(){
           var id = parseInt(btn.getAttribute('data-id'), 10);
-          if (!window.sqmConfirm('이 품목 마스터 행을 삭제할까요?')) return;
+          if (!(await window.sqmConfirmAsync('이 품목 마스터 행을 삭제할까요?'))) return;
           apiCall('DELETE', '/api/product-master/' + id, null).then(function(res){
             if (res && res.ok === false) { showToast('error', res.error || '실패'); return; }
             showToast('success', '삭제됨');
@@ -2928,10 +2928,10 @@
       tbl += '</tbody></table>';
       box.innerHTML = tbl;
       box.querySelectorAll('.rt-del').forEach(function(btn){
-        btn.addEventListener('click', function(){
+        btn.addEventListener('click', async function(){
           var enc = btn.getAttribute('data-enc');
           var name = enc ? decodeURIComponent(enc) : '';
-          if (!name || !window.sqmConfirm('파일을 삭제할까요?')) return;
+          if (!name || !(await window.sqmConfirmAsync('파일을 삭제할까요?'))) return;
           fetch(window.API + '/api/report-templates/file?name=' + encodeURIComponent(name), { method: 'DELETE' })
             .then(function(r){ return r.json(); })
             .then(function(res){
@@ -3311,7 +3311,7 @@
     'onToggleTheme':     {m:'JS',   u:'theme',                                    lbl:'테마 전환'},
   };
 
-  function dispatchAction(action) {
+  async function dispatchAction(action) {
     var conf = ENDPOINTS[action];
     if (!conf) {
       dbgLog('⚠️','[unregistered] '+action,'ENDPOINTS에 없는 액션','#ffa726');
@@ -3470,7 +3470,7 @@
         return;
       }
       if (conf.u === 'export-dl-e4') {
-        var incSample = window.sqmConfirm('톤백리스트(Sub LOT): 샘플 톤백을 포함할까요?\n\n[확인] 포함 · [취소] 제외');
+        var incSample = await window.sqmConfirmAsync('톤백리스트(Sub LOT): 샘플 톤백을 포함할까요?\n\n[확인] 포함 · [취소] 제외');
         sqmDownloadFileUrl(
           window.API + '/api/action/export-engine-excel?option=4&include_sample=' + (incSample ? 'true' : 'false'),
           conf.lbl
@@ -3563,7 +3563,7 @@
       return;
     }
     if (action === 'tb-backup' || action === 'onOnBackup') {
-      var ok = window.sqmConfirm('💾 DB 백업을 생성합니다.\n\nOK를 누르면 백업 파일이 생성됩니다.');
+      var ok = await window.sqmConfirmAsync('💾 DB 백업을 생성합니다.\n\nOK를 누르면 백업 파일이 생성됩니다.');
       if (!ok) return;
     }
     apiCall(conf.m, conf.u, {})
@@ -3719,14 +3719,14 @@
     });
 
     // F5 shortcut — F8: debug panel toggle (handled in _dbgBuild)
-    document.addEventListener('keydown', function(ev){
+    document.addEventListener('keydown', async function(ev){
       if (ev.key === 'Escape') {
         closeAllMenus();
         return;
       }
       if (ev.key==='F5'&&!ev.ctrlKey&&!ev.metaKey){
         ev.preventDefault();
-        if (confirm('화면을 새로고침 하시겠습니까?')) renderPage(window.getCurrentRoute()||'dashboard');
+        if (await window.sqmConfirmAsync('화면을 새로고침 하시겠습니까?')) renderPage(window.getCurrentRoute()||'dashboard');
       }
     });
 
@@ -3801,7 +3801,7 @@
     const btn = document.getElementById('adjustExecuteBtn');
     const items = JSON.parse(btn.dataset.items || '[]');
     if (!items.length) { showToast('조정 항목이 없습니다', 'warning'); return; }
-    if (!sqmConfirm(items.length+'건의 재고를 조정합니다. DB와 엑셀이 모두 수정됩니다. 계속하시겠습니까?')) return;
+    if (!(await window.sqmConfirmAsync(items.length+'건의 재고를 조정합니다. DB와 엑셀이 모두 수정됩니다. 계속하시겠습니까?'))) return;
     try {
       const res = await fetch('/api/inventory/adjust/execute', {
         method: 'POST',

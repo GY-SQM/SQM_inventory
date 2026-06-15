@@ -57,6 +57,11 @@
       + '  <span id="lmi-fname" style="font-size:12px;color:var(--text-muted,#95a5a6);">'
       +     '선택된 파일 없음</span>'
       + '  <label style="margin-left:auto;font-size:11px;color:var(--text-muted,#95a5a6);'
+      +     'display:flex;align-items:center;gap:4px;" id="lmi-apply-wrap" '
+      +     'title="체크 시 LOT 셀 매핑을 톤백 위치까지 즉시 확정(inventory_tonbag.location 갱신). 미체크 시 LOT 후보 스냅샷만 저장(출고 스캔 때 확정).">'
+      + '    <input type="checkbox" id="lmi-apply-tonbag"> 📍 톤백 위치까지 즉시 확정'
+      + '  </label>'
+      + '  <label style="font-size:11px;color:var(--text-muted,#95a5a6);'
       +     'display:none;align-items:center;gap:4px;" id="lmi-force-wrap">'
       + '    <input type="checkbox" id="lmi-force"> 입고 누락 무시하고 강제 저장'
       + '  </label>'
@@ -284,15 +289,19 @@
   }
 
   /* ── commit 요청 ── */
-  function _doCommit() {
+  async function _doCommit() {
     if (_state.busy || !_state.file || !_state.report) return;
     var rep = _state.report;
     var force = document.getElementById('lmi-force').checked;
+    var applyTonbag = document.getElementById('lmi-apply-tonbag').checked;
     if (rep.has_inbound_short && !force) {
       _toast('warning', '입고 누락 의심 건이 있습니다 — 현장 확인 후 "강제 저장"을 체크하거나 엑셀을 수정하세요');
       return;
     }
-    if (!window.sqmConfirm('이 엑셀을 LOT 위치 후보 스냅샷으로 저장합니다.\n\n톤백별 실제 위치는 변경하지 않고, 출고 바코드 스캔 시점에 확정됩니다. 계속할까요?')) {
+    var confirmMsg = applyTonbag
+      ? '이 엑셀을 LOT 위치 후보로 저장하고, 각 LOT 셀 매핑을 톤백 위치까지 즉시 확정합니다.\n\ninventory_tonbag.location 이 갱신됩니다. 계속할까요?'
+      : '이 엑셀을 LOT 위치 후보 스냅샷으로 저장합니다.\n\n톤백별 실제 위치는 변경하지 않고, 출고 바코드 스캔 시점에 확정됩니다. 계속할까요?';
+    if (!(await window.sqmConfirmAsync(confirmMsg))) {
       return;
     }
     _state.busy = true;
@@ -302,7 +311,10 @@
 
     var fd = new FormData();
     fd.append('file', _state.file);
-    var url = _api() + '/api/location-map/commit' + (force ? '?force=true' : '');
+    var _qs = [];
+    if (force) _qs.push('force=true');
+    if (applyTonbag) _qs.push('apply_tonbag=true');
+    var url = _api() + '/api/location-map/commit' + (_qs.length ? '?' + _qs.join('&') : '');
     fetch(url, { method: 'POST', body: fd })
       .then(function (r) { return r.json(); })
       .then(function (res) {
@@ -344,7 +356,7 @@
     // ① 최신 batch 정보 조회
     fetch(_api() + '/api/location-map/latest')
       .then(function (r) { return r.json(); })
-      .then(function (res) {
+      .then(async function (res) {
         if (!res || !res.ok) {
           _toast('error', '배치 정보 조회 실패: ' + (res && res.error || '알 수 없음'));
           return;
@@ -359,12 +371,12 @@
         var msg = '⚠️ 최신 배치 #' + batchId + ' 를 삭제합니다.\n'
           + 'LOT ' + lotCount + '개의 위치 후보(매핑 데이터)가 제거됩니다.\n\n'
           + '계속할까요?';
-        if (!window.sqmConfirm(msg)) return;
+        if (!(await window.sqmConfirmAsync(msg))) return;
         // ② batch 삭제 API 호출
         _state.busy = true;
         fetch(_api() + '/api/location-map/batch/' + batchId, { method: 'DELETE' })
           .then(function (r) { return r.json(); })
-          .then(function (res2) {
+          .then(async function (res2) {
             _state.busy = false;
             if (!res2 || !res2.ok) {
               _toast('error', '배치 삭제 실패: ' + (res2 && res2.error || '알 수 없음'));
@@ -380,7 +392,7 @@
                 + '톤백 실제 위치(inventory_tonbag.location)도\n'
                 + '초기화(NULL)할까요?\n\n'
                 + '※ 위치 후보만 지우고 실제 위치는 유지하려면 [취소]';
-              if (window.sqmConfirm(msg2)) {
+              if (await window.sqmConfirmAsync(msg2)) {
                 fetch(_api() + '/api/inventory/clear-lot-locations', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },

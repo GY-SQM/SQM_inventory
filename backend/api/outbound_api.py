@@ -194,6 +194,7 @@ def quick_outbound(req: QuickOutboundRequest):
 class LotQtyOutboundRequest(BaseModel):
     lot_no: str = Field(..., min_length=1, description="LOT 번호")
     count: Optional[int] = Field(None, description="일반 톤백 개수 (null=전량)")
+    tonbag_ids: Optional[List[int]] = Field(None, description="특정 톤백 ID 목록 (지정 시 그것만 출고)")
     customer: str = Field(..., min_length=1, description="고객명")
     sale_ref: str = Field("", description="판매참조 (이중출고 판별 키)")
     outbound_date: Optional[str] = Field(None, description="출고일 YYYY-MM-DD (null=오늘)")
@@ -224,6 +225,7 @@ def outbound_lot_qty(req: LotQtyOutboundRequest):
         result = engine.outbound_lot_qty(
             lot_no=req.lot_no.strip(),
             count=req.count,
+            tonbag_ids=req.tonbag_ids,
             customer=req.customer.strip(),
             sale_ref=(req.sale_ref or "").strip(),
             outbound_date=req.outbound_date,
@@ -271,6 +273,111 @@ def outbound_lot_qty(req: LotQtyOutboundRequest):
             "detail": {"code": "LOT_QTY_OUTBOUND_FAILED", "errors": errors},
             "message": "; ".join(errors) if errors else "LOT 수량 출고 실패",
         }
+
+
+@router.get("/lot-qty/lots", summary="LOT 수량 출고 — 가용 LOT 목록")
+def lot_qty_available_lots():
+    """가용(AVAILABLE) 톤백이 있는 LOT 목록 — 모달 드롭다운용."""
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진 사용 불가")
+    # 위치 지정 여부 감지: 톤백 location 우선, 없으면 lot_location_map(최신 batch) 폴백
+    # (재고 화면의 location 정의와 동일한 COALESCE(NULLIF(TRIM(t.location),''), lm.map_location))
+    LOC_SELECT = (
+        "MAX(COALESCE(NULLIF(TRIM(t.location),''), lm.map_location)) AS sample_location, "
+        "SUM(CASE WHEN COALESCE(NULLIF(TRIM(t.location),''), lm.map_location) IS NOT NULL "
+        "         AND COALESCE(t.is_sample,0)=0 THEN 1 ELSE 0 END) AS located_normal"
+    )
+    LOC_JOIN = (
+        "LEFT JOIN ("
+        "  SELECT lot_no, GROUP_CONCAT(location, ', ') AS map_location FROM ("
+        "    SELECT lot_no, location FROM lot_location_map "
+        "    WHERE batch_id = (SELECT MAX(id) FROM lot_location_import_batch) "
+        "    ORDER BY lot_no, location"
+        "  ) GROUP BY lot_no"
+        ") lm ON lm.lot_no = t.lot_no"
+    )
+    BASE = (
+        "SELECT t.lot_no AS lot_no, "
+        "       COALESCE(MAX(i.product), '') AS product, "
+        "       SUM(CASE WHEN COALESCE(t.is_sample,0)=0 THEN 1 ELSE 0 END) AS avail_normal, "
+        "       SUM(CASE WHEN COALESCE(t.is_sample,0)=1 THEN 1 ELSE 0 END) AS avail_sample, "
+        "       COALESCE(SUM(t.weight),0) AS avail_kg, {loc_select} "
+        "FROM inventory_tonbag t "
+        "LEFT JOIN inventory i ON i.lot_no = t.lot_no {loc_join} "
+        "WHERE t.status = 'AVAILABLE' "
+        "GROUP BY t.lot_no "
+        "HAVING avail_normal > 0 OR avail_sample > 0 "
+        "ORDER BY t.lot_no"
+    )
+    try:
+        try:
+            rows = engine.db.fetchall(BASE.format(loc_select=LOC_SELECT, loc_join=LOC_JOIN))
+        except Exception:
+            # lot_location_map 미존재 DB → 톤백 location 만으로 폴백
+            rows = engine.db.fetchall(BASE.format(
+                loc_select="MAX(NULLIF(TRIM(t.location),'')) AS sample_location, "
+                           "SUM(CASE WHEN NULLIF(TRIM(t.location),'') IS NOT NULL "
+                           "         AND COALESCE(t.is_sample,0)=0 THEN 1 ELSE 0 END) AS located_normal",
+                loc_join=""))
+        items = []
+        for r in (rows or []):
+            g = (lambda k, i: r[k] if isinstance(r, dict) else r[i])
+            sample_loc = g("sample_location", 5) or ""
+            located_n = int(g("located_normal", 6) or 0)
+            items.append({
+                "lot_no": g("lot_no", 0),
+                "product": g("product", 1),
+                "avail_normal": int(g("avail_normal", 2) or 0),
+                "avail_sample": int(g("avail_sample", 3) or 0),
+                "avail_kg": float(g("avail_kg", 4) or 0),
+                "located": bool(located_n > 0 or sample_loc),
+                "location": sample_loc,
+            })
+        return {"ok": True, "data": {"items": items, "total": len(items)}}
+    except Exception as e:
+        logger.warning(f"[lot-qty/lots] 조회 실패: {e}")
+        raise HTTPException(500, f"조회 실패: {e}")
+
+
+@router.get("/lot-qty/tonbags", summary="LOT 수량 출고 — LOT별 가용 톤백 목록")
+def lot_qty_tonbags(lot_no: str):
+    """특정 LOT의 가용(AVAILABLE) 톤백 목록 — 부분 출고 체크 선택용."""
+    try:
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None:
+        raise HTTPException(500, "엔진 사용 불가")
+    lot_no = (lot_no or "").strip()
+    if not lot_no:
+        raise HTTPException(400, "lot_no required")
+    try:
+        rows = engine.db.fetchall(
+            """SELECT id, sub_lt, weight, COALESCE(is_sample,0) AS is_sample,
+                      COALESCE(location,'') AS location, COALESCE(tonbag_uid,'') AS tonbag_uid
+               FROM inventory_tonbag
+               WHERE lot_no = ? AND status = 'AVAILABLE'
+               ORDER BY COALESCE(is_sample,0), sub_lt""",
+            (lot_no,))
+        items = []
+        for r in (rows or []):
+            g = (lambda k, i: r[k] if isinstance(r, dict) else r[i])
+            items.append({
+                "id": int(g("id", 0)),
+                "sub_lt": int(g("sub_lt", 1) or 0),
+                "weight": float(g("weight", 2) or 0),
+                "is_sample": int(g("is_sample", 3) or 0),
+                "location": g("location", 4),
+                "tonbag_uid": g("tonbag_uid", 5),
+            })
+        return {"ok": True, "data": {"lot_no": lot_no, "items": items, "total": len(items)}}
+    except Exception as e:
+        logger.warning(f"[lot-qty/tonbags] 조회 실패: {e}")
+        raise HTTPException(500, f"조회 실패: {e}")
 
 
 @router.get("/quick/info", summary="즉시 출고 — LOT 가용 정보 (F015 보조)")

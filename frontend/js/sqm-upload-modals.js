@@ -616,8 +616,8 @@
         }
       });
     };
-    btnApply.onclick = function() {
-      if (!confirm('정말 ' + (btnApply.textContent.match(/\d+/) || [0]) + '건을 SOLD 로 확정하시겠습니까?\n\n⚠️ SOLD 는 취소할 수 없습니다 (차량 출발 = 거래 종료).')) return;
+    btnApply.onclick = async function() {
+      if (!await window.sqmConfirmAsync('정말 ' + (btnApply.textContent.match(/\d+/) || [0]) + '건을 SOLD 로 확정하시겠습니까?\n\n⚠️ SOLD 는 취소할 수 없습니다 (차량 출발 = 거래 종료).')) return;
       _upload(false, function(d) {
         btnApply.style.display = 'none';
         btnPrev.disabled = true;
@@ -773,9 +773,9 @@
         }
       });
     };
-    btnApply.onclick = function() {
+    btnApply.onclick = async function() {
       var n = (btnApply.textContent.match(/\d+/) || [0])[0];
-      if (!confirm('정말 샘플 ' + n + '건을 SOLD 로 확정하시겠습니까?\n\n⚠️ SOLD 는 취소할 수 없습니다.')) return;
+      if (!await window.sqmConfirmAsync('정말 샘플 ' + n +'건을 SOLD 로 확정하시겠습니까?\n\n⚠️ SOLD 는 취소할 수 없습니다.')) return;
       _upload(false, function(d) {
         btnApply.style.display = 'none';
         btnPrev.disabled = true;

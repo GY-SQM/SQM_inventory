@@ -350,8 +350,8 @@
       { icon:'▶',  label:'피킹 상세 열기', kbd:'Space',  color:'#f59e0b', fn:function(){ window.togglePickedDetail(lot); } },
       // v868 fix (2026-05-16): 취소 기능 추가 — PICKED → RESERVED 되돌리기
       '-',
-      { icon:'↩',  label:'PICKED → RESERVED 되돌리기', color:'#ef4444', fn:function(){
-          if (!sqmConfirm('↩ ' + lot + '\nPICKED → RESERVED로 되돌리시겠습니까?')) return;
+      { icon:'↩',  label:'PICKED → RESERVED 되돌리기', color:'#ef4444', fn:async function(){
+          if (!(await window.sqmConfirmAsync('↩ ' + lot + '\nPICKED → RESERVED로 되돌리시겠습니까?'))) return;
           if (window.allocRevertStep) {
             window.allocRevertStep('PICKED');
           } else {

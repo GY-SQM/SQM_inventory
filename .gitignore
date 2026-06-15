@@ -53,6 +53,16 @@ frontend/.cache/
 # Backup
 backup/
 
-# SQLite WAL 사이드카 (런타임 자동 생성 — 버전관리 제외)
-data/db/*.db-shm
+# SQLite 런타임 WAL/SHM 사이드카 (자동 생성 — 버전관리 제외)
 data/db/*.db-wal
+data/db/*.db-shm
+
+# Office 임시 잠금 파일 (~$파일명)
+~$*
+
+# bkit 런타임/감사 로그 (도구 상태 — 저장소 추적 불필요)
+.bkit/audit/
+.bkit/runtime/
+
+# 작업용 엑셀 데이터 (저장소 비포함)
+/우선순이 리스트.xlsx

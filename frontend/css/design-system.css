@@ -32,6 +32,15 @@
   --accent-dim:     rgba(56, 189, 248, 0.15);
   --accent-glow:    rgba(56, 189, 248, 0.25);
 
+  /* [v8.7.4] 호환 별칭 — JS 인라인 fallback(var(--surface,#1e293b) 등)에서 쓰지만
+     미정의였던 변수들. 기존 테마변수 별칭으로 정의 → 라이트/다크 자동 추종
+     (var() 가 사용 시점에 해석되므로 :root 한 곳 정의로 양 테마 적용).
+     이전엔 미정의라 다크 fallback 이 라이트에서도 발동해 패널이 어둡게 보였음. */
+  --surface:   var(--bg-card);
+  --card-bg:   var(--bg-card);
+  --input-bg:  var(--bg-input);
+  --primary:   var(--accent);
+
   /* Status Colors */
   --status-available: #52c87e;
   --status-reserved:  #38bdf8;
