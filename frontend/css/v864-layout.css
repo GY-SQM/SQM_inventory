@@ -1936,63 +1936,63 @@ select option {
 .sqm-float-modal .sqm-float-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
 
 /* ── HARDEN: 메뉴/하위 메뉴 고대비 색상 (v8.7.4: 테마별 분리) ─────────── */
-/* [DARK] 기존 다크 고대비 — html[data-theme="dark"] 로 한정 */
-html[data-theme="dark"] nav.menubar .menu-btn > .menu-dropdown,
-html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-dropdown,
-html[data-theme="dark"] .menubar .menu-btn > .menu-dropdown,
-html[data-theme="dark"] .menubar .menu-dropdown .submenu-dropdown {
-  background: #0f172a !important;
-  color: #ffffff !important;
-  border-color: #334155 !important;
-}
-html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-dropdown,
-html[data-theme="dark"] .menubar .menu-dropdown .submenu-dropdown {
-  background: #172033 !important;
-  border-color: #38bdf8 !important;
-}
-html[data-theme="dark"] nav.menubar .menu-dropdown button,
-html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-parent-btn,
-html[data-theme="dark"] .menubar .menu-dropdown button,
-html[data-theme="dark"] .menubar .menu-dropdown .submenu-parent-btn {
-  background: transparent !important;
-  color: #ffffff !important;
-}
-html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-parent-btn::after,
-html[data-theme="dark"] .menubar .menu-dropdown .submenu-parent-btn::after {
-  color: #ffffff !important;
-}
-html[data-theme="dark"] nav.menubar .menu-dropdown .menu-section-label,
-html[data-theme="dark"] .menubar .menu-dropdown .menu-section-label {
-  color: #94a3b8 !important;
-}
-
-/* [LIGHT] 라이트 모드 메뉴 — 흰 배경 + 어두운 글씨 (가독성) */
+/* 반대 테마 팝업 ①: 라이트 모드 → 다크 드롭다운 (메인과 대비) */
 html[data-theme="light"] nav.menubar .menu-btn > .menu-dropdown,
 html[data-theme="light"] nav.menubar .menu-dropdown .submenu-dropdown,
 html[data-theme="light"] .menubar .menu-btn > .menu-dropdown,
 html[data-theme="light"] .menubar .menu-dropdown .submenu-dropdown {
-  background: #ffffff !important;
-  color: #1e293b !important;
-  border-color: #cbd5e1 !important;
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border-color: #334155 !important;
 }
 html[data-theme="light"] nav.menubar .menu-dropdown .submenu-dropdown,
 html[data-theme="light"] .menubar .menu-dropdown .submenu-dropdown {
-  background: #f1f5f9 !important;
-  border-color: #94a3b8 !important;
+  background: #172033 !important;
+  border-color: #38bdf8 !important;
 }
 html[data-theme="light"] nav.menubar .menu-dropdown button,
 html[data-theme="light"] nav.menubar .menu-dropdown .submenu-parent-btn,
 html[data-theme="light"] .menubar .menu-dropdown button,
 html[data-theme="light"] .menubar .menu-dropdown .submenu-parent-btn {
   background: transparent !important;
-  color: #1e293b !important;
+  color: #ffffff !important;
 }
 html[data-theme="light"] nav.menubar .menu-dropdown .submenu-parent-btn::after,
 html[data-theme="light"] .menubar .menu-dropdown .submenu-parent-btn::after {
-  color: #1e293b !important;
+  color: #ffffff !important;
 }
 html[data-theme="light"] nav.menubar .menu-dropdown .menu-section-label,
 html[data-theme="light"] .menubar .menu-dropdown .menu-section-label {
+  color: #94a3b8 !important;
+}
+
+/* 반대 테마 팝업 ②: 다크 모드 → 라이트 드롭다운 (메인과 대비) */
+html[data-theme="dark"] nav.menubar .menu-btn > .menu-dropdown,
+html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-dropdown,
+html[data-theme="dark"] .menubar .menu-btn > .menu-dropdown,
+html[data-theme="dark"] .menubar .menu-dropdown .submenu-dropdown {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-dropdown,
+html[data-theme="dark"] .menubar .menu-dropdown .submenu-dropdown {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+}
+html[data-theme="dark"] nav.menubar .menu-dropdown button,
+html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-parent-btn,
+html[data-theme="dark"] .menubar .menu-dropdown button,
+html[data-theme="dark"] .menubar .menu-dropdown .submenu-parent-btn {
+  background: transparent !important;
+  color: #1e293b !important;
+}
+html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-parent-btn::after,
+html[data-theme="dark"] .menubar .menu-dropdown .submenu-parent-btn::after {
+  color: #1e293b !important;
+}
+html[data-theme="dark"] nav.menubar .menu-dropdown .menu-section-label,
+html[data-theme="dark"] .menubar .menu-dropdown .menu-section-label {
   color: #64748b !important;
 }
 
@@ -2008,19 +2008,21 @@ nav.menubar .menu-dropdown .submenu-dropdown,
   overflow-x: visible !important;
   overflow-y: visible;
 }
-/* [공통] hover/focus — 액센트 파랑 (양 테마 공통, 흰 글씨) */
-nav.menubar .menu-dropdown button:hover,
-nav.menubar .menu-dropdown button:focus,
-nav.menubar .menu-dropdown .submenu-parent:hover > .submenu-parent-btn,
-nav.menubar .menu-dropdown .submenu-parent.open > .submenu-parent-btn,
-nav.menubar .menu-dropdown .submenu-parent.hover-active > .submenu-parent-btn,
-nav.menubar .menu-dropdown .submenu-parent:focus-within > .submenu-parent-btn,
-.menubar .menu-dropdown button:hover,
-.menubar .menu-dropdown button:focus,
-.menubar .menu-dropdown .submenu-parent:hover > .submenu-parent-btn,
-.menubar .menu-dropdown .submenu-parent.open > .submenu-parent-btn,
-.menubar .menu-dropdown .submenu-parent.hover-active > .submenu-parent-btn,
-.menubar .menu-dropdown .submenu-parent:focus-within > .submenu-parent-btn {
+/* [공통] hover/focus — 액센트 파랑 + 흰 글씨 (양 테마 공통).
+   html 접두사로 특이도를 높여 luxury.css 의 다크 hover(앰버)보다 우선 →
+   반대 테마 팝업(라이트 팝업)에서도 hover 가독성 유지. */
+html nav.menubar .menu-dropdown button:hover,
+html nav.menubar .menu-dropdown button:focus,
+html nav.menubar .menu-dropdown .submenu-parent:hover > .submenu-parent-btn,
+html nav.menubar .menu-dropdown .submenu-parent.open > .submenu-parent-btn,
+html nav.menubar .menu-dropdown .submenu-parent.hover-active > .submenu-parent-btn,
+html nav.menubar .menu-dropdown .submenu-parent:focus-within > .submenu-parent-btn,
+html .menubar .menu-dropdown button:hover,
+html .menubar .menu-dropdown button:focus,
+html .menubar .menu-dropdown .submenu-parent:hover > .submenu-parent-btn,
+html .menubar .menu-dropdown .submenu-parent.open > .submenu-parent-btn,
+html .menubar .menu-dropdown .submenu-parent.hover-active > .submenu-parent-btn,
+html .menubar .menu-dropdown .submenu-parent:focus-within > .submenu-parent-btn {
   background: #2563eb !important;
   color: #ffffff !important;
 }
