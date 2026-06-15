@@ -368,6 +368,44 @@ def _update_sold_table(con: sqlite3.Connection, lots: list[str], from_status: st
     return int(cur.rowcount or 0)
 
 
+def _recalc_lot_weights(con: sqlite3.Connection, lots: list[str]) -> int:
+    """D2/D4: 상태복원 후 inventory 무게를 tonbag 상태 기준으로 재계산한다."""
+    if not lots:
+        return 0
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    updated = 0
+    for lot_no in lots:
+        row = con.execute(
+            """
+            SELECT
+                COALESCE(SUM(CASE
+                    WHEN UPPER(COALESCE(status,'')) IN ('AVAILABLE','RESERVED','RETURN','SAMPLE')
+                    THEN weight ELSE 0 END), 0) AS current_weight,
+                COALESCE(SUM(CASE
+                    WHEN UPPER(COALESCE(status,'')) IN ('PICKED','CONFIRMED','SHIPPED','SOLD')
+                    THEN weight ELSE 0 END), 0) AS picked_weight
+            FROM inventory_tonbag
+            WHERE lot_no=?
+            """,
+            (lot_no,),
+        ).fetchone()
+        cur = con.execute(
+            """
+            UPDATE inventory
+            SET current_weight=?, picked_weight=?, updated_at=?
+            WHERE lot_no=?
+            """,
+            (
+                float(row["current_weight"] or 0) if row else 0.0,
+                float(row["picked_weight"] or 0) if row else 0.0,
+                now,
+                lot_no,
+            ),
+        )
+        updated += int(cur.rowcount or 0)
+    return updated
+
+
 def _write_audit(con: sqlite3.Connection, payload: dict[str, Any], lots: list[str], counts: dict[str, int]) -> None:
     if not _table_exists(con, "audit_log"):
         return
@@ -405,6 +443,7 @@ def execute_status_revert(con: sqlite3.Connection, raw_payload: dict[str, Any]) 
         "allocation": _update_allocation(con, lots, payload["from_status"], payload["to_status"]),
         "sold_table": _update_sold_table(con, lots, payload["from_status"], payload["to_status"]),
     }
+    counts["recalculated_lots"] = _recalc_lot_weights(con, lots)
     _write_audit(con, payload, lots, counts)
     con.commit()
     return {
