@@ -1,14 +1,21 @@
 # -*- coding: utf-8 -*-
 """SQM 재고관리 시스템 버전 정보"""
 
-__version__ = "8.7.8"
-VERSION = "8.7.8"
-VERSION_TUPLE = (8, 7, 8)
+__version__ = "8.7.9"
+VERSION = "8.7.9"
+VERSION_TUPLE = (8, 7, 9)
 RELEASE_DATE = "2026-06-15"
 APP_NAME = "SQM 재고관리 시스템"
 APP_NAME_EN = "SQM Inventory Management System"
 BUILD_DATE = "2026-05-26"
 BUILD_NOTE = (
+    "v8.7.9 (2026-06-15)\n"
+    "디버깅 백로그 C/D 무결성 강화\n"
+    "  [C9-C10] 트랜잭션 최적화 및 선적-재고 정합성 요약 추가\n"
+    "  [D1-D7] 반품 자동복귀, 상태복원 무게 보호, All-or-Nothing 입고 강화\n"
+    "  [D7] 재고조정 업데이트 결과(rowcount) 검증 추가\n"
+    "  [TEST] 영역 C/D 회귀 테스트 9종 추가, 321 passed / 1 deselected\n"
+    "\n"
     "v8.7.8 (2026-06-15)\n"
     "디버깅 백로그 B/C 안정화\n"
     "  [B3-B12] 입고/Allocation 실패 사유·부분성공·AI 매핑 오류 명시\n"
