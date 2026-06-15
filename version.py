@@ -1,14 +1,21 @@
 # -*- coding: utf-8 -*-
 """SQM 재고관리 시스템 버전 정보"""
 
-__version__ = "8.7.7"
-VERSION = "8.7.7"
-VERSION_TUPLE = (8, 7, 7)
+__version__ = "8.7.8"
+VERSION = "8.7.8"
+VERSION_TUPLE = (8, 7, 8)
 RELEASE_DATE = "2026-06-15"
 APP_NAME = "SQM 재고관리 시스템"
 APP_NAME_EN = "SQM Inventory Management System"
 BUILD_DATE = "2026-05-26"
 BUILD_NOTE = (
+    "v8.7.8 (2026-06-15)\n"
+    "디버깅 백로그 B/C 안정화\n"
+    "  [B3-B12] 입고/Allocation 실패 사유·부분성공·AI 매핑 오류 명시\n"
+    "  [C1-C4] 출고확정 이력 확인, LOT 스캔 STEP1 재계산, PICKED 계획 기록 보장\n"
+    "  [C4] LOT_SCAN_BLOCKED 응답에 message/errors/next_step 추가\n"
+    "  [TEST] B3~B12, C1~C4 회귀 테스트 추가/확인, 299 passed / 1 deselected\n"
+    "\n"
     "v8.7.7 (2026-06-15)\n"
     "앱 시작/응답 흐름 안정화\n"
     "  [A1] 스플래시 /api/health·KPI 응답 검증 및 실패 보고\n"
