@@ -118,7 +118,7 @@
 - [x] **🟡 D5** `engine_modules/return_reinbound_engine.py:~162` 재계산 실패를 debug 로그로 무시한 채 COMMIT → current_weight 미복구 채로 확정(추정). → 재계산 전 engine 검증, 실패 시 롤백.
 - [x] **🟡 D6** `engine_modules/inventory_modular/preflight_mixin.py:~45` preflight 결과를 process로 전달/재검증 안 함 → 실제 add 단계 초과 감지 시 부분 입고. → preflight↔실행 교차검증.
 - [x] **🟡 D7** `engine_modules/inventory_modular/adjust_executor.py` 조정 시 `rowcount` 검증 없이 success 집계(추정) → 0행인데 성공으로 카운트. → UPDATE 후 rowcount 확인.
-- [ ] **🟡 D8** `engine_modules/return_reinbound_engine.py:~287` `_restore_tonbags` 내부 검증이 UPDATE 사이에 있어 실패 시 부분 변경 후 롤백(원자성 위반 추정). → BEGIN 전 전체 preflight.
+- [x] **🟡 D8** `engine_modules/return_reinbound_engine.py:~287` `_restore_tonbags` 내부 검증이 UPDATE 사이에 있어 실패 시 부분 변경 후 롤백(원자성 위반 추정). → BEGIN 전 전체 preflight.
 - [ ] **🟢 D9** `backend/api/inventory_adjust_api.py:~79` `return_to_available` 액션이 `_recalc_current_weight` 미호출 → 무게 미복구. → 재계산 추가.
 - [ ] **🟢 D10** `engine_modules/lot_balance_checker.py:~15` `ok=False` 반환해도 호출자가 무시 가능 → 불완전 LOT 생성. → 필수 검증 단계로 승격.
 - [ ] **🟢 D11** `integrity_mixin.py:~475` 정합성 warnings가 API 응답에 누락 → 사용자가 주의사항 못 봄. → `/check`에 warnings 포함.
