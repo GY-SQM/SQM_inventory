@@ -32,4 +32,4 @@ else
   echo "⚠ pytest 미설치 — 'pip install -r requirements-test.txt' 후 테스트 가능"
 fi
 
-echo "── 준비 완료. docs/DEBUG_GOALS.md 의 첫 미체크 항목부터 이어서 진행하세요. ──"
+echo "── 준비 완료. DEBUG_GOALS.md 의 첫 미체크 항목부터 이어서 진행하세요. ──"
