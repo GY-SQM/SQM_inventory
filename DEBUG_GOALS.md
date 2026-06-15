@@ -142,6 +142,35 @@
 
 ---
 
+## 🤖 AI 오케스트레이션 개선 (LangChain/LangGraph/LangSmith 청사진 검토 반영, 2026-06-15)
+
+> 외부 AI가 제안한 청사진을 면밀 검토한 결과: **프레임워크 도입은 비채택**(우리는 이미
+> 멀티 백엔드 추상화·무결성 게이트·parsing_log 트레이싱을 자체 구현, ~80% 보유. LangSmith는
+> 통관 데이터 외부 전송 리스크). **유효 패턴만 네이티브로** 반영한다.
+
+- [x] **✅ P1 — PL 파싱 신뢰도 점수 DB 영속화** (LangSmith-lite). `parsing_log.confidence_score`
+      컬럼 추가(신규 CREATE + 기존 DB 멱등 ALTER), `_log_parse_result` 신뢰도 파라미터,
+      `/api/ai/parse-pl` 엔드포인트가 doc_confidence 기록. 테스트 4종(329 passed). *(완료)*
+
+- [ ] **🔴 P0 — 검증기반 "프롬프트 교정 재파싱" 루프** (LangGraph Node 3 패턴, 네이티브 구현)
+  - 배경: 현재는 "Gemini 실패→OpenAI 폴백 1회" + "LOT 누락 힌트 재시도 1회"만. 일반화된
+    "검증 실패 → 프롬프트/조건 교정 → 재파싱(최대 N회)" 루프 부재. PL 헤더합 vs 행합 검증이
+    soft-warning(`gemini_parser.py:1043`)이라 통과돼버림.
+  - 범위: `features/ai/gemini_parser.py`(파싱 후 검증 훅), `features/parsers/document_parsing_service.py`.
+    절대 건드리지 말 것: ocr_auto_tuner의 동시성/Circuit Breaker, 입고 PENDING 게이트.
+  - 완료 기준:
+    - [ ] plain Python 루프: `attempt<MAX_RETRY(기본3)` 동안 parse→validate(Σ행=헤더합)→실패 시 교정 프롬프트로 재파싱
+    - [ ] 교정 전략 최소 2종(숫자 오인식 "정수만 추출", 누락 LOT "기존 제외 후 나머지")
+    - [ ] 최대 재시도 횟수 상한 + 각 시도 parsing_log 기록(method='gemini_retryN', confidence)
+    - [ ] 회귀 테스트: 1차 실패→2차 성공 시나리오 그린
+    - [ ] LangGraph/LangChain 의존성 추가 금지 (네이티브 유지)
+
+- [ ] **🟢 P2 — 프롬프트/좌표 변경 이력 감사** (컴플라이언스). audit_log 또는 parsing_log에
+      프롬프트 버전/좌표 범위 기록 → "왜 이번 파싱이 달라졌나" 역추적. *(여유 시)*
+
+---
+
 ## 완료된 목표 (기록 보관)
 
+- ✅ **P1 (2026-06-15)** PL 파싱 신뢰도 DB 영속화 — `parsing_log.confidence_score` + 테스트 4종.
 <!-- 완료된 목표는 여기로 옮겨 ✅ 로 보관 -->

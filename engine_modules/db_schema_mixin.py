@@ -719,9 +719,15 @@ class DatabaseSchemaMixin:
                 method      TEXT,                -- 'regex'|'gemini'|'gemini_retry'
                 error_msg   TEXT,                -- 실패 시 오류 메시지
                 duration_ms INTEGER DEFAULT 0,   -- 파싱 소요 시간 (ms)
+                confidence_score REAL,           -- 문서 전체 신뢰도(0~100, PL 신뢰도 파서)
                 created_at  TEXT DEFAULT (datetime('now','localtime'))
             )
         """)
+        # 기존 DB 멱등 마이그레이션: confidence_score 컬럼 보강 (P1 — 신뢰도 영속화)
+        _plog_cols = {r[1].lower() for r in
+                      self.execute("PRAGMA table_info(parsing_log)").fetchall()}
+        if 'confidence_score' not in _plog_cols:
+            self.execute("ALTER TABLE parsing_log ADD COLUMN confidence_score REAL")
         self.execute(
             "CREATE INDEX IF NOT EXISTS idx_parsing_log_doc_type "
             "ON parsing_log(doc_type)"

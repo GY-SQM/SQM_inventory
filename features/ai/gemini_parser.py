@@ -403,9 +403,11 @@ class GeminiDocumentParser:
                           success: bool = False, bl_no: str = '',
                           lot_count: int = 0, method: str = '',
                           error_msg: str = '', duration_ms: int = 0,
-                          carrier_id: str = '') -> None:
+                          carrier_id: str = '',
+                          confidence_score: float = None) -> None:
         """v8.2.4: 파싱 결과를 parsing_log 테이블에 기록.
         DB 미설정 시 조용히 스킵.
+        v8.8.x(P1): confidence_score(0~100) 영속화 — 신뢰도 역추적용.
         """
         if not self._db:
             return
@@ -413,11 +415,12 @@ class GeminiDocumentParser:
             self._db.execute(
                 """INSERT INTO parsing_log
                    (doc_type, source_file, carrier_id, success, bl_no,
-                    lot_count, method, error_msg, duration_ms)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                    lot_count, method, error_msg, duration_ms, confidence_score)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (doc_type, source_file or '', carrier_id or '',
                  1 if success else 0, bl_no or '',
-                 lot_count, method or '', error_msg or '', duration_ms)
+                 lot_count, method or '', error_msg or '', duration_ms,
+                 confidence_score)
             )
         except Exception as _le:
             logger.debug(f"[GeminiParser] parsing_log 기록 스킵: {_le}")
