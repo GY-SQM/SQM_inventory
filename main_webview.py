@@ -743,6 +743,27 @@ SPLASH_HTML = '''<!DOCTYPE html>
     if(text) $('st2').textContent = text;
   }
 
+  function reportSplashError(message, detail){
+    var text = message || '재고 요약 로드 실패';
+    setProgress(55, text + ' — 로그 확인');
+    try{
+      console.error('[splash]', text, detail || '');
+      var base = (new URLSearchParams(location.search)).get('sqm_base') || location.origin;
+      fetch(base+'/api/log/frontend-error', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          source:'splash',
+          message:text,
+          detail: detail && (detail.stack || detail.message || String(detail)),
+          url: location.href,
+          ts: new Date().toISOString()
+        }),
+        keepalive:true
+      }).catch(function(){});
+    } catch(_e){}
+  }
+
   /* 인트로 시퀀스 */
   async function intro(){
     await delay(100);
@@ -767,18 +788,28 @@ SPLASH_HTML = '''<!DOCTYPE html>
     $('cb').classList.add('show');
     setProgress(55, '재고 데이터 로드 중 …');
 
-    // API 호출 (실패해도 0으로 표시)
+    // API 호출 (실패 시 화면/로그에 표시하고 카운터는 안전 기본값 유지)
     var lots=0, bags=0, mt=0;
     try{
       var base = (new URLSearchParams(location.search)).get('sqm_base') || location.origin;
       var res = await fetch(base+'/api/health', {cache:'no-store'});
+      if(!res.ok){ throw new Error('/api/health HTTP '+res.status); }
       var d = await res.json();
-      lots = d.lots||0; bags = d.tonbags||0;
+      if(d.status && d.status !== 'ok'){
+        throw new Error('/api/health status '+d.status+(d.message ? ': '+d.message : ''));
+      }
+      lots = Number(d.lots||0); bags = Number(d.tonbags||0);
+      if(!Number.isFinite(lots) || !Number.isFinite(bags)){
+        throw new Error('/api/health invalid counters');
+      }
       // KPI에서 MT 가져오기
       var r2 = await fetch(base+'/api/dashboard/kpi', {cache:'no-store'});
+      if(!r2.ok){ throw new Error('/api/dashboard/kpi HTTP '+r2.status); }
       var d2 = await r2.json();
-      mt = (d2.data && d2.data.current_stock_mt) ? d2.data.current_stock_mt : 0;
-    } catch(e){}
+      if(d2.ok === false){ throw new Error('/api/dashboard/kpi failed'+(d2.error ? ': '+d2.error : '')); }
+      mt = Number(d2.data && d2.data.current_stock_mt);
+      if(!Number.isFinite(mt)){ throw new Error('/api/dashboard/kpi invalid current_stock_mt'); }
+    } catch(e){ reportSplashError('재고 요약 로드 실패', e); }
 
     await Promise.all([
       countUp($('c-lot'), lots, 800, 0),
