@@ -21,7 +21,7 @@ from fastapi import APIRouter, HTTPException, Query as QP
 from fastapi.responses import FileResponse
 from backend.common.errors import ok_response, err_response
 from backend.common.excel_alignment import safe_apply_sqm_file, safe_apply_sqm_workbook
-from .location_candidates import load_latest_candidates
+from .location_candidates import NO_LOCATION_DATA_MESSAGE, load_latest_candidate_status, load_latest_candidates
 
 router = APIRouter(prefix="/api/action", tags=["actions"])
 logger = logging.getLogger(__name__)
@@ -638,11 +638,12 @@ def _build_lot_workbook(rows):
 
 def _append_lot_candidate_summary(rows, con: sqlite3.Connection):
     candidates = load_latest_candidates(con)
+    candidate_status = load_latest_candidate_status(con)
     out = []
     for r in rows:
         row = list(r)
         lot_no = str(row[4] or "").strip() if len(row) > 4 else ""
-        row.append("✓" if candidates.get(lot_no) else "")
+        row.append("✓" if candidates.get(lot_no) else (NO_LOCATION_DATA_MESSAGE if not candidate_status.get("has_data") else ""))
         out.append(tuple(row))
     return out
 
