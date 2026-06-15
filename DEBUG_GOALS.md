@@ -103,7 +103,7 @@
 - [x] **🟡 C5** `barcode_scan_engine.py:~1154` 대량 스캔 시 `processed_lots`에 None 섞여 `_recalc` 조용히 skip → 일부 current_weight 미갱신(추정). → 루프 내 직접 수집 + None 필터.
 - [x] **🟡 C6** `barcode_scan_engine.py:~1036` 소량 LOT 오차허용 `max(1.0, target*0.001)` 과대 → TARGET_EXCEEDED 오판정. → 비율 상/하한 재설정.
 - [x] **🟡 C7** `outbound_api.py:~802` (onestop) SOLD 전환 시 `current_weight=0` 하드코딩 → PICKED/AVAILABLE 잔량 있어도 0 → 부분반품 복구 불가. → 재계산으로 대체.
-- [ ] **🟡 C8** `outbound_api.py:~396` 피킹리스트 파싱 부분실패 시 warnings/items 미반환 → 어디가 문제인지 불명. → 부분결과 반환.
+- [x] **🟡 C8** `outbound_api.py:~396` 피킹리스트 파싱 부분실패 시 warnings/items 미반환 → 어디가 문제인지 불명. → 부분결과 반환.
 - [ ] **🟢 C9** `barcode_scan_engine.py:~1160` 트랜잭션 컨텍스트 내부 명시적 `commit()` 중복(추정). → 구조 정리.
 - [ ] **🟢 C10** `engine_modules/inventory_modular/shipment_mixin.py` 사실상 미구현 + 전용 테스트 0 → 선적-재고 정합 흐름 공백. → 최소 구현 + 테스트.
 

@@ -419,8 +419,16 @@ async def picking_list_pdf(file: UploadFile = File(...)):
                 "data": {
                     "filename": file.filename,
                     "total_lots": doc.get("total_lots", 0),
+                    "items": doc.get("items", [])[:30],
+                    "details": result.get("details", [])[:30],
                     "errors": result.get("errors", []),
                     "warnings": doc.get("warnings", []),
+                    "allocation_validation": allocation_validation,
+                    "partial_result": {
+                        "parse_ok": bool(doc.get("parse_ok")),
+                        "parsed_items": len(doc.get("items", []) or []),
+                        "applied": int(result.get("applied", 0) or result.get("picked", 0) or 0),
+                    },
                 },
                 "error": "Picking List 반영 실패",
                 "detail": {"code": "APPLY_FAILED", "errors": result.get("errors", [])},
@@ -527,8 +535,16 @@ async def picking_import_excel(file: UploadFile = File(...)):
             "data": {
                 "filename": file.filename,
                 "total_lots": doc.get("total_lots", 0),
+                "items": doc.get("items", [])[:30],
+                "details": result.get("details", [])[:30],
                 "errors": result.get("errors", []),
                 "warnings": doc.get("warnings", []),
+                "allocation_validation": allocation_validation,
+                "partial_result": {
+                    "parse_ok": bool(doc.get("parse_ok")),
+                    "parsed_items": len(doc.get("items", []) or []),
+                    "applied": int(result.get("applied", 0) or result.get("picked", 0) or 0),
+                },
             },
             "error": "Picking List 반영 실패",
             "detail": {"code": "APPLY_FAILED", "errors": result.get("errors", [])},
