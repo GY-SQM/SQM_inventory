@@ -972,12 +972,12 @@ html[data-table-preset="large"] {
   padding: 5px 8px 5px 16px;
   gap: 6px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 14px;        /* v8.7.4: 형제 항목(.side-label 14px)과 통일 */
   font-weight: 600;
   min-height: 32px;
 }
-.side-child-icon { font-size: 14px; flex-shrink: 0; }
-.side-child-label { font-size: 12px; font-weight: 700; flex: 1; text-align: left; }
+.side-child-icon { font-size: 15px; flex-shrink: 0; }
+.side-child-label { font-size: 14px; font-weight: 700; flex: 1; text-align: left; }
 .side-child-badge {
   font-size: 10px; font-weight: 600;
   text-align: right; line-height: 1.4;
@@ -1943,39 +1943,80 @@ select option {
 .sqm-float-modal .sqm-float-body::-webkit-scrollbar-track { background:var(--bg-card); }
 .sqm-float-modal .sqm-float-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
 
-/* ── HARDEN: 메뉴/하위 메뉴 고대비 색상 강제 ─────────── */
-nav.menubar .menu-btn > .menu-dropdown,
-nav.menubar .menu-dropdown .submenu-dropdown,
-.menubar .menu-btn > .menu-dropdown,
-.menubar .menu-dropdown .submenu-dropdown {
+/* ── HARDEN: 메뉴/하위 메뉴 고대비 색상 (v8.7.4: 테마별 분리) ─────────── */
+/* [DARK] 기존 다크 고대비 — html[data-theme="dark"] 로 한정 */
+html[data-theme="dark"] nav.menubar .menu-btn > .menu-dropdown,
+html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-dropdown,
+html[data-theme="dark"] .menubar .menu-btn > .menu-dropdown,
+html[data-theme="dark"] .menubar .menu-dropdown .submenu-dropdown {
   background: #0f172a !important;
   color: #ffffff !important;
   border-color: #334155 !important;
 }
+html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-dropdown,
+html[data-theme="dark"] .menubar .menu-dropdown .submenu-dropdown {
+  background: #172033 !important;
+  border-color: #38bdf8 !important;
+}
+html[data-theme="dark"] nav.menubar .menu-dropdown button,
+html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-parent-btn,
+html[data-theme="dark"] .menubar .menu-dropdown button,
+html[data-theme="dark"] .menubar .menu-dropdown .submenu-parent-btn {
+  background: transparent !important;
+  color: #ffffff !important;
+}
+html[data-theme="dark"] nav.menubar .menu-dropdown .submenu-parent-btn::after,
+html[data-theme="dark"] .menubar .menu-dropdown .submenu-parent-btn::after {
+  color: #ffffff !important;
+}
+html[data-theme="dark"] nav.menubar .menu-dropdown .menu-section-label,
+html[data-theme="dark"] .menubar .menu-dropdown .menu-section-label {
+  color: #94a3b8 !important;
+}
 
+/* [LIGHT] 라이트 모드 메뉴 — 흰 배경 + 어두운 글씨 (가독성) */
+html[data-theme="light"] nav.menubar .menu-btn > .menu-dropdown,
+html[data-theme="light"] nav.menubar .menu-dropdown .submenu-dropdown,
+html[data-theme="light"] .menubar .menu-btn > .menu-dropdown,
+html[data-theme="light"] .menubar .menu-dropdown .submenu-dropdown {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
+}
+html[data-theme="light"] nav.menubar .menu-dropdown .submenu-dropdown,
+html[data-theme="light"] .menubar .menu-dropdown .submenu-dropdown {
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+}
+html[data-theme="light"] nav.menubar .menu-dropdown button,
+html[data-theme="light"] nav.menubar .menu-dropdown .submenu-parent-btn,
+html[data-theme="light"] .menubar .menu-dropdown button,
+html[data-theme="light"] .menubar .menu-dropdown .submenu-parent-btn {
+  background: transparent !important;
+  color: #1e293b !important;
+}
+html[data-theme="light"] nav.menubar .menu-dropdown .submenu-parent-btn::after,
+html[data-theme="light"] .menubar .menu-dropdown .submenu-parent-btn::after {
+  color: #1e293b !important;
+}
+html[data-theme="light"] nav.menubar .menu-dropdown .menu-section-label,
+html[data-theme="light"] .menubar .menu-dropdown .menu-section-label {
+  color: #64748b !important;
+}
+
+/* [공통] 구조/테두리 (테마 무관) */
 nav.menubar .menu-btn > .menu-dropdown,
 .menubar .menu-btn > .menu-dropdown {
   border-left: 3px solid #38bdf8 !important;
   overflow: visible !important;
 }
-
 nav.menubar .menu-dropdown .submenu-dropdown,
 .menubar .menu-dropdown .submenu-dropdown {
-  background: #172033 !important;
-  border-color: #38bdf8 !important;
   border-left: 4px solid #f59e0b !important;
   overflow-x: visible !important;
   overflow-y: visible;
 }
-
-nav.menubar .menu-dropdown button,
-nav.menubar .menu-dropdown .submenu-parent-btn,
-.menubar .menu-dropdown button,
-.menubar .menu-dropdown .submenu-parent-btn {
-  background: transparent !important;
-  color: #ffffff !important;
-}
-
+/* [공통] hover/focus — 액센트 파랑 (양 테마 공통, 흰 글씨) */
 nav.menubar .menu-dropdown button:hover,
 nav.menubar .menu-dropdown button:focus,
 nav.menubar .menu-dropdown .submenu-parent:hover > .submenu-parent-btn,
@@ -1990,17 +2031,6 @@ nav.menubar .menu-dropdown .submenu-parent:focus-within > .submenu-parent-btn,
 .menubar .menu-dropdown .submenu-parent:focus-within > .submenu-parent-btn {
   background: #2563eb !important;
   color: #ffffff !important;
-}
-
-nav.menubar .menu-dropdown .submenu-parent-btn::after,
-.menubar .menu-dropdown .submenu-parent-btn::after {
-  color: #ffffff !important;
-}
-
-/* menu-section-label contrast fix */
-nav.menubar .menu-dropdown .menu-section-label,
-.menubar .menu-dropdown .menu-section-label {
-  color: #94a3b8 !important;
 }
 
 /* Global table export and scrollbar hardening */

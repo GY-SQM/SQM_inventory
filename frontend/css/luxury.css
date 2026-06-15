@@ -1,3 +1,6 @@
+/* [v8.7.4] 이 파일은 다크 전용 럭셔리 스킨입니다.
+   모든 규칙을 html[data-theme="dark"] 로 한정 → 라이트 모드에서는
+   기반 CSS(design-system/v864-layout)의 라이트 스타일이 적용됩니다. */
 /* ══════════════════════════════════════════════════════════════
    SQM Inventory — Luxury UI Layer v1.0
    로직/내용 무변경. 시각 레이어만 오버레이.
@@ -13,16 +16,16 @@
   to   { opacity:1; transform:translateX(0); }
 }
 
-.app-titlebar  { animation: slideUpFade .5s ease both; }
-.menubar       { animation: slideUpFade .5s .08s ease both; }
-.toolbar       { animation: slideUpFade .5s .14s ease both; }
-.sidebar       { animation: slideInLeft .5s .18s ease both; }
-#page-container{ animation: slideUpFade .55s .22s ease both; }
-.statusbar     { animation: slideUpFade .4s .28s ease both; }
+html[data-theme="dark"] .app-titlebar { animation: slideUpFade .5s ease both; }
+html[data-theme="dark"] .menubar { animation: slideUpFade .5s .08s ease both; }
+html[data-theme="dark"] .toolbar { animation: slideUpFade .5s .14s ease both; }
+html[data-theme="dark"] .sidebar { animation: slideInLeft .5s .18s ease both; }
+html[data-theme="dark"] #page-container { animation: slideUpFade .55s .22s ease both; }
+html[data-theme="dark"] .statusbar { animation: slideUpFade .4s .28s ease both; }
 
 
 /* ── 1. 메뉴바 — 글래스모피즘 ──────────────────────────────── */
-.menubar {
+html[data-theme="dark"] .menubar {
   background: linear-gradient(
     180deg,
     rgba(13, 22, 40, 0.98) 0%,
@@ -37,19 +40,21 @@
 }
 
 /* 메뉴 버튼 호버 — 앰버 글로우 */
-.menu-btn:hover, .menu-btn:focus {
+html[data-theme="dark"] .menu-btn:hover,
+html[data-theme="dark"] .menu-btn:focus {
   background: rgba(245, 158, 11, 0.08) !important;
   color: #fbbf24 !important;
   box-shadow: inset 0 -2px 0 rgba(245,158,11,0.5) !important;
   transition: all .18s ease !important;
 }
-.menu-btn > span:first-of-type {
+html[data-theme="dark"] .menu-btn > span:first-of-type {
   font-weight: 500;
   letter-spacing: 0.3px;
 }
 
 /* 드롭다운 */
-.menu-dropdown, .submenu-dropdown {
+html[data-theme="dark"] .menu-dropdown,
+html[data-theme="dark"] .submenu-dropdown {
   background: rgba(11, 19, 34, 0.98) !important;
   border: 1px solid rgba(245, 158, 11, 0.14) !important;
   box-shadow:
@@ -59,8 +64,8 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
-.menu-dropdown button:hover,
-.submenu-dropdown button:hover {
+html[data-theme="dark"] .menu-dropdown button:hover,
+html[data-theme="dark"] .submenu-dropdown button:hover {
   background: rgba(245, 158, 11, 0.1) !important;
   color: #fbbf24 !important;
   padding-left: 18px !important;
@@ -68,14 +73,15 @@
 }
 
 /* 메뉴 구분선 */
-.menu-sep {
+html[data-theme="dark"] .menu-sep {
   border-color: rgba(245, 158, 11, 0.08) !important;
   margin: 3px 8px !important;
 }
 
 
 /* ── 2. 툴바 — 프리미엄 ───────────────────────────────────── */
-.toolbar, #toolbar {
+html[data-theme="dark"] .toolbar,
+html[data-theme="dark"] #toolbar {
   background: linear-gradient(
     180deg,
     rgba(15, 26, 48, 0.99) 0%,
@@ -86,26 +92,30 @@
 }
 
 /* 툴바 버튼 */
-.topbar-btn, .tb-btn {
+html[data-theme="dark"] .topbar-btn,
+html[data-theme="dark"] .tb-btn {
   border-radius: 6px !important;
   font-weight: 500 !important;
   letter-spacing: 0.2px !important;
   transition: all .18s cubic-bezier(.4,0,.2,1) !important;
   border: 1px solid transparent !important;
 }
-.topbar-btn:hover, .tb-btn:hover {
+html[data-theme="dark"] .topbar-btn:hover,
+html[data-theme="dark"] .tb-btn:hover {
   background: rgba(245,158,11,0.1) !important;
   border-color: rgba(245,158,11,0.2) !important;
   color: #fbbf24 !important;
   transform: translateY(-1px) !important;
   box-shadow: 0 4px 12px rgba(245,158,11,0.15) !important;
 }
-.topbar-btn:active, .tb-btn:active {
+html[data-theme="dark"] .topbar-btn:active,
+html[data-theme="dark"] .tb-btn:active {
   transform: translateY(0) !important;
 }
 
 /* 빠른 실행 버튼 (PDF 입고, 즉시 출고 등) */
-.btn-primary, .btn.btn-primary {
+html[data-theme="dark"] .btn-primary,
+html[data-theme="dark"] .btn.btn-primary {
   background: linear-gradient(135deg, #0f6ecb, #1e88e5) !important;
   border: none !important;
   box-shadow: 0 2px 12px rgba(30,136,229,0.35), 0 0 0 1px rgba(30,136,229,0.2) !important;
@@ -113,14 +123,15 @@
   border-radius: 6px !important;
   transition: all .2s ease !important;
 }
-.btn-primary:hover {
+html[data-theme="dark"] .btn-primary:hover {
   transform: translateY(-1px) !important;
   box-shadow: 0 6px 20px rgba(30,136,229,0.45), 0 0 0 1px rgba(30,136,229,0.3) !important;
 }
 
 
 /* ── 3. 사이드바 — 럭셔리 ──────────────────────────────────── */
-.sidebar, #sidebar {
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] #sidebar {
   width: 220px !important;  /* 톤백+샘플 배지 표시를 위해 확장 */
   background: linear-gradient(
     180deg,
@@ -132,19 +143,22 @@
 }
 
 /* 사이드바 아이템 */
-.sidebar-item, .sidebar button {
+html[data-theme="dark"] .sidebar-item,
+html[data-theme="dark"] .sidebar button {
   border-radius: 8px !important;
   margin: 2px 6px !important;
   transition: all .2s cubic-bezier(.4,0,.2,1) !important;
   border: 1px solid transparent !important;
 }
-.sidebar-item:hover, .sidebar button:hover {
+html[data-theme="dark"] .sidebar-item:hover,
+html[data-theme="dark"] .sidebar button:hover {
   background: rgba(245,158,11,0.08) !important;
   border-color: rgba(245,158,11,0.15) !important;
   transform: translateX(2px) !important;
 }
-.sidebar-item.active, .sidebar button.active,
-.sidebar-item[class*="active"] {
+html[data-theme="dark"] .sidebar-item.active,
+html[data-theme="dark"] .sidebar button.active,
+html[data-theme="dark"] .sidebar-item[class*="active"] {
   background: linear-gradient(
     135deg,
     rgba(245,158,11,0.15),
@@ -158,7 +172,9 @@
 
 
 /* ── 4. 카드 — 글로우 효과 ─────────────────────────────────── */
-.kpi-card, .card, [class*="kpi-"] {
+html[data-theme="dark"] .kpi-card,
+html[data-theme="dark"] .card,
+html[data-theme="dark"] [class*="kpi-"] {
   border-radius: 12px !important;
   border: 1px solid rgba(56,189,248,0.1) !important;
   background: linear-gradient(
@@ -172,7 +188,8 @@
   transition: all .25s ease !important;
   backdrop-filter: blur(4px);
 }
-.kpi-card:hover, .card:hover {
+html[data-theme="dark"] .kpi-card:hover,
+html[data-theme="dark"] .card:hover {
   transform: translateY(-2px) !important;
   border-color: rgba(245,158,11,0.2) !important;
   box-shadow:
@@ -183,11 +200,11 @@
 
 
 /* ── 5. 테이블 — 프리미엄 ──────────────────────────────────── */
-table {
+html[data-theme="dark"] table {
   border-collapse: separate !important;
   border-spacing: 0 !important;
 }
-thead th {
+html[data-theme="dark"] thead th {
   background: rgba(13,22,40,0.95) !important;
   border-bottom: 2px solid rgba(245,158,11,0.2) !important;
   color: rgba(245,158,11,0.8) !important;
@@ -197,52 +214,57 @@ thead th {
   font-weight: 600 !important;
   padding: 10px 12px !important;
 }
-tbody tr {
+html[data-theme="dark"] tbody tr {
   transition: all .15s ease !important;
   border-bottom: 1px solid rgba(56,189,248,0.05) !important;
 }
-tbody tr:hover {
+html[data-theme="dark"] tbody tr:hover {
   background: rgba(245,158,11,0.05) !important;
   box-shadow: inset 3px 0 0 rgba(245,158,11,0.4) !important;
 }
-tbody tr:nth-child(even) {
+html[data-theme="dark"] tbody tr:nth-child(even) {
   background: rgba(255,255,255,0.018) !important;
 }
 
 
 /* ── 6. 버튼 공통 — 마이크로 인터랙션 ──────────────────────── */
-button:not(:disabled) {
+html[data-theme="dark"] button:not(:disabled) {
   transition: all .18s cubic-bezier(.4,0,.2,1) !important;
 }
-.btn {
+html[data-theme="dark"] .btn {
   border-radius: 6px !important;
   font-weight: 500 !important;
 }
-.btn-ghost {
+html[data-theme="dark"] .btn-ghost {
   border: 1px solid rgba(56,189,248,0.15) !important;
   color: rgba(56,189,248,0.8) !important;
 }
-.btn-ghost:hover {
+html[data-theme="dark"] .btn-ghost:hover {
   background: rgba(56,189,248,0.1) !important;
   border-color: rgba(56,189,248,0.3) !important;
   color: #7dd4fa !important;
 }
-.btn-success, .btn.btn-success {
+html[data-theme="dark"] .btn-success,
+html[data-theme="dark"] .btn.btn-success {
   background: linear-gradient(135deg, #059669, #10b981) !important;
   box-shadow: 0 2px 10px rgba(16,185,129,0.3) !important;
 }
-.btn-danger, .btn.btn-danger {
+html[data-theme="dark"] .btn-danger,
+html[data-theme="dark"] .btn.btn-danger {
   background: linear-gradient(135deg, #dc2626, #ef4444) !important;
   box-shadow: 0 2px 10px rgba(239,68,68,0.3) !important;
 }
-.btn-warning, .btn.btn-warning {
+html[data-theme="dark"] .btn-warning,
+html[data-theme="dark"] .btn.btn-warning {
   background: linear-gradient(135deg, #d97706, #f59e0b) !important;
   box-shadow: 0 2px 10px rgba(245,158,11,0.3) !important;
 }
 
 
 /* ── 7. 모달 — 딥 글래스 ───────────────────────────────────── */
-.modal, .modal-overlay > div, [class*="modal-content"] {
+html[data-theme="dark"] .modal,
+html[data-theme="dark"] .modal-overlay > div,
+html[data-theme="dark"] [class*="modal-content"] {
   background: rgba(13, 22, 40, 0.97) !important;
   border: 1px solid rgba(245,158,11,0.14) !important;
   border-radius: 14px !important;
@@ -253,11 +275,13 @@ button:not(:disabled) {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
-.modal-header, [class*="modal-header"] {
+html[data-theme="dark"] .modal-header,
+html[data-theme="dark"] [class*="modal-header"] {
   border-bottom: 1px solid rgba(245,158,11,0.1) !important;
   padding: 16px 20px !important;
 }
-.modal-header h2, .modal-header h3 {
+html[data-theme="dark"] .modal-header h2,
+html[data-theme="dark"] .modal-header h3 {
   background: linear-gradient(135deg, #f59e0b, #fbbf24);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -266,8 +290,11 @@ button:not(:disabled) {
 
 
 /* ── 8. 입력 필드 — 정제된 스타일 ──────────────────────────── */
-input[type="text"], input[type="number"], input[type="date"],
-select, textarea {
+html[data-theme="dark"] input[type="text"],
+html[data-theme="dark"] input[type="number"],
+html[data-theme="dark"] input[type="date"],
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
   background: rgba(7,14,26,0.7) !important;
   border: 1px solid rgba(56,189,248,0.15) !important;
   border-radius: 6px !important;
@@ -275,7 +302,9 @@ select, textarea {
   transition: all .18s ease !important;
   padding: 7px 10px !important;
 }
-input:focus, select:focus, textarea:focus {
+html[data-theme="dark"] input:focus,
+html[data-theme="dark"] select:focus,
+html[data-theme="dark"] textarea:focus {
   outline: none !important;
   border-color: rgba(245,158,11,0.4) !important;
   box-shadow: 0 0 0 3px rgba(245,158,11,0.1) !important;
@@ -284,7 +313,9 @@ input:focus, select:focus, textarea:focus {
 
 
 /* ── 9. 알림 배너 — 세련됨 ─────────────────────────────────── */
-.alert-bar, #alert-bar, [id*="alert"] {
+html[data-theme="dark"] .alert-bar,
+html[data-theme="dark"] #alert-bar,
+html[data-theme="dark"] [id*="alert"] {
   border-radius: 0 !important;
   border-top: none !important;
   border-left: none !important;
@@ -302,7 +333,8 @@ input:focus, select:focus, textarea:focus {
 
 
 /* ── 10. 상태 배지 — 프리미엄 ──────────────────────────────── */
-.badge, [class*="badge"] {
+html[data-theme="dark"] .badge,
+html[data-theme="dark"] [class*="badge"] {
   border-radius: 4px !important;
   font-size: 10px !important;
   font-weight: 600 !important;
@@ -312,30 +344,30 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* 스크롤바 — 미니멀 황금 */
-::-webkit-scrollbar { width: 3px !important; height: 3px !important; }
-::-webkit-scrollbar-track { background: transparent !important; }
-::-webkit-scrollbar-thumb {
+html[data-theme="dark"] ::-webkit-scrollbar { width: 3px !important; height: 3px !important; }
+html[data-theme="dark"] ::-webkit-scrollbar-track { background: transparent !important; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
   background: rgba(245,158,11,0.2) !important;
   border-radius: 2px !important;
 }
-::-webkit-scrollbar-thumb:hover {
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
   background: rgba(245,158,11,0.4) !important;
 }
 
 
 /* ── 11. 선택 하이라이트 ──────────────────────────────────── */
-::selection {
+html[data-theme="dark"] ::selection {
   background: rgba(245,158,11,0.25);
   color: #fde68a;
 }
 
 
 /* ── 12. 타이틀바 — 미니멀 ─────────────────────────────────── */
-.app-titlebar {
+html[data-theme="dark"] .app-titlebar {
   background: #020817 !important;
   border-bottom: 1px solid rgba(245,158,11,0.07) !important;
 }
-.app-title {
+html[data-theme="dark"] .app-title {
   background: linear-gradient(135deg, rgba(245,158,11,0.9), rgba(251,191,36,0.7));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;

@@ -2,10 +2,12 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<!-- [v8.7.4] 메인 창과 테마 동기화 (localStorage 공유, 같은 origin) -->
+<script>(function(){try{var t=localStorage.getItem('sqm_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <title>SQM Popout</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="stylesheet" href="css/design-system.css?v=20260527pop">
-<link rel="stylesheet" href="css/v864-layout.css?v=20260527pop">
+<link rel="stylesheet" href="css/v864-layout.css?v=20260615theme">
 <style>
   html,body{margin:0;padding:0;background:var(--bg-root);color:var(--text-primary);
     font-family:"Segoe UI","Malgun Gothic",sans-serif;height:100vh;overflow:hidden;}
