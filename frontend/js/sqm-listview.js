@@ -66,7 +66,7 @@
     { k: 'tonbag_no',    h: '톤백 번호',   w: 90,  align: 'center' },
     { k: 'weight_kg',    h: '중량(kg)',    w: 90,  align: 'right', num: true },
     { k: 'status',       h: '상태',        w: 90,  align: 'center', badge: 'status' },
-    { k: 'location',     h: '실제 위치',    w: 130, mono: true, align: 'center' },
+    { k: 'location',     h: '실제 위치',    w: 140, align: 'center', badge: 'location' },
     { k: 'rack_location_candidate', h: '랙 위치 후보', w: 130, mono: true, align: 'center' },
     { k: 'cell_state',   h: '셀 상태',     w: 110, align: 'center', badge: 'cell' },
     { k: 'inbound_date', h: '입고일',      w: 100, align: 'center' },
@@ -99,6 +99,17 @@
   };
 
   function _formatCell(val, col) {
+    if (col.badge === 'location') {
+      // 위치 구분 배지: location(톤백→LOT맵 폴백) 값 있으면 '위치 지정(랙)', 없으면 '일반 창고(위치 미상)'
+      var hasLoc = !(val == null || String(val).trim() === '');
+      if (hasLoc) {
+        return '<span style="display:inline-block;padding:1px 8px;border-radius:10px;'
+          + 'background:#1b5e20;color:#c8e6c9;font-size:10px;font-weight:700;" title="위치 지정(랙)">📍 '
+          + _esc(val) + '</span>';
+      }
+      return '<span style="display:inline-block;padding:1px 8px;border-radius:10px;'
+        + 'background:#455a64;color:#cfd8dc;font-size:10px;font-weight:700;" title="일반 창고(위치 미상)">🏬 일반창고</span>';
+    }
     if (val == null || val === '') return '';
     if (col.num) {
       var n = Number(val);

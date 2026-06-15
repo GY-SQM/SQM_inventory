@@ -1130,6 +1130,23 @@
       showToast('warning', '선택된 톤백이 없습니다');
       return;
     }
+    // Case B 가드: 선택 재고의 LOT 이 전부 일반창고(위치 미상)면 스캔 위치검증 의미가 적음 → 경고
+    try {
+      var _lots = {};
+      _ooState.selectedTonbags.forEach(function(k){
+        var s = String(k); var lot = s.substring(0, s.lastIndexOf('.')) || s; _lots[lot] = 1;
+      });
+      var _lotKeys = Object.keys(_lots);
+      if (_lotKeys.length) {
+        var _res = await apiGet('/api/outbound/lot-qty/lots');
+        var _items = (_res && _res.data && _res.data.items) || [];
+        var _locMap = {}; _items.forEach(function(it){ _locMap[it.lot_no] = !!it.located; });
+        var _anyLocated = _lotKeys.some(function(l){ return _locMap[l]; });
+        if (!_anyLocated) {
+          if (!(await window.sqmConfirmAsync('⚠️ 선택한 재고가 모두 일반창고(위치 미상)입니다.\n\n랙 위치가 없어 스캔 위치 검증의 의미가 적습니다.\n위치 추적이 필요 없다면 「📦 LOT 수량 출고(스캔없음)」이 더 적합합니다.\n\n그래도 스캔 검증으로 진행할까요?'))) return;
+        }
+      }
+    } catch (e) { /* 조회 실패 시 가드 생략, 정상 흐름 유지 */ }
     if (!(await window.sqmConfirmAsync('📦 WAIT_SCAN 진입\n\n선택된 톤백 ' + _ooState.selectedTonbags.size + '개로 스캔 검증 단계로 이동합니다.\n계속하시겠습니까?'))) return;
     _ooSetState('WAIT_SCAN');
     _ooUpdateT3Stats();
@@ -2069,6 +2086,7 @@
       '      <label style="display:flex;align-items:center;gap:5px"><input type="radio" name="lq-mode" value="part"> 부분(톤백 선택)</label>',
       '    </div>',
       '  </div>',
+      '  <div id="lq-loc-warn" style="display:none;margin:-4px 0 10px 0;padding:9px 11px;border-radius:6px;font-size:.84rem;line-height:1.45"></div>',
       '  <div id="lq-tonbag-wrap" style="display:none;margin-bottom:10px">',
       '    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">',
       '      <span style="font-weight:600;font-size:.85rem">출고할 톤백 선택</span>',
@@ -2146,7 +2164,8 @@
       var opts = ['<option value="">— 목록에서 선택 —</option>'];
       arr.forEach(function(it) {
         var label = it.lot_no + (it.product ? ' · ' + it.product : '') +
-                    ' · 가용 ' + it.avail_normal + '개' + (it.avail_sample ? '(+샘플)' : '');
+                    ' · 가용 ' + it.avail_normal + '개' + (it.avail_sample ? '(+샘플)' : '') +
+                    (it.located ? ' · 📍' + (it.location || '위치지정') : ' · 🏬일반창고');
         opts.push('<option value="' + escapeHtml(it.lot_no) + '"' +
                   (it.lot_no === cur ? ' selected' : '') + '>' + escapeHtml(label) + '</option>');
       });
@@ -2206,8 +2225,39 @@
         refresh();
       });
     }
+    var locWarn = document.getElementById('lq-loc-warn');
+    function selectedLotItem() {
+      for (var i = 0; i < _lotItems.length; i++)
+        if (_lotItems[i].lot_no === lotSel.value) return _lotItems[i];
+      return null;
+    }
+    function updateLocWarn() {
+      var it = selectedLotItem();
+      if (!it || !lotSel.value) { locWarn.style.display = 'none'; return; }
+      locWarn.style.display = 'block';
+      if (it.located) {
+        // Case A 가드: 랙 위치 지정 재고를 스캔없이 출고하려는 경우 경고
+        locWarn.style.background = 'rgba(245,158,11,.13)';
+        locWarn.style.border = '1px solid var(--warning)';
+        locWarn.style.color = 'var(--text)';
+        locWarn.innerHTML = '⚠️ 이 LOT은 <b>위치 지정(랙)</b> 재고입니다' +
+          (it.location ? ' (📍 ' + escapeHtml(it.location) + ')' : '') +
+          '.<br>스캔 없는 LOT 수량 출고는 <b>위치 검증이 생략</b>됩니다. 정확한 위치 추적이 필요하면 ' +
+          '<b>피킹 리스트(스캔) 출고</b>를 권장합니다. 실제로 일반창고로 옮겨졌다면 아래 ' +
+          '<b>📍 위치 미상</b>을 체크하고 진행하세요.';
+      } else {
+        locWarn.style.background = 'rgba(76,175,80,.10)';
+        locWarn.style.border = '1px solid var(--success)';
+        locWarn.style.color = 'var(--text-muted)';
+        locWarn.innerHTML = '🏬 이 LOT은 <b>일반창고(위치 미상)</b> 재고 — LOT 수량 출고에 적합합니다.';
+      }
+    }
     lotSel.addEventListener('change', function(){
       _tonbagsLoadedFor = '';
+      var it = selectedLotItem();
+      // 위치 상태에 따라 '위치 미상' 자동 설정(사용자 수동 변경 가능)
+      if (it) unlocEl.checked = !it.located;
+      updateLocWarn();
       if (lotSel.value && !isFull()) loadTonbags();
       refresh();
     });
@@ -2262,7 +2312,10 @@
         outbound_date: dateEl.value || null,
         include_sample: full ? sampleEl.checked : false,
         unlocated: unlocEl.checked,
-        confirm: confirmEl.checked
+        confirm: confirmEl.checked,
+        // 불일치 감사 기록: 위치 지정(랙) LOT 을 스캔없이 출고하면 사유 자동 부착
+        reason: (function(){ var it = selectedLotItem(); return (it && it.located)
+                   ? '위치지정 LOT 스캔없이 출고(위치검증 생략)' + (it.location ? ' @' + it.location : '') : ''; })()
       };
       var desc = full ? '전량' : (ids.length + '개 톤백 선택');
       var extra = (payload.include_sample ? ' + 샘플' : '') + (payload.unlocated ? ' / 위치미상' : '') + (payload.confirm ? ' / 확정(SOLD)' : '');

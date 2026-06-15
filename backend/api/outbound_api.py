@@ -284,31 +284,58 @@ def lot_qty_available_lots():
         raise HTTPException(500, f"엔진 로드 실패: {e}")
     if not ENGINE_AVAILABLE or engine is None:
         raise HTTPException(500, "엔진 사용 불가")
+    # 위치 지정 여부 감지: 톤백 location 우선, 없으면 lot_location_map(최신 batch) 폴백
+    # (재고 화면의 location 정의와 동일한 COALESCE(NULLIF(TRIM(t.location),''), lm.map_location))
+    LOC_SELECT = (
+        "MAX(COALESCE(NULLIF(TRIM(t.location),''), lm.map_location)) AS sample_location, "
+        "SUM(CASE WHEN COALESCE(NULLIF(TRIM(t.location),''), lm.map_location) IS NOT NULL "
+        "         AND COALESCE(t.is_sample,0)=0 THEN 1 ELSE 0 END) AS located_normal"
+    )
+    LOC_JOIN = (
+        "LEFT JOIN ("
+        "  SELECT lot_no, GROUP_CONCAT(location, ', ') AS map_location FROM ("
+        "    SELECT lot_no, location FROM lot_location_map "
+        "    WHERE batch_id = (SELECT MAX(id) FROM lot_location_import_batch) "
+        "    ORDER BY lot_no, location"
+        "  ) GROUP BY lot_no"
+        ") lm ON lm.lot_no = t.lot_no"
+    )
+    BASE = (
+        "SELECT t.lot_no AS lot_no, "
+        "       COALESCE(MAX(i.product), '') AS product, "
+        "       SUM(CASE WHEN COALESCE(t.is_sample,0)=0 THEN 1 ELSE 0 END) AS avail_normal, "
+        "       SUM(CASE WHEN COALESCE(t.is_sample,0)=1 THEN 1 ELSE 0 END) AS avail_sample, "
+        "       COALESCE(SUM(t.weight),0) AS avail_kg, {loc_select} "
+        "FROM inventory_tonbag t "
+        "LEFT JOIN inventory i ON i.lot_no = t.lot_no {loc_join} "
+        "WHERE t.status = 'AVAILABLE' "
+        "GROUP BY t.lot_no "
+        "HAVING avail_normal > 0 OR avail_sample > 0 "
+        "ORDER BY t.lot_no"
+    )
     try:
-        rows = engine.db.fetchall(
-            """
-            SELECT t.lot_no AS lot_no,
-                   COALESCE(MAX(i.product), '') AS product,
-                   SUM(CASE WHEN COALESCE(t.is_sample,0)=0 THEN 1 ELSE 0 END) AS avail_normal,
-                   SUM(CASE WHEN COALESCE(t.is_sample,0)=1 THEN 1 ELSE 0 END) AS avail_sample,
-                   COALESCE(SUM(t.weight),0) AS avail_kg
-            FROM inventory_tonbag t
-            LEFT JOIN inventory i ON i.lot_no = t.lot_no
-            WHERE t.status = 'AVAILABLE'
-            GROUP BY t.lot_no
-            HAVING avail_normal > 0 OR avail_sample > 0
-            ORDER BY t.lot_no
-            """
-        )
+        try:
+            rows = engine.db.fetchall(BASE.format(loc_select=LOC_SELECT, loc_join=LOC_JOIN))
+        except Exception:
+            # lot_location_map 미존재 DB → 톤백 location 만으로 폴백
+            rows = engine.db.fetchall(BASE.format(
+                loc_select="MAX(NULLIF(TRIM(t.location),'')) AS sample_location, "
+                           "SUM(CASE WHEN NULLIF(TRIM(t.location),'') IS NOT NULL "
+                           "         AND COALESCE(t.is_sample,0)=0 THEN 1 ELSE 0 END) AS located_normal",
+                loc_join=""))
         items = []
         for r in (rows or []):
             g = (lambda k, i: r[k] if isinstance(r, dict) else r[i])
+            sample_loc = g("sample_location", 5) or ""
+            located_n = int(g("located_normal", 6) or 0)
             items.append({
                 "lot_no": g("lot_no", 0),
                 "product": g("product", 1),
                 "avail_normal": int(g("avail_normal", 2) or 0),
                 "avail_sample": int(g("avail_sample", 3) or 0),
                 "avail_kg": float(g("avail_kg", 4) or 0),
+                "located": bool(located_n > 0 or sample_loc),
+                "location": sample_loc,
             })
         return {"ok": True, "data": {"items": items, "total": len(items)}}
     except Exception as e:
