@@ -161,14 +161,11 @@ class ReturnReinboundEngine:
             )
 
             # v8.0.5 [ATOMIC-FIX]: tonbag restore 후 recalc를 COMMIT 전에 실행
-            # GPT 지적: DETAIL변경 ≠ SUMMARY갱신 원자성 보장
-            try:
-                _eng = getattr(self, '_engine', None) or getattr(self, 'engine', None)
-                if _eng and hasattr(_eng, '_recalc_current_weight'):
-                    _eng._recalc_current_weight(lot_no, reason='P2_REINBOUND_ATOMIC')
-            except Exception as _re:
-                import logging
-                logging.getLogger(__name__).debug(f'[ATOMIC] reinbound atomic recalc 스킵: {_re}')
+            # v8.0.5 [ATOMIC-FIX] + D5: 재계산 실패 시 COMMIT 중단 및 롤백
+            _eng = getattr(self, '_engine', None) or getattr(self, 'engine', None)
+            if _eng and hasattr(_eng, '_recalc_current_weight'):
+                # try-except 제거 → 에러 발생 시 outer catch로 이동하여 ROLLBACK 수행
+                _eng._recalc_current_weight(lot_no, reason='P2_REINBOUND_ATOMIC')
 
             self.conn.execute("COMMIT")
 
@@ -372,14 +369,10 @@ class ReturnReinboundEngine:
             """,
             (lot_no,)
         )
-        # v8.0.2 [P2]: 중앙 재계산으로 current_weight 복구
-        try:
-            engine = getattr(self, '_engine', None) or getattr(self, 'engine', None)
-            if engine and hasattr(engine, '_recalc_current_weight'):
-                engine._recalc_current_weight(lot_no, reason='P2_REINBOUND_RESTORE')
-        except Exception as _e:
-            import logging
-            logging.getLogger(__name__).debug(f'[P2] reinbound recalc 스킵: {_e}')
+        # v8.0.2 [P2] + D5: 중앙 재계산으로 current_weight 복구 (실패 시 상위에서 롤백)
+        engine = getattr(self, '_engine', None) or getattr(self, 'engine', None)
+        if engine and hasattr(engine, '_recalc_current_weight'):
+            engine._recalc_current_weight(lot_no, reason='P2_REINBOUND_RESTORE')
 
     # ── 반품 이력 기록 ────────────────────────────────────────────────────────
     def _write_return_log(
