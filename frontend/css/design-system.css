@@ -7,25 +7,25 @@
 
 /* ── 1. CSS Variables ───────────────────────────────────────── */
 :root {
-  /* Base Colors */
-  --bg-root:        #070e1a;
-  --bg-sidebar:     #0b1322;
-  --bg-card:        #111d35;
-  --bg-card-hover:  #162040;
-  --bg-input:       #0f1a30;
-  --bg-header:      #0d1628;
-  --bg-modal:       #111d35;
+  /* Base Colors — Warm Charcoal (순흑 #070e1a → 웜 차콜로 띄움, 눈부심/번짐 감소) */
+  --bg-root:        #1a1714;
+  --bg-sidebar:     #1e1a16;
+  --bg-card:        #26221b;
+  --bg-card-hover:  #2f2a21;
+  --bg-input:       #242019;
+  --bg-header:      #211d18;
+  --bg-modal:       #26221b;
 
-  /* Border */
-  --border-subtle:  rgba(56, 189, 248, 0.08);
-  --border-default: rgba(56, 189, 248, 0.15);
-  --border-strong:  rgba(56, 189, 248, 0.30);
+  /* Border — 웜 샌드 톤 */
+  --border-subtle:  rgba(230, 214, 184, 0.07);
+  --border-default: rgba(230, 214, 184, 0.14);
+  --border-strong:  rgba(230, 214, 184, 0.26);
 
-  /* Text */
-  --text-primary:   #dce8fa;
-  --text-secondary: #6e92be;
-  --text-muted:     #3d5878;
-  --text-inverse:   #070e1a;
+  /* Text — 웜 크림 (차가운 흰 #dce8fa → 따뜻하게, 대비 ~14:1) */
+  --text-primary:   #f2ebdf;
+  --text-secondary: #c7b8a4;
+  --text-muted:     #8a7d6c;
+  --text-inverse:   #1a1714;
 
   /* Accent — Steel Blue */
   --accent:         #38bdf8;
@@ -84,21 +84,23 @@
 
 /* ── 1b. Light Theme Overrides ──────────────────────────────── */
 [data-theme="light"] {
-  --bg-root:        #f0f4f8;
-  --bg-sidebar:     #e2e8f0;
-  --bg-card:        #ffffff;
-  --bg-card-hover:  #f8fafc;
-  --bg-input:       #f1f5f9;
-  --bg-header:      #ffffff;
-  --bg-modal:       #ffffff;
+  /* Warm Off-White (순백 #ffffff → 웜 화이트로, 눈부심 감소) */
+  --bg-root:        #f4efe7;
+  --bg-sidebar:     #ece4d6;
+  --bg-card:        #fbf7f0;
+  --bg-card-hover:  #f3ede2;
+  --bg-input:       #f1eadd;
+  --bg-header:      #fbf7f0;
+  --bg-modal:       #fbf7f0;
 
-  --border-subtle:  rgba(14, 80, 160, 0.08);
-  --border-default: rgba(14, 80, 160, 0.15);
-  --border-strong:  rgba(14, 80, 160, 0.30);
+  --border-subtle:  rgba(120, 90, 40, 0.08);
+  --border-default: rgba(120, 90, 40, 0.16);
+  --border-strong:  rgba(120, 90, 40, 0.30);
 
-  --text-primary:   #0f2040;
-  --text-secondary: #3a5a8a;
-  --text-muted:     #8aa3c0;
+  /* 웜 차콜 글씨 (차가운 네이비 #0f2040 → 따뜻하게, 대비 ~12:1) */
+  --text-primary:   #2b2419;
+  --text-secondary: #6b5d4a;
+  --text-muted:     #9a8c76;
   --text-inverse:   #ffffff;
 
   --accent:         #0284c7;
