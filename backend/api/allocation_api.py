@@ -564,13 +564,26 @@ def apply_approved_allocation():
         applied = int(result.get("applied", 0))
         return {
             "ok": True,
-            "data": {"applied": applied, "errors": result.get("errors", [])[:20]},
+            "data": {
+                "applied": applied,
+                "attempted": int(result.get("attempted", 0)),
+                "failed": int(result.get("failed", 0)),
+                "partial_success": bool(result.get("partial_success")),
+                "errors": result.get("errors", [])[:20],
+            },
+            "warning_code": "APPLY_APPROVED_PARTIAL" if result.get("partial_success") else None,
             "message": f"{applied}건 승인 예약 반영 완료",
         }
     else:
         return {
             "ok": False,
-            "data": {"applied": int(result.get("applied", 0)), "errors": result.get("errors", [])},
+            "data": {
+                "applied": int(result.get("applied", 0)),
+                "attempted": int(result.get("attempted", 0)),
+                "failed": int(result.get("failed", 0)),
+                "partial_success": bool(result.get("partial_success")),
+                "errors": result.get("errors", []),
+            },
             "error": "예약 반영 실패",
             "detail": {"code": "APPLY_APPROVED_FAILED", "errors": result.get("errors", [])[:10]},
             "message": "; ".join(result.get("errors", []))[:200] or "예약 반영 실패",

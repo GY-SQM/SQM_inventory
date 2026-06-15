@@ -2390,7 +2390,7 @@ class OutboundMixin(InventoryBaseMixin):
         """
         승인 완료(STAGED + APPROVED) 건을 실제 RESERVED로 반영.
         """
-        result = {"success": False, "applied": 0, "errors": []}
+        result = {"success": False, "applied": 0, "attempted": 0, "failed": 0, "partial_success": False, "errors": []}
         try:
             alloc_plan_cols = set()
             rows = self.db.fetchall("PRAGMA table_info(allocation_plan)")
@@ -2444,6 +2444,7 @@ class OutboundMixin(InventoryBaseMixin):
             if limit and int(limit) > 0:
                 q += f" LIMIT {int(limit)}"
             staged_rows = self.db.fetchall(q) or []
+            result["attempted"] = len(staged_rows)
             if not staged_rows:
                 result["errors"].append("반영할 승인 완료(STAGED/APPROVED) 건이 없습니다.")
                 return result
@@ -2471,6 +2472,7 @@ class OutboundMixin(InventoryBaseMixin):
                         avail_cnt = 0
                     if avail_cnt <= 0:
                         result["errors"].append(f"미반영: {lot_no} 판매가능 톤백 없음 (plan_id={plan_id})")
+                        result["failed"] += 1
                         continue
 
                     # allocation_plan만 상태 전환 (tonbag_id/sub_lt는 NULL 유지)
@@ -2508,6 +2510,11 @@ class OutboundMixin(InventoryBaseMixin):
                     self._recalc_lot_status(lot_no)
 
             result["success"] = result["applied"] > 0
+            result["partial_success"] = result["applied"] > 0 and result["failed"] > 0
+            if result["partial_success"]:
+                result["errors"].append(
+                    f"[APPLY_APPROVED_PARTIAL] 승인 반영 일부 완료: applied={result['applied']} failed={result['failed']} attempted={result['attempted']}"
+                )
             if not result["success"] and not result["errors"]:
                 result["errors"].append("반영된 건이 없습니다.")
             return result
