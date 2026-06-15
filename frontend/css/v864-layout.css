@@ -952,48 +952,40 @@ html[data-table-preset="large"] {
 .side-label { font-size: 14px; letter-spacing: 0.3px; font-weight: 900; }
 
 /* ── Inventory 그룹: 부모 + 자식 메뉴 (v9.5) ─────────────────────── */
-.side-group { display: flex; flex-direction: column; gap: 0; }
+.side-group { display: flex; flex-direction: column; gap: 8px; }
 .side-parent { position: relative; }
 .side-total-badge {
   font-size: 9px; color: rgba(255,255,255,0.55);
   line-height: 1.2; margin-top: 1px; letter-spacing: 0;
 }
+/* [v8.7.4] 하위 항목(Pending/Available/Allocation/Picked)을 아래 표준 항목
+   (Sold/Return/Move/Dashboard/Log/Scan)과 동일한 '큰 세로 버튼'으로 통일.
+   그룹 박스(어두운 배경/들여쓰기) 제거 → 사이드바 전체가 균일한 버튼. */
 .side-children {
   display: flex; flex-direction: column;
-  background: rgba(0,0,0,0.18);
-  border-radius: 0 0 8px 8px;
-  padding: 2px 0 4px 0;
-  gap: 1px;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  gap: 8px;
 }
 .side-btn.side-child {
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding: 5px 8px 5px 16px;
-  gap: 6px;
-  border-radius: 6px;
-  font-size: 14px;        /* v8.7.4: 형제 항목(.side-label 14px)과 통일 */
-  font-weight: 600;
-  min-height: 32px;
+  justify-content: center;
+  padding: 10px 10px;
+  gap: 5px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 900;
+  min-height: 0;
 }
-.side-child-icon { font-size: 15px; flex-shrink: 0; }
-.side-child-label { font-size: 14px; font-weight: 700; flex: 1; text-align: left; }
+.side-child-icon { font-size: 30px; line-height: 1; flex-shrink: 0; }
+.side-child-label { font-size: 14px; font-weight: 900; letter-spacing: 0.3px; text-align: center; }
+/* 배지: 표준 항목과 동일하게 라벨 아래 중앙 정렬 */
 .side-child-badge {
   font-size: 10px; font-weight: 600;
-  text-align: right; line-height: 1.4;
-  white-space: normal;       /* 2줄 허용 */
-  word-break: keep-all;
-  flex-shrink: 0;
-  min-width: 60px;           /* 충분한 너비 확보 */
-  max-width: 90px;
-}
-/* standalone side-btn 내 배지는 중앙 정렬 */
-.side-btn:not(.side-child) .side-child-badge {
-  text-align: center;
-  white-space: normal;
-  word-break: keep-all;
-  font-size: 10px;
-  line-height: 1.4;
+  text-align: center; line-height: 1.4;
+  white-space: normal; word-break: keep-all;
   max-width: 100%;
 }
 .side-btn.active-parent {
