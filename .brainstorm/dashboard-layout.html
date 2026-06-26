@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SQM Dashboard 레이아웃 선택</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Malgun Gothic', 'Segoe UI', sans-serif; background: #0f1117; color: #e8e0d4; min-height: 100vh; padding: 32px; }
+  h1 { font-size: 22px; font-weight: 700; color: #4fc3f7; margin-bottom: 6px; letter-spacing: 1px; }
+  .subtitle { color: #8a9ab5; font-size: 13px; margin-bottom: 32px; }
+  .options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .option { border: 2px solid #2a3140; border-radius: 12px; overflow: hidden; cursor: pointer; transition: all 0.2s; background: #161b26; }
+  .option:hover { border-color: #4fc3f7; transform: translateY(-2px); box-shadow: 0 8px 32px rgba(79,195,247,0.15); }
+  .option.selected { border-color: #4fc3f7; box-shadow: 0 0 0 3px rgba(79,195,247,0.25); }
+  .opt-label { background: #1e2535; padding: 10px 16px; font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #4fc3f7; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+  .opt-badge { background: #4fc3f7; color: #0f1117; border-radius: 4px; padding: 2px 8px; font-size: 10px; display: none; }
+  .option.selected .opt-badge { display: block; }
+  .mockup { padding: 16px; background: #0f1117; min-height: 220px; }
+
+  /* Layout A: 사이드바 + 카드 그리드 */
+  .la-wrap { display: flex; gap: 8px; height: 200px; }
+  .la-sidebar { width: 52px; background: #1e2535; border-radius: 6px; display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 6px; }
+  .la-icon { width: 28px; height: 28px; border-radius: 6px; background: #2a3140; }
+  .la-icon.active { background: #4fc3f7; opacity: 0.8; }
+  .la-main { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+  .la-header { height: 28px; background: #1e2535; border-radius: 6px; display: flex; align-items: center; padding: 0 10px; gap: 8px; }
+  .la-htag { height: 10px; border-radius: 3px; background: #2a3140; }
+  .la-cards { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .la-card { background: #1e2535; border-radius: 6px; padding: 8px; }
+  .la-cval { height: 16px; background: #4fc3f7; border-radius: 3px; width: 60%; opacity: 0.7; margin-bottom: 4px; }
+  .la-clabel { height: 8px; background: #2a3140; border-radius: 3px; width: 80%; }
+  .la-table { background: #1e2535; border-radius: 6px; padding: 6px; }
+  .la-row { height: 10px; background: #2a3140; border-radius: 2px; margin-bottom: 4px; }
+  .la-row:last-child { margin-bottom: 0; }
+
+  /* Layout B: 상단 탭 + 와이드 테이블 */
+  .lb-wrap { display: flex; flex-direction: column; gap: 8px; height: 200px; }
+  .lb-nav { height: 32px; background: #1e2535; border-radius: 6px; display: flex; align-items: center; padding: 0 10px; gap: 4px; }
+  .lb-tab { height: 20px; padding: 0 12px; border-radius: 4px; background: #2a3140; display: flex; align-items: center; }
+  .lb-tab.active { background: #4fc3f7; opacity: 0.8; }
+  .lb-tab-txt { height: 8px; width: 32px; background: #0f1117; border-radius: 2px; opacity: 0.5; }
+  .lb-kpi { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .lb-kcard { background: #1e2535; border-radius: 6px; padding: 8px; }
+  .lb-kval { height: 18px; background: #4fc3f7; border-radius: 3px; width: 55%; opacity: 0.6; margin-bottom: 4px; }
+  .lb-klabel { height: 7px; background: #2a3140; border-radius: 2px; }
+  .lb-table { flex: 1; background: #1e2535; border-radius: 6px; padding: 6px; }
+  .lb-thead { height: 20px; background: #2a3140; border-radius: 4px; margin-bottom: 4px; display: flex; align-items: center; padding: 0 8px; gap: 4px; }
+  .lb-th { height: 8px; background: #3a4455; border-radius: 2px; flex: 1; }
+  .lb-trow { display: flex; gap: 4px; margin-bottom: 4px; align-items: center; }
+  .lb-td { height: 8px; background: #232c3a; border-radius: 2px; flex: 1; }
+
+  /* Layout C: 대시보드 집중형 (카드+차트+알림) */
+  .lc-wrap { display: flex; flex-direction: column; gap: 8px; height: 200px; }
+  .lc-top { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; }
+  .lc-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .lc-crd { background: #1e2535; border-radius: 6px; padding: 8px; }
+  .lc-v { height: 16px; border-radius: 3px; width: 55%; margin-bottom: 4px; }
+  .lc-v.blue { background: #4fc3f7; opacity: 0.7; }
+  .lc-v.green { background: #66bb6a; opacity: 0.7; }
+  .lc-v.orange { background: #ffa726; opacity: 0.7; }
+  .lc-l { height: 7px; background: #2a3140; border-radius: 2px; }
+  .lc-alert { background: #1e2535; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .lc-alitem { height: 14px; border-radius: 3px; display: flex; align-items: center; padding: 0 6px; gap: 4px; }
+  .lc-alitem.warn { background: rgba(255,167,38,0.15); border-left: 3px solid #ffa726; }
+  .lc-alitem.err { background: rgba(239,83,80,0.15); border-left: 3px solid #ef5350; }
+  .lc-alitem.ok { background: rgba(102,187,106,0.15); border-left: 3px solid #66bb6a; }
+  .lc-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .lc-altext { height: 7px; background: #2a3140; border-radius: 2px; flex: 1; }
+  .lc-bottom { flex: 1; display: grid; grid-template-columns: 3fr 1fr; gap: 8px; }
+  .lc-chart { background: #1e2535; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .lc-chart-bars { flex: 1; display: flex; align-items: flex-end; gap: 4px; padding-top: 4px; }
+  .lc-bar { flex: 1; border-radius: 3px 3px 0 0; opacity: 0.7; }
+  .lc-mini { background: #1e2535; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .lc-mrow { height: 16px; background: #2a3140; border-radius: 3px; }
+
+  .opt-desc { padding: 12px 16px; font-size: 12px; color: #8a9ab5; line-height: 1.6; border-top: 1px solid #2a3140; }
+  .opt-desc strong { color: #c8d6e8; }
+
+  .footer { margin-top: 28px; text-align: center; color: #4a5568; font-size: 12px; }
+  .footer span { color: #4fc3f7; }
+  .sel-count { position: fixed; bottom: 24px; right: 24px; background: #4fc3f7; color: #0f1117; padding: 10px 20px; border-radius: 24px; font-weight: 700; font-size: 13px; display: none; box-shadow: 0 4px 16px rgba(79,195,247,0.4); }
+</style>
+</head>
+<body>
+
+<h1>SQM 대시보드 레이아웃 선택</h1>
+<p class="subtitle">Phase A 파일럿 — 3가지 레이아웃 방향 중 하나를 선택하세요 (클릭)</p>
+
+<div class="options">
+
+  <!-- Option A -->
+  <div class="option" onclick="select(this,'A')">
+    <div class="opt-label">A — 사이드바 + 카드 그리드 <span class="opt-badge">선택됨</span></div>
+    <div class="mockup">
+      <div class="la-wrap">
+        <div class="la-sidebar">
+          <div class="la-icon active"></div>
+          <div class="la-icon"></div>
+          <div class="la-icon"></div>
+          <div class="la-icon"></div>
+          <div class="la-icon"></div>
+          <div class="la-icon"></div>
+          <div class="la-icon"></div>
+        </div>
+        <div class="la-main">
+          <div class="la-header">
+            <div class="la-htag" style="width:80px"></div>
+            <div class="la-htag" style="width:40px;margin-left:auto"></div>
+          </div>
+          <div class="la-cards">
+            <div class="la-card"><div class="la-cval"></div><div class="la-clabel"></div></div>
+            <div class="la-card"><div class="la-cval" style="background:#66bb6a"></div><div class="la-clabel"></div></div>
+            <div class="la-card"><div class="la-cval" style="background:#ffa726"></div><div class="la-clabel"></div></div>
+            <div class="la-card"><div class="la-cval" style="background:#ef5350"></div><div class="la-clabel"></div></div>
+          </div>
+          <div class="la-table">
+            <div class="la-row"></div><div class="la-row" style="width:90%"></div>
+            <div class="la-row" style="width:75%"></div><div class="la-row" style="width:85%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="opt-desc">
+      <strong>고전적 ERP 레이아웃.</strong> 왼쪽 아이콘 사이드바 + 상단 KPI 카드 4개 + 재고 테이블.<br>
+      현재 SQM과 가장 유사한 구조. <strong>학습 비용 최소</strong>, 전환 리스크 낮음.
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="option" onclick="select(this,'B')">
+    <div class="opt-label">B — 상단 탭 + KPI + 와이드 테이블 <span class="opt-badge">선택됨</span></div>
+    <div class="mockup">
+      <div class="lb-wrap">
+        <div class="lb-nav">
+          <div class="lb-tab active"><div class="lb-tab-txt"></div></div>
+          <div class="lb-tab"><div class="lb-tab-txt"></div></div>
+          <div class="lb-tab"><div class="lb-tab-txt"></div></div>
+          <div class="lb-tab"><div class="lb-tab-txt"></div></div>
+          <div class="lb-tab"><div class="lb-tab-txt"></div></div>
+        </div>
+        <div class="lb-kpi">
+          <div class="lb-kcard"><div class="lb-kval"></div><div class="lb-klabel"></div></div>
+          <div class="lb-kcard"><div class="lb-kval" style="background:#66bb6a"></div><div class="lb-klabel"></div></div>
+          <div class="lb-kcard"><div class="lb-kval" style="background:#ffa726"></div><div class="lb-klabel"></div></div>
+          <div class="lb-kcard"><div class="lb-kval" style="background:#ef5350"></div><div class="lb-klabel"></div></div>
+          <div class="lb-kcard"><div class="lb-kval" style="background:#ab47bc"></div><div class="lb-klabel"></div></div>
+        </div>
+        <div class="lb-table">
+          <div class="lb-thead">
+            <div class="lb-th"></div><div class="lb-th"></div><div class="lb-th"></div>
+            <div class="lb-th"></div><div class="lb-th"></div>
+          </div>
+          <div class="lb-trow"><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div></div>
+          <div class="lb-trow"><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div></div>
+          <div class="lb-trow"><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div></div>
+          <div class="lb-trow"><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div><div class="lb-td"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="opt-desc">
+      <strong>데이터 집중형 레이아웃.</strong> 상단 탭 메뉴 + KPI 5개 + 와이드 데이터 테이블.<br>
+      <strong>가장 많은 정보</strong>를 한 화면에. 운영 담당자 위주. 마우스 이동 최소.
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="option" onclick="select(this,'C')">
+    <div class="opt-label">C — 대시보드 집중형 (카드+차트+알림) <span class="opt-badge">선택됨</span></div>
+    <div class="mockup">
+      <div class="lc-wrap">
+        <div class="lc-top">
+          <div class="lc-cards">
+            <div class="lc-crd"><div class="lc-v blue"></div><div class="lc-l"></div></div>
+            <div class="lc-crd"><div class="lc-v green"></div><div class="lc-l"></div></div>
+            <div class="lc-crd"><div class="lc-v orange"></div><div class="lc-l"></div></div>
+          </div>
+          <div class="lc-alert">
+            <div class="lc-alitem warn"><div class="lc-dot" style="color:#ffa726"></div><div class="lc-altext"></div></div>
+            <div class="lc-alitem err"><div class="lc-dot" style="color:#ef5350"></div><div class="lc-altext"></div></div>
+            <div class="lc-alitem ok"><div class="lc-dot" style="color:#66bb6a"></div><div class="lc-altext"></div></div>
+          </div>
+        </div>
+        <div class="lc-bottom">
+          <div class="lc-chart">
+            <div class="la-row" style="width:80px; margin-bottom:4px;"></div>
+            <div class="lc-chart-bars">
+              <div class="lc-bar" style="height:60%;background:#4fc3f7"></div>
+              <div class="lc-bar" style="height:80%;background:#4fc3f7"></div>
+              <div class="lc-bar" style="height:45%;background:#4fc3f7"></div>
+              <div class="lc-bar" style="height:90%;background:#66bb6a"></div>
+              <div class="lc-bar" style="height:70%;background:#66bb6a"></div>
+              <div class="lc-bar" style="height:55%;background:#ffa726"></div>
+              <div class="lc-bar" style="height:85%;background:#4fc3f7"></div>
+            </div>
+          </div>
+          <div class="lc-mini">
+            <div class="lc-mrow"></div>
+            <div class="lc-mrow" style="opacity:.7"></div>
+            <div class="lc-mrow" style="opacity:.5"></div>
+            <div class="lc-mrow" style="opacity:.3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="opt-desc">
+      <strong>경영진·관제용 대시보드.</strong> KPI 카드 + 실시간 알림 패널 + 입출고 추이 차트.<br>
+      <strong>한눈에 현황 파악</strong>. Figma 기반 디자인 시스템과 가장 잘 맞는 방향.
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  클릭해서 선택 후 터미널에 알려주세요 — <span>SQM v8.8.1 Figma UI Redesign · Phase A 파일럿</span>
+</div>
+
+<div class="sel-count" id="sel-count"></div>
+
+<script>
+  let selected = null;
+  function select(el, choice) {
+    document.querySelectorAll('.option').forEach(o => o.classList.remove('selected'));
+    el.classList.add('selected');
+    selected = choice;
+    const sc = document.getElementById('sel-count');
+    sc.textContent = '✓ ' + choice + ' 선택됨';
+    sc.style.display = 'block';
+  }
+</script>
+</body>
+</html>

@@ -485,7 +485,8 @@
               return '• tonbag ' + e.tonbag_id + ': ' + e.reason;
             }).join('\n');
             if (d.errors.length > 5) msg += '\n... (+' + (d.errors.length - 5) + '건)';
-            alert(msg);
+            if (window.sqmAlert) window.sqmAlert(msg, { title: '위치 매핑 실패', pre: true });
+            else if (window.showToast) window.showToast('error', msg.split('\n')[0]);
           }
           _state.pendingMap = {};
           _state.selectedIds = {};

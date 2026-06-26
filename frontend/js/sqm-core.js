@@ -76,6 +76,62 @@ window.sqmConfirmAsync = window.sqmConfirmAsync || function (msg, opts) {
 };
 
 /* -----------------------------------------------------------------------
+   sqmAlert — 비동기 정보 표시 모달 (alert 대체)
+   이유: pywebview/WebView2 에서 native alert() 이 전체를 블로킹 → 자체 모달로 대체.
+   사용법: await sqmAlert('내용', { title: '제목', pre: true });
+   ----------------------------------------------------------------------- */
+window.sqmAlert = window.sqmAlert || function (msg, opts) {
+  opts = opts || {};
+  return new Promise(function (resolve) {
+    var prev = document.getElementById('sqm-alert-overlay');
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+
+    var ov = document.createElement('div');
+    ov.id = 'sqm-alert-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483600;display:flex;' +
+      'align-items:center;justify-content:center;background:rgba(0,0,0,0.55);';
+
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--surface,#1e293b);border:1px solid var(--border,#334155);' +
+      'border-radius:12px;padding:24px 28px;max-width:560px;width:90%;max-height:80vh;' +
+      'overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:14px;';
+
+    if (opts.title) {
+      var hd = document.createElement('div');
+      hd.style.cssText = 'font-weight:700;font-size:15px;color:var(--text,#f1f5f9)';
+      hd.textContent = opts.title;
+      box.appendChild(hd);
+    }
+
+    var body = document.createElement('div');
+    body.style.cssText = 'font-size:13px;color:var(--text-muted,#94a3b8);line-height:1.6;' +
+      (opts.pre ? 'white-space:pre-wrap;font-family:monospace;' : '');
+    body.textContent = msg;
+    box.appendChild(body);
+
+    var ok = document.createElement('button');
+    ok.className = 'btn btn-primary';
+    ok.style.cssText = 'align-self:flex-end;min-width:80px;';
+    ok.textContent = opts.okLabel || '확인';
+    box.appendChild(ok);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); resolve(); }
+    ok.addEventListener('click', close);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+    document.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        e.preventDefault(); e.stopPropagation();
+        document.removeEventListener('keydown', onKey, true);
+        close();
+      }
+    }, true);
+    setTimeout(function () { try { ok.focus(); } catch (e) {} }, 0);
+  });
+};
+
+/* -----------------------------------------------------------------------
    SQM_STATUS_MAP — STATUS 색상·라벨 단일 정본 (D1 구조 단일화)
    향후 design-tokens.css 변수로 전환 시 이 블록만 수정
    ----------------------------------------------------------------------- */

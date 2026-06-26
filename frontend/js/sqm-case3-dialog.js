@@ -245,7 +245,8 @@
     });
 
     if (errs.length) {
-      alert('⚠️ 입력 오류:\n\n' + errs.join('\n'));
+      if (window.sqmAlert) { window.sqmAlert(errs.join('\n'), { title: '⚠️ 입력 오류', pre: true }); }
+      else if (window.showToast) { window.showToast('error', errs[0]); }
       return;
     }
     if (!jobs.length) {

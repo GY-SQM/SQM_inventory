@@ -1428,7 +1428,7 @@
     });
     if (dupLots.length) {
       showToast('error', '중복 LOT가 있어 DB 업로드를 중단했습니다: ' + dupLots[0].lot_no);
-      alert('중복 LOT 차단\n\n같은 입고 파일 안에 동일 LOT가 있습니다.\n첫 번째 중복: ' + dupLots[0].lot_no + ' (행 ' + dupLots[0].first + ', ' + dupLots[0].row + ')\n\n중복을 제거한 뒤 다시 저장하세요.');
+      if (window.sqmAlert) window.sqmAlert('같은 입고 파일 안에 동일 LOT가 있습니다.\n첫 번째 중복: ' + dupLots[0].lot_no + ' (행 ' + dupLots[0].first + ', ' + dupLots[0].row + ')\n\n중복을 제거한 뒤 다시 저장하세요.', { title: '중복 LOT 차단', pre: true });
       return;
     }
     var editedCount = Object.keys(_onestopState.editedCells).length;

@@ -393,7 +393,7 @@
           ' | 잔여: ' + (r.remain_mt||0).toFixed(3) + 'MT' +
           (r.sample_bags ? ' | 샘플:' + r.sample_bags + '개' : '');
       });
-      alert('📦 LOT 배정 현황 (' + rows.length + '건)\n\n' + lines.join('\n'));
+      window.sqmAlert(lines.join('\n'), { title: '📦 LOT 배정 현황 (' + rows.length + '건)', pre: true });
     }).catch(function(e){ showToast('error', 'LOT 현황 실패: ' + (e.message||e)); });
   };
 

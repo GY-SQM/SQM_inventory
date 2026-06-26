@@ -611,24 +611,6 @@ def health():
         "version": "8.7.1",
     }
 
-# ── Dashboard ────────────────────────────────────────────────
-@app.get("/api/dashboard/stats")
-def dashboard_stats():
-    if not ENGINE_AVAILABLE:
-        return _sample_dashboard()
-    try:
-        summary = engine.get_inventory_summary()
-        return {
-            "available_lots": summary.get("available_count", 0),
-            "reserved_lots":  summary.get("reserved_count", 0),
-            "picked_lots":    summary.get("picked_count", 0),
-            "outbound_lots_month": summary.get("outbound_month", 0),
-            "return_lots":    summary.get("return_count", 0),
-            "available_kg":   summary.get("available_kg", 0),
-        }
-    except Exception as e:
-        raise HTTPException(500, str(e))
-
 # ── Inventory ────────────────────────────────────────────────
 @app.get("/api/inventory")
 def get_inventory(

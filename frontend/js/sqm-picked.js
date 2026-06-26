@@ -37,7 +37,7 @@
     if (window.exportTableToExcel) {
       window.exportTableToExcel(tbl, 'picked_' + ts + '.xlsx');
     } else {
-      alert('Excel 내보내기 함수를 찾을 수 없습니다 (exportTableToExcel)');
+      showToast('error', 'Excel 내보내기 함수를 찾을 수 없습니다 (exportTableToExcel)');
     }
   };
 
@@ -392,7 +392,7 @@
           if (window.allocRevertStep) {
             window.allocRevertStep('PICKED');
           } else {
-            alert('되돌리기 함수를 찾을 수 없습니다 (allocRevertStep)');
+            showToast('error', '되돌리기 함수를 찾을 수 없습니다 (allocRevertStep)');
           }
       } },
     ]);

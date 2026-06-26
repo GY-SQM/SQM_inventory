@@ -76,11 +76,5 @@
 
   console.log('[SQM] sqm-revert.js patch OK — route-aware menu active');
 
-  if (!window.__SQM_STATUS_REVERT_LOADER__) {
-    window.__SQM_STATUS_REVERT_LOADER__ = true;
-    var sr = document.createElement('script');
-    sr.src = 'js/sqm-status-revert.js?v=20260525a';
-    sr.defer = true;
-    document.head.appendChild(sr);
-  }
+  // sqm-status-revert.js는 index.html에 정적 포함됨 — 동적 인젝션 제거
 })();

@@ -489,7 +489,7 @@
         return '[' + (h.created_at||h.action_time||'').slice(0,16) + '] ' + (h.action||'') + ' — ' + (h.note||h.detail||'');
       });
       var msg = lines.length ? lines.join('\n') : '이력 없음';
-      alert('📊 LOT 이력: ' + lot + '\n\n' + msg);
+      window.sqmAlert(msg, { title: '📊 LOT 이력: ' + lot, pre: true });
     }).catch(function(e){
       showToast('error', 'LOT 이력 조회 실패: ' + (e.message||e));
     });
@@ -1121,7 +1121,7 @@
       if (done + failed.length === lots.length) {
         if (failed.length) {
           console.error('[availCancelSelected] 실패 LOT:', failed);
-          alert('⚠️ 취소 실패 LOT ' + failed.length + '건:\n\n' + failed.join('\n') + '\n\n이 LOT들은 AVAILABLE 상태로 남아 있거나\nRESERVED/PICKED 톤백이 있어 취소 불가합니다.\n취소 완료: ' + done + '건');
+          window.sqmAlert(failed.join('\n') + '\n\n이 LOT들은 AVAILABLE 상태로 남아 있거나\nRESERVED/PICKED 톤백이 있어 취소 불가합니다.\n취소 완료: ' + done + '건', { title: '⚠️ 취소 실패 LOT ' + failed.length + '건', pre: true });
         } else {
           showToast('success', '↩️ ' + done + '건 전량 → PENDING 복구 완료');
         }
@@ -1444,7 +1444,7 @@
     if (window.exportTableToExcel) {
       window.exportTableToExcel(tbl, 'pending_' + ts + '.xlsx');
     } else {
-      alert('Excel 내보내기 함수를 찾을 수 없습니다 (exportTableToExcel)');
+      showToast('error', 'Excel 내보내기 함수를 찾을 수 없습니다 (exportTableToExcel)');
     }
   };
   window.exportAvailableExcel = function() {
@@ -1454,7 +1454,7 @@
     if (window.exportTableToExcel) {
       window.exportTableToExcel(tbl, 'available_' + ts + '.xlsx');
     } else {
-      alert('Excel 내보내기 함수를 찾을 수 없습니다 (exportTableToExcel)');
+      showToast('error', 'Excel 내보내기 함수를 찾을 수 없습니다 (exportTableToExcel)');
     }
   };
   window.loadInventoryPage  = loadInventoryPage;

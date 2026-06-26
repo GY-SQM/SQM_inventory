@@ -1678,13 +1678,13 @@
           .then(function(r) { return r.json(); })
           .then(function(res) {
             if (res.ok === false || res.detail) {
-              alert(label + ' 실패: ' + (res.detail || res.message || JSON.stringify(res)));
+              window.showToast('error', label + ' 실패: ' + (res.detail || res.message || JSON.stringify(res)));
             } else {
-              alert(label + ' 완료\n' + (res.message || ''));
+              window.showToast('success', label + ' 완료 ' + (res.message || ''));
               window._bmaRefresh();
             }
           })
-          .catch(function(e) { alert(label + ' 오류: ' + String(e)); });
+          .catch(function(e) { window.showToast('error', label + ' 오류: ' + String(e)); });
       };
 
       window._bmaRefresh();

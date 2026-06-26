@@ -43,7 +43,7 @@
 
   function toast(type, msg) {
     if (window.showToast) window.showToast(type, msg);
-    else alert(msg);
+    else if (window.sqmAlert) window.sqmAlert(msg); else if (window.showToast) window.showToast('info', msg);
   }
 
   function post(path, body) {
