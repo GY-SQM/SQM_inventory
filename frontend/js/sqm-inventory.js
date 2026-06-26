@@ -67,31 +67,42 @@
         if (r.reserved_mt != null && !isNaN(Number(r.reserved_mt))) sumRsvMt += Number(r.reserved_mt);
         if (r.picked_mt != null && !isNaN(Number(r.picked_mt))) sumPickedMt += Number(r.picked_mt);
       });
-      var html = '<section class="page" data-page="inventory">' +
-        '<div style="display:flex;align-items:center;gap:12px;padding:4px 0 10px">' +
-        '<h2 style="margin:0">📦 재고 목록 (Inventory)</h2>' +
-        '<span style="font-size:12px;color:var(--text-muted)" id="inv-count-label">'+rows.length+' LOTs</span>' +
-        '<button class="btn btn-secondary" onclick="renderPage(\'inventory\')" style="margin-left:auto">🔁 새로고침</button>' +
+      var html = '<section class="page sqm-page-wrap" data-page="inventory">' +
+        /* ── 페이지 헤더 (B형) ── */
+        '<div class="sqm-page-hd">' +
+        '<div class="sqm-page-hd-title">📦 재고 목록 <span style="font-size:12px;font-weight:400;color:var(--text-muted)">Inventory</span></div>' +
+        '<span class="sqm-page-hd-count" id="inv-count-label">'+rows.length+' LOTs</span>' +
+        '<div class="sqm-page-hd-actions">' +
+        '<button class="btn btn-secondary" onclick="renderPage(\'inventory\')">🔁 새로고침</button>' +
         '</div>' +
-        /* ── 필터 / 검색 바 ── */
-        '<div id="inv-filter-bar" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 8px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px;margin-bottom:8px">' +
-        '  <label style="font-size:12px;white-space:nowrap">상태:</label>' +
-        '  <select id="inv-status-filter" style="font-size:12px;padding:2px 6px;border-radius:4px;border:1px solid var(--panel-border);background:var(--bg);color:var(--fg)" onchange="window.invApplyFilter()">' +
-        '    <option value="">전체</option>' +
-        '    <option value="AVAILABLE">AVAILABLE</option>' +
-        '    <option value="RESERVED">RESERVED</option>' +
-        '    <option value="PICKED">PICKED</option>' +
-        '    <option value="RETURN">RETURN</option>' +
-        '  </select>' +
-        '  <input id="inv-search-input" type="text" placeholder="LOT / SAP / BL / Product 검색..." ' +
-        '    style="flex:1;min-width:180px;font-size:12px;padding:2px 8px;border-radius:4px;border:1px solid var(--panel-border);background:var(--bg);color:var(--fg)" ' +
-        '    oninput="window.invApplyFilter()">' +
-        '  <button class="btn btn-ghost" style="font-size:12px" onclick="window.invClearFilter()">✕ 초기화</button>' +
         '</div>' +
-        '<p style="font-size:12px;color:var(--text-muted);margin:0 0 8px 0">' +
-        '목록 합계 · NET(MT): <b style="color:var(--accent)">'+fmtN(sumNet)+'</b> · Balance(MT): <b>'+fmtN(sumBal)+'</b> · 미판매(MT): <b style="color:#22c55e">'+fmtN(sumUnsold)+'</b> · 판매완료(MT): <b style="color:#ef4444;font-weight:700">'+fmtN(sumSold)+'</b> · 차이(순−현, 샘플 등): <b style="color:#f59e0b">'+fmtN(sumNet - sumBal)+'</b>' +
-        '</p>' +
-        '<div style="overflow-x:auto"><table class="data-table"><thead><tr>' +
+        /* ── 요약 KPI 미니바 ── */
+        '<div class="sqm-summary-bar">' +
+        '<span class="sqm-summary-item"><span class="lbl">NET:</span><span class="val">'+fmtN(sumNet)+' MT</span></span>' +
+        '<span class="sqm-summary-item"><span class="sep">|</span></span>' +
+        '<span class="sqm-summary-item"><span class="lbl">Balance:</span><span class="val">'+fmtN(sumBal)+' MT</span></span>' +
+        '<span class="sqm-summary-item"><span class="sep">|</span></span>' +
+        '<span class="sqm-summary-item"><span class="lbl">미판매:</span><span class="val" style="color:#22c55e">'+fmtN(sumUnsold)+' MT</span></span>' +
+        '<span class="sqm-summary-item"><span class="sep">|</span></span>' +
+        '<span class="sqm-summary-item"><span class="lbl">판매완료:</span><span class="val" style="color:#ef4444">'+fmtN(sumSold)+' MT</span></span>' +
+        '<span class="sqm-summary-item"><span class="sep">|</span></span>' +
+        '<span class="sqm-summary-item"><span class="lbl">차이:</span><span class="val" style="color:#f59e0b">'+fmtN(sumNet - sumBal)+' MT</span></span>' +
+        '</div>' +
+        /* ── 필터 / 검색 바 (B형) ── */
+        '<div class="sqm-filter-bar" id="inv-filter-bar">' +
+        '<label>상태:</label>' +
+        '<select id="inv-status-filter" onchange="window.invApplyFilter()">' +
+        '  <option value="">전체</option>' +
+        '  <option value="AVAILABLE">AVAILABLE</option>' +
+        '  <option value="RESERVED">RESERVED</option>' +
+        '  <option value="PICKED">PICKED</option>' +
+        '  <option value="RETURN">RETURN</option>' +
+        '</select>' +
+        '<input id="inv-search-input" type="text" placeholder="LOT / SAP / BL / Product 검색..." oninput="window.invApplyFilter()">' +
+        '<button class="btn btn-ghost" style="font-size:11px" onclick="window.invClearFilter()">✕ 초기화</button>' +
+        '</div>' +
+        /* ── B형 Wide 테이블 ── */
+        '<div class="sqm-b-table-wrap"><table class="data-table sqm-b-table"><thead><tr>' +
         '<th>#</th><th style="text-align:center !important">LOT</th><th style="width:36px;text-align:center">+</th><th>SAP</th><th>BL</th><th>Product</th>' +
         '<th>Status</th><th>Balance(MT)</th><th>NET(MT)</th><th>Container</th>' +
         '<th title="총 톤백 개수 (MAXI BAG)">MXBG</th><th title="가용 톤백 수(개) — 바로 배분 가능한 톤백">Available</th><th title="예약 톤백 수(개) — 배정 잡힌 톤백">Reserved</th><th title="피킹/포장된 톤백 수(개)">Packed</th><th title="전체 톤백 수(개)">Total Bags</th><th title="남은 톤백 수 = 전체 − 가용 − 예약 − 피킹">Remain Bags</th><th title="가용 중량 AV (Available MT) — 아직 배정 안 된, 바로 배분 가능한 물량">AV</th><th title="예약 중량 VR (Reserved MT) — RESERVED 상태로 배정 잡힌 물량">VR</th><th title="피킹 중량 AR (Picked MT) — 출고 작업 중(PICKED)인 물량">AR</th><th>Invoice</th>' +
@@ -216,7 +227,7 @@
       html += '<td class="mono-cell" style="text-align:right">'+fmtN(sumIni)+'</td>';
       html += '<td class="mono-cell" style="text-align:right">'+fmtN(sumOb)+'</td>';
       html += '<td colspan="2"></td>';
-      html += '</tr></tfoot></table></div></section>';
+      html += '</tr></tfoot></table></div></section>'; /* sqm-b-table-wrap 닫힘 */
       c.innerHTML = html;
     }).catch(function(e){
       if (window.getCurrentRoute() !== route) return;

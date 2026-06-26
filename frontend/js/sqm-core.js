@@ -1234,7 +1234,15 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
   var _kpiTimer = null;
 
   function loadDashboard() {
-    renderStatusCards({});   /* dash-matrix-area / dash-integrity-area 컨테이너 생성 */
+    /* Phase A: 신규 C+B 하이브리드 대시보드가 로드된 경우 우선 사용 */
+    var dashContainer = document.getElementById('dashboard-container');
+    if (window._sqmDashMount && dashContainer) {
+      if (window._sqmDashUnmount) window._sqmDashUnmount();
+      window._sqmDashMount(dashContainer);
+      return;
+    }
+    /* fallback: 구 대시보드 (Phase A 모듈 로드 전) */
+    renderStatusCards({});
     loadKpi();
     loadDashboardTables();
     loadAlerts();

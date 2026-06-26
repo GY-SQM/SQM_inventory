@@ -218,6 +218,12 @@ async function loadAlerts() {
   }
 }
 
+// Module-to-global bridge: legacy sqm-core.js router가 mount/unmount 호출 가능하도록
+if (typeof window !== 'undefined') {
+  window._sqmDashMount   = mount;
+  window._sqmDashUnmount = unmount;
+}
+
 async function showDrilldown(title) {
   const panel   = document.getElementById('sqm-drilldown');
   const titleEl = document.getElementById('sqm-drill-title');
