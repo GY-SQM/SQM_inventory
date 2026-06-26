@@ -40,30 +40,31 @@
     if (!c) return;
     _allocState.selectedLots.clear();
     c.innerHTML = [
-      '<section class="page" data-page="allocation">',
-      /* ── 헤더 ── */
-      '<div class="alloc-header" style="display:flex;align-items:center;gap:6px;padding:8px 0 10px;flex-wrap:wrap">',
-      '  <h2 style="margin:0;font-size:14px;white-space:nowrap;flex-shrink:0">📋 ALLOCATION</h2>',
-      '  <span id="alloc-summary-label" style="font-size:11px;color:var(--text-muted)"></span>',
-      '  <span style="flex:1"></span>',
-      '  <span style="font-size:11px;color:var(--text-muted);flex-shrink:0">이전 단계로</span>',
-      '  <button class="btn" style="font-size:12px;padding:3px 10px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid #ef444455;border-radius:4px" onclick="window.allocRevertStep(\'RESERVED\')">↩ →AVAILABLE</button>',
-      '  <button class="btn" style="font-size:12px;padding:3px 10px;background:var(--accent,#3b82f6);color:#fff;border:1px solid var(--accent,#3b82f6);border-radius:4px" onclick="window.allocUploadExcel()">📂 Excel 업로드</button>',
-      '  <button class="btn" style="font-size:12px;padding:3px 10px;border-radius:4px" onclick="renderPage(\'allocation\')">🔁 새로고침</button>',
-      '</div>',
-      '<div style="display:flex;align-items:center;gap:6px;padding:6px 0 8px;flex-wrap:wrap;border-bottom:1px solid var(--border,#334155);margin-bottom:8px">',
-      '  <span style="font-size:11px;color:var(--text-muted);flex-shrink:0">🔍 검색</span>',
-      '  <input id="alloc-q" type="text" placeholder="LOT · BL · Sale Ref · SAP" style="font-size:12px;padding:3px 8px;background:var(--surface,#1e293b);border:1px solid var(--border,#334155);border-radius:4px;color:var(--text-primary);width:160px" oninput="window._allocFilter()">',
-      '  <span style="font-size:11px;color:var(--text-muted);flex-shrink:0">고객사</span>',
-      '  <input id="alloc-cust" type="text" placeholder="고객사 이름" style="font-size:12px;padding:3px 8px;background:var(--surface,#1e293b);border:1px solid var(--border,#334155);border-radius:4px;color:var(--text-primary);width:120px" oninput="window._allocFilter()">',
-      '  <button class="btn" style="font-size:12px;padding:3px 10px;border-radius:4px" onclick="window._allocFilterReset()">✕ 초기화</button>',
+      '<section class="page sqm-page-wrap" data-page="allocation">',
+      /* ── 페이지 헤더 (B형) ── */
+      '<div class="sqm-page-hd">',
+      '  <div class="sqm-page-hd-title">📋 ALLOCATION</div>',
+      '  <span class="sqm-page-hd-count" id="alloc-summary-label"></span>',
       '  <span id="alloc-search-count" style="font-size:11px;color:var(--text-muted)"></span>',
+      '  <div class="sqm-page-hd-actions">',
+      '    <button class="btn" style="font-size:11px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid #ef444455;border-radius:4px;padding:3px 8px" onclick="window.allocRevertStep(\'RESERVED\')">↩ →AVAILABLE</button>',
+      '    <button class="btn btn-primary" style="font-size:11px" onclick="window.allocUploadExcel()">📂 Excel</button>',
+      '    <button class="btn btn-ghost" style="font-size:11px" onclick="renderPage(\'allocation\')">🔁</button>',
+      '  </div>',
+      '</div>',
+      /* ── 필터바 (B형) ── */
+      '<div class="sqm-filter-bar">',
+      '  <label>검색</label>',
+      '  <input id="alloc-q" type="text" placeholder="LOT · BL · Sale Ref · SAP" style="width:180px" oninput="window._allocFilter()">',
+      '  <label>고객사</label>',
+      '  <input id="alloc-cust" type="text" placeholder="고객사 이름" style="width:130px" oninput="window._allocFilter()">',
+      '  <button class="btn btn-ghost" style="font-size:11px" onclick="window._allocFilterReset()">✕ 초기화</button>',
       '</div>',
       /* ── 로딩 / 빈 상태 ── */
       '<div id="alloc-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
       '<div class="empty" id="alloc-empty" style="display:none;padding:60px;text-align:center">📭 배정 데이터 없음</div>',
-      /* ── 테이블 (v864-2 ALLOC_PREVIEW_COLUMNS: LOT/SAP/PRODUCT/QTY/CUSTOMER/SALE REF/OUTBOUND DATE/WH/STATUS) ── */
-      '<div style="overflow-x:auto">',
+      /* ── B형 Wide 테이블 ── */
+      '<div class="sqm-b-table-wrap">',
       '  <table class="data-table" id="alloc-summary-table" style="display:none;width:100%">',
       '  <thead><tr>',
       '    <th style="width:36px"><input type="checkbox" id="alloc-select-all" onclick="window.allocToggleAll(this.checked)"></th>',

@@ -552,37 +552,39 @@
     var _initFrom   = window._outboundDateFrom || '';
     var _initTo     = window._outboundDateTo   || '';
     c.innerHTML = [
-      '<section class="page" data-page="outbound">',
-      '<div style="display:flex;align-items:center;gap:6px;padding:8px 0 10px;flex-wrap:wrap">',
-      '  <h2 style="margin:0;font-size:14px;white-space:nowrap;flex-shrink:0">📤 SOLD</h2>',
-      '  <span style="font-size:11px;color:var(--text-muted);flex-shrink:0">그룹:</span>',
-      '  ' + _soldGroupBtn('lot',       'LOT별',      _outMode) + '',
-      '  ' + _soldGroupBtn('container', '컨테이너별', _outMode) + '',
-      '  ' + _soldGroupBtn('bl',        'BL별',       _outMode) + '',
-      '  ' + _soldGroupBtn('customer',  '고객사별',   _outMode) + '',
-      '  ' + _soldGroupBtn('date',      '출고일별',   _outMode) + '',
-      '  <span style="width:1px;height:18px;background:var(--border);margin:0 2px;flex-shrink:0"></span>',
-      '  <span style="font-size:11px;color:var(--text-muted);flex-shrink:0">기간:</span>',
+      '<section class="page sqm-page-wrap" data-page="outbound">',
+      /* ── 페이지 헤더 (B형) ── */
+      '<div class="sqm-page-hd">',
+      '  <div class="sqm-page-hd-title">📤 SOLD (출고)</div>',
+      '  <div class="sqm-page-hd-actions">',
+      '    <span style="font-size:11px;color:var(--text-muted)">그룹:</span>',
+      '    ' + _soldGroupBtn('lot',       'LOT별',      _outMode) + '',
+      '    ' + _soldGroupBtn('container', '컨테이너별', _outMode) + '',
+      '    ' + _soldGroupBtn('bl',        'BL별',       _outMode) + '',
+      '    ' + _soldGroupBtn('customer',  '고객사별',   _outMode) + '',
+      '    ' + _soldGroupBtn('date',      '출고일별',   _outMode) + '',
+      '    <span style="width:1px;height:16px;background:var(--panel-border,#21293a);margin:0 2px"></span>',
+      '    <button class="btn btn-ghost" style="font-size:11px" onclick="window.allocRevertStep(\'SOLD\')">↩ SOLD→PICKED</button>',
+      '    <button class="btn btn-ghost" style="font-size:11px" onclick="window.exportSoldExcel()">📊 Excel</button>',
+      '  </div>',
+      '</div>',
+      /* ── 필터바 (B형, 기간 포함) ── */
+      '<div class="sqm-filter-bar">',
+      '  <label>기간</label>',
       '  ' + _soldPeriodBtn('all',   '전체',   _outPeriod) + '',
       '  ' + _soldPeriodBtn('today', '오늘',   _outPeriod) + '',
       '  ' + _soldPeriodBtn('week',  '이번주', _outPeriod) + '',
       '  ' + _soldPeriodBtn('month', '이번달', _outPeriod) + '',
       '  ' + _soldPeriodBtn('custom','기간지정', _outPeriod) + '',
-      '  <span id="sold-custom-dates" style="' + (_outPeriod==='custom' ? 'display:inline-flex' : 'display:none') + ';align-items:center;gap:4px;flex-shrink:0">',
-      '    <input type="date" id="sold-date-from" value="' + (_initFrom || _soldTodayStr()) + '"'
-        + ' style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--panel);color:var(--text);width:110px">',
-      '    <span style="font-size:11px">~</span>',
-      '    <input type="date" id="sold-date-to" value="' + (_initTo || _soldTodayStr()) + '"'
-        + ' style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;background:var(--panel);color:var(--text);width:110px">',
+      '  <span id="sold-custom-dates" style="' + (_outPeriod==='custom' ? 'display:inline-flex' : 'display:none') + ';align-items:center;gap:4px">',
+      '    <input type="date" id="sold-date-from" value="' + (_initFrom || _soldTodayStr()) + '">',
+      '    <span>~</span>',
+      '    <input type="date" id="sold-date-to" value="' + (_initTo || _soldTodayStr()) + '">',
       '  </span>',
-      '  <button class="btn btn-primary" onclick="window._soldSearch()" style="font-size:12px;padding:3px 12px;font-weight:700;flex-shrink:0">🔍 조회</button>',
-      '  <button class="btn" onclick="window.exportSoldExcel()" style="font-size:12px;padding:3px 10px;flex-shrink:0">📊 Excel</button>',
-      '  <span style="flex:1"></span>',
-      '  <span style="font-size:11px;color:var(--text-muted);flex-shrink:0">이전 단계로</span>',
-      '  <button class="btn" onclick="window.allocRevertStep(\'SOLD\')" style="font-size:11px;padding:2px 10px;flex-shrink:0">↩ SOLD→PICKED</button>',
+      '  <button class="btn btn-primary" style="font-size:11px;font-weight:700" onclick="window._soldSearch()">🔍 조회</button>',
       '</div>',
       '<div id="outbound-loading" style="padding:40px;text-align:center;color:var(--text-muted)">⏳ 데이터 로딩 중...</div>',
-      '<div style="overflow-x:auto">',
+      '<div class="sqm-b-table-wrap">',
       '  <table class="data-table" id="outbound-table" style="display:none">',
       '  <thead><tr><th></th><th>#</th><th>LOT No</th><th>판매주문No</th><th>고객사</th><th>톤백수</th><th>중량(kg)</th><th>출고일</th></tr></thead>',
       '  <tbody id="outbound-tbody"></tbody>',
@@ -748,14 +750,17 @@
     }
     var sumBal = 0;
     rows.forEach(function(r){ if (r.balance != null) sumBal += Number(r.balance); });
-    var html = '<section style="padding:12px 16px">'
-      + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">'
-      + '<h2 style="margin:0;font-size:16px;color:#a855f7">🔄 Return 재고 — 입고 · 검사 대기</h2>'
-      + '<span style="font-size:12px;color:var(--text-muted)">' + rows.length + ' LOT · ' + fmtN(sumBal) + ' MT</span>'
-      + '<span style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:4px">⚠ 검사완료 후 수동으로 AVAILABLE 전환</span>'
-      + '<button class="btn btn-ghost" style="font-size:12px;margin-left:auto" onclick="window.loadReturnPage()">🔄 새로고침</button>'
+    var html = '<section class="page sqm-page-wrap" data-page="return">'
+      /* ── 페이지 헤더 (B형) ── */
+      + '<div class="sqm-page-hd">'
+      + '  <div class="sqm-page-hd-title" style="color:#a855f7">🔄 Return 재고</div>'
+      + '  <span class="sqm-page-hd-count">' + rows.length + ' LOT · ' + fmtN(sumBal) + ' MT</span>'
+      + '  <span style="font-size:11px;color:#f59e0b;background:rgba(245,158,11,0.12);padding:2px 8px;border-radius:4px;margin-left:8px">⚠ 검사완료 후 AVAILABLE 전환</span>'
+      + '  <div class="sqm-page-hd-actions">'
+      + '    <button class="btn btn-ghost" style="font-size:11px" onclick="window.loadReturnPage()">🔄 새로고침</button>'
+      + '  </div>'
       + '</div>'
-      + '<div style="overflow-x:auto"><table class="data-table"><thead><tr>'
+      + '<div class="sqm-b-table-wrap"><table class="data-table sqm-b-table"><thead><tr>'
       + '<th>#</th><th style="text-align:center!important">LOT</th><th style="width:32px;text-align:center">+</th><th>SAP</th><th>BL</th><th>Product</th>'
       + '<th>Balance(MT)</th><th>NET(MT)</th><th>Container</th><th>Invoice</th>'
       + '<th>Ship</th><th>Arrival</th><th>WH</th><th>Inbound(MT)</th><th>Location</th><th>검사완료</th>'
