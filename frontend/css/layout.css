@@ -2154,3 +2154,29 @@ table.sqm-table {
    다크 모드 → ☀️ Light 만 표시 / 라이트 모드 → 🌙 Dark 만 표시 */
 html[data-theme="dark"]  .topbar-btn[data-action="theme-dark"]  { display: none; }
 html[data-theme="light"] .topbar-btn[data-action="theme-light"] { display: none; }
+
+/* ── KPI 대시보드 사이드바 아이콘 툴팁 (Phase A) ─────────────────── */
+.sqm-sidenav-icon {
+  position: relative;
+}
+.sqm-sidenav-icon::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--panel, #1a2030);
+  color: var(--fg, #c8d6e8);
+  font-size: 11px;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border, #21293a);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 9999;
+}
+.sqm-sidenav-icon:hover::after {
+  opacity: 1;
+}
