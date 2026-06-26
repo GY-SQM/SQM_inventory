@@ -260,7 +260,7 @@
         ov.remove();
         refreshRoute(route);
       }).catch(function(e) {
-        toast('error', '되돌리기 실패: ' + (e.message || e));
+        toast('error', '되돌리기 실패: ' + (e && e.message ? e.message : String(e)) + (e && e.status ? ' (HTTP ' + e.status + ')' : ''));
       });
     };
   }

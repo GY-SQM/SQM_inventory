@@ -105,6 +105,7 @@ function buildSkeleton() {
 }
 
 function startPolling() {
+  if (_pollHandle) { clearInterval(_pollHandle); _pollHandle = null; }
   _pollHandle = setInterval(loadSummary, 30_000);
 }
 
@@ -228,7 +229,7 @@ async function showDrilldown(title) {
   const panel   = document.getElementById('sqm-drilldown');
   const titleEl = document.getElementById('sqm-drill-title');
   const content = document.getElementById('sqm-drill-content');
-  if (!panel) return;
+  if (!panel || !titleEl || !content) return;
 
   titleEl.textContent = `📋 ${title}`;
   content.innerHTML = '<div class="sqm-empty-msg">데이터 로딩 중...</div>';
@@ -264,6 +265,6 @@ async function showDrilldown(title) {
       </div>`;
   } catch (e) {
     console.error('[dashboard] drilldown failed', e);
-    content.innerHTML = '<div class="sqm-empty-msg">드릴다운 로드 실패</div>';
+    if (content) content.innerHTML = '<div class="sqm-empty-msg">드릴다운 로드 실패</div>';
   }
 }

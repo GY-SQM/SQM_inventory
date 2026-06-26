@@ -406,13 +406,15 @@
 
   function renderReturnRows(rows, route) {
     if (_currentRoute !== route) return;
-    document.getElementById('return-loading').style.display = 'none';
-    if (!rows.length) { document.getElementById('return-empty').style.display='block'; return; }
+    var loading = document.getElementById('return-loading');
+    if (loading) loading.style.display = 'none';
+    if (!rows.length) { var emptyEl = document.getElementById('return-empty'); if (emptyEl) emptyEl.style.display = 'block'; return; }
     var tbody = document.getElementById('return-tbody');
     if (tbody) tbody.innerHTML = rows.map(function(r, _i){
       return '<tr><td class="mono-cell" style="color:var(--text-muted);text-align:center">'+(_i+1)+'</td><td>'+escapeHtml(r.lot||'')+'</td><td>'+escapeHtml(r.product||'')+'</td><td>'+(r.bags||r.qty||'')+'</td><td>'+escapeHtml(r.date||'')+'</td><td>'+escapeHtml(r.reason||'')+'</td></tr>';
     }).join('');
-    document.getElementById('return-table').style.display = '';
+    var tblEl = document.getElementById('return-table');
+    if (tblEl) tblEl.style.display = '';
   }
 
   /* ===================================================
@@ -437,7 +439,7 @@
      =================================================== */
 
   var _scanHistory = [];
-  window.ScanActions = {
+  if (!window.ScanActions) window.ScanActions = {
     _lastBarcode: '',
     processBarcode: function(barcode, action) {
       if (!barcode) return;
@@ -475,7 +477,7 @@
   };
 
   var _pdfFile=null, _pdfB64=null;
-  window.PdfInbound = {
+  if (!window.PdfInbound) window.PdfInbound = {
     handleDrop: function(e) {
       e.preventDefault();
       var dz = document.getElementById('pdf-drop-zone');
@@ -839,8 +841,10 @@
     lot = String(lot).trim();
     if (!lot || !act) { showToast('warning', 'LOT NO 와 실제(kg) 값 필요'); return; }
     _ooState.manualActuals[lot] = { actual_kg: parseFloat(act) };
-    document.getElementById('oo-manual-lot').value = '';
-    document.getElementById('oo-manual-actual').value = '';
+    var lotEl = document.getElementById('oo-manual-lot');
+    var actEl = document.getElementById('oo-manual-actual');
+    if (lotEl) lotEl.value = '';
+    if (actEl) actEl.value = '';
     var list = document.getElementById('oo-manual-list');
     if (list) {
       var items = Object.keys(_ooState.manualActuals).map(function(k){
@@ -974,7 +978,7 @@
       });
       _ooRenderTonbags();
       _ooUpdateT2Stats();
-    });
+    }).catch(function(e){ console.error('[tonbag-load]', e); showToast('error', '톤백 로드 중 오류: '+(e.message||String(e))); });
   }
 
   function _ooRenderTonbags() {
@@ -1253,8 +1257,10 @@
     var actNum = parseFloat(act);
     if (isNaN(actNum)) { showToast('error', 'actual_kg 가 숫자 아님'); return; }
     _ooState.manualScans.push({ tonbag_uid: uid, actual_kg: actNum });
-    document.getElementById('oo-scan-uid').value = '';
-    document.getElementById('oo-scan-actual').value = '';
+    var uidEl = document.getElementById('oo-scan-uid');
+    var actEl2 = document.getElementById('oo-scan-actual');
+    if (uidEl) uidEl.value = '';
+    if (actEl2) actEl2.value = '';
     showToast('success', '수동 추가: ' + uid + ' = ' + actNum + 'kg (총 ' + _ooState.manualScans.length + '건)');
     _ooUpdateT3Stats();
   };

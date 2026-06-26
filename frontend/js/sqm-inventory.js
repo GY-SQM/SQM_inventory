@@ -232,7 +232,7 @@
     }).catch(function(e){
       if (window.getCurrentRoute() !== route) return;
       c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
-      showToast('error', 'Inventory load failed');
+      showToast('error', 'Inventory load failed: ' + (e&&e.message||String(e)));
     });
   }
 
@@ -289,7 +289,7 @@
     window._openContextMenu(btn, [
       { icon:'📋', label:'LOT 상세 보기',  kbd:'Enter',   fn:function(){ window.showLotDetail(lot); } },
       { icon:'📄', label:'LOT 번호 복사',  kbd:'Ctrl+C',  fn:function(){ window.invCopyLot(lot); } },
-      { icon:'📑', label:'행 전체 복사',   kbd:'Ctrl+Shift+C', fn:function(){ window.invCopyLot(lot); } },
+      { icon:'📑', label:'행 전체 복사',   kbd:'Ctrl+Shift+C', fn:function(){ var tr = document.querySelector('tr[data-lot="'+lot+'"]') || (document.querySelector('[data-lot="'+lot+'"]') && document.querySelector('[data-lot="'+lot+'"]').closest('tr')); if (window.invCopyRow && tr) window.invCopyRow({closest:function(){ return tr; }}); else window.invCopyLot(lot); } },
       '-',
       { icon:'🚀', label:'즉시 출고 진입', kbd:'O',       color:'#42a5f5', fn:function(){ window.invQuickOutbound(lot); } },
       { icon:'🔄', label:'반품 진입',      kbd:'R',       color:'#ef5350', fn:function(){ window.invQuickReturn(lot); } },
@@ -299,7 +299,7 @@
     ]);
   };
 
-  window.revertToPending = function(lot) {
+  if (!window.revertToPending) window.revertToPending = function(lot) {
     if (!lot) return;
     var ov = document.createElement('div');
     ov.id = 'revert-pending-overlay';
@@ -430,10 +430,10 @@
       document.body.appendChild(modal);
       modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
     }
-    document.getElementById('tbm-title').textContent = '톤백 세부 — LOT ' + lotNo;
-    document.getElementById('tbm-filter').value = '';
-    document.getElementById('tbm-body').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#94a3b8">로딩 중...</td></tr>';
-    document.getElementById('tbm-summary').textContent = '';
+    var titleEl2 = document.getElementById('tbm-title'); if (titleEl2) titleEl2.textContent = '톤백 세부 — LOT ' + lotNo;
+    var filterEl2 = document.getElementById('tbm-filter'); if (filterEl2) filterEl2.value = '';
+    var bodyEl2 = document.getElementById('tbm-body'); if (bodyEl2) bodyEl2.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#94a3b8">로딩 중...</td></tr>';
+    var summaryEl2 = document.getElementById('tbm-summary'); if (summaryEl2) summaryEl2.textContent = '';
     modal.style.display = 'flex';
     modal._allRows = [];
     apiGet('/api/tonbags?lot_no=' + encodeURIComponent(lotNo) + '&limit=500')
@@ -442,14 +442,14 @@
         modal._allRows = rows;
         window._filterTonbagModal();
       })
-      .catch(function(){ document.getElementById('tbm-body').innerHTML =
-        '<tr><td colspan="8" style="text-align:center;padding:20px;color:#ef4444">로드 실패</td></tr>'; });
+      .catch(function(e){ var body = document.getElementById('tbm-body'); if (body) body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:#ef4444">로드 실패: ' + (window.escapeHtml ? window.escapeHtml(e&&e.message||String(e)) : (e&&e.message||String(e))) + '</td></tr>'; });
   };
 
   window._filterTonbagModal = function() {
     var modal = document.getElementById('tonbag-modal');
     if (!modal || !modal._allRows) return;
-    var filter = document.getElementById('tbm-filter').value;
+    var filterEl = document.getElementById('tbm-filter');
+    var filter = filterEl ? filterEl.value : '';
     var rows = filter ? modal._allRows.filter(function(r){ return r.status === filter; }) : modal._allRows;
     var STATUS_COLOR = {
       AVAILABLE:'#22c55e', RESERVED:'#f59e0b', PICKED:'#3b82f6',
@@ -471,11 +471,13 @@
         + '<td style="padding:6px 8px;text-align:center">' + escapeHtml((r.inbound_date || '').slice(0,10)) + '</td>'
         + '</tr>';
     });
-    document.getElementById('tbm-body').innerHTML = html ||
+    var tbmBody = document.getElementById('tbm-body');
+    if (tbmBody) tbmBody.innerHTML = html ||
       '<tr><td colspan="8" style="text-align:center;padding:20px;color:#94a3b8">데이터 없음</td></tr>';
     var totalMt = rows.reduce(function(s,r){ return s + (parseFloat(r.weight)||0); }, 0);
     var sampleCnt = rows.filter(function(r){ return r.is_sample==1||r.is_sample===true; }).length;
-    document.getElementById('tbm-summary').textContent =
+    var tbmSummary = document.getElementById('tbm-summary');
+    if (tbmSummary) tbmSummary.textContent =
       '표시 ' + rows.length + '개 / 합계 ' + totalMt.toFixed(3) + ' MT'
       + (sampleCnt > 0 ? ' (SP ' + sampleCnt + '개 포함)' : '');
   };
@@ -816,7 +818,9 @@
     try {
       lots = JSON.parse(btn.getAttribute('data-lots') || '[]');
     } catch (e) {
-      lots = [];
+      console.error('[confirmPendingGroupFromButton] data-lots JSON 파싱 실패:', e, btn.getAttribute('data-lots'));
+      showToast('error', '선택 데이터 파싱 오류: ' + e.message);
+      return;
     }
     var dateInputId = btn.getAttribute('data-date-input');
     var dateEl = dateInputId ? document.getElementById(dateInputId) : null;
@@ -841,7 +845,7 @@
       }
       apiPost('/api/inbound/confirm/' + encodeURIComponent(lots[i]), { inbound_date: inboundDate })
         .then(function() { done++; next(i + 1); })
-        .catch(function() { errs.push(lots[i]); next(i + 1); });
+        .catch(function(e) { console.warn('[batch confirm] LOT 실패:', lots[i], e&&e.message); errs.push(lots[i]); next(i + 1); });
     }
     next(0);
   };
@@ -1068,7 +1072,7 @@
     }).catch(function(e) {
       if (window.getCurrentRoute() !== route) return;
       c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: ' + escapeHtml(e.message||String(e)) + '</div>';
-      showToast('error', 'Available 로드 실패');
+      showToast('error', 'Available 로드 실패: ' + (e&&e.message||String(e)));
     });
   }
 
@@ -1277,81 +1281,12 @@
       .then(function() {
         showToast('success', '\u2705 ' + lotNo + ' \uc785\uace0 \ud655\uc815 \uc644\ub8cc');
         window.loadPendingPage();
-        setTimeout(function() { if (window.navigate) window.navigate('available'); }, 3000);
+        setTimeout(function() { if (window.navigate && window.getCurrentRoute() === 'pending') window.navigate('available'); }, 3000);
       })
       .catch(function(e) { showToast('error', '\uc785\uace0 \ud655\uc815 \uc2e4\ud328: ' + (e.message || e)); });
   };
 
-  window.bulkConfirmPending = function() {
-    var checked = Array.from(document.querySelectorAll('.pending-cb:checked')).map(function(c) { return c.dataset.lot; });
-    if (!checked.length) { showToast('warning', '\ud655\uc815\ud560 LOT\uc744 \uc120\ud0dd\ud558\uc138\uc694'); return; }
-    var today = new Date().toISOString().slice(0, 10);
-    var ov = document.createElement('div');
-    ov.id = 'bulk-confirm-overlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10000;display:flex;align-items:center;justify-content:center';
-    var inner = document.createElement('div');
-    inner.style.cssText = 'background:var(--surface,#1e293b);border:1px solid var(--border,#334155);border-radius:12px;padding:24px;min-width:360px';
-    var h3 = document.createElement('h3');
-    h3.style.cssText = 'margin:0 0 12px;font-size:15px;color:var(--text)';
-    h3.textContent = '\u2705 \uc77c\uad04 \uc785\uace0 \ud655\uc815 (' + checked.length + '\uac74)';
-    var lotList = document.createElement('div');
-    lotList.style.cssText = 'max-height:120px;overflow-y:auto;margin-bottom:12px;font-size:12px;color:var(--text-muted);font-family:monospace';
-    lotList.textContent = checked.join(', ');
-    var label = document.createElement('label');
-    label.style.cssText = 'font-size:13px;color:var(--text-muted);display:block;margin-bottom:6px';
-    label.textContent = '\uc77c\uad04 \ud655\uc815\uc77c';
-    var input = document.createElement('input');
-    input.id = 'bulk-confirm-date';
-    input.type = 'date';
-    input.value = today;
-    input.max = today;
-    input.style.cssText = 'width:100%;box-sizing:border-box;padding:8px;background:var(--bg,#0f172a);border:1px solid var(--border,#334155);border-radius:6px;color:var(--text);font-size:14px;margin-bottom:16px';
-    var prog = document.createElement('div');
-    prog.id = 'bulk-progress';
-    prog.style.cssText = 'display:none;margin-bottom:12px;font-size:13px;color:var(--accent,#3b82f6)';
-    var btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
-    var cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn btn-ghost';
-    cancelBtn.textContent = '\ucde8\uc18c';
-    cancelBtn.onclick = function() { ov.remove(); };
-    var execBtn = document.createElement('button');
-    execBtn.id = 'bulk-confirm-btn';
-    execBtn.className = 'btn btn-primary';
-    execBtn.textContent = '\uc77c\uad04 \ud655\uc815';
-    execBtn.dataset.lots = JSON.stringify(checked);
-    execBtn.onclick = function() { window._execBulkConfirm(JSON.parse(this.dataset.lots)); };
-    btnRow.appendChild(cancelBtn);
-    btnRow.appendChild(execBtn);
-    inner.appendChild(h3);
-    inner.appendChild(lotList);
-    inner.appendChild(label);
-    inner.appendChild(input);
-    inner.appendChild(prog);
-    inner.appendChild(btnRow);
-    ov.appendChild(inner);
-    document.body.appendChild(ov);
-  };
-
-  window._execBulkConfirm = function(lots) {
-    var dateEl = document.getElementById('bulk-confirm-date');
-    var inboundDate = dateEl ? dateEl.value : '';
-    if (!inboundDate || !/^\d{4}-\d{2}-\d{2}$/.test(inboundDate)) {
-      showToast('error', '\ub0a0\uc9dc\ub97c \uc62c\ubc14\ub974\uac8c \uc785\ub825\ud574 \uc8fc\uc138\uc694 (YYYY-MM-DD)'); return;
-    }
-    if (inboundDate > new Date().toISOString().slice(0, 10)) {
-      showToast('error', '\ubbf8\ub798 \ub0a0\uc9dc\ub294 \uc785\ub825\ud560 \uc218 \uc5c6\uc2b5\ub2c8\ub2e4'); return;
-    }
-    var ov = document.getElementById('pending-confirm-overlay');
-    if (ov) ov.remove();
-    apiPost('/api/inbound/confirm/' + encodeURIComponent(lotNo), { inbound_date: inboundDate })
-      .then(function() {
-        showToast('success', '\u2705 ' + lotNo + ' \uc785\uace0 \ud655\uc815 \uc644\ub8cc');
-        window.loadPendingPage();
-        setTimeout(function() { if (window.navigate) window.navigate('available'); }, 3000);
-      })
-      .catch(function(e) { showToast('error', '\uc785\uace0 \ud655\uc815 \uc2e4\ud328: ' + (e.message || e)); });
-  };
+  /* [FIX] \uc911\ubcf5 bulkConfirmPending/\u200b_execBulkConfirm \uc81c\uac70 \u2014 \uc815\uc0c1 \uad6c\ud604\ub9cc \uc720\uc9c0 */
 
   window.bulkConfirmPending = function() {
     var checked = Array.from(document.querySelectorAll('.pending-cb:checked')).map(function(c) { return c.dataset.lot; });
@@ -1423,14 +1358,14 @@
           showToast('warning', '\uc644\ub8cc ' + done + '\uac74 / \uc2e4\ud328 ' + errs.length + '\uac74: ' + errs.join(', '));
         } else {
           showToast('success', '\u2705 ' + done + '\uac74 \uc77c\uad04 \ud655\uc815 \uc644\ub8cc');
-          setTimeout(function() { if (window.navigate) window.navigate('available'); }, 2000);
+          setTimeout(function() { if (window.navigate && window.getCurrentRoute() === 'pending') window.navigate('available'); }, 2000);
         }
         window.loadPendingPage(); return;
       }
       if (prog) prog.textContent = '\uc9c4\ud589 \uc911... ' + (i + 1) + '/' + lots.length + ' \u2014 ' + lots[i];
       apiPost('/api/inbound/confirm/' + encodeURIComponent(lots[i]), { inbound_date: inboundDate })
         .then(function() { done++; next(i + 1); })
-        .catch(function() { errs.push(lots[i]); next(i + 1); });
+        .catch(function(e) { console.warn('[batch confirm] LOT 실패:', lots[i], e&&e.message); errs.push(lots[i]); next(i + 1); });
     }
     next(0);
   };

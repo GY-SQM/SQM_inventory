@@ -1330,7 +1330,7 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
       sv('kpi-current-stock-val',  d.current_stock_mt    !== undefined ? d.current_stock_mt    : '-');
       sv('kpi-prev-stock-val',     d.prev_stock_mt       !== undefined ? d.prev_stock_mt       : '-');
       sv('kpi-unassigned-val',     d.unassigned_total    !== undefined ? d.unassigned_total    : (d.unassigned_locations || '-'));
-    }).catch(function(){});
+    }).catch(function(e){ console.error('[KPI]', e); if(typeof showToast==='function') showToast('warning','KPI 로드 실패: '+(e.message||String(e))); });
   }
 
   function startKpiPolling() {
@@ -1340,6 +1340,7 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     }, 5000);
     // v9.5: 사이드바 배지 초기 로드 + 30초 갱신
     loadSidebarBadges();
+    if (_sidebarBadgeTimer) clearInterval(_sidebarBadgeTimer);
     _sidebarBadgeTimer = setInterval(function(){
       if (document.visibilityState !== 'hidden') loadSidebarBadges();
     }, 30000);
@@ -1381,7 +1382,7 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
       // 상단 Inventory 버튼 총계 유지
       var tot = document.getElementById('badge-inv-total');
       if (tot && d.total) tot.textContent = d.total.bags + '개 · ' + d.total.mt.toFixed(3) + 'MT';
-    }).catch(function(){});
+    }).catch(function(e){ console.warn('[sidebar-badges]', e && e.message || e); });
   }
 
   /* ── 공용 컨텍스트 드롭다운 엔진 (모든 탭 공유) ────────────────── */
@@ -1474,7 +1475,7 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
       el.innerHTML = '<div class="alerts-header">🔔 재고 알림 '
                    + '<span class="alerts-counter">' + alerts.length + '건</span></div>'
                    + '<ul class="alerts-list">' + items + '</ul>';
-    }).catch(function() {});
+    }).catch(function(e){ console.warn('[alerts]', e && e.message || e); var el = document.getElementById('alerts-content'); if(el) el.innerHTML='<div style="color:var(--warning)">알림 로드 실패</div>'; });
   }
   window.loadAlerts = loadAlerts;
 
@@ -1507,7 +1508,7 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
       setText('sb-unallocated', '위치 미배정 ' + unalloc + '개');
       setText('sb-scan-fail', '스캔 실패율 ' + scanFail);
       setText('sb-lot-age', 'LOT 평균 재고기간 ' + lotAge + '일');
-    }).catch(function() {}).finally(function() {
+    }).catch(function(e){ console.warn('[statusbar]', e && e.message || e); }).finally(function() {
       apiGet('/api/health').then(function(res) {
         var h = res.data || res || {};
         var loaded = h.modules_loaded !== undefined ? h.modules_loaded : (h.engine_available ? 7 : 0);

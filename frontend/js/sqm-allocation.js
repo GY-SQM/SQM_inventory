@@ -24,6 +24,9 @@
     searchCust: ''
   };
 
+  /* ─── 인라인 편집 가능 필드 목록 ─────────────────────────────────── */
+  var ALLOC_EDITABLE_FIELDS = new Set(['customer', 'sale_ref', 'qty_mt', 'outbound_date']);
+
   function allocStatusPalette(status) {
     var st = String(status || '').toUpperCase();
     if (st === 'AVAILABLE') return { bg: 'rgba(34,197,94,0.18)', fg: '#22c55e' };
@@ -39,6 +42,7 @@
     var c = document.getElementById('page-container');
     if (!c) return;
     _allocState.selectedLots.clear();
+    _allocExpandedLot = null;
     c.innerHTML = [
       '<section class="page sqm-page-wrap" data-page="allocation">',
       /* ── 페이지 헤더 (B형) ── */
@@ -103,9 +107,9 @@
     apiGet('/api/q/allocation-summary').then(function(res){
       if (window.getCurrentRoute() !== route) return;
       _allocState.rows = extractRows(res);
-      document.getElementById('alloc-loading').style.display = 'none';
+      var ldEl = document.getElementById('alloc-loading'); if (ldEl) ldEl.style.display = 'none';
       if (!_allocState.rows.length) {
-        document.getElementById('alloc-empty').style.display = 'block';
+        var emptyEl = document.getElementById('alloc-empty'); if (emptyEl) { emptyEl.textContent = '📭 배정 데이터 없음'; emptyEl.style.display = 'block'; }
         var lbl = document.getElementById('alloc-summary-label');
         if (lbl) lbl.textContent = '(0건)';
         return;
@@ -113,9 +117,9 @@
       _renderAllocTable();
     }).catch(function(e){
       if (window.getCurrentRoute() !== route) return;
-      document.getElementById('alloc-loading').style.display = 'none';
-      document.getElementById('alloc-empty').textContent = 'Load failed: ' + (e.message||'');
-      document.getElementById('alloc-empty').style.display = 'block';
+      var ldEl2 = document.getElementById('alloc-loading'); if (ldEl2) ldEl2.style.display = 'none';
+      var emptyEl2 = document.getElementById('alloc-empty');
+      if (emptyEl2) { emptyEl2.textContent = 'Load failed: ' + (e.message||''); emptyEl2.style.display = 'block'; }
     });
   }
 
@@ -153,6 +157,7 @@
     if (empty) empty.style.display = 'none';
     if (table) table.style.display = '';
     if (lbl) lbl.textContent = '(' + rows.length + '/' + _allocState.rows.length + '건)';
+    if (!tbody || !tfoot) return;
 
     var totalMt = 0;
     var sumAvailBags = 0, sumReservedBags = 0, sumPackedBags = 0, sumTotalBags = 0, sumRemainBags = 0;
@@ -257,6 +262,7 @@
 
   /* ── 버튼 핸들러 ─────────────────────────────────────────────────── */
   window.showAllocActionMenu = function(btn) {
+    if (!window._openContextMenu) return;
     var lot = btn.dataset.lot || '';
     window._openContextMenu(btn, [
       { icon:'📋', label:'LOT 상세 보기',  kbd:'Enter',  fn:function(){ if(window.showLotDetail) window.showLotDetail(lot); } },
@@ -413,8 +419,8 @@
       .catch(function(e) { showToast('error', 'Excel 오류: ' + (e.message || e)); });
   };
 
-  /* ── 단계 되돌리기 ── */
-  window.allocRevertStep = async function(fromStatus) {
+  /* ── 단계 되돌리기 (sqm-status-revert.js가 로드되면 그쪽이 우선) ── */
+  if (!window.allocRevertStep) window.allocRevertStep = async function(fromStatus) {
     var labels = { RESERVED: 'RESERVED → AVAILABLE', PICKED: 'PICKED → RESERVED', SOLD: 'SOLD → PICKED' };
     var label = labels[fromStatus] || fromStatus;
     if (!(await window.sqmConfirmAsync('↩️ 단계 되돌리기\n\n' + label + '\n\n' + fromStatus + ' 상태의 모든 배정을 한 단계 되돌립니다.\n계속하시겠습니까?'))) return;
@@ -450,7 +456,7 @@
         .then(function(){ okCount++; })
         .catch(function(e){ errors.push({ lot: lot, reason: (e && e.message) || String(e) }); });
     });
-    Promise.all(promises).then(function(){
+    await Promise.all(promises).then(function(){
       var errCount = errors.length;
       if (errCount === 0) {
         showToast('success', opts.icon + ' ' + opts.label + ': ' + okCount + '건 성공');
@@ -460,7 +466,7 @@
       }
       _allocState.selectedLots.clear();
       loadAllocationPage();
-    });
+    }).catch(function(e){ showToast('error', opts.label + ' 내부 오류: ' + (e.message||e)); });
   }
 
   /* ── [Sprint 1-1-D] 인라인 편집 — 셀 더블클릭 → PATCH ─────────────── */
@@ -594,6 +600,7 @@
     document.body.appendChild(m);
     /* 다음 클릭 또는 ESC 로 자동 닫기 */
     var closeHandler = function(ev){
+      if (!document.body.contains(m)) { document.removeEventListener('click', closeHandler); return; }
       if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', closeHandler); }
     };
     setTimeout(function(){ document.addEventListener('click', closeHandler); }, 10);
@@ -604,6 +611,7 @@
     var panel = document.getElementById('alloc-detail-panel');
     var content = document.getElementById('alloc-detail-content');
     var title = document.getElementById('alloc-detail-title');
+    if (!panel || !content || !title) return;
 
     // 같은 LOT 클릭 시 닫기
     if (_allocExpandedLot === lotNo) {
@@ -618,10 +626,10 @@
     document.querySelectorAll('.alloc-summary-row').forEach(function(r){
       if (r.dataset.lot === lotNo) {
         r.style.background = 'var(--bg-active)';
-        r.querySelector('.alloc-expand-icon').textContent = '▼';
+        var icon = r.querySelector('.alloc-expand-icon'); if (icon) icon.textContent = '▼';
       } else {
         r.style.background = '';
-        r.querySelector('.alloc-expand-icon').textContent = '▶';
+        var icon2 = r.querySelector('.alloc-expand-icon'); if (icon2) icon2.textContent = '▶';
       }
     });
 
@@ -744,7 +752,7 @@
           });
           listDiv.innerHTML = rows.join('');
         })
-        .catch(function(){ listDiv.innerHTML = '<div style="padding:10px 12px;color:var(--danger);font-size:.85rem">목록 불러오기 실패</div>'; });
+        .catch(function(e){ listDiv.innerHTML = '<div style="padding:10px 12px;color:var(--danger);font-size:.85rem">목록 불러오기 실패: ' + (e.message || String(e)) + '</div>'; });
     }
 
     window._atplDelete = async function(id) {
@@ -755,7 +763,7 @@
           if (res.ok) { showToast('success', '삭제 완료: ' + id); loadList(); }
           else showToast('error', res.detail || '삭제 실패');
         })
-        .catch(function(){ showToast('error', '통신 오류'); });
+        .catch(function(e){ showToast('error', '양식 삭제 통신 오류: ' + (e.message || String(e))); });
     };
 
     loadList();

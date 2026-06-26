@@ -5,7 +5,7 @@
   window.__SQM_REVERT_PATCHED__ = true;
 
   /* ── revertToPending 확인 모달 ─────────────────────────────── */
-  window.revertToPending = function(lot) {
+  if (!window.revertToPending) window.revertToPending = function(lot) {
     if (!lot) return;
     var ov = document.createElement('div');
     ov.id = 'revert-pending-overlay';
@@ -59,13 +59,13 @@
     var lot = btn.dataset.lot || '';
     var route = window.getCurrentRoute ? window.getCurrentRoute() : '';
     var items = [
-      { icon: '📋', label: 'LOT 상세 보기',  kbd: 'Enter',         fn: function() { window.showLotDetail(lot); } },
-      { icon: '📄', label: 'LOT 번호 복사',  kbd: 'Ctrl+C',        fn: function() { window.invCopyLot(lot); } },
-      { icon: '📑', label: '행 전체 복사',   kbd: 'Ctrl+Shift+C',  fn: function() { window.invCopyLot(lot); } },
+      { icon: '📋', label: 'LOT 상세 보기',  kbd: 'Enter',         fn: function() { if (typeof window.showLotDetail === 'function') window.showLotDetail(lot); else if (window.showToast) window.showToast('warning','LOT 상세 기능 준비 중'); } },
+      { icon: '📄', label: 'LOT 번호 복사',  kbd: 'Ctrl+C',        fn: function() { if (typeof window.invCopyLot === 'function') window.invCopyLot(lot); } },
+      { icon: '📑', label: '행 전체 복사',   kbd: 'Ctrl+Shift+C',  fn: function() { if (typeof window.invCopyLot === 'function') window.invCopyLot(lot); } },
       '-',
-      { icon: '🚀', label: '즉시 출고 진입', kbd: 'O', color: '#42a5f5', fn: function() { window.invQuickOutbound(lot); } },
-      { icon: '🔄', label: '반품 진입',      kbd: 'R', color: '#ef5350', fn: function() { window.invQuickReturn(lot); } },
-      { icon: '📊', label: 'LOT 이력 보기', kbd: 'H', color: '#66bb6a', fn: function() { window.invShowLotHistory(lot); } }
+      { icon: '🚀', label: '즉시 출고 진입', kbd: 'O', color: '#42a5f5', fn: function() { if (typeof window.invQuickOutbound === 'function') window.invQuickOutbound(lot); else if (window.showToast) window.showToast('warning','출고 기능 준비 중'); } },
+      { icon: '🔄', label: '반품 진입',      kbd: 'R', color: '#ef5350', fn: function() { if (typeof window.invQuickReturn === 'function') window.invQuickReturn(lot); else if (window.showToast) window.showToast('warning','반품 기능 준비 중'); } },
+      { icon: '📊', label: 'LOT 이력 보기', kbd: 'H', color: '#66bb6a', fn: function() { if (typeof window.invShowLotHistory === 'function') window.invShowLotHistory(lot); else if (window.showToast) window.showToast('warning','이력 기능 준비 중'); } }
     ];
     if (route === 'available') {
       items.push('-');

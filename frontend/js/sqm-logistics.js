@@ -671,7 +671,7 @@
           + '<td></td></tr>';
         _outTbl.appendChild(_tf);
       }
-      _outTbl.style.display = '';
+      if (_outTbl) _outTbl.style.display = '';
       dbgLog('📤','outbound-page','rows='+rows.length,'#4caf50');
     }).catch(function(e){
       if (window.getCurrentRoute() !== route) return;
@@ -687,6 +687,7 @@
     var panel = document.getElementById('outbound-detail-panel');
     var content = document.getElementById('outbound-detail-content');
     var title = document.getElementById('outbound-detail-title');
+    if (!panel || !content || !title) return;
 
     if (_outboundExpandedLot === lotNo) {
       panel.style.display = 'none';
@@ -700,10 +701,10 @@
     document.querySelectorAll('.outbound-summary-row').forEach(function(r){
       if (r.dataset.lot === lotNo) {
         r.style.background = 'var(--bg-active)';
-        r.querySelector('.outbound-expand-icon').textContent = '▼';
+        var icon = r.querySelector('.outbound-expand-icon'); if (icon) icon.textContent = '▼';
       } else {
         r.style.background = '';
-        r.querySelector('.outbound-expand-icon').textContent = '▶';
+        var icon2 = r.querySelector('.outbound-expand-icon'); if (icon2) icon2.textContent = '▶';
       }
     });
 
@@ -903,11 +904,13 @@
           _moveTbl.appendChild(_tf);
         }
       })();
-      document.getElementById('move-table').style.display = '';
-    }).catch(function(){
+      var mt = document.getElementById('move-table'); if (mt) mt.style.display = '';
+    }).catch(function(e){
       if (window.getCurrentRoute() !== route) return;
-      document.getElementById('move-loading').style.display = 'none';
-      document.getElementById('move-empty').style.display = 'block';
+      var _mlEl = document.getElementById('move-loading'); if (_mlEl) _mlEl.style.display = 'none';
+      var _meEl = document.getElementById('move-empty');
+      if (_meEl) { _meEl.textContent = '❌ 로드 실패: ' + (e && e.message || String(e)); _meEl.style.display = 'block'; }
+      showToast('error', '이동 이력 로드 실패: ' + (e && e.message || String(e)));
     });
   }
 
@@ -999,7 +1002,7 @@
           '<td class="mono-cell" style="padding:4px 8px;text-align:left;font-size:11px;color:var(--accent)">'+escapeHtml(r.lot_no||r.lot||r.tonbag_id||'')+'</td>' +
           '<td style="padding:4px 8px;text-align:left;word-break:break-all;line-height:1.4;font-size:11px">'+fmtDetail+'</td></tr>';
       }).join('');
-      document.getElementById('log-table').style.display = '';
+      var lt = document.getElementById('log-table'); if (lt) lt.style.display = '';
     }).catch(function(e){
       if (window.getCurrentRoute() !== route) return;
       document.getElementById('log-loading').style.display = 'none';

@@ -165,7 +165,7 @@
       '    ' + _pickedModeBtnHtml('lot', 'LOT별', pickedMode),
       '    ' + _pickedModeBtnHtml('customer', '고객사별', pickedMode),
       '    ' + _pickedModeBtnHtml('date', '입고일별', pickedMode),
-      '    <button class="btn" style="font-size:11px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid #ef444455;border-radius:4px;padding:3px 8px" onclick="window.allocRevertStep(\'PICKED\')" title="PICKED→RESERVED">↩ PICKED→RESERVED</button>',
+      '    <button class="btn" style="font-size:11px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid #ef444455;border-radius:4px;padding:3px 8px" onclick="if(window.allocRevertStep) window.allocRevertStep(\'PICKED\'); else console.warn(\'allocRevertStep not loaded\');" title="PICKED→RESERVED">↩ PICKED→RESERVED</button>',
       '    <button class="btn btn-ghost" style="font-size:11px" onclick="window.exportPickedExcel()">📊 Excel</button>',
       '    <button class="btn btn-ghost" style="font-size:11px" onclick="renderPage(\'picked\')">🔁</button>',
       '  </div>',
@@ -198,7 +198,7 @@
     apiGet('/api/q/picked-list').then(function(res){
       if (window.getCurrentRoute() !== route) return;
       var rows = extractRows(res);
-      document.getElementById('picked-loading').style.display = 'none';
+      var _pickLd = document.getElementById('picked-loading'); if (_pickLd) _pickLd.style.display = 'none';
       if (!rows.length) { document.getElementById('picked-empty').style.display='block'; return; }
       // v868 fix (2026-05-16): 그룹화 모드 분기 — 고객사별/입고일별이면 별도 렌더 후 return
       if (pickedMode === 'customer' || pickedMode === 'date') {
@@ -281,10 +281,10 @@
           _tbl.appendChild(_tf);
         }
       })();
-      document.getElementById('picked-table').style.display = '';
+      var _pickTbl = document.getElementById('picked-table'); if (_pickTbl) _pickTbl.style.display = '';
     }).catch(function(e){
       if (window.getCurrentRoute() !== route) return;
-      document.getElementById('picked-loading').style.display = 'none';
+      var _pickLd2 = document.getElementById('picked-loading'); if (_pickLd2) _pickLd2.style.display = 'none';
       var el = document.getElementById('picked-empty');
       if (el) { el.textContent = 'Load failed: '+(e.message||String(e)); el.style.display='block'; }
     });
@@ -295,6 +295,7 @@
     var panel = document.getElementById('picked-detail-panel');
     var content = document.getElementById('picked-detail-content');
     var title = document.getElementById('picked-detail-title');
+    if (!panel || !content || !title) return;
 
     if (_pickedExpandedLot === lotNo) {
       panel.style.display = 'none';
@@ -308,10 +309,10 @@
     document.querySelectorAll('.picked-summary-row').forEach(function(r){
       if (r.dataset.lot === lotNo) {
         r.style.background = 'var(--bg-active)';
-        r.querySelector('.picked-expand-icon').textContent = '▼';
+        var icon = r.querySelector('.picked-expand-icon'); if (icon) icon.textContent = '▼';
       } else {
         r.style.background = '';
-        r.querySelector('.picked-expand-icon').textContent = '▶';
+        var icon2 = r.querySelector('.picked-expand-icon'); if (icon2) icon2.textContent = '▶';
       }
     });
 
@@ -390,7 +391,7 @@
       { icon:'↩',  label:'PICKED → RESERVED 되돌리기', color:'#ef4444', fn:async function(){
           if (!(await window.sqmConfirmAsync('↩ ' + lot + '\nPICKED → RESERVED로 되돌리시겠습니까?'))) return;
           if (window.allocRevertStep) {
-            window.allocRevertStep('PICKED');
+            try { await window.allocRevertStep('PICKED'); } catch(e) { showToast('error', '되돌리기 실패: ' + (e.message||e)); }
           } else {
             showToast('error', '되돌리기 함수를 찾을 수 없습니다 (allocRevertStep)');
           }

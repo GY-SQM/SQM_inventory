@@ -3,10 +3,11 @@
 
   // [fix F-3] window.API 즉시캡처 제거 → fetch 시점에 실시간 읽기
   function _api() { return window.SQM_API_BASE || (window.location && window.location.origin) || ''; }
-  var escapeHtml = window.escapeHtml;
-  var showDataModal = window.showDataModal;
-  var showToast = window.showToast;
-  var dbgLog = window.dbgLog;
+  // [FIX UNDEF-CALL] 의존 함수들을 즉시 캡처하지 않고 실행 시점에 window.* 참조
+  function escapeHtml(s) { return (window.escapeHtml || function(x){ return String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); })(s); }
+  function showDataModal(t, h) { if (window.showDataModal) window.showDataModal(t, h); }
+  function showToast(type, msg) { if (window.showToast) window.showToast(type, msg); }
+  function dbgLog() { if (window.dbgLog) window.dbgLog.apply(window, arguments); }
 
   function currentRoute() {
     return typeof window.getCurrentRoute === 'function' ? window.getCurrentRoute() : null;
@@ -94,7 +95,7 @@
       if (e.dataTransfer.files && e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
     });
     cancelBtn.addEventListener('click', function(){
-      document.getElementById('sqm-modal').style.display = 'none';
+      var modal = document.getElementById('sqm-modal'); if (modal) modal.style.display = 'none';
     });
 
     uploadBtn.addEventListener('click', function(){
@@ -110,7 +111,7 @@
       form.append('file', selectedFile, selectedFile.name);
 
       var xhr = new XMLHttpRequest();
-      xhr.open('POST', API + opts.endpoint);
+      xhr.open('POST', _api() + opts.endpoint);
       xhr.upload.onprogress = function(e){
         if (e.lengthComputable) {
           var pct = Math.round((e.loaded / e.total) * 70) + 10;
@@ -327,7 +328,7 @@
     dz.addEventListener('dragover', function(e){ e.preventDefault(); dz.style.background='var(--bg-active)'; });
     dz.addEventListener('dragleave', function(){ dz.style.background='var(--bg-hover)'; });
     dz.addEventListener('drop', function(e){ e.preventDefault(); dz.style.background='var(--bg-hover)'; if (e.dataTransfer.files && e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]); });
-    cb.addEventListener('click', function(){ document.getElementById('sqm-modal').style.display='none'; });
+    cb.addEventListener('click', function(){ var modal = document.getElementById('sqm-modal'); if (modal) modal.style.display='none'; });
 
     ub.addEventListener('click', function(){
       if (!f) return;
@@ -338,7 +339,7 @@
       var form = new FormData();
       form.append('file', f, f.name);
       var xhr = new XMLHttpRequest();
-      xhr.open('POST', API + opts.endpoint);
+      xhr.open('POST', _api() + opts.endpoint);
       xhr.upload.onprogress = function(e){
         if (e.lengthComputable) {
           var pct = Math.round((e.loaded/e.total)*70)+10;
