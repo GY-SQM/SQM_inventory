@@ -108,6 +108,33 @@ function startPolling() {
   _pollHandle = setInterval(loadSummary, 30_000);
 }
 
+// ── 하위 호환 — A6 회귀 테스트가 요구하는 loadAll / normalizeDashboardStats ──
+function normalizeDashboardStats(res) {
+  const payload = res?.data || res || {};
+  if (payload.ok === false || payload.success === false) {
+    throw new Error(payload.message || payload.error || 'dashboard response failed');
+  }
+  return {
+    products: Array.isArray(payload.products) ? payload.products : [],
+    lots: Array.isArray(payload.lots) ? payload.lots : [],
+  };
+}
+
+async function loadAll() {
+  try {
+    const res = await apiGet('/api/dashboard/stats');
+    if (res?.ok === false || res?.success === false) throw new Error(res.message || res.error || 'dashboard response failed');
+    const data = normalizeDashboardStats(res);
+    const products = Array.isArray(data.products) ? data.products : [];
+    const lots     = Array.isArray(data.lots)     ? data.lots     : [];
+    return { products, lots };
+  } catch (e) {
+    console.error('[dashboard] loadAll 로드 실패', e);
+    showToast?.('error', '대시보드 데이터 로드 실패');
+    return null;
+  }
+}
+
 async function loadSummary() {
   try {
     const res = await apiGet('/api/dashboard/summary');
