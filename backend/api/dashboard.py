@@ -561,3 +561,124 @@ def get_sidebar_counts():
     except Exception as exc:
         logger.error("[dashboard/sidebar-counts] 집계 실패: %s", exc, exc_info=True)
         return {"ok": False, "error": str(exc)}
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/dashboard/summary — Phase A KPI ×7 집계
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@router.get("/summary")
+def get_dashboard_summary():
+    """Phase A 대시보드 KPI 7개 집계."""
+    now_str = datetime.now(KST).isoformat(timespec="seconds")
+    try:
+        db_path = _get_db_path()
+        con = sqlite3.connect(db_path, timeout=5, check_same_thread=False)
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA busy_timeout=3000")
+        c = con.cursor()
+
+        stock_mt = float(c.execute(
+            "SELECT COALESCE(SUM(weight),0)/1000.0 FROM inventory_tonbag WHERE status='AVAILABLE'"
+        ).fetchone()[0] or 0.0)
+
+        inbound_pending = int(c.execute(
+            "SELECT COUNT(*) FROM inventory WHERE status='PENDING'"
+        ).fetchone()[0] or 0)
+
+        outbound_pending = int(c.execute(
+            "SELECT COUNT(*) FROM inventory_tonbag WHERE status='RESERVED'"
+        ).fetchone()[0] or 0)
+
+        picked_today_mt = float(c.execute("""
+            SELECT COALESCE(SUM(weight),0)/1000.0 FROM inventory_tonbag
+            WHERE status='PICKED'
+              AND DATE(COALESCE(updated_at, created_at), 'localtime') = DATE('now', 'localtime')
+        """).fetchone()[0] or 0.0)
+
+        integrity_alerts = int(c.execute("""
+            SELECT COUNT(*) FROM inventory
+            WHERE ABS(initial_weight - (current_weight + picked_weight)) > 1.0
+              AND status NOT IN ('SOLD','RETURNED')
+        """).fetchone()[0] or 0)
+
+        lot_count = int(c.execute(
+            "SELECT COUNT(DISTINCT lot_no) FROM inventory WHERE status NOT IN ('SOLD','RETURNED','PENDING')"
+        ).fetchone()[0] or 0)
+
+        return_pending = int(c.execute(
+            "SELECT COUNT(*) FROM inventory_tonbag WHERE status='RETURN'"
+        ).fetchone()[0] or 0)
+
+        con.close()
+        return {
+            "ok": True,
+            "data": {
+                "stock_mt":         round(stock_mt, 3),
+                "inbound_pending":  inbound_pending,
+                "outbound_pending": outbound_pending,
+                "picked_today_mt":  round(picked_today_mt, 3),
+                "integrity_alerts": integrity_alerts,
+                "lot_count":        lot_count,
+                "return_pending":   return_pending,
+                "updated_at":       now_str,
+            },
+        }
+    except Exception as exc:
+        logger.error("[dashboard/summary] 집계 실패: %s", exc, exc_info=True)
+        return {
+            "ok": False,
+            "data": {
+                "stock_mt": 0.0, "inbound_pending": 0, "outbound_pending": 0,
+                "picked_today_mt": 0.0, "integrity_alerts": 0, "lot_count": 0,
+                "return_pending": 0, "updated_at": now_str,
+            },
+            "error": str(exc),
+        }
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# GET /api/dashboard/weekly — 주간 입출고 차트 데이터
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+@router.get("/weekly")
+def get_dashboard_weekly():
+    """최근 7일 일별 입고/출고 합계 (MT)."""
+    try:
+        db_path = _get_db_path()
+        con = sqlite3.connect(db_path, timeout=5, check_same_thread=False)
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA busy_timeout=3000")
+        c = con.cursor()
+
+        DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"]
+
+        rows = c.execute("""
+            SELECT
+                DATE(COALESCE(inbound_date, created_at), 'localtime') AS day,
+                ROUND(COALESCE(SUM(CASE WHEN outbound_date IS NULL THEN weight ELSE 0 END),0)/1000.0, 3),
+                ROUND(COALESCE(SUM(CASE WHEN outbound_date IS NOT NULL THEN weight ELSE 0 END),0)/1000.0, 3)
+            FROM inventory_tonbag
+            WHERE DATE(COALESCE(inbound_date, created_at), 'localtime')
+                  >= DATE('now', '-6 days', 'localtime')
+            GROUP BY day
+            ORDER BY day ASC
+        """).fetchall()
+        con.close()
+
+        day_map = {row[0]: (float(row[1] or 0), float(row[2] or 0)) for row in rows}
+
+        from datetime import date, timedelta as td
+        labels, inbound_mt, outbound_mt = [], [], []
+        today = date.today()
+        for i in range(6, -1, -1):
+            d = today - td(days=i)
+            day_str = d.strftime("%Y-%m-%d")
+            label = "오늘" if i == 0 else DAY_LABELS[d.weekday()]
+            in_mt, out_mt = day_map.get(day_str, (0.0, 0.0))
+            labels.append(label)
+            inbound_mt.append(in_mt)
+            outbound_mt.append(out_mt)
+
+        return {"ok": True, "labels": labels, "inbound_mt": inbound_mt, "outbound_mt": outbound_mt}
+    except Exception as exc:
+        logger.error("[dashboard/weekly] 집계 실패: %s", exc, exc_info=True)
+        return {"ok": False, "labels": [], "inbound_mt": [], "outbound_mt": [], "error": str(exc)}
