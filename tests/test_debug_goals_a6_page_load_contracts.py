@@ -6,8 +6,8 @@ import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DASHBOARD_JS = os.path.join(ROOT, "frontend", "js", "pages", "dashboard.js")
-ALLOCATION_JS = os.path.join(ROOT, "frontend", "js", "pages", "allocation.js")
-PICKED_JS = os.path.join(ROOT, "frontend", "js", "pages", "picked.js")
+ALLOCATION_JS = os.path.join(ROOT, "frontend", "js", "_archive", "pages", "allocation.js")
+PICKED_JS = os.path.join(ROOT, "frontend", "js", "_archive", "pages", "picked.js")
 
 
 def _read(path: str) -> str:

@@ -414,16 +414,17 @@
     inp.click();
   };
 
-  /* [Sprint 1-2-D] D/O 나중에 — 수동 정보 입력 프롬프트 체인 */
+  /* [Sprint 1-2-D] D/O 나중에 — 수동 정보 입력 (sqmPrompt 체인으로 블로킹 방지) */
   window.onestopSkipDo = async function() {
     var cur = _onestopState.manualDo || {};
-    var ft = prompt('📋 D/O 수동 입력 (1/3) — Free Time (일수)\n\n예: 7\n(취소 → 전체 입력 취소)', cur.free_time || '');
+    var _prompt = window.sqmPrompt || function(m, d) { return Promise.resolve(window.prompt ? window.prompt(m, d) : null); };
+    var ft = await _prompt('Free Time (일수) — 예: 7\n(취소 → 전체 입력 취소)', cur.free_time || '', { title: '📋 D/O 수동 입력 (1/3)', placeholder: '예: 7' });
     if (ft === null) return;
     ft = String(ft || '').trim();
-    var wh = prompt('📋 D/O 수동 입력 (2/3) — 창고명\n\n예: GY\n(빈값 허용)', cur.warehouse || '');
+    var wh = await _prompt('창고명 — 예: GY\n(빈값 허용)', cur.warehouse || '', { title: '📋 D/O 수동 입력 (2/3)', placeholder: '예: GY' });
     if (wh === null) return;
     wh = String(wh || '').trim();
-    var ar = prompt('📋 D/O 수동 입력 (3/3) — 도착일 (YYYY-MM-DD)\n\n예: 2026-04-20\n(빈값 허용)', cur.arrival_date || '');
+    var ar = await _prompt('도착일 (YYYY-MM-DD) — 예: 2026-04-20\n(빈값 허용)', cur.arrival_date || '', { title: '📋 D/O 수동 입력 (3/3)', placeholder: '예: 2026-04-20' });
     if (ar === null) return;
     ar = String(ar || '').trim();
     /* 도착일 형식 검증 (빈값 OK, 입력된 경우 YYYY-MM-DD) */

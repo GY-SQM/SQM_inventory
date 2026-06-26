@@ -132,6 +132,69 @@ window.sqmAlert = window.sqmAlert || function (msg, opts) {
 };
 
 /* -----------------------------------------------------------------------
+   sqmPrompt — 비동기 입력 모달 (prompt() 대체, PyWebView 블로킹 방지)
+   사용법: var val = await sqmPrompt('SALE REF 입력', '기본값', { title: '제목' })
+           val === null → 취소, val === '' → 빈 값 확인
+   ----------------------------------------------------------------------- */
+window.sqmPrompt = window.sqmPrompt || function (msg, defaultVal, opts) {
+  opts = opts || {};
+  defaultVal = defaultVal !== undefined ? String(defaultVal) : '';
+  return new Promise(function (resolve) {
+    var prev = document.getElementById('sqm-prompt-overlay');
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
+    var ov = document.createElement('div');
+    ov.id = 'sqm-prompt-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483601;display:flex;' +
+      'align-items:center;justify-content:center;background:rgba(0,0,0,0.55);';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:var(--surface,#1e293b);border:1px solid var(--border,#334155);' +
+      'border-radius:12px;padding:24px 28px;min-width:340px;max-width:560px;width:90%;' +
+      'box-shadow:0 8px 32px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:14px;';
+    if (opts.title) {
+      var hd = document.createElement('div');
+      hd.style.cssText = 'font-weight:700;font-size:15px;color:var(--text,#f1f5f9)';
+      hd.textContent = opts.title;
+      box.appendChild(hd);
+    }
+    var body = document.createElement('div');
+    body.style.cssText = 'font-size:13px;color:var(--text-muted,#94a3b8);line-height:1.6;white-space:pre-wrap;';
+    body.textContent = msg;
+    box.appendChild(body);
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = defaultVal;
+    inp.className = 'input';
+    inp.style.cssText = 'width:100%;box-sizing:border-box;';
+    if (opts.placeholder) inp.placeholder = opts.placeholder;
+    box.appendChild(inp);
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;';
+    var cancel = document.createElement('button');
+    cancel.className = 'btn btn-ghost';
+    cancel.style.cssText = 'min-width:72px;';
+    cancel.textContent = opts.cancelLabel || '취소';
+    var ok = document.createElement('button');
+    ok.className = 'btn btn-primary';
+    ok.style.cssText = 'min-width:72px;';
+    ok.textContent = opts.okLabel || '확인';
+    row.appendChild(cancel);
+    row.appendChild(ok);
+    box.appendChild(row);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    function close(val) { if (ov.parentNode) ov.parentNode.removeChild(ov); resolve(val); }
+    ok.addEventListener('click', function () { close(inp.value); });
+    cancel.addEventListener('click', function () { close(null); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(null); });
+    document.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); document.removeEventListener('keydown', onKey, true); close(inp.value); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); document.removeEventListener('keydown', onKey, true); close(null); }
+    }, true);
+    setTimeout(function () { try { inp.focus(); inp.select(); } catch (ex) {} }, 0);
+  });
+};
+
+/* -----------------------------------------------------------------------
    SQM_STATUS_MAP — STATUS 색상·라벨 단일 정본 (D1 구조 단일화)
    향후 design-tokens.css 변수로 전환 시 이 블록만 수정
    ----------------------------------------------------------------------- */

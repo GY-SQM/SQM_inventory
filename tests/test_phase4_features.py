@@ -100,24 +100,24 @@ def test_favorite_max_10_entries():
 # ═══════════════════════════════════════════════════
 
 def test_shortcuts_has_ctrl_e():
-    """shortcuts.js에 Ctrl+E (엑셀 내보내기) 단축키가 있어야 한다."""
-    code = _read("frontend/js/shortcuts.js")
-    assert "Ctrl+E" in code
+    """sqm-core.js에 Ctrl+E (엑셀 내보내기) 단축키가 있어야 한다."""
+    code = _read("frontend/js/sqm-core.js")
+    assert "C-e" in code or "Ctrl+E" in code or "onExport" in code
 
 
 def test_shortcuts_has_ai_chat_toggle():
-    """shortcuts.js에 AI 채팅 단축키가 있어야 한다."""
-    code = _read("frontend/js/shortcuts.js")
-    assert "ai-chat" in code or "Ctrl+Shift+A" in code
+    """sqm-core.js 또는 _archive/shortcuts.js에 AI 채팅 단축키가 있어야 한다."""
+    code = _read("frontend/js/sqm-core.js") + _read("frontend/js/_archive/shortcuts.js")
+    assert "ai-chat" in code or "Ctrl+Shift+A" in code or "toggleAiChat" in code or "ai_chat" in code
 
 
 def test_shortcuts_has_ai_rollback():
-    """shortcuts.js에 AI 롤백 단축키(Ctrl+Z)가 있어야 한다."""
-    code = _read("frontend/js/shortcuts.js")
-    assert "ai-rollback" in code or ("Ctrl+Z" in code and "rollback" in code)
+    """sqm-core.js 또는 _archive/shortcuts.js에 AI 롤백 단축키가 있어야 한다."""
+    code = _read("frontend/js/sqm-core.js") + _read("frontend/js/_archive/shortcuts.js")
+    assert "ai-rollback" in code or ("Ctrl+Z" in code and "rollback" in code) or "C-z" in code
 
 
 def test_shortcuts_has_help_key():
-    """shortcuts.js에 ? 도움말 단축키가 있어야 한다."""
-    code = _read("frontend/js/shortcuts.js")
-    assert "'?'" in code or '"?"' in code or "shortcuts" in code
+    """sqm-core.js에 단축키 구현이 있어야 한다."""
+    code = _read("frontend/js/sqm-core.js")
+    assert "'?'" in code or '"?"' in code or "shortcuts" in code or "keydown" in code

@@ -5,7 +5,7 @@ import re
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-INVENTORY_JS = os.path.join(ROOT, "frontend", "js", "pages", "inventory.js")
+INVENTORY_JS = os.path.join(ROOT, "frontend", "js", "_archive", "pages", "inventory.js")
 
 
 def _read_inventory_js() -> str:

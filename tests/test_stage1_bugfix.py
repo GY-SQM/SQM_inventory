@@ -318,7 +318,7 @@ class TestD1_AllocationUniqueIndex:
 # ═══════════════════════════════════════════════════════
 class TestF1F2_RouterCleanup:
     def test_router_init_no_click_binding(self):
-        src = open(os.path.join(ROOT, 'frontend/js/router.js'), encoding='utf-8').read()
+        src = open(os.path.join(ROOT, 'frontend/js/_archive/router.js'), encoding='utf-8').read()
         func_start = src.index('export function initRouter')
         func_end = src.index('\n}', func_start) + 2
         func_body = src[func_start:func_end]
@@ -326,7 +326,7 @@ class TestF1F2_RouterCleanup:
             "initRouter()에 여전히 addEventListener 클릭 바인딩 있음"
 
     def test_router_no_navigateto_call_in_init(self):
-        src = open(os.path.join(ROOT, 'frontend/js/router.js'), encoding='utf-8').read()
+        src = open(os.path.join(ROOT, 'frontend/js/_archive/router.js'), encoding='utf-8').read()
         func_start = src.index('export function initRouter')
         func_end = src.index('\n}', func_start) + 2
         func_body = src[func_start:func_end]

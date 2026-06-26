@@ -373,7 +373,7 @@
 
   /* ── SALE REF 일괄 취소 ── */
   window.allocCancelBySaleRef = async function() {
-    var saleRef = prompt('SALE REF 번호를 입력하세요 (예: SC-2026-001)');
+    var saleRef = await window.sqmPrompt('SALE REF 번호를 입력하세요', '', { title: '🔖 SALE REF 일괄 취소', placeholder: '예: SC-2026-001' });
     if (!saleRef || !saleRef.trim()) return;
     saleRef = saleRef.trim();
     if (!(await window.sqmConfirmAsync('🔖 SALE REF 취소\n\n"' + saleRef + '" 에 해당하는 모든 배정을 취소하고 AVAILABLE로 원복합니다.\n계속하시겠습니까?'))) return;
@@ -577,14 +577,16 @@
       var header = cols.join(',');
       var values = cols.map(function(c){ return String(row[c] != null ? row[c] : (c === 'customer' ? (row.sold_to || '') : '')); }).join(',');
       var text = header + '\n' + values;
+      function allocCopyFallback(v) {
+        window.sqmAlert ? window.sqmAlert(v, { title: '📋 데이터 (직접 복사)', pre: true })
+                        : showToast('info', '클립보드 복사 실패 — 직접 복사해주세요');
+      }
       if (navigator.clipboard) {
         navigator.clipboard.writeText(text).then(function(){
           showToast('success', '📋 클립보드에 복사됨');
-        }).catch(function(){
-          prompt('수동 복사:', text);
-        });
+        }).catch(function(){ allocCopyFallback(text); });
       } else {
-        prompt('수동 복사:', text);
+        allocCopyFallback(text);
       }
     });
 

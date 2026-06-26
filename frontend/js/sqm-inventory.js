@@ -350,12 +350,16 @@
 
   window.invCopyLot = function(lot) {
     if (!lot) return;
+    function fallback(v) {
+      window.sqmAlert ? window.sqmAlert(v, { title: '📋 LOT 번호 (직접 복사)', pre: true })
+                      : showToast('info', '복사: ' + v);
+    }
     if (navigator.clipboard) {
       navigator.clipboard.writeText(lot).then(function(){
         showToast('success', '📋 LOT 번호 복사됨: ' + lot);
-      }).catch(function(){ prompt('수동 복사:', lot); });
+      }).catch(function(){ fallback(lot); });
     } else {
-      prompt('수동 복사:', lot);
+      fallback(lot);
     }
   };
 
@@ -364,12 +368,16 @@
     if (!tr) return;
     var cells = Array.from(tr.querySelectorAll('td'));
     var text = cells.slice(0, cells.length - 1).map(function(td){ return td.textContent.trim(); }).join('\t');
+    function fallback(v) {
+      window.sqmAlert ? window.sqmAlert(v, { title: '📑 행 데이터 (직접 복사)', pre: true })
+                      : showToast('info', '복사 실패 — 클립보드 권한 확인');
+    }
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text).then(function(){
         showToast('success', '📑 행 복사됨');
-      }).catch(function(){ prompt('수동 복사:', text); });
+      }).catch(function(){ fallback(text); });
     } else {
-      prompt('수동 복사:', text);
+      fallback(text);
     }
   };
 

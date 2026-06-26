@@ -1672,7 +1672,8 @@
         var label = action === 'approve' ? '승인' : '반려';
         var reason = '';
         if (action === 'reject') {
-          reason = prompt('반려 사유를 입력하세요 (선택):', '') || '';
+          var r = await (window.sqmPrompt ? window.sqmPrompt('반려 사유를 입력하세요 (선택)', '', { title: '❌ 배치 반려', placeholder: '사유 없으면 비워두세요' }) : Promise.resolve(''));
+          reason = r !== null ? r : '';
         }
         if (action === 'approve' && !(await window.sqmConfirmAsync('배치 ' + batchId + ' 를 승인하시겠습니까?\n승인 즉시 DB에 반영됩니다.'))) return;
         var url = _getApiBase() + '/api/tonbag/batch-move/' + action + '/' + encodeURIComponent(batchId);

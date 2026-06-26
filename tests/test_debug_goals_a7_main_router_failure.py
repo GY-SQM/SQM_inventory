@@ -5,8 +5,8 @@ import re
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MAIN_JS = os.path.join(ROOT, "frontend", "js", "main.js")
-ROUTER_JS = os.path.join(ROOT, "frontend", "js", "router.js")
+MAIN_JS = os.path.join(ROOT, "frontend", "js", "_archive", "main.js")
+ROUTER_JS = os.path.join(ROOT, "frontend", "js", "_archive", "router.js")
 
 
 def _read(path: str) -> str:

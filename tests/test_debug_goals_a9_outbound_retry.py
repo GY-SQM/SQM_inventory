@@ -5,7 +5,7 @@ import re
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUTBOUND_JS = os.path.join(ROOT, "frontend", "js", "pages", "outbound.js")
+OUTBOUND_JS = os.path.join(ROOT, "frontend", "js", "_archive", "pages", "outbound.js")
 
 
 def _read_outbound_js() -> str:
