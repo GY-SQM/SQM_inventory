@@ -235,7 +235,8 @@
      =================================================== */
 
   var _pickedExpandedLot = null;
-  window.togglePickedDetail = function(lotNo) {
+  // sqm-picked.js 버전(pickedStatusPalette 포함)이 이미 정의된 경우 덮어쓰지 않음
+  if (!window.togglePickedDetail) window.togglePickedDetail = function(lotNo) {
     var panel = document.getElementById('picked-detail-panel');
     var content = document.getElementById('picked-detail-content');
     var title = document.getElementById('picked-detail-title');
@@ -356,7 +357,8 @@
      =================================================== */
 
   var _outboundExpandedLot = null;
-  window.toggleOutboundDetail = function(lotNo) {
+  // sqm-logistics.js 버전이 이미 정의된 경우 덮어쓰지 않음
+  if (!window.toggleOutboundDetail) window.toggleOutboundDetail = function(lotNo) {
     var panel = document.getElementById('outbound-detail-panel');
     var content = document.getElementById('outbound-detail-content');
     var title = document.getElementById('outbound-detail-title');

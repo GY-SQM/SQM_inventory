@@ -343,6 +343,41 @@
      =================================================== */
   /* _inboundAllRows: 전체 행 캐시 (필터용) */
 
+  window._pickedFilter = function() {
+    var mode = window._pickedViewMode || 'lot';
+    if (mode !== 'lot') return; // 그룹 모드에서는 필터 미적용
+    var q  = ((document.getElementById('picked-q') ||{}).value||'').toLowerCase().trim();
+    var df = (document.getElementById('picked-df')||{}).value||'';
+    var dt = (document.getElementById('picked-dt')||{}).value||'';
+    var tbody = document.getElementById('picked-tbody');
+    var countEl = document.getElementById('picked-count');
+    if (!tbody) return;
+    var trs = tbody.querySelectorAll('tr');
+    var vis = 0, total = 0;
+    trs.forEach(function(row) {
+      var txt = row.textContent.toLowerCase();
+      var textOk = !q || txt.indexOf(q) !== -1;
+      var cells = row.cells;
+      var dateStr = cells && cells.length > 17 ? cells[17].textContent.trim() : '';
+      var dMatch = dateStr.match(/(\d{4}-\d{2}-\d{2})/);
+      var d = dMatch ? dMatch[1] : '';
+      var dateOk = (!df || !d || d >= df) && (!dt || !d || d <= dt);
+      var show = textOk && dateOk;
+      row.style.display = show ? '' : 'none';
+      total++; if (show) vis++;
+    });
+    if (countEl) countEl.textContent = vis + '/' + total + '건';
+  };
+
+  window._pickedFilterReset = function() {
+    var el;
+    el = document.getElementById('picked-q');  if (el) el.value = '';
+    el = document.getElementById('picked-df'); if (el) el.value = '';
+    el = document.getElementById('picked-dt'); if (el) el.value = '';
+    el = document.getElementById('picked-count'); if (el) el.textContent = '';
+    window._pickedFilter();
+  };
+
   window.showPickedActionMenu = function(btn) {
     var lot = btn.dataset.lot || '';
     window._openContextMenu(btn, [
