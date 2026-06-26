@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SQM Dashboard Mockup — C+B Hybrid</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Malgun Gothic', 'Segoe UI', sans-serif; background: #0d1117; color: #e8e0d4; min-height: 100vh; }
+
+/* ── APP SHELL ── */
+.app { display: flex; height: 100vh; }
+
+/* Sidebar */
+.sidebar { width: 56px; background: #161b26; border-right: 1px solid #21293a; display: flex; flex-direction: column; align-items: center; padding: 12px 0; gap: 4px; flex-shrink: 0; }
+.sb-logo { width: 36px; height: 36px; background: linear-gradient(135deg,#4fc3f7,#0288d1); border-radius: 8px; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.sb-item { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; transition: all 0.15s; color: #6b7c93; }
+.sb-item:hover { background: #21293a; color: #c8d6e8; }
+.sb-item.active { background: rgba(79,195,247,0.15); color: #4fc3f7; }
+.sb-divider { width: 28px; height: 1px; background: #21293a; margin: 6px 0; }
+
+/* Main area */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Titlebar */
+.titlebar { height: 44px; background: #161b26; border-bottom: 1px solid #21293a; display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0; }
+.tb-title { font-size: 13px; font-weight: 700; color: #4fc3f7; letter-spacing: 0.5px; }
+.tb-sep { color: #2a3140; }
+.tb-page { font-size: 12px; color: #8a9ab5; }
+.tb-spacer { flex: 1; }
+.tb-badge { background: rgba(255,167,38,0.15); color: #ffa726; border: 1px solid rgba(255,167,38,0.3); border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 600; }
+.tb-time { font-size: 11px; color: #4a5568; }
+
+/* Content */
+.content { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+/* KPI Row */
+.kpi-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+.kpi-card { background: #161b26; border: 1px solid #21293a; border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; }
+.kpi-card:hover { border-color: #4fc3f7; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+.kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.kpi-card.blue::before { background: #4fc3f7; }
+.kpi-card.green::before { background: #66bb6a; }
+.kpi-card.orange::before { background: #ffa726; }
+.kpi-card.teal::before { background: #26c6da; }
+.kpi-card.red::before { background: #ef5350; }
+.kpi-card.purple::before { background: #ab47bc; }
+.kpi-card.coral::before { background: #ff7043; }
+.kpi-label { font-size: 10px; color: #6b7c93; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 8px; }
+.kpi-value { font-size: 26px; font-weight: 800; line-height: 1; margin-bottom: 4px; }
+.kpi-card.blue .kpi-value { color: #4fc3f7; }
+.kpi-card.green .kpi-value { color: #66bb6a; }
+.kpi-card.orange .kpi-value { color: #ffa726; }
+.kpi-card.teal .kpi-value { color: #26c6da; }
+.kpi-card.red .kpi-value { color: #ef5350; }
+.kpi-card.purple .kpi-value { color: #ab47bc; }
+.kpi-sub { font-size: 10px; color: #4a5568; }
+.kpi-delta { position: absolute; top: 12px; right: 12px; font-size: 10px; font-weight: 700; }
+.kpi-delta.up { color: #66bb6a; }
+.kpi-delta.down { color: #ef5350; }
+
+/* Middle row */
+.mid-row { display: grid; grid-template-columns: 1fr 320px; gap: 12px; }
+
+/* Chart panel */
+.panel { background: #161b26; border: 1px solid #21293a; border-radius: 10px; padding: 16px; }
+.panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.panel-title { font-size: 12px; font-weight: 700; color: #c8d6e8; letter-spacing: 0.5px; }
+.panel-action { font-size: 10px; color: #4fc3f7; cursor: pointer; }
+
+/* Bar chart */
+.chart-area { display: flex; align-items: flex-end; gap: 6px; height: 100px; padding-top: 8px; }
+.bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.bars { display: flex; gap: 2px; align-items: flex-end; width: 100%; }
+.bar { flex: 1; border-radius: 3px 3px 0 0; min-height: 4px; transition: opacity 0.2s; }
+.bar:hover { opacity: 0.8; }
+.bar-in { background: #4fc3f7; }
+.bar-out { background: #66bb6a; }
+.bar-label { font-size: 9px; color: #4a5568; }
+.chart-legend { display: flex; gap: 12px; margin-top: 8px; }
+.legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #6b7c93; }
+.legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+/* Alert panel */
+.alert-panel { display: flex; flex-direction: column; gap: 8px; }
+.alert-item { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: all 0.15s; border-left: 3px solid; }
+.alert-item:hover { filter: brightness(1.2); }
+.alert-item.warn { background: rgba(255,167,38,0.08); border-color: #ffa726; }
+.alert-item.err { background: rgba(239,83,80,0.08); border-color: #ef5350; }
+.alert-item.ok { background: rgba(102,187,106,0.08); border-color: #66bb6a; }
+.alert-item.info { background: rgba(79,195,247,0.08); border-color: #4fc3f7; }
+.alert-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.alert-body { flex: 1; }
+.alert-title { font-size: 11px; font-weight: 600; color: #c8d6e8; margin-bottom: 2px; }
+.alert-desc { font-size: 10px; color: #6b7c93; }
+.alert-time { font-size: 9px; color: #4a5568; margin-top: 2px; }
+.alert-arrow { color: #4a5568; font-size: 12px; align-self: center; }
+
+/* Bottom table (B형) */
+.table-panel { }
+.table-tabs { display: flex; gap: 2px; margin-bottom: 12px; }
+.tab-btn { padding: 6px 14px; border-radius: 6px 6px 0 0; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid #21293a; border-bottom: none; color: #6b7c93; background: #0d1117; }
+.tab-btn.active { background: #161b26; color: #4fc3f7; border-color: #21293a; }
+.sqm-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.sqm-table th { background: #1a2030; color: #6b7c93; font-weight: 600; text-align: left; padding: 8px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #21293a; }
+.sqm-table td { padding: 8px 10px; border-bottom: 1px solid #161b26; color: #c8d6e8; }
+.sqm-table tr:hover td { background: #161b26; }
+.status-badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+.st-available { background: rgba(102,187,106,0.15); color: #66bb6a; }
+.st-pending { background: rgba(255,167,38,0.15); color: #ffa726; }
+.st-staged { background: rgba(79,195,247,0.15); color: #4fc3f7; }
+.st-picked { background: rgba(171,71,188,0.15); color: #ab47bc; }
+
+/* Figma badge */
+.figma-note { position: fixed; bottom: 16px; right: 16px; background: #1e2535; border: 1px solid #21293a; border-radius: 8px; padding: 8px 14px; font-size: 10px; color: #6b7c93; display: flex; align-items: center; gap: 6px; }
+.figma-dot { width: 6px; height: 6px; border-radius: 50%; background: #4fc3f7; animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* Sidebar tooltip */
+.sb-item { position: relative; }
+.sb-item::after { content: attr(title); position: absolute; left: 52px; top: 50%; transform: translateY(-50%); background: #21293a; color: #c8d6e8; font-size: 11px; white-space: nowrap; padding: 4px 10px; border-radius: 6px; border: 1px solid #2e3d52; opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 100; }
+.sb-item:hover::after { opacity: 1; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #21293a; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sb-logo">📦</div>
+    <div class="sb-item active" title="대시보드">🏠</div>
+    <div class="sb-item" title="재고">📋</div>
+    <div class="sb-item" title="입고">📥</div>
+    <div class="sb-item" title="출고">📤</div>
+    <div class="sb-item" title="피킹">🏷️</div>
+    <div class="sb-item" title="톤백">🪣</div>
+    <div class="sb-divider"></div>
+    <div class="sb-item" title="로그">📄</div>
+    <div class="sb-item" title="반품">↩️</div>
+    <div class="sb-item" title="스캔">📷</div>
+    <div class="sb-divider"></div>
+    <div class="sb-item" title="설정" style="margin-top:auto">⚙️</div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+
+    <!-- Titlebar -->
+    <div class="titlebar">
+      <span class="tb-title">S.I.M.S</span>
+      <span class="tb-sep">›</span>
+      <span class="tb-page">대시보드</span>
+      <div class="tb-spacer"></div>
+      <span class="tb-badge">⚠ 정합성 경고 2건</span>
+      <span class="tb-time">2026-06-26 오후 14:32</span>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- KPI Cards (6개) -->
+      <div class="kpi-row">
+        <div class="kpi-card blue">
+          <div class="kpi-delta up">+12.3t ↑</div>
+          <div class="kpi-label">현재 재고량</div>
+          <div class="kpi-value">4,821</div>
+          <div class="kpi-sub">MT · AVAILABLE 기준</div>
+        </div>
+        <div class="kpi-card green">
+          <div class="kpi-delta up">+3 ↑</div>
+          <div class="kpi-label">입고 대기</div>
+          <div class="kpi-value">7</div>
+          <div class="kpi-sub">PENDING 상태 BL</div>
+        </div>
+        <div class="kpi-card orange">
+          <div class="kpi-delta" style="color:#8a9ab5">±0</div>
+          <div class="kpi-label">출고 대기</div>
+          <div class="kpi-value">12</div>
+          <div class="kpi-sub">ALLOCATION 승인 대기</div>
+        </div>
+        <div class="kpi-card teal">
+          <div class="kpi-delta up">오늘</div>
+          <div class="kpi-label">피킹 완료</div>
+          <div class="kpi-value">320</div>
+          <div class="kpi-sub">MT · picked_weight 합계</div>
+        </div>
+        <div class="kpi-card red">
+          <div class="kpi-delta down">요주의 ↑</div>
+          <div class="kpi-label">정합성 알림</div>
+          <div class="kpi-value">2</div>
+          <div class="kpi-sub">불변식 위반 LOT</div>
+        </div>
+        <div class="kpi-card purple">
+          <div class="kpi-delta" style="color:#8a9ab5">활성</div>
+          <div class="kpi-label">LOT 총 수량</div>
+          <div class="kpi-value">183</div>
+          <div class="kpi-sub">전체 활성 LOT</div>
+        </div>
+        <div class="kpi-card coral">
+          <div class="kpi-delta down">처리필요</div>
+          <div class="kpi-label">반품 대기</div>
+          <div class="kpi-value" style="color:#ff7043">5</div>
+          <div class="kpi-sub">미처리 반품 건수</div>
+        </div>
+      </div>
+
+      <!-- Middle: Chart + Alert -->
+      <div class="mid-row">
+
+        <!-- 입출고 추이 차트 -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">📈 주간 입출고 추이</span>
+            <span class="panel-action">상세보기 →</span>
+          </div>
+          <div class="chart-area">
+            <div class="bar-group">
+              <div class="bars">
+                <div class="bar bar-in" style="height:55px"></div>
+                <div class="bar bar-out" style="height:40px"></div>
+              </div>
+              <div class="bar-label">월</div>
+            </div>
+            <div class="bar-group">
+              <div class="bars">
+                <div class="bar bar-in" style="height:70px"></div>
+                <div class="bar bar-out" style="height:60px"></div>
+              </div>
+              <div class="bar-label">화</div>
+            </div>
+            <div class="bar-group">
+              <div class="bars">
+                <div class="bar bar-in" style="height:45px"></div>
+                <div class="bar bar-out" style="height:80px"></div>
+              </div>
+              <div class="bar-label">수</div>
+            </div>
+            <div class="bar-group">
+              <div class="bars">
+                <div class="bar bar-in" style="height:90px"></div>
+                <div class="bar bar-out" style="height:50px"></div>
+              </div>
+              <div class="bar-label">목</div>
+            </div>
+            <div class="bar-group">
+              <div class="bars">
+                <div class="bar bar-in" style="height:60px"></div>
+                <div class="bar bar-out" style="height:70px"></div>
+              </div>
+              <div class="bar-label">금</div>
+            </div>
+            <div class="bar-group">
+              <div class="bars">
+                <div class="bar bar-in" style="height:30px"></div>
+                <div class="bar bar-out" style="height:20px"></div>
+              </div>
+              <div class="bar-label">토</div>
+            </div>
+            <div class="bar-group">
+              <div class="bars">
+                <div class="bar bar-in" style="height:75px; opacity:0.5"></div>
+                <div class="bar bar-out" style="height:45px; opacity:0.5"></div>
+              </div>
+              <div class="bar-label" style="color:#4fc3f7">오늘</div>
+            </div>
+          </div>
+          <div class="chart-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#4fc3f7"></div>입고 (MT)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#66bb6a"></div>출고 (MT)</div>
+          </div>
+        </div>
+
+        <!-- 실시간 알림 패널 -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">🔔 실시간 알림</span>
+            <span class="panel-action">전체보기 →</span>
+          </div>
+          <div class="alert-panel">
+            <div class="alert-item err" onclick="showTable()">
+              <span class="alert-icon">🔴</span>
+              <div class="alert-body">
+                <div class="alert-title">정합성 위반 — LOT #MIC-2026-0412</div>
+                <div class="alert-desc">initial ≠ current + picked (+2.1 MT 초과)</div>
+                <div class="alert-time">14:28 · 클릭하면 상세 테이블 →</div>
+              </div>
+              <span class="alert-arrow">›</span>
+            </div>
+            <div class="alert-item warn">
+              <span class="alert-icon">🟡</span>
+              <div class="alert-body">
+                <div class="alert-title">입고 승인 대기 7건 (3일 초과)</div>
+                <div class="alert-desc">BL #2200033057 외 6건</div>
+                <div class="alert-time">12:15</div>
+              </div>
+              <span class="alert-arrow">›</span>
+            </div>
+            <div class="alert-item info">
+              <span class="alert-icon">🔵</span>
+              <div class="alert-body">
+                <div class="alert-title">출고 배정 승인 요청 12건</div>
+                <div class="alert-desc">LBM AP 550MT Allocation 승인 필요</div>
+                <div class="alert-time">11:40</div>
+              </div>
+              <span class="alert-arrow">›</span>
+            </div>
+            <div class="alert-item ok">
+              <span class="alert-icon">🟢</span>
+              <div class="alert-body">
+                <div class="alert-title">오늘 피킹 완료 320 MT</div>
+                <div class="alert-desc">목표 대비 94% 달성</div>
+                <div class="alert-time">13:55</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- B형 상세 테이블 (알림 클릭 시 표시) -->
+      <div class="panel table-panel" id="detail-table" style="display:none">
+        <div class="panel-header">
+          <span class="panel-title">📋 정합성 위반 상세 — B형 드릴다운</span>
+          <span class="panel-action" onclick="hideTable()">닫기 ✕</span>
+        </div>
+        <div class="table-tabs">
+          <div class="tab-btn active">정합성 위반 LOT</div>
+          <div class="tab-btn">전체 재고 목록</div>
+          <div class="tab-btn">입고 대기</div>
+        </div>
+        <table class="sqm-table">
+          <thead>
+            <tr>
+              <th>LOT No.</th>
+              <th>제품</th>
+              <th>Initial (MT)</th>
+              <th>Current (MT)</th>
+              <th>Picked (MT)</th>
+              <th>차이</th>
+              <th>상태</th>
+              <th>조치</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="color:#4fc3f7">MIC-2026-0412</td>
+              <td>MIC9000</td>
+              <td>500.0</td>
+              <td>200.1</td>
+              <td>297.8</td>
+              <td style="color:#ef5350;font-weight:700">+2.1 ⚠</td>
+              <td><span class="status-badge st-available">AVAILABLE</span></td>
+              <td style="color:#4fc3f7;cursor:pointer">복구 →</td>
+            </tr>
+            <tr>
+              <td style="color:#4fc3f7">LBM-2026-0318</td>
+              <td>LBM AP</td>
+              <td>250.0</td>
+              <td>130.0</td>
+              <td>119.8</td>
+              <td style="color:#ef5350;font-weight:700">+0.2 ⚠</td>
+              <td><span class="status-badge st-staged">STAGED</span></td>
+              <td style="color:#4fc3f7;cursor:pointer">복구 →</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<div class="figma-note">
+  <div class="figma-dot"></div>
+  Figma 설계 기준 목업 — Phase A 파일럿 · SQM v8.8.1
+</div>
+
+<script>
+function showTable() {
+  const t = document.getElementById('detail-table');
+  t.style.display = 'block';
+  setTimeout(() => t.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+}
+function hideTable() {
+  document.getElementById('detail-table').style.display = 'none';
+}
+</script>
+</body>
+</html>
