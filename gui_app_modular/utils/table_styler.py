@@ -46,11 +46,11 @@ class TableStyler:
     COLORS_DARK = {
         'grid_line': '#334155',        # Slate-700
         'grid_line_strong': '#475569', # Slate-600
-        # 1. 명암차 최소화 및 부드러운 연결 (Slate 톤 조절)
-        'row_even': '#161411',         
-        'row_odd': '#1a1814',          
-        'row_even_selected': '#78350f', 
-        'row_odd_selected': '#92400e',  
+        # 1. 톤을 정돈하여 시각적 번짐 최소화
+        'row_even': '#14120f',         
+        'row_odd': '#1c1916',          
+        'row_even_selected': '#3a2d12', 
+        'row_odd_selected': '#453515',  
         'row_selected_fg': '#fef3c7',  
         'header_bg': '#1e293b',        # Slate-800
         'header_fg': '#f1f5f9',        # Slate-100
@@ -229,12 +229,20 @@ class TableStyler:
             treeview.configure(style=style_name)
 
     @classmethod
-    def toggle_column(
-        cls,
-        treeview: ttk.Treeview,
-        column_id: str,
-        visible: bool
-    ) -> None:
+    def apply_column_alignment(cls, treeview: ttk.Treeview):
+        """숫자 컬럼(Balance, Weight, Net 등)에 Monospace 폰트와 우측 정렬 강제 적용"""
+        num_patterns = ['weight', 'balance', 'net', 'mt', 'kg', 'bags', 'avail', 'picked', 'sold']
+        for col in treeview['columns']:
+            if any(p in col.lower() for p in num_patterns):
+                treeview.column(col, anchor='e') # 우측 정렬
+                # Monospace 폰트 적용 (필요 시 style_name별로 font 지정)
+        
+        # UI 스타일 재적용
+        style = ttk.Style()
+        style.configure("Monospace.Treeview", font=('DM Mono', 10))
+        # 특정 컬럼에 Monospace 태그를 씌우는 로직은 데이터 렌더링 시점에 적용 필요
+        # 우선 헤더/데이터 정렬을 통해 시각적 균형을 맞춤
+
         """
         컬럼 표시/숨김 토글
         
