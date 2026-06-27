@@ -200,7 +200,12 @@ def cancel_inventory(lot_no: str):
     try:
         db = _db()
         db.execute(
-            "UPDATE inventory SET status='STOCK', sale_ref=NULL, sold_to=NULL WHERE lot_no=?",
+            "UPDATE inventory SET status='AVAILABLE', sale_ref=NULL, sold_to=NULL WHERE lot_no=?",
+            (lot_no,)
+        )
+        # F003 fix: inventory_tonbag도 복구 (SOLD 제외)
+        db.execute(
+            "UPDATE inventory_tonbag SET status='AVAILABLE' WHERE lot_no=? AND status NOT IN ('SOLD')",
             (lot_no,)
         )
         db.commit(); db.close()
@@ -978,7 +983,7 @@ async def scan_bulk_upload(file: UploadFile = FileField(...), action: str = "loo
                 if action != "lookup":
                     STATUS_TRANS = {
                         "outbound": ("PICKED", "SOLD"),
-                        "return": ("RETURN"),
+                        "return": ("PICKED", "RETURN"),  # F002 fix: 튜플 오류 (괄호만은 문자열)
                         "pick": ("AVAILABLE", "PICKED"),
                         "available": (None, "AVAILABLE"),
                     }
