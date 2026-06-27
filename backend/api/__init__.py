@@ -704,12 +704,13 @@ def move_tonbag(payload: dict):
     if not barcode or not destination:
         raise HTTPException(400, "barcode and destination required")
     if not ENGINE_AVAILABLE:
-        return {"success": True, "message": f"[DEMO] {barcode} → {destination}"}
+        raise HTTPException(503, "엔진 불가용 — 서버를 재시작하세요")
     try:
         result = engine.move_tonbag(barcode, destination)
         return {"success": True, "message": result or f"{barcode} 이동 완료"}
     except AttributeError:
-        return {"success": True, "message": f"[DEMO] {barcode} → {destination}"}
+        # F007 fix: AttributeError도 503 반환 (엔진 메서드 누락)
+        raise HTTPException(503, "엔진 메서드 누락 — 서버 설정 오류")
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -728,12 +729,12 @@ def get_move_history(limit: int = Query(50, ge=1, le=500)):
 @app.post("/api/allocation/{lot}/cancel")
 def cancel_allocation(lot: str):
     if not ENGINE_AVAILABLE:
-        return {"success": True, "message": f"[DEMO] {lot} 배정 취소"}
+        raise HTTPException(503, "엔진 불가용 — 서버를 재시작하세요")
     try:
         result = engine.cancel_reservation(lot)
         return {"success": True, "message": result or f"{lot} 배정 취소 완료"}
     except AttributeError:
-        return {"success": True, "message": f"[DEMO] {lot} 배정 취소"}
+        raise HTTPException(503, "엔진 메서드 누락 — 서버 설정 오류")
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -741,24 +742,24 @@ def cancel_allocation(lot: str):
 @app.post("/api/outbound/{lot_no}/confirm")
 def confirm_outbound(lot_no: str):
     if not ENGINE_AVAILABLE:
-        return {"success": True, "message": f"[DEMO] {lot_no} 출고 확정"}
+        raise HTTPException(503, "엔진 불가용 — 서버를 재시작하세요")
     try:
         result = engine.confirm_outbound(lot_no)
         return {"success": True, "message": result or f"{lot_no} 출고 확정 완료"}
     except AttributeError:
-        return {"success": True, "message": f"[DEMO] {lot_no} 출고 확정"}
+        raise HTTPException(503, "엔진 메서드 누락 — 서버 설정 오류")
     except Exception as e:
         raise HTTPException(500, str(e))
 
 @app.post("/api/outbound/{lot_no}/cancel")
 def cancel_outbound_lot(lot_no: str):
     if not ENGINE_AVAILABLE:
-        return {"success": True, "message": f"[DEMO] {lot_no} 출고 취소"}
+        raise HTTPException(503, "엔진 불가용 — 서버를 재시작하세요")
     try:
         result = engine.cancel_outbound(lot_no)
         return {"success": True, "message": result or f"{lot_no} 출고 취소 완료"}
     except AttributeError:
-        return {"success": True, "message": f"[DEMO] {lot_no} 출고 취소"}
+        raise HTTPException(503, "엔진 메서드 누락 — 서버 설정 오류")
     except Exception as e:
         raise HTTPException(500, str(e))
 

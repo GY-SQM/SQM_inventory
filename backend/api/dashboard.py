@@ -651,20 +651,27 @@ def get_dashboard_weekly():
 
         DAY_LABELS = ["월", "화", "수", "목", "금", "토", "일"]
 
-        rows = c.execute("""
-            SELECT
-                DATE(COALESCE(inbound_date, created_at), 'localtime') AS day,
-                ROUND(COALESCE(SUM(CASE WHEN outbound_date IS NULL THEN weight ELSE 0 END),0)/1000.0, 3),
-                ROUND(COALESCE(SUM(CASE WHEN outbound_date IS NOT NULL THEN weight ELSE 0 END),0)/1000.0, 3)
+        # F006 fix: inbound_mt와 outbound_mt를 별개 쿼리로 (입고일/출고일 기준 분리)
+        inbound_rows = c.execute("""
+            SELECT DATE(inbound_date, 'localtime') AS day, ROUND(COALESCE(SUM(weight),0)/1000.0, 3) AS mt
             FROM inventory_tonbag
-            WHERE DATE(COALESCE(inbound_date, created_at), 'localtime')
-                  >= DATE('now', '-6 days', 'localtime')
+            WHERE DATE(inbound_date, 'localtime') >= DATE('now', '-6 days', 'localtime')
+            GROUP BY day
+            ORDER BY day ASC
+        """).fetchall()
+
+        outbound_rows = c.execute("""
+            SELECT DATE(outbound_date, 'localtime') AS day, ROUND(COALESCE(SUM(weight),0)/1000.0, 3) AS mt
+            FROM inventory_tonbag
+            WHERE outbound_date IS NOT NULL
+              AND DATE(outbound_date, 'localtime') >= DATE('now', '-6 days', 'localtime')
             GROUP BY day
             ORDER BY day ASC
         """).fetchall()
         con.close()
 
-        day_map = {row[0]: (float(row[1] or 0), float(row[2] or 0)) for row in rows}
+        inbound_map = {row[0]: float(row[1] or 0) for row in inbound_rows}
+        outbound_map = {row[0]: float(row[1] or 0) for row in outbound_rows}
 
         from datetime import date, timedelta as td
         labels, inbound_mt, outbound_mt = [], [], []
@@ -673,7 +680,8 @@ def get_dashboard_weekly():
             d = today - td(days=i)
             day_str = d.strftime("%Y-%m-%d")
             label = "오늘" if i == 0 else DAY_LABELS[d.weekday()]
-            in_mt, out_mt = day_map.get(day_str, (0.0, 0.0))
+            in_mt = inbound_map.get(day_str, 0.0)
+            out_mt = outbound_map.get(day_str, 0.0)
             labels.append(label)
             inbound_mt.append(in_mt)
             outbound_mt.append(out_mt)
