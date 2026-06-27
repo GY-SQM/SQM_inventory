@@ -756,7 +756,8 @@ def lot_list_json():
                  GROUP BY lot_no
             """).fetchall()
             tb_map = {r[0]: (int(r[1] or 0), int(r[2] or 0)) for r in tb_summary}
-        except Exception:
+        except Exception as e:  # HIGH: 예외 로깅
+            logger.warning("tb_summary 계산 실패: %s", e)
             tb_map = {}
         con.close()
         data = []
