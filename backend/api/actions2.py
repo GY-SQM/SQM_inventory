@@ -352,8 +352,8 @@ def _append_tonbag_rack_candidates(rows, con: sqlite3.Connection):
         if lot_no and sub_lt is not None and not is_sample:
             try:
                 sub_lts_by_lot.setdefault(lot_no, []).append(int(sub_lt))
-            except Exception:
-                pass
+            except Exception as e:  # MEDIUM: sub_lt 파싱 실패 로깅
+                logger.debug("sub_lt 파싱 실패: %s", e)
 
     expanded_by_lot = {
         lot_no: expand_candidates_for_sublots(candidates.get(lot_no, []), sub_lts)

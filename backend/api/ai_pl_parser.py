@@ -85,5 +85,5 @@ async def parse_pl(file: UploadFile = File(...)):
     finally:
         try:
             os.unlink(tmp_path)
-        except Exception:
-            pass
+        except Exception as e:  # MEDIUM: 임시 파일 정리 실패 로깅
+            logger.debug("임시 파일 정리 실패: %s", e)

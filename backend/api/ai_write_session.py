@@ -38,8 +38,8 @@ def _load_config() -> dict:
     if path.exists():
         try:
             return json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            pass
+        except Exception as e:  # MEDIUM: 설정 파일 파싱 실패 로깅
+            logger.debug("설정 파일 파싱 실패: %s", e)
     cfg = {
         "pin_hash": _hash_pin(DEFAULT_PIN),
         "session_minutes": 10

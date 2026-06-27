@@ -51,8 +51,8 @@ def auto_backup(operation: str = "auto") -> str:
             con = sqlite3.connect(db_src, timeout=3)
             con.execute("PRAGMA wal_checkpoint(PASSIVE)")
             con.close()
-        except Exception:
-            pass
+        except Exception as e:  # MEDIUM: WAL checkpoint 실패 로깅
+            logger.debug("WAL checkpoint 건너뜀: %s", e)
         shutil.copy2(db_src, dst_path)
 
         # 자동 백업은 50개까지 (수동 30개와 별도 카운트)
@@ -690,10 +690,10 @@ def _cleanup_old_exports(folder: str, prefix: str, keep: int = 30) -> None:
         for old in files[keep:]:
             try:
                 os.remove(os.path.join(folder, old))
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as e:  # MEDIUM: 파일 삭제 실패 로깅
+                logger.debug("파일 삭제 실패: %s", e)
+    except Exception as e:  # MEDIUM: 백업 정리 실패 로깅
+        logger.debug("백업 정리 실패: %s", e)
 
 
 @router.get("/open-lot-excel", summary="📂 LOT 리스트 Excel 저장 후 바로 열기")

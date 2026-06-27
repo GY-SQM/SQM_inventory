@@ -63,8 +63,8 @@ def _clean_value(v: Any) -> Any:
             return None
         if isinstance(v, float) and math.isnan(v):
             return None
-    except Exception:
-        pass
+    except Exception as e:  # MEDIUM: null 정규화 실패 로깅
+        logger.debug("null 정규화 실패: %s", e)
     if isinstance(v, str):
         s = v.strip()
         return s if s else None

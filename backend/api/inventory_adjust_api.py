@@ -149,8 +149,8 @@ def parse_adjust(req: ParseRequest):
         finally:
             try:
                 db.close_all()
-            except Exception:
-                pass
+            except Exception as e:  # MEDIUM: DB 연결 정리 실패 로깅
+                logger.debug("DB 연결 정리 실패: %s", e)
 
         items_out: List[Dict[str, Any]] = []
         for item in result.items:

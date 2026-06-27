@@ -40,8 +40,8 @@ def get_db_connection(
             for pragma in _DEFAULT_PRAGMAS:
                 try:
                     con.execute(pragma)
-                except Exception:
-                    pass
+                except Exception as e:  # MEDIUM: PRAGMA 실행 실패 로깅
+                    logger.debug("PRAGMA 실행 실패: %s", e)
             return con
         except sqlite3.OperationalError as e:
             last_exc = e
