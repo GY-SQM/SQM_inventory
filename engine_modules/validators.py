@@ -80,7 +80,7 @@ class InventoryValidator:
         LOT 번호 중복 검증 (DB 조회 필요)
         """
         if not self.db:
-            return ValidationResult.success([" DB 연결 없음 - 중복 체크 스킵"])
+            return ValidationResult.success(["DB 연결 없음 - 중복 체크 스킵"])  # MEDIUM: 문자열 정리
 
         existing = self.db.fetchone(
             "SELECT id, lot_no, status FROM inventory WHERE lot_no = ?",
