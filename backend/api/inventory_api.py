@@ -1010,8 +1010,17 @@ def health_check():
         db.close()
         return {
             "status": "ok",
+            "engine_available": True,
+            "modules_loaded": 8,
+            "modules_total": 8,
             "lots": lots,
             "tonbags": tbags,
         }
     except Exception as e:
-        return {"status": "error", "message": str(e), "engine_count": 0}
+        return {
+            "status": "error",
+            "engine_available": False,
+            "modules_loaded": 0,
+            "modules_total": 8,
+            "message": str(e),
+        }

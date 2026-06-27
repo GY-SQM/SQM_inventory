@@ -281,13 +281,13 @@ class QueryMixin:
             row = self.db.fetchone(
                 "SELECT * FROM inventory WHERE lot_no = ?", (lot_no,))
             if not row:
-                return {'error': f'LOT not found: {lot_no}'}
+                return None
             lot_data = _row_to_dict(row)
             lot_data['tonbags'] = self.get_tonbags(lot_no=lot_no)
             return lot_data
         except (sqlite3.OperationalError, sqlite3.IntegrityError, OSError) as e:
             logger.error(f"LOT 상세 조회 오류: {e}")
-            return {'error': str(e)}
+            return None
 
     def get_lot_items(self, lot_no: str) -> List[Dict]:
         """LOT 항목 조회 (톤백 목록)"""
