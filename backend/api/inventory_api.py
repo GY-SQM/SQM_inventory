@@ -991,7 +991,11 @@ async def scan_bulk_upload(file: UploadFile = FileField(...), action: str = "loo
                     if trans:
                         src, dst = trans
                         if src is None or r.get("status") == src:
-                            db.execute("UPDATE inventory_tonbag SET status=? WHERE id=?", (dst, r["id"]))
+                            # SQM-008 fix: 반품(RETURN) 시 location 초기화
+                            if action.lower() == "return":
+                                db.execute("UPDATE inventory_tonbag SET status=?, location=NULL WHERE id=?", (dst, r["id"]))
+                            else:
+                                db.execute("UPDATE inventory_tonbag SET status=? WHERE id=?", (dst, r["id"]))
                             r["status_changed"] = f"{src or '*'} -> {dst}"
                 r["weight"] = float(r.get("weight") or 0)
             else:

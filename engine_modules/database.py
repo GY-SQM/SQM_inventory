@@ -309,8 +309,10 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
             if not os.path.exists(self.db_path):
                 return None
 
-            # 백업 파일명 생성
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            # 백업 파일명 생성 (SQM-009 fix: datetime.now() UTC → KST)
+            from datetime import timezone, timedelta
+            kst = timezone(timedelta(hours=9))
+            timestamp = _dt.datetime.now(kst).strftime('%Y%m%d_%H%M%S')
             backup_name = f"sqm_inventory_{timestamp}_{reason}.db"
             backup_path = os.path.join(self.backup_dir, backup_name)
 
@@ -318,7 +320,7 @@ class SQMDatabase(DatabaseSchemaMixin, DatabaseMigrationMixin, DatabaseInterface
             with sqlite3.connect(backup_path) as backup_conn:
                 self.conn.backup(backup_conn)
 
-            self._last_backup_time = datetime.now()
+            self._last_backup_time = _dt.datetime.now(kst)
             logger.info(f"DB 백업 생성 (Online API): {backup_name}")
 
             # 오래된 백업 정리
