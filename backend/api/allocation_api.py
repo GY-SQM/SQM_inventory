@@ -736,8 +736,8 @@ def approve_allocation(data: dict = Body(...)):
                     "INSERT INTO allocation_approval (allocation_plan_id, status, actor, reason, created_at) VALUES (?,?,?,?,datetime('now'))",
                     (plan_id, "APPROVED", actor, reason)
                 )
-            except Exception:
-                pass  # allocation_approval 테이블 없으면 무시
+            except Exception as e:
+                logger.debug(f"allocation_approval insert skip: {e}")  # HIGH: 빈 except 제거
         con.commit(); con.close()
         return {"ok": True, "message": f"{updated}건 승인됨", "data": {"updated": updated}}
     except Exception as e:
