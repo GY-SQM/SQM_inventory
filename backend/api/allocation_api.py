@@ -890,6 +890,12 @@ def reset_all_allocations():
                 "WHERE lot_no=? AND status NOT IN ('SOLD')",
                 (lot_no,)
             )
+            # F005 fix: tonbag 상태도 복구 (SOLD 제외)
+            con.execute(
+                "UPDATE inventory_tonbag SET status='AVAILABLE' "
+                "WHERE lot_no=? AND status NOT IN ('SOLD')",
+                (lot_no,)
+            )
         con.commit(); con.close()
         logger.info(f"[reset-all] lots={len(lot_list)}, plans={cancelled_plans}")
         return {
@@ -1583,10 +1589,12 @@ def confirm_allocation_by_lot(lot_no: str):
             "UPDATE allocation_plan SET status='SOLD', executed_at=datetime('now') WHERE lot_no=? AND status='PICKED'",
             (lot_no,)
         )
+        # F004 fix: commit 전에 rowcount 체크 (데이터 오염 방지)
+        if cur.rowcount == 0:
+            con.rollback(); con.close()
+            raise HTTPException(404, f"{lot_no}: PICKED 상태가 아니거나 존재하지 않음")
         con.execute("UPDATE inventory SET status='SOLD' WHERE lot_no=?", (lot_no,))
         con.commit(); con.close()
-        if cur.rowcount == 0:
-            raise HTTPException(404, f"{lot_no}: PICKED 상태가 아니거나 존재하지 않음")
         return {"ok": True, "lot_no": lot_no, "message": f"{lot_no} → SOLD"}
     except HTTPException: raise
     except Exception as e:
