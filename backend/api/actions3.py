@@ -193,9 +193,9 @@ def return_create(payload: dict):
             con.close()
             return err_response(f"LOT '{lot_no}' 없음")
 
-        # 실제 재고 상태 반영 — 이력만 쌓이고 Return 탭에 보이지 않는 상태를 방지
+        # 실제 재고 상태 반영 — 이력만 쌓이고 Return 탭에 보이지 않는 상태를 방지 (HIGH: 상태 검증)
         con.execute(
-            "UPDATE inventory SET status='RETURN', updated_at=? WHERE lot_no=?",
+            "UPDATE inventory SET status='RETURN', updated_at=? WHERE lot_no=? AND status IN ('PICKED','AVAILABLE')",
             (ts, lot_no),
         )
         if tonbag_uid:

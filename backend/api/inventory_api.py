@@ -755,9 +755,9 @@ def confirm_allocation(lot_no: str):
             (lot_no,)
         )
         changes = cursor.rowcount
-        # inventory 테이블 상태도 SOLD 로
+        # inventory 테이블 상태도 SOLD로 (HIGH: 상태 검증 추가)
         db.execute(
-            "UPDATE inventory SET status='SOLD' WHERE lot_no=?",
+            "UPDATE inventory SET status='SOLD' WHERE lot_no=? AND status IN ('PICKED','AVAILABLE')",
             (lot_no,)
         )
         db.commit(); db.close()

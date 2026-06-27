@@ -79,7 +79,11 @@ async def scan_confirm_outbound(payload: dict):
             (r["lot_no"], "SOLD", "CONFIRMED", "SHIPPED")
         ).fetchone()[0]
         if remaining == 0:
-            conn.execute("UPDATE inventory SET status=? WHERE lot_no=?", ("SOLD", r["lot_no"]))
+            # HIGH: 상태 검증 추가 (PICKED/AVAILABLE만 SOLD 가능)
+            conn.execute(
+                "UPDATE inventory SET status=? WHERE lot_no=? AND status IN (?,?)",
+                ("SOLD", r["lot_no"], "PICKED", "AVAILABLE")
+            )
         conn.commit()
         conn.close()
         return dict(success=True,
