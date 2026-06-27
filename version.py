@@ -1,14 +1,23 @@
 # -*- coding: utf-8 -*-
 """SQM 재고관리 시스템 버전 정보"""
 
-__version__ = "8.8.1"
-VERSION = "8.8.1"
-VERSION_TUPLE = (8, 8, 1)
-RELEASE_DATE = "2026-06-15"
+__version__ = "8.8.2"
+VERSION = "8.8.2"
+VERSION_TUPLE = (8, 8, 2)
+RELEASE_DATE = "2026-06-27"
 APP_NAME = "SQM 재고관리 시스템"
 APP_NAME_EN = "SQM Inventory Management System"
-BUILD_DATE = "2026-06-15"
+BUILD_DATE = "2026-06-27"
 BUILD_NOTE = (
+    "v8.8.2 (2026-06-27)\n"
+    "3-AI 협업 전수 버그 수정 완료 — 50개 버그 일괄 처리\n"
+    "  [CRITICAL] F001~F007 + BUG-001 (8개): 상태 무결성, 트랜잭션 순서, 타임존\n"
+    "  [HIGH] 27개: 상태 검증, 로깅, 예외 처리, API 응답\n"
+    "  [MEDIUM] 12개: 타입 강변환, 빈 except → 로깅, 문자열 정리\n"
+    "  [LOW] 3개: boolean 간결화, truthiness 사용\n"
+    "  [TEST] 402/402 passed (100% 회귀)\n"
+    "  [QUALITY] 점수 104/100 (A 등급)\n"
+    "\n"
     "v8.8.1 (2026-06-15)\n"
     "따뜻한 테마 + 라이트 모드 정합 + 회귀 수정\n"
     "  [FIX] 반품 재입고 엔진 logger 미정의(NameError)로 반품 흐름 차단되던 회귀 수정\n"
