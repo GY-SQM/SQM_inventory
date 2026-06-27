@@ -231,8 +231,11 @@
       c.innerHTML = html;
     }).catch(function(e){
       if (window.getCurrentRoute() !== route) return;
-      c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
-      showToast('error', 'Inventory load failed: ' + (e&&e.message||String(e)));
+      window.sqmShowError ? window.sqmShowError({
+        title: '재고 목록 로드 실패',
+        what: '재고(Inventory) 탭의 전체 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/inventory', container: c, toast: true
+      }) : (c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: '+escapeHtml(e.message||String(e))+'</div>');
     });
   }
 
@@ -1079,8 +1082,11 @@
       c.innerHTML = html;
     }).catch(function(e) {
       if (window.getCurrentRoute() !== route) return;
-      c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: ' + escapeHtml(e.message||String(e)) + '</div>';
-      showToast('error', 'Available 로드 실패: ' + (e&&e.message||String(e)));
+      window.sqmShowError ? window.sqmShowError({
+        title: 'Available 재고 로드 실패',
+        what: 'Available(가용 재고) 탭의 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/inventory?status=AVAILABLE', container: c, toast: true
+      }) : (c.innerHTML = '<div class="empty" style="padding:40px;text-align:center">Load failed: ' + escapeHtml(e.message||String(e)) + '</div>');
     });
   }
 

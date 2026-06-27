@@ -61,7 +61,7 @@
     if (hist) {
       hist.innerHTML = '<div style="color:var(--text-muted);font-size:.84rem">대화가 초기화되었습니다.</div>';
     }
-    apiPost('/api/ai/chat/clear', {}).catch(function(){});
+    apiPost('/api/ai/chat/clear', {}).catch(function(e){ console.warn('[AI chat clear]', e && e.message || e); });
   };
 
   window._aiChatSend = function(preset) {
@@ -864,7 +864,15 @@
       document.getElementById('sqm-modal-content').innerHTML='<h2 style="margin-bottom:16px">'+escapeHtml(title)+'</h2>'+html;
       _sqmSyncModalHeaderFromContent();
     }).catch(function(e){
-      document.getElementById('sqm-modal-content').innerHTML='<h2>'+escapeHtml(title)+'</h2><div class="empty">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
+      var mc = document.getElementById('sqm-modal-content');
+      if (mc) {
+        mc.innerHTML = '<h2>' + escapeHtml(title) + '</h2>';
+        window.sqmShowError ? window.sqmShowError({
+          title: '정보 모달 로드 실패',
+          what: '"' + title + '" 데이터를 서버에서 불러오는 중 오류가 발생했습니다.',
+          why: e, container: mc.appendChild(document.createElement('div')), toast: true
+        }) : (mc.innerHTML += '<div class="empty">Load failed: '+escapeHtml(e.message||String(e))+'</div>');
+      }
       _sqmSyncModalHeaderFromContent();
     });
   }
@@ -881,7 +889,17 @@
       document.getElementById('sqm-modal-content').innerHTML='<h2 style="margin-bottom:16px">LOT Detail: '+escapeHtml(lotNo)+'</h2>'+html;
       _sqmSyncModalHeaderFromContent();
     }).catch(function(e){
-      document.getElementById('sqm-modal-content').innerHTML='<h2>LOT Detail: '+escapeHtml(lotNo)+'</h2><div class="empty">Load failed: '+escapeHtml(e.message||String(e))+'</div>';
+      var mc = document.getElementById('sqm-modal-content');
+      if (mc) {
+        mc.innerHTML = '<h2>LOT Detail: ' + escapeHtml(lotNo) + '</h2>';
+        var errDiv = document.createElement('div');
+        mc.appendChild(errDiv);
+        window.sqmShowError ? window.sqmShowError({
+          title: 'LOT 상세 로드 실패',
+          what: 'LOT ' + lotNo + ' 상세 정보를 서버에서 불러오는 중 오류가 발생했습니다.',
+          why: e, endpoint: '/api/action/lot-detail/' + lotNo, container: errDiv, toast: true
+        }) : (mc.innerHTML += '<div class="empty">Load failed: '+escapeHtml(e.message||String(e))+'</div>');
+      }
       _sqmSyncModalHeaderFromContent();
     });
   };

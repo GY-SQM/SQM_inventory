@@ -133,8 +133,12 @@
       if (window.getCurrentRoute() !== route) return;
       document.getElementById('inbound-loading').style.display = 'none';
       var el = document.getElementById('inbound-empty');
-      if (el) { el.textContent = '❌ 로드 실패: '+(e.message||String(e)); el.style.display = 'block'; }
-      showToast('error', '입고 목록 로드 실패');
+      if (el) { el.style.display = 'block'; }
+      window.sqmShowError ? window.sqmShowError({
+        title: '입고 목록 로드 실패',
+        what: '입고(Inbound) 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/logistics/inbound', container: el, toast: true
+      }) : (el && (el.textContent = '❌ 로드 실패: '+(e.message||String(e))));
       dbgLog('❌','inbound-page',String(e),'#f44336');
     });
   }
@@ -677,8 +681,12 @@
       if (window.getCurrentRoute() !== route) return;
       document.getElementById('outbound-loading').style.display = 'none';
       var el = document.getElementById('outbound-empty');
-      if (el) { el.textContent = '❌ 로드 실패: '+(e.message||String(e)); el.style.display = 'block'; }
-      showToast('error', '출고 현황 로드 실패');
+      if (el) { el.style.display = 'block'; }
+      window.sqmShowError ? window.sqmShowError({
+        title: '출고 현황 로드 실패',
+        what: '출고(Outbound) 현황 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/q/outbound-status', container: el, toast: true
+      }) : (el && (el.textContent = '❌ 로드 실패: '+(e.message||String(e))));
     });
   }
 
@@ -722,7 +730,11 @@
       tbl += '</tbody></table>';
       content.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">' + rows.length + '개 톤백</p>' + tbl;
     }).catch(function(e){
-      content.innerHTML = '<div class="empty">톤백 로드 실패: '+escapeHtml(e.message||'')+'</div>';
+      window.sqmShowError ? window.sqmShowError({
+        title: '출고 톤백 상세 로드 실패',
+        what: '출고 LOT 톤백 상세 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/tonbags?lot_no=...', container: content, toast: false
+      }) : (content.innerHTML = '<div class="empty">톤백 로드 실패: '+escapeHtml(e.message||'')+'</div>');
     });
   };
 
@@ -740,7 +752,11 @@
       renderReturnRows(rows, container);
     }).catch(function(e){
       if (window.getCurrentRoute() !== route) return;
-      container.innerHTML = '<div class="empty" style="padding:60px;text-align:center">Load failed: ' + escapeHtml(String(e)) + '</div>';
+      window.sqmShowError ? window.sqmShowError({
+        title: 'Return 재고 로드 실패',
+        what: 'Return 상태 재고 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/inventory?status=RETURN', container: container, toast: true
+      }) : (container.innerHTML = '<div class="empty" style="padding:60px;text-align:center">Load failed: ' + escapeHtml(String(e)) + '</div>');
     });
   }
 
@@ -909,8 +925,12 @@
       if (window.getCurrentRoute() !== route) return;
       var _mlEl = document.getElementById('move-loading'); if (_mlEl) _mlEl.style.display = 'none';
       var _meEl = document.getElementById('move-empty');
-      if (_meEl) { _meEl.textContent = '❌ 로드 실패: ' + (e && e.message || String(e)); _meEl.style.display = 'block'; }
-      showToast('error', '이동 이력 로드 실패: ' + (e && e.message || String(e)));
+      if (_meEl) { _meEl.style.display = 'block'; }
+      window.sqmShowError ? window.sqmShowError({
+        title: '이동 이력 로드 실패',
+        what: '재고 이동 이력을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/q/move-history', container: _meEl, toast: true
+      }) : (_meEl && (_meEl.textContent = '❌ 로드 실패: ' + (e && e.message || String(e))));
     });
   }
 
@@ -1007,7 +1027,12 @@
       if (window.getCurrentRoute() !== route) return;
       document.getElementById('log-loading').style.display = 'none';
       var el=document.getElementById('log-empty');
-      if (el) { el.textContent='Load failed: '+(e.message||String(e)); el.style.display='block'; }
+      if (el) { el.style.display='block'; }
+      window.sqmShowError ? window.sqmShowError({
+        title: '감사 로그 로드 실패',
+        what: '감사 로그(Audit Log) 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/audit/logs', container: el, toast: true
+      }) : (el && (el.textContent='Load failed: '+(e.message||String(e))));
     });
   }
 

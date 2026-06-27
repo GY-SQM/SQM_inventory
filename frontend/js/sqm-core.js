@@ -1945,5 +1945,65 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     }, 5000);
   })();
 
+  /* ── sqmShowError: 상세 에러 진단 박스 ──────────────────────────────
+     에러 발생 시 WHY(왜 이 에러가 생겼는지)를 화면에 표시한다.
+     opts: { title, what, why, hint, endpoint, container, toast }
+  ──────────────────────────────────────────────────────────────────── */
+  window._sqmHint = window._sqmHint || function(e) {
+    var msg = (e && e.message) || String(e || '');
+    var status = e && e.status;
+    if (msg === 'Failed to fetch' || msg.indexOf('NetworkError') >= 0 || msg.indexOf('fetch') >= 0)
+      return '서버(백엔드)에 연결할 수 없습니다.\n• sqm_debug.log 파일을 열어 서버 에러 여부 확인\n• 작업 관리자에서 python.exe 프로세스 확인\n• 앱을 완전히 종료 후 재시작';
+    if (status === 0 || msg === 'timeout')
+      return '서버 응답 시간 초과(8초). 잠시 후 다시 시도하거나 필터를 좁혀서 조회하세요.';
+    if (status === 404)
+      return 'API 엔드포인트를 찾을 수 없습니다(404). 앱 버전이 맞는지 확인하세요.';
+    if (status === 500)
+      return '서버 내부 오류(500). sqm_debug.log에서 Python 에러를 확인하세요.';
+    if (status === 422)
+      return '요청 데이터 형식이 잘못되었습니다(422). 입력값을 확인하세요.';
+    return '알 수 없는 오류입니다. 개발자 콘솔(F12 → Console)을 확인하세요.';
+  };
+
+  window.sqmShowError = window.sqmShowError || function(opts) {
+    opts = opts || {};
+    var title    = opts.title    || '오류 발생';
+    var what     = opts.what     || '작업 중 오류가 발생했습니다.';
+    var why      = opts.why      || '알 수 없는 오류';
+    var hint     = opts.hint     || window._sqmHint(why);
+    var endpoint = opts.endpoint || '';
+    var esc = (typeof window.escapeHtml === 'function') ? window.escapeHtml : function(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(m){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];}); };
+
+    if (opts.container) {
+      var whyStr = String(why && why.message ? why.message : (why || ''));
+      var hintLines = hint.replace(/\n•/g, '<br>•').replace(/\n/g,'<br>');
+      var html = '<div class="sqm-error-box" style="' +
+        'border:1px solid #ef444480;background:#1c0a0a;border-radius:8px;' +
+        'padding:20px 24px;margin:20px;font-family:Malgun Gothic,sans-serif">' +
+        '<div style="color:#fca5a5;font-weight:700;font-size:15px;margin-bottom:12px">⚠️ ' + esc(title) + '</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+        '<tr><td style="color:#94a3b8;padding:4px 0;width:80px;vertical-align:top">무엇을</td>' +
+        '<td style="color:#e2e8f0;padding:4px 0">' + esc(what) + '</td></tr>' +
+        '<tr><td style="color:#94a3b8;padding:4px 0;vertical-align:top">에러</td>' +
+        '<td style="color:#fca5a5;padding:4px 0;font-family:monospace">' + esc(whyStr) + '</td></tr>' +
+        (endpoint ? '<tr><td style="color:#94a3b8;padding:4px 0">API</td>' +
+        '<td style="color:#7dd3fc;padding:4px 0;font-family:monospace">' + esc(endpoint) + '</td></tr>' : '') +
+        (hint ? '<tr><td style="color:#94a3b8;padding:4px 0;vertical-align:top">조치</td>' +
+        '<td style="color:#fde68a;padding:4px 0">' + hintLines + '</td></tr>' : '') +
+        '</table>' +
+        '<button onclick="location.reload()" style="margin-top:14px;background:#374151;' +
+        'color:#e2e8f0;border:0;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:12px">🔄 새로고침</button>' +
+        '</div>';
+      opts.container.innerHTML = html;
+    }
+
+    if (opts.toast !== false && typeof showToast === 'function') {
+      var whyShort = String(why && why.message ? why.message : (why || ''));
+      if (whyShort.length > 60) whyShort = whyShort.slice(0, 60) + '…';
+      showToast('error', title + ': ' + whyShort);
+    }
+
+    console.error('[SQM Error]', title, why && why.message ? why.message : why, endpoint || '');
+  };
 
 })();

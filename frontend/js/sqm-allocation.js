@@ -119,7 +119,12 @@
       if (window.getCurrentRoute() !== route) return;
       var ldEl2 = document.getElementById('alloc-loading'); if (ldEl2) ldEl2.style.display = 'none';
       var emptyEl2 = document.getElementById('alloc-empty');
-      if (emptyEl2) { emptyEl2.textContent = 'Load failed: ' + (e.message||''); emptyEl2.style.display = 'block'; }
+      if (emptyEl2) { emptyEl2.style.display = 'block'; }
+      window.sqmShowError ? window.sqmShowError({
+        title: '배정 목록 로드 실패',
+        what: 'Allocation(배정) 탭의 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/allocation', container: emptyEl2, toast: true
+      }) : (emptyEl2 && (emptyEl2.textContent = 'Load failed: ' + (e.message||'')));
     });
   }
 
@@ -650,7 +655,11 @@
       tbl += '</tbody></table>';
       content.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">' + rows.length + '개 톤백</p>' + tbl;
     }).catch(function(e){
-      content.innerHTML = '<div class="empty">상세 로드 실패: '+escapeHtml(e.message||'')+'</div>';
+      window.sqmShowError ? window.sqmShowError({
+        title: '할당 상세 로드 실패',
+        what: 'Allocation 상세 톤백 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/allocation/{lot}/tonbags', container: content, toast: false
+      }) : (content.innerHTML = '<div class="empty">상세 로드 실패: '+escapeHtml(e.message||'')+'</div>');
     });
   };
 

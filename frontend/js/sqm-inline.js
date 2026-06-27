@@ -274,7 +274,11 @@
       tbl += '</tbody></table>';
       content.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">' + rows.length + '개 톤백</p>' + tbl;
     }).catch(function(e){
-      content.innerHTML = '<div class="empty">톤백 로드 실패: '+escapeHtml(e.message||'')+'</div>';
+      window.sqmShowError ? window.sqmShowError({
+        title: '톤백 목록 로드 실패',
+        what: 'LOT 상세 패널의 톤백 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/inventory/{lot}/tonbags', container: content, toast: false
+      }) : (content.innerHTML = '<div class="empty">톤백 로드 실패: '+escapeHtml(e.message||'')+'</div>');
     });
   };
 
@@ -396,7 +400,11 @@
       tbl += '</tbody></table>';
       content.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">' + rows.length + '개 톤백</p>' + tbl;
     }).catch(function(e){
-      content.innerHTML = '<div class="empty">톤백 로드 실패: '+escapeHtml(e.message||'')+'</div>';
+      window.sqmShowError ? window.sqmShowError({
+        title: '출고 톤백 목록 로드 실패',
+        what: '출고(Sold) LOT의 톤백 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/inventory/{lot}/tonbags', container: content, toast: false
+      }) : (content.innerHTML = '<div class="empty">톤백 로드 실패: '+escapeHtml(e.message||'')+'</div>');
     });
   };
 
@@ -2183,7 +2191,11 @@
     apiGet('/api/outbound/lot-qty/lots').then(function(res) {
       _lotItems = (res && res.data && res.data.items) || [];
       renderLotOptions();
-    }).catch(function() { lotSel.innerHTML = '<option value="">목록 로드 실패</option>'; });
+    }).catch(function(e) {
+      lotSel.innerHTML = '<option value="">목록 로드 실패</option>';
+      console.error('[sqm-inline] LOT qty list load failed', e && e.message || e);
+      if (typeof showToast === 'function') showToast('error', 'LOT 목록 로드 실패: ' + (e && e.message || String(e)));
+    });
     lotSortBtn.addEventListener('click', function() {
       _lotSortAsc = !_lotSortAsc;
       lotSortBtn.textContent = _lotSortAsc ? '↑ 오름차순' : '↓ 내림차순';
@@ -2212,7 +2224,10 @@
         });
         updateTbSum();
         refresh();
-      }).catch(function(){ tbBox.innerHTML = '<span style="color:var(--danger)">톤백 로드 실패</span>'; });
+      }).catch(function(e){
+        tbBox.innerHTML = '<span style="color:var(--danger)">톤백 로드 실패: ' + escapeHtml(e && e.message || String(e || '')) + '</span>';
+        console.error('[sqm-inline] LOT qty tonbag load failed', e && e.message || e);
+      });
     }
 
     document.getElementById('lq-tb-all').addEventListener('click', function(e){ e.preventDefault();

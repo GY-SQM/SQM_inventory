@@ -286,7 +286,12 @@
       if (window.getCurrentRoute() !== route) return;
       var _pickLd2 = document.getElementById('picked-loading'); if (_pickLd2) _pickLd2.style.display = 'none';
       var el = document.getElementById('picked-empty');
-      if (el) { el.textContent = 'Load failed: '+(e.message||String(e)); el.style.display='block'; }
+      if (el) { el.style.display='block'; }
+      window.sqmShowError ? window.sqmShowError({
+        title: 'Picked 목록 로드 실패',
+        what: 'Picked(피킹 완료) 재고 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/inventory?status=PICKED', container: el, toast: true
+      }) : (el && (el.textContent = 'Load failed: '+(e.message||String(e))));
     });
   }
 
@@ -331,7 +336,11 @@
       tbl += '</tbody></table>';
       content.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem;margin-bottom:8px">' + rows.length + '개 톤백</p>' + tbl;
     }).catch(function(e){
-      content.innerHTML = '<div class="empty">톤백 로드 실패: '+escapeHtml(e.message||'')+'</div>';
+      window.sqmShowError ? window.sqmShowError({
+        title: 'Picked 톤백 상세 로드 실패',
+        what: 'Picked LOT의 톤백 상세 목록을 서버에서 불러오는 중 오류가 발생했습니다.',
+        why: e, endpoint: '/api/tonbags?lot_no=...', container: content, toast: false
+      }) : (content.innerHTML = '<div class="empty">톤백 로드 실패: '+escapeHtml(e.message||'')+'</div>');
     });
   };
 
