@@ -747,7 +747,7 @@ def quick_outbound_paste(req: QuickOutboundPasteRequest):
         f"· 총중량 {total_weight_kg:.1f} kg · 고객 {req.customer}"
     )
     return {
-        "ok": True if fail_count == 0 else False,
+        "ok": fail_count == 0,  # LOW: 간결한 boolean 표현
         "data": {
             "total": len(req.rows),
             "success_count": success_count,

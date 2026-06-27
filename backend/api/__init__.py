@@ -197,7 +197,7 @@ async def onestop_parse_stream(job_id: str):
                 break
             await _asyncio.sleep(0.15)
             # heartbeat (긴 대기 시 keep-alive)
-            if len(events) == 0:
+            if not events:  # LOW: truthiness 사용
                 yield ": keepalive\n\n"
 
     return StreamingResponse(

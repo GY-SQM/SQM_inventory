@@ -203,7 +203,7 @@ def integrity_check():
         return ok_response(data={
             "issues": issues,
             "issue_count": len(issues),
-            "status": "PASS" if len(issues) == 0 else "FAIL",
+            "status": "PASS" if not issues else "FAIL",  # LOW: truthiness 사용
             "checked_at": datetime.now(KST).isoformat(timespec="seconds"),
             "stats": {"total_lots": total_lots, "total_tonbags": total_tbs}
         })
