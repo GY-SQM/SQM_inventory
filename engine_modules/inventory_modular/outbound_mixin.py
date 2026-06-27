@@ -804,12 +804,12 @@ class OutboundMixin(InventoryBaseMixin):
             self._recalc_current_weight(lot_no, reason='P2_OUTBOUND_STAGE2')
         self._recalc_lot_status(lot_no)
         
-        # ★ 3단계: stock_movement 이력
+        # ★ 3단계: stock_movement 이력 [BUG-001 FIX: movement_type 플레이스홀더 추가]
         self.db.execute(
-            """INSERT INTO stock_movement 
+            """INSERT INTO stock_movement
             (lot_no, movement_type, qty_kg, remarks, created_at)
-            VALUES (?, ?, ?, ?)""",
-            (lot_no, weight_kg, f"customer={customer}" if customer else '', now)
+            VALUES (?, ?, ?, ?, ?)""",
+            (lot_no, 'OUTBOUND', weight_kg, f"customer={customer}" if customer else '', now)
         )
         
         # ★ 4단계: outbound 테이블 기록

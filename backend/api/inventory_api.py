@@ -900,13 +900,21 @@ def scan_process(payload: dict):
                 "data": r
             }
         elif action == "outbound":
+            # F001 fix: tonbag 상태 변경 + 부모 inventory 무게 업데이트 (불변식 보장)
+            weight_kg = r.get('weight', 0.0)
+            lot_no = r.get('lot_no')
             db.execute(
                 "UPDATE inventory_tonbag SET status='PICKED', picked_date=date('now') WHERE sub_lt=?",
                 (barcode,)
             )
+            # 부모 inventory 동시 업데이트 (원자성)
+            db.execute(
+                "UPDATE inventory SET current_weight = current_weight - ?, picked_weight = picked_weight + ? WHERE lot_no = ?",
+                (weight_kg, weight_kg, lot_no)
+            )
             db.commit()
             db.close()
-            return {"success": True, "message": f"{barcode} 출고 처리 완료", "data": r}
+            return {"success": True, "message": f"{barcode} 출고 처리 완료 (+{weight_kg}kg picked)", "data": r}
         else:
             db.close()
             return {"success": True, "message": f"{barcode} 조회 완료", "data": r}
