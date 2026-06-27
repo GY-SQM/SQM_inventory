@@ -303,13 +303,13 @@ STATUS_RESERVED = "RESERVED"
 STATUS_PICKED = "PICKED"
 STATUS_SHIPPED = "SHIPPED"
 
-# 색상
+# 색상 (Slate & Amber 테마 동기화)
 COLORS = {
-    'success': '#28a745',
-    'warning': '#ffc107',
-    'danger': '#dc3545',
-    'info': '#17a2b8',
-    'primary': '#007bff',
+    'success': '#52c87e',  # CSS --status-available
+    'warning': '#f59e0b',  # CSS --accent (Amber)
+    'danger': '#e06868',   # CSS --status-return
+    'info': '#38bdf8',     # CSS --status-reserved
+    'primary': '#f59e0b',  # CSS --accent
 }
 
 # 최근 파일 최대 개수

@@ -86,7 +86,7 @@ class ManualInboundPreviewDialog:
         info.pack(fill=X, padx=10)
         tk.Label(info,
                  text=f"총 {len(rows_valid)}건 | 셀 더블클릭으로 편집 가능 | 편집 후 [DB 반영]",
-                 font=('맑은 고딕', 10), bg=bg, fg=fg).pack(anchor='w')
+                 font=('Noto Sans KR', 10), bg=bg, fg=fg).pack(anchor='w')
 
         # ═══ Treeview ═══
         tree_frame = tk.Frame(self.popup, bg=bg)
@@ -148,7 +148,7 @@ class ManualInboundPreviewDialog:
         total_tb = sum(p.get('mxbg_pallet', 0) for _, p in rows_valid)
         tk.Label(btn_bar,
                  text=f"합계: {total_kg:,.0f} kg | 톤백 {total_tb:,}개",
-                 font=('맑은 고딕', 10), bg=bg, fg=fg).pack(side=LEFT)
+                 font=('Noto Sans KR', 10), bg=bg, fg=fg).pack(side=LEFT)
 
         self.popup.wait_window()
 
@@ -179,7 +179,7 @@ class ManualInboundPreviewDialog:
 
         current_val = self.tree.set(item, col_name)
 
-        entry = tk.Entry(self.tree, font=('맑은 고딕', 10))
+        entry = tk.Entry(self.tree, font=('Noto Sans KR', 10))
         entry.insert(0, current_val.replace(',', ''))  # 숫자 콤마 제거
         entry.select_range(0, 'end')
         entry.place(x=x, y=y, width=w, height=h)

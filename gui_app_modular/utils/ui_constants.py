@@ -161,7 +161,7 @@ class FontScale:
     사용법:
         fonts = FontScale(dpi=120)
         title_font = fonts.get_font(FontStyle.TITLE, 'bold')
-        # ('맑은 고딕', 20, 'bold')
+        # ('Noto Sans KR', 20, 'bold')
     """
 
     # 기준 폰트 크기 (96 DPI 기준) — v3.8.7: 30% 확대
@@ -176,7 +176,7 @@ class FontScale:
     }
 
     # 폰트 패밀리
-    FONT_FAMILY = '맑은 고딕'
+    FONT_FAMILY = 'Noto Sans KR'
     MONO_FAMILY = 'Consolas'
 
     def __init__(self, dpi: float = 96):
@@ -696,14 +696,11 @@ def set_global_theme(theme_name: str) -> None:
 
 def tc(key: str, dark: bool = None) -> str:
     """테마 자동 대응 색상 반환.
-
-    Args:
-        key:  ThemeColors.LIGHT/DARK 딕셔너리 키
-        dark: None → is_dark() 자동 사용, True/False → 직접 지정
-
-    Returns:
-        해당 테마의 색상 hex 문자열
-
+       v8.8.6: 디자인 시스템(Amber/Slate) 일관성을 위해 강제 오버라이드.
+    """
+    if key == 'accent': return '#f59e0b'
+    if key == 'bg_primary': return '#151310' if dark else '#f4efe7'
+    return ThemeColors.get(key, dark)
     예시:
         label.config(fg=tc('text_primary'))
         frame.config(bg=tc('bg_primary'))
@@ -864,7 +861,7 @@ class ReadableStyle:
     ROW_HEIGHT = 40  # v8.7.0: 36→40 (행 간격 여유)
 
     # 기본 폰트 — v3.8.7: 30% 확대
-    FONT_FAMILY = '맑은 고딕'
+    FONT_FAMILY = 'Noto Sans KR'
     FONT_SIZE = 13       # 10 → 13
     HEADING_SIZE = 13    # 10 → 13
 
@@ -1070,9 +1067,31 @@ class ReadableStyle:
         }
 
 
-# ═══════════════════════════════════════════════════════════════
-# 7. 다이얼로그 위치 유틸리티
-# ═══════════════════════════════════════════════════════════════
+class DesignManager:
+"""가상 디자인 서버: theme_config.json을 실시간 모니터링하여 테마 적용"""
+def __init__(self, root):
+    self.root = root
+    self.config_path = Path("theme_config.json")
+    self.apply_theme()
+        
+def load_config(self):
+    try:
+        with open(self.config_path, 'r') as f:
+            return json.load(f)
+    except:
+        return {}
+
+def apply_theme(self):
+    config = self.load_config()
+    if not config: return
+        
+    # UI 업데이트 로직 (ttk.Style 등 활용)
+    style = ttk.Style()
+    style.configure(".", foreground=config.get("text_primary", "#d1c9bd"))
+        
+    # 1초마다 config 감시 (실시간 튜닝 핵심)
+    self.root.after(1000, self.apply_theme)
+
 
 def center_dialog(dialog, parent=None):
     """
@@ -1543,11 +1562,11 @@ def make_tab_header(parent, title: str, status_color: str = '#3b82f6',
     inner.pack(side='left', fill='both', expand=True)
 
     tk.Label(inner, text=title, bg=bg, fg=fg,
-             font=('맑은 고딕', 12, 'bold')).pack(side='left', padx=10)
+             font=('Noto Sans KR', 12, 'bold')).pack(side='left', padx=10)
 
     if count_var is not None:
         tk.Label(inner, textvariable=count_var, bg=bg, fg=status_color,
-                 font=('맑은 고딕', 11, 'bold')).pack(side='right', padx=10)
+                 font=('Noto Sans KR', 11, 'bold')).pack(side='right', padx=10)
 
     return outer
 

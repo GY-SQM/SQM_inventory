@@ -358,10 +358,10 @@ class BackupHandlersMixin:
             # 상단 요약
             header = tk.Frame(dialog, bg=_h_bg, padx=15, pady=10)
             header.pack(fill=X)
-            tk.Label(header, text="📊 SQM 데이터베이스 구조", font=('맑은 고딕', 16, 'bold'),
+            tk.Label(header, text="📊 SQM 데이터베이스 구조", font=('Noto Sans KR', 16, 'bold'),
                      bg=_h_bg, fg=_h_fg).pack(anchor='w')
             tk.Label(header, text=f"경로: {db_path}  |  크기: {db_size_mb:.2f} MB  |  엔진: SQLite (WAL)",
-                     font=('맑은 고딕', 10), bg=_h_bg, fg=_h_fg_sec).pack(anchor='w', pady=(3,0))
+                     font=('Noto Sans KR', 10), bg=_h_bg, fg=_h_fg_sec).pack(anchor='w', pady=(3,0))
 
             # 테이블 목록 Treeview
             tree_frame = ttk.Frame(dialog)
@@ -432,13 +432,13 @@ class BackupHandlersMixin:
             footer = tk.Frame(dialog, bg=_h_bg, padx=15, pady=8)
             footer.pack(fill=X)
             tk.Label(footer, text=f"총 {len(tables)}개 테이블  |  총 {total_rows:,}행  |  인덱스 44개",
-                     font=('맑은 고딕', 11, 'bold'), bg=_h_bg, fg=ThemeColors.get('statusbar_icon_ok', _bh_dark)).pack(side=LEFT)
+                     font=('Noto Sans KR', 11, 'bold'), bg=_h_bg, fg=ThemeColors.get('statusbar_icon_ok', _bh_dark)).pack(side=LEFT)
 
             tk.Button(footer, text="닫기", command=dialog.destroy,
-                      font=('맑은 고딕', 10), padx=15).pack(side=RIGHT)
+                      font=('Noto Sans KR', 10), padx=15).pack(side=RIGHT)
             tk.Button(footer, text="📋 docs/DB_SCHEMA.md 열기",
                       command=lambda: self._open_db_schema_doc(),
-                      font=('맑은 고딕', 10), padx=15).pack(side=RIGHT, padx=5)
+                      font=('Noto Sans KR', 10), padx=15).pack(side=RIGHT, padx=5)
 
         except (sqlite3.OperationalError, sqlite3.DatabaseError, OSError, ValueError) as e:
             CustomMessageBox.showerror(self.root, "오류", f"DB 정보 조회 실패:\n{e}")

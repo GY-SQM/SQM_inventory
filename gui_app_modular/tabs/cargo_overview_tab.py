@@ -136,14 +136,14 @@ class CargoOverviewTabMixin:
         # 상단: 기준 (총 입고 / 현재 재고) + 상태 필터
         filter_frame = ttk.Frame(frame)
         filter_frame.pack(fill=X, padx=Spacing.XS, pady=(0, Spacing.SM))
-        ttk.Label(filter_frame, text="기준:", font=('맑은 고딕', 10, 'bold')).pack(side=LEFT, padx=(0, Spacing.XS))
+        ttk.Label(filter_frame, text="기준:", font=('Noto Sans KR', 10, 'bold')).pack(side=LEFT, padx=(0, Spacing.XS))
         self._cargo_scope_var = tk.StringVar(value="all")
         ttk.Radiobutton(filter_frame, text="총 입고 기준", variable=self._cargo_scope_var, value="all",
                         command=self._on_cargo_scope_change).pack(side=LEFT, padx=(0, Spacing.SM))
         ttk.Radiobutton(filter_frame, text="현재 재고 기준", variable=self._cargo_scope_var, value="current",
                         command=self._on_cargo_scope_change).pack(side=LEFT, padx=(0, Spacing.SM))
         apply_tooltip(filter_frame.winfo_children()[-1], "현재 재고 기준: 전체=판매가능+판매배정+판매화물 결정(출고 제외)")
-        ttk.Label(filter_frame, text="  상태:", font=('맑은 고딕', 10, 'bold')).pack(side=LEFT, padx=(Spacing.SM, Spacing.XS))
+        ttk.Label(filter_frame, text="  상태:", font=('Noto Sans KR', 10, 'bold')).pack(side=LEFT, padx=(Spacing.SM, Spacing.XS))
         self._cargo_status_var = tk.StringVar(value="전체 (0)")
         self._cargo_status_combo = ttk.Combobox(
             filter_frame, textvariable=self._cargo_status_var,
@@ -178,8 +178,8 @@ class CargoOverviewTabMixin:
         all_col_ids = [c[0] for c in CARGO_OVERVIEW_COLUMNS]
         import tkinter.font as tkfont
         _style = ttk.Style()
-        _font = tkfont.Font(family='맑은 고딕', size=11)
-        _head_font = tkfont.Font(family='맑은 고딕', size=11, weight='bold')
+        _font = tkfont.Font(family='Noto Sans KR', size=11)
+        _head_font = tkfont.Font(family='Noto Sans KR', size=11, weight='bold')
         _row_h = _font.metrics('linespace') + 6
         _tv_bg = ThemeColors.get('bg_card', _is_dark)
         _tv_fg = ThemeColors.get('text_primary', _is_dark)
@@ -425,7 +425,7 @@ class ReturnTabMixin:
         hdr = tk.Frame(frame)
         hdr.pack(fill='x', padx=Spacing.LG, pady=(Spacing.MD, 0))
         tk.Label(hdr, text="🔄 Return Management",
-                 font=('맑은 고딕', 14, 'bold')).pack(side='left')
+                 font=('Noto Sans KR', 14, 'bold')).pack(side='left')
 
         # ── 버튼 바 ───────────────────────────────────────────
         btn_bar = tk.Frame(frame)
@@ -459,8 +459,8 @@ class ReturnTabMixin:
         ]:
             card = tk.Frame(card_frame, relief='solid', bd=1)
             card.pack(side='left', fill='x', expand=True, padx=Spacing.Tab.BTN_GAP)
-            tk.Label(card, text=col_title, font=('맑은 고딕', 10)).pack(pady=(Spacing.XS, 0))
-            lbl = tk.Label(card, text='—', font=('맑은 고딕', 18, 'bold'))
+            tk.Label(card, text=col_title, font=('Noto Sans KR', 10)).pack(pady=(Spacing.XS, 0))
+            lbl = tk.Label(card, text='—', font=('Noto Sans KR', 18, 'bold'))
             lbl.pack(pady=(0, Spacing.XS))
             self._return_summary_labels[col_key] = lbl
 

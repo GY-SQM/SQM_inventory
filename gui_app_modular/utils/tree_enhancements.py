@@ -358,12 +358,12 @@ class HeaderFilterBar:
 
         # "필터:" 라벨 (ttk)
         _lbl_filter = ttk.Label(self.frame, text="🔽 필터:",
-                                font=('맑은 고딕', 10, 'bold'))
+                                font=('Noto Sans KR', 10, 'bold'))
         _lbl_filter.pack(side='left', padx=(0, 8))
         self._apply_tooltip_safe(_lbl_filter, "컬럼별 조건을 선택하면 목록이 자동으로 필터됩니다. 빈 조건은 적용되지 않습니다.")
 
         for col_id, label, width in filter_columns:
-            _lbl = ttk.Label(self.frame, text=f"{label}:", font=('맑은 고딕', 10))
+            _lbl = ttk.Label(self.frame, text=f"{label}:", font=('Noto Sans KR', 10))
             _lbl.pack(side='left', padx=(0, 2))
             self._apply_tooltip_safe(_lbl, self._get_column_tooltip(col_id, label))
 
@@ -380,7 +380,7 @@ class HeaderFilterBar:
 
         # v5.7.5: 기간(날짜 범위) — STATUS와 초기화 사이 한 줄에 배치 + 클릭 시 캘린더
         if date_from_var is not None and date_to_var is not None:
-            _lbl_period = ttk.Label(self.frame, text="조회 기간 ", font=('맑은 고딕', 10))
+            _lbl_period = ttk.Label(self.frame, text="조회 기간 ", font=('Noto Sans KR', 10))
             _lbl_period.pack(side='left', padx=(8, 2))
             self._apply_tooltip_safe(_lbl_period, "입력한 기간(시작일~종료일) 안의 데이터만 표시. 비우면 기간 조건 없음. 형식: YYYY-MM-DD")
             _e_from = ttk.Entry(self.frame, textvariable=date_from_var, width=12)
@@ -566,7 +566,7 @@ class HeaderSortFilterRow:
                 cell.pack(side=tk.LEFT, fill=tk.Y, padx=(0, _cell_pad_between))
 
             # 컬럼명 + 클릭 시 정렬
-            lbl = ttk.Label(cell, text=label, font=('맑은 고딕', 10, 'bold'))
+            lbl = ttk.Label(cell, text=label, font=('Noto Sans KR', 10, 'bold'))
             lbl.pack(side=tk.LEFT, padx=(0, 0))
             lbl.bind('<Button-1>', lambda e, c=col_id: self._on_header_click(c))
             try:
@@ -575,7 +575,7 @@ class HeaderSortFilterRow:
             except Exception:
                 logger.debug("[SUPPRESSED] exception in tree_enhancements.py")  # noqa
 
-            sort_lbl = ttk.Label(cell, text="", font=('맑은 고딕', 10), width=2)
+            sort_lbl = ttk.Label(cell, text="", font=('Noto Sans KR', 10), width=2)
             sort_lbl.pack(side=tk.LEFT, padx=(0, 0))
             sort_lbl.bind('<Button-1>', lambda e, c=col_id: self._on_header_click(c))
             self._sort_labels[col_id] = sort_lbl
@@ -727,9 +727,9 @@ class FooterTotalBar:
 
         for key, label_text, default in fields:
             ttk.Label(self.frame, text=label_text,
-                      font=('맑은 고딕', 11, 'bold')).pack(side='left', padx=(10, 2))
+                      font=('Noto Sans KR', 11, 'bold')).pack(side='left', padx=(10, 2))
             lbl = ttk.Label(self.frame, text=default,
-                            font=('맑은 고딕', 12, 'bold'))
+                            font=('Noto Sans KR', 12, 'bold'))
             lbl.pack(side='left', padx=(0, 15))
             self._labels[key] = lbl
 
@@ -808,14 +808,14 @@ class TreeviewTotalFooter:
         # 좌측 아이콘 라벨
         tk.Label(
             _inner, text='Σ', bg=_bg, fg=_accent,
-            font=('맑은 고딕', 14, 'bold'),
+            font=('Noto Sans KR', 14, 'bold'),
         ).pack(side='left', padx=(0, 8))
 
         # 합계 텍스트 라벨 — 13pt bold, 강조색
         self._label_var = tk.Label(
             _inner,
             text='',
-            font=('맑은 고딕', 13, 'bold'),
+            font=('Noto Sans KR', 13, 'bold'),
             bg=_bg,
             fg=_accent,
             anchor='w',

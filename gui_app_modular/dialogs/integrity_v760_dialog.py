@@ -78,11 +78,11 @@ class IntegrityV760Dialog:
         hdr.pack_propagate(False)
         tk.Label(
             hdr, text="📋  SQM 정합성 검증 리포트  (v7.5.0 ~ v7.6.0 강화 검증 포함)",
-            bg=_CLR_HDR, fg=_CLR_FG, font=('맑은 고딕', 12, 'bold')
+            bg=_CLR_HDR, fg=_CLR_FG, font=('Noto Sans KR', 12, 'bold')
         ).pack(side='left', padx=16, pady=10)
 
         self._lbl_ts = tk.Label(hdr, text="", bg=_CLR_HDR, fg=_CLR_FG_DIM,
-                                 font=('맑은 고딕', 10))
+                                 font=('Noto Sans KR', 10))
         self._lbl_ts.pack(side='right', padx=14)
 
         # ── 요약 카드 행
@@ -104,10 +104,10 @@ class IntegrityV760Dialog:
         style.configure('IntV760.Treeview',
                         background=_CLR_CARD, foreground=_CLR_FG,
                         fieldbackground=_CLR_CARD, rowheight=32,
-                        font=('맑은 고딕', 10))
+                        font=('Noto Sans KR', 10))
         style.configure('IntV760.Treeview.Heading',
                         background=_CLR_HDR, foreground=_CLR_FG,
-                        font=('맑은 고딕', 10, 'bold'),
+                        font=('Noto Sans KR', 10, 'bold'),
                         anchor='center')
         style.map('IntV760.Treeview',
                   background=[('selected', _CLR_SEL)])
@@ -151,7 +151,7 @@ class IntegrityV760Dialog:
         detail_frame = tk.LabelFrame(
             self.win, text="  선택 LOT 상세  ",
             bg=_CLR_CARD, fg=_CLR_FG_DIM,
-            font=('맑은 고딕', 10), bd=1, relief='flat'
+            font=('Noto Sans KR', 10), bd=1, relief='flat'
         )
         detail_frame.pack(fill='x', padx=12, pady=(0, 4))
 
@@ -173,7 +173,7 @@ class IntegrityV760Dialog:
         btn_bar.pack_propagate(False)
 
         self._lbl_status = tk.Label(btn_bar, text="", bg=_CLR_HDR,
-                                     fg=_CLR_FG_DIM, font=('맑은 고딕', 10))
+                                     fg=_CLR_FG_DIM, font=('Noto Sans KR', 10))
         self._lbl_status.pack(side='left', padx=14, pady=10)
 
         for txt, cmd, fg in [
@@ -184,7 +184,7 @@ class IntegrityV760Dialog:
             tk.Button(
                 btn_bar, text=txt, command=cmd,
                 bg=_CLR_CARD, fg=fg, relief='flat',
-                font=('맑은 고딕', 10, 'bold'),
+                font=('Noto Sans KR', 10, 'bold'),
                 padx=14, pady=6, cursor='hand2',
                 activebackground=_CLR_SEL, activeforeground=_CLR_FG,
                 bd=0
@@ -196,9 +196,9 @@ class IntegrityV760Dialog:
         f = tk.Frame(parent, bg=_CLR_CARD, bd=0, relief='flat')
         f.pack(side='left', padx=5, pady=4, ipadx=12, ipady=8)
         tk.Label(f, text=title, bg=_CLR_CARD, fg=_CLR_FG_DIM,
-                 font=('맑은 고딕', 8)).pack()
+                 font=('Noto Sans KR', 8)).pack()
         lbl = tk.Label(f, text=value, bg=_CLR_CARD, fg=accent,
-                       font=('맑은 고딕', 18, 'bold'))
+                       font=('Noto Sans KR', 18, 'bold'))
         lbl.pack()
         return lbl
 

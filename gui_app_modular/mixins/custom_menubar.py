@@ -32,10 +32,10 @@ class CustomMenuBar:
     """
     
     # 메뉴 스타일 설정 (v4.0.8: 가시성 대폭 개선)
-    MENU_FONT = ('맑은 고딕', 13, 'bold')
+    MENU_FONT = ('Noto Sans KR', 13, 'bold')
     MENU_PADX = 16
     MENU_PADY = 7
-    DROPDOWN_FONT = ('맑은 고딕', 11)
+    DROPDOWN_FONT = ('Noto Sans KR', 11)
     
     # v4.0.8 / v8.7.0 Phase2: 메뉴바 색상 — ThemeColors 단일 소스 (메뉴바는 다크 스타일)
     MENUBAR_BG = None  # __init__에서 ThemeColors로 설정
@@ -615,7 +615,7 @@ class CustomMenuBar:
         menu.add_command(
             label=label,
             state='disabled',
-            font=('맑은 고딕', 13, 'bold'),
+            font=('Noto Sans KR', 13, 'bold'),
         )
     
     def _add_submenu(self, parent_menu: 'tk.Menu', label: str) -> 'tk.Menu':
@@ -653,9 +653,9 @@ class CustomMenuBar:
         
         # 제목
         tk.Label(guide, text="📊 SQM 재고 STATUS 상태값 안내",
-                 font=('맑은 고딕', 16, 'bold'), fg=ThemeColors.get('text_primary')).pack(pady=(15, 5))
+                 font=('Noto Sans KR', 16, 'bold'), fg=ThemeColors.get('text_primary')).pack(pady=(15, 5))
         tk.Label(guide, text="재고(LOT) 및 톤백에 사용되는 상태값 목록",
-                 font=('맑은 고딕', 11), fg=ThemeColors.get('text_secondary')).pack(pady=(0, 10))
+                 font=('Noto Sans KR', 11), fg=ThemeColors.get('text_secondary')).pack(pady=(0, 10))
         
         # 상태값 프레임
         content = tk.Frame(guide, padx=20, pady=10)
@@ -685,16 +685,16 @@ class CustomMenuBar:
             row = tk.Frame(content, bg=bg_color, padx=10, pady=6, relief='groove', bd=1)
             row.pack(fill='x', pady=3)
             
-            tk.Label(row, text=icon_label, font=('맑은 고딕', 13, 'bold'),
+            tk.Label(row, text=icon_label, font=('Noto Sans KR', 13, 'bold'),
                      bg=bg_color, fg=fg_color, width=18, anchor='w').pack(side='left')
-            tk.Label(row, text=f"({ko_name})", font=('맑은 고딕', 11),
+            tk.Label(row, text=f"({ko_name})", font=('Noto Sans KR', 11),
                      bg=bg_color, fg=_sec, width=8).pack(side='left')
-            tk.Label(row, text=desc, font=('맑은 고딕', 10),
+            tk.Label(row, text=desc, font=('Noto Sans KR', 10),
                      bg=bg_color, fg=_pri, anchor='w', wraplength=300).pack(side='left', padx=(10, 0))
         
         # 닫기 버튼
         tk.Button(guide, text="닫기", command=guide.destroy,
-                  font=('맑은 고딕', 11), padx=20, pady=5).pack(pady=15)
+                  font=('Noto Sans KR', 11), padx=20, pady=5).pack(pady=15)
     
     def _show_backup_guide(self) -> None:
         """v4.1.2: DB 백업/복구 가이드 팝업"""
@@ -707,9 +707,9 @@ class CustomMenuBar:
         guide.grab_set()
         
         tk.Label(guide, text="💾 DB 백업 및 복구 가이드",
-                 font=('맑은 고딕', 16, 'bold'), fg=ThemeColors.get('text_primary')).pack(pady=(15, 10))
+                 font=('Noto Sans KR', 16, 'bold'), fg=ThemeColors.get('text_primary')).pack(pady=(15, 10))
         
-        text = tk.Text(guide, font=('맑은 고딕', 11), wrap='word', padx=15, pady=10)
+        text = tk.Text(guide, font=('Noto Sans KR', 11), wrap='word', padx=15, pady=10)
         text.pack(fill='both', expand=True, padx=10)
         
         content = """📁 DB 파일 위치
@@ -753,7 +753,7 @@ class CustomMenuBar:
         text.config(state='disabled')
         
         tk.Button(guide, text="닫기", command=guide.destroy,
-                  font=('맑은 고딕', 11), padx=20, pady=5).pack(pady=10)
+                  font=('Noto Sans KR', 11), padx=20, pady=5).pack(pady=10)
     
     def _show_return_safe(self) -> None:
         """반품 처리 (안전한 호출)"""

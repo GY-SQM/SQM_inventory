@@ -176,8 +176,8 @@ class TonbagTabMixin:
         # v3.8.9: 재고리스트와 동일 컬럼 + TONBAG NO 추가 (MXBG 다음) | v5.7.5: 가독성 위해 폰트 14로 확대
         import tkinter.font as tkfont
         _style = ttk.Style()
-        _tb_font = tkfont.Font(family='맑은 고딕', size=11)
-        _tb_head_font = tkfont.Font(family='맑은 고딕', size=11, weight='bold')
+        _tb_font = tkfont.Font(family='Noto Sans KR', size=11)
+        _tb_head_font = tkfont.Font(family='Noto Sans KR', size=11, weight='bold')
         _tb_row_h = _tb_font.metrics('linespace') + 6
         
         _is_dark_tb = is_dark()
@@ -476,7 +476,7 @@ class TonbagTabMixin:
         
         # 톤백 목록 표시
         ttk.Label(dialog, text=f"선택된 톤백: {len(tonbag_list)}개", 
-                 font=('맑은 고딕', 18, 'bold')).pack(pady=Spacing.SM)
+                 font=('Noto Sans KR', 18, 'bold')).pack(pady=Spacing.SM)
         
         listbox = tk.Listbox(dialog, height=8)
         for tb in tonbag_list:

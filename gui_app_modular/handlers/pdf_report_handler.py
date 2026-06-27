@@ -163,7 +163,7 @@ class PDFReportMixin:
 <title>SQM 재고 현황 보고서</title>
 <style>
     @media print {{ body {{ margin: 10mm; }} }}
-    body {{ font-family: '맑은 고딕', sans-serif; color: #2c3e50; max-width: 1000px; margin: 0 auto; padding: 20px; }}
+    body {{ font-family: 'Noto Sans KR', sans-serif; color: #2c3e50; max-width: 1000px; margin: 0 auto; padding: 20px; }}
     h1 {{ color: #2980b9; border-bottom: 3px solid #2980b9; padding-bottom: 10px; }}
     h2 {{ color: #34495e; margin-top: 30px; }}
     .cards {{ display: flex; gap: 15px; flex-wrap: wrap; margin: 20px 0; }}

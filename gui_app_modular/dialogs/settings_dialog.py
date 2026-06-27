@@ -64,7 +64,7 @@ class SettingsDialogMixin:
         header = tk.Frame(dialog, bg=ThemeColors.get('info', _is_dark), pady=Spacing.SM)
         header.pack(fill=X)
         tk.Label(header, text="🔐 Gemini API 키 설정", bg=ThemeColors.get('info', _is_dark), fg=ThemeColors.get('badge_text', _is_dark),
-                 font=('맑은 고딕', 13, 'bold')).pack()
+                 font=('Noto Sans KR', 13, 'bold')).pack()
 
         body = tk.Frame(dialog, bg=_bg, padx=Spacing.LG, pady=Spacing.MD)
         body.pack(fill=BOTH, expand=YES)
@@ -77,17 +77,17 @@ class SettingsDialogMixin:
         info_frame = tk.Frame(body, bg=_bg)
         info_frame.pack(fill=X, pady=(0, Spacing.SM))
 
-        _l1 = tk.Label(info_frame, text="현재 API 키:", bg=_bg, fg=_fg, font=('맑은 고딕', 10))
+        _l1 = tk.Label(info_frame, text="현재 API 키:", bg=_bg, fg=_fg, font=('Noto Sans KR', 10))
         _l1.pack(anchor=W)
         apply_tooltip(_l1, "현재 로드된 API 키의 마스킹된 표시입니다. 새 키를 입력한 뒤 저장하면 교체됩니다.")
-        tk.Label(info_frame, text=f"  {masked}", bg=_bg, fg=ThemeColors.get('statusbar_progress'), font=('맑은 고딕', 10, 'bold')).pack(anchor=W)
-        tk.Label(info_frame, text=f"  저장 위치: {source_text}", bg=_bg, fg=_fg, font=('맑은 고딕', 10)).pack(anchor=W)
-        tk.Label(info_frame, text=f"  모델: {GEMINI_MODEL}", bg=_bg, fg=ThemeColors.get('text_muted', _is_dark), font=('맑은 고딕', 10)).pack(anchor=W)
+        tk.Label(info_frame, text=f"  {masked}", bg=_bg, fg=ThemeColors.get('statusbar_progress'), font=('Noto Sans KR', 10, 'bold')).pack(anchor=W)
+        tk.Label(info_frame, text=f"  저장 위치: {source_text}", bg=_bg, fg=_fg, font=('Noto Sans KR', 10)).pack(anchor=W)
+        tk.Label(info_frame, text=f"  모델: {GEMINI_MODEL}", bg=_bg, fg=ThemeColors.get('text_muted', _is_dark), font=('Noto Sans KR', 10)).pack(anchor=W)
 
         ttk.Separator(body).pack(fill=X, pady=Spacing.SM)
 
         # 모델 변경 (다음 실행부터 적용)
-        _l_model = tk.Label(body, text="Gemini 모델 (변경 시 저장 후 다음 실행부터 적용):", bg=_bg, fg=_fg, font=('맑은 고딕', 10))
+        _l_model = tk.Label(body, text="Gemini 모델 (변경 시 저장 후 다음 실행부터 적용):", bg=_bg, fg=_fg, font=('Noto Sans KR', 10))
         _l_model.pack(anchor=W)
         apply_tooltip(_l_model, "사용할 Gemini 모델명(예: gemini-2.5-flash). 변경 후 저장하면 다음 실행부터 적용됩니다.")
         model_var = tk.StringVar(value=GEMINI_MODEL or "gemini-2.5-flash")
@@ -98,7 +98,7 @@ class SettingsDialogMixin:
         ttk.Separator(body).pack(fill=X, pady=Spacing.SM)
 
         # 새 API 키 입력
-        _l_key = tk.Label(body, text="새 API 키 입력:", bg=_bg, fg=_fg, font=('맑은 고딕', 10))
+        _l_key = tk.Label(body, text="새 API 키 입력:", bg=_bg, fg=_fg, font=('Noto Sans KR', 10))
         _l_key.pack(anchor=W)
         apply_tooltip(_l_key, "Google AI Studio에서 발급한 API 키(AIza로 시작)를 입력한 뒤 저장을 누르세요.")
         key_var = tk.StringVar()
@@ -115,7 +115,7 @@ class SettingsDialogMixin:
         apply_tooltip(_chk_show, "체크하면 API 키가 평문으로 보입니다. 입력 확인 후 해제하는 것을 권장합니다.")
 
         # 저장 방식 선택
-        _l_method = tk.Label(body, text="저장 방식:", bg=_bg, fg=_fg, font=('맑은 고딕', 10))
+        _l_method = tk.Label(body, text="저장 방식:", bg=_bg, fg=_fg, font=('Noto Sans KR', 10))
         _l_method.pack(anchor=W, pady=(Spacing.SM, 0))
         apply_tooltip(_l_method, "API 키 저장 위치. 자동은 OS keyring 우선, 실패 시 settings.ini에 저장됩니다.")
         method_var = tk.StringVar(value='auto')
@@ -128,7 +128,7 @@ class SettingsDialogMixin:
         _rb_ini.pack(anchor=W)
         apply_tooltip(_rb_ini, "API 키를 settings.ini 파일에 평문으로 저장합니다. 보안상 주의가 필요합니다.")
 
-        result_label = tk.Label(body, text="", bg=_bg, fg=_fg, font=('맑은 고딕', 10))
+        result_label = tk.Label(body, text="", bg=_bg, fg=_fg, font=('Noto Sans KR', 10))
         result_label.pack(anchor=W, pady=Spacing.XS)
 
         def save_key():

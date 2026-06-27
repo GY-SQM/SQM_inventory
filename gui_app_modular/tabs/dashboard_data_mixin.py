@@ -664,7 +664,7 @@ class DashboardDataMixin:
                     width // 2, height // 2,
                     text="데이터 없음",
                     fill='#999',
-                    font=('맑은 고딕', 13)
+                    font=('Noto Sans KR', 13)
                 )
                 return
             

@@ -224,8 +224,8 @@ class InventoryTabMixin:
         # v3.8.9: 트리뷰 스타일 — 테마 인식 (글자 흐림 수정) | v5.7.5: 가독성 위해 폰트 14로 확대
         import tkinter.font as tkfont
         _style = ttk.Style()
-        _inv_font = tkfont.Font(family='맑은 고딕', size=11)
-        _inv_head_font = tkfont.Font(family='맑은 고딕', size=11, weight='bold')
+        _inv_font = tkfont.Font(family='Noto Sans KR', size=11)
+        _inv_head_font = tkfont.Font(family='Noto Sans KR', size=11, weight='bold')
         _row_h = _inv_font.metrics('linespace') + 10
         
         _style.configure('Inv.Treeview', 
@@ -483,7 +483,7 @@ class InventoryTabMixin:
         title_frame.pack(fill='x', padx=Spacing.Tab.OUTER_PADX, pady=(Spacing.SM, Spacing.XS))
         _ttk.Label(
             title_frame, text=f"📦 LOT: {lot_no}",
-            font=('맑은 고딕', 12, 'bold')
+            font=('Noto Sans KR', 12, 'bold')
         ).pack(side='left')
         _ttk.Button(
             title_frame, text="✖ 닫기", width=8,
@@ -511,9 +511,9 @@ class InventoryTabMixin:
                 ]
                 for i, (lbl, val) in enumerate(fields):
                     r, c = divmod(i, 3)
-                    _ttk.Label(info_frame, text=f"{lbl}:", font=('맑은 고딕', 10, 'bold')).grid(
+                    _ttk.Label(info_frame, text=f"{lbl}:", font=('Noto Sans KR', 10, 'bold')).grid(
                         row=r, column=c*2, sticky='e', padx=(8,2), pady=2)
-                    _ttk.Label(info_frame, text=str(val), font=('맑은 고딕', 10)).grid(
+                    _ttk.Label(info_frame, text=str(val), font=('Noto Sans KR', 10)).grid(
                         row=r, column=c*2+1, sticky='w', padx=(0,12), pady=2)
         except Exception as _e:
             logger.debug(f"[SUPPRESSED] {type(_e).__name__}: {_e}")  # noqa
@@ -578,7 +578,7 @@ class InventoryTabMixin:
             _ttk.Label(
                 tb_frame,
                 text=f"  총 {cnt}개 톤백  |  합계 {total_kg:,.0f} kg",
-                font=('맑은 고딕', 10, 'bold')
+                font=('Noto Sans KR', 10, 'bold')
             ).pack(side='bottom', anchor='w', pady=2)
 
         except Exception as _e:
@@ -1462,7 +1462,7 @@ class InventoryTabMixin:
             self._empty_hint = tk.Label(
                 self._inv_tree_frame,
                 text=_msg,
-                font=('맑은 고딕', 10),
+                font=('Noto Sans KR', 10),
                 fg=_fg,
                 bg=ThemeColors.get('bg_card', _is_dark),
                 wraplength=500,

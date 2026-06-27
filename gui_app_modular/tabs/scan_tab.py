@@ -105,7 +105,7 @@ class ScanTabMixin:
         ttk.Label(inner, text="톤백 번호:").pack(side=LEFT, padx=(0, Spacing.XS))
         self._scan_entry_var = tk.StringVar()
         self._scan_entry = ttk.Entry(inner, textvariable=self._scan_entry_var, width=35,
-                                     font=('맑은 고딕', 11))
+                                     font=('Noto Sans KR', 11))
         self._scan_entry.pack(side=LEFT, padx=Spacing.XS)
         self._scan_entry.bind('<Return>', self._on_scan_enter)
         self._scan_entry.bind('<KeyRelease>', self._on_scan_keyrelease)  # E3: 자동완성
@@ -140,7 +140,7 @@ class ScanTabMixin:
         # 조회 결과 표시 레이블
         self._scan_result_var = tk.StringVar(value="톤백 번호를 입력하거나 스캔하세요.")
         lbl_result = ttk.Label(scan_input_frame, textvariable=self._scan_result_var,
-                               font=('맑은 고딕', 10))
+                               font=('Noto Sans KR', 10))
         lbl_result.pack(padx=Spacing.SM, pady=(0, Spacing.SM))
 
         # ── 중단: 빠른처리 4버튼 ────────────────────
@@ -162,7 +162,7 @@ class ScanTabMixin:
             btn = tk.Button(
                 btn_bar, text=label, command=cmd,
                 bg=color, fg='#ffffff',
-                font=('맑은 고딕', 11, 'bold'),
+                font=('Noto Sans KR', 11, 'bold'),
                 relief='flat', padx=16, pady=8, cursor='hand2',
                 activebackground=hover_color, activeforeground=color
             )

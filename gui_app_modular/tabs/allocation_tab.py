@@ -95,7 +95,7 @@ class AllocationTabMixin:
         # 두 번째 줄 프레임
         btn_frame2 = ttk.Frame(frame, padding=(8, 0, 8, 4))
         btn_frame2.pack(fill=X)
-        ttk.Label(btn_frame2, text="↩️ 단계 되돌리기:", font=('맑은 고딕', 10)).pack(side=LEFT, padx=(0, 4))
+        ttk.Label(btn_frame2, text="↩️ 단계 되돌리기:", font=('Noto Sans KR', 10)).pack(side=LEFT, padx=(0, 4))
 
         btn_revert_alloc = ttk.Button(btn_frame2, text="RESERVED → AVAILABLE",
                                        command=lambda: self._on_revert_step('RESERVED'))
@@ -138,8 +138,8 @@ class AllocationTabMixin:
         try:
             _alloc_style = ttk.Style()
             _alloc_style.configure('Alloc.Treeview', rowheight=32,
-                                   font=('맑은 고딕', 10))
-            _alloc_style.configure('Alloc.Treeview.Heading', font=('맑은 고딕', 10, 'bold'))
+                                   font=('Noto Sans KR', 10))
+            _alloc_style.configure('Alloc.Treeview.Heading', font=('Noto Sans KR', 10, 'bold'))
         except Exception as _se:
             logger.debug(f"[UI] Alloc.Treeview 스타일: {_se}")
         for col_id, label, width, anchor in ALLOCATION_LOT_COLUMNS:
@@ -167,7 +167,7 @@ class AllocationTabMixin:
             from ..utils.ui_constants import tc as _tc_alloc
             self.tree_allocation.tag_configure('alloc_line',
                 foreground=_tc_alloc('text_muted'))      # v8.1.8: #94a3b8 → tc(text_muted)
-            self.tree_allocation.tag_configure('alloc_subtotal', font=('맑은 고딕', 10, 'bold'))
+            self.tree_allocation.tag_configure('alloc_subtotal', font=('Noto Sans KR', 10, 'bold'))
         except Exception as e:
             logger.debug(f'allocation tree tags: {e}')
 
@@ -189,7 +189,7 @@ class AllocationTabMixin:
             _hint = _tk.Label(
                 self._alloc_lot_container,
                 text='펼침(☐) 열을 누르면 해당 LOT의 톤백별 배정수량·출고예정일·배정일과 소계가 펼쳐집니다. 다시 누르면 접힙니다.',
-                font=('맑은 고딕', 8), fg=_tc_hint('text_muted'), anchor='w', justify='left'
+                font=('Noto Sans KR', 8), fg=_tc_hint('text_muted'), anchor='w', justify='left'
             )
             _hint.pack(fill='x', padx=4, pady=(0, 2))
         except Exception as e:
@@ -621,7 +621,7 @@ class AllocationTabMixin:
         # 인라인 Entry 위젯 생성
         entry_var = tk.StringVar(value=cur_val)
         entry = tk.Entry(tree, textvariable=entry_var, justify='center',
-                         font=('맑은 고딕', 10))
+                         font=('Noto Sans KR', 10))
         entry.place(x=x, y=y, width=w, height=h)
         entry.focus_set()
         entry.select_range(0, 'end')

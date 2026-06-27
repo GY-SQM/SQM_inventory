@@ -1487,7 +1487,7 @@ class AllocationDialog:
             ttk.Label(
                 footer,
                 textvariable=summary_var,
-                font=('맑은 고딕', 10, 'bold'),
+                font=('Noto Sans KR', 10, 'bold'),
             ).pack(anchor=tk.W)
 
             def _fetch_rows():

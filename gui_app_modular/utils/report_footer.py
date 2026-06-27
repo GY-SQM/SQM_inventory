@@ -40,7 +40,7 @@ def add_gy_logistics_footer(ws, start_row: int = None, max_col: int = None) -> i
     # 오른쪽 하단에 배치
     footer_col = max(max_col - 2, 1)
     cell = ws.cell(row=start_row, column=footer_col, value=footer_text)
-    cell.font = Font(name='맑은 고딕', size=10, color='2F5496')
+    cell.font = Font(name='Noto Sans KR', size=10, color='2F5496')
     cell.alignment = Alignment(horizontal='right')
 
     return start_row

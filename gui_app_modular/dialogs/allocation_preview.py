@@ -147,7 +147,7 @@ class AllocationPreviewDialog:
             f"🧪 샘플 {s['total_sample_count']}개 ({s['total_sample_weight_kg']:,.1f} kg)   │   "
             f"합계 {s['total_count']}개 ({s['total_weight_kg']:,.1f} kg)"
         )
-        ttk.Label(summary_frame, text=line1, font=('맑은 고딕', 10, 'bold')).pack(anchor='w')
+        ttk.Label(summary_frame, text=line1, font=('Noto Sans KR', 10, 'bold')).pack(anchor='w')
 
         # 제품별 요약 (콤팩트 1줄씩)
         for product_name, pstats in s['by_product'].items():
@@ -156,7 +156,7 @@ class AllocationPreviewDialog:
                 f"톤백 {pstats['tonbag_count']}개 / {pstats['tonbag_weight_kg']:,.0f} kg,  "
                 f"샘플 {pstats['sample_count']}개 / {pstats['sample_weight_kg']:,.1f} kg"
             )
-            ttk.Label(summary_frame, text=line, font=('맑은 고딕', 10)).pack(anchor='w')
+            ttk.Label(summary_frame, text=line, font=('Noto Sans KR', 10)).pack(anchor='w')
 
         # ═══════════════════════════════════════════════════════
         # 2. 상세 내역 (최대 확장)
@@ -248,7 +248,7 @@ class AllocationPreviewDialog:
         ttk.Label(
             btn_frame,
             text="❓ 위 내용으로 출고를 실행하시겠습니까?",
-            font=('맑은 고딕', 11, 'bold'),
+            font=('Noto Sans KR', 11, 'bold'),
             foreground=tc('danger')
         ).pack(side='left', padx=(0, 20))
 

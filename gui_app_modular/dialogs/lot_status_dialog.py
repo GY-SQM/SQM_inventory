@@ -209,12 +209,12 @@ class LotStatusDialog:
         # ── 하단 요약 ──
         self._summary_var = tk.StringVar(value="")
         summary_lbl = ttk.Label(dlg, textvariable=self._summary_var,
-                                font=('맑은 고딕', 10))
+                                font=('Noto Sans KR', 10))
         summary_lbl.pack(fill=X, padx=8, pady=(0, 4))
 
         formula_lbl = ttk.Label(dlg,
                                 text="배정% = (RESERVED+PICKED+OUT kg) ÷ 일반톤백 총중량 × 100 (샘플 제외)",
-                                font=('맑은 고딕', 8), bootstyle="secondary")
+                                font=('Noto Sans KR', 8), bootstyle="secondary")
         formula_lbl.pack(fill=X, padx=8, pady=(0, 8))
 
     def _load_data(self):
@@ -343,7 +343,7 @@ class LotStatusDialog:
         ws.title = "LOT별현황"
 
         hdr_fill = PatternFill('solid', fgColor='1F3864')
-        hdr_font = Font(bold=True, color='FFFFFF', size=10, name='맑은 고딕')
+        hdr_font = Font(bold=True, color='FFFFFF', size=10, name='Noto Sans KR')
         smp_fill = PatternFill('solid', fgColor='FFF2CC')
 
         HEADERS = [

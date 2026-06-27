@@ -428,7 +428,7 @@ class AllocationTemplateDialog:
         desc_lbl = tk.Label(
             self.dialog,
             textvariable=self._desc_var,
-            font=('맑은 고딕', 10),
+            font=('Noto Sans KR', 10),
             bg=C_BG, fg=C_FG2,
             anchor='w', padx=12, pady=4,
             wraplength=1050,
@@ -441,11 +441,11 @@ class AllocationTemplateDialog:
         tk.Label(legend_frame, text='■', fg=C_BG2, bg=C_BG,
                  font=('Courier', 11)).pack(side='left')
         tk.Label(legend_frame, text=' 본 제품 행',
-                 fg=C_FG2, bg=C_BG, font=('맑은 고딕', 10)).pack(side='left')
+                 fg=C_FG2, bg=C_BG, font=('Noto Sans KR', 10)).pack(side='left')
         tk.Label(legend_frame, text='   ■', fg=C_SAMPLE, bg=C_BG,
                  font=('Courier', 11)).pack(side='left')
         tk.Label(legend_frame, text=' 샘플 행 (QTY=0.001 MT = 1 kg)',
-                 fg=C_FG2, bg=C_BG, font=('맑은 고딕', 10)).pack(side='left')
+                 fg=C_FG2, bg=C_BG, font=('Noto Sans KR', 10)).pack(side='left')
 
         # ── Treeview 영역 ──
         tree_frame = tk.Frame(self.dialog, bg=C_BG)
@@ -459,11 +459,11 @@ class AllocationTemplateDialog:
                         fieldbackground=C_BG2,
                         foreground=C_FG,
                         rowheight=32,
-                        font=('맑은 고딕', 10))
+                        font=('Noto Sans KR', 10))
         style.configure('Template.Treeview.Heading',
                         background=C_BG,
                         foreground=C_ACCENT,
-                        font=('맑은 고딕', 10, 'bold'),
+                        font=('Noto Sans KR', 10, 'bold'),
                         relief='flat',
                         anchor='center')
         style.map('Template.Treeview',

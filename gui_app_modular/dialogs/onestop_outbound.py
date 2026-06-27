@@ -614,7 +614,7 @@ class S1OneStopOutboundDialog:
         """★ 2-5: 하단 토스트 메시지 (자동 사라짐)"""
         toast = tk.Label(self.win, text=f"  {message}  ",
                          bg=tc('btn_inbound'), fg=tc('text_primary'),
-                         font=('맑은 고딕', 10, 'bold'),
+                         font=('Noto Sans KR', 10, 'bold'),
                          padx=16, pady=8)
         toast.place(relx=0.5, rely=0.95, anchor='center')
 
@@ -1024,9 +1024,9 @@ class S1OneStopOutboundDialog:
             _oc_style = ttk.Style()
             try:
                 _oc_style.configure('OutboundCheck.Treeview',
-                                    rowheight=36, font=('맑은 고딕', 10))
+                                    rowheight=36, font=('Noto Sans KR', 10))
                 _oc_style.configure('OutboundCheck.Treeview.Heading',
-                                    font=('맑은 고딕', 10, 'bold'))
+                                    font=('Noto Sans KR', 10, 'bold'))
                 _tree_style = 'OutboundCheck.Treeview'
             except Exception:
                 _tree_style = None
@@ -1268,7 +1268,7 @@ class S1OneStopOutboundDialog:
         c.create_rectangle(0, 0, bar_w, 22, fill=color, outline='')
         c.create_text(w // 2, 11, text=f"{total_sel:,.0f} / {total_req:,.0f} kg ({ratio:.0%})",
                       fill='white' if bar_w > w * 0.4 else ('#e2e8f0' if self._is_dark else '#1f2937'),
-                      font=('맑은 고딕', 10, 'bold'))
+                      font=('Noto Sans KR', 10, 'bold'))
 
         self._prog_label_var.set(
             f"{'✅ 충분' if 0.95 <= ratio <= 1.05 else '⚠️ 부족' if ratio < 0.95 else '🔴 초과'}")
@@ -1878,9 +1878,9 @@ class S1OneStopOutboundDialog:
             card = tk.Frame(card_fr, bg=color, padx=16, pady=8)
             card.pack(side=LEFT, expand=YES, fill=X, padx=4)
             tk.Label(card, textvariable=var, bg=color, fg=tc('text_primary'),
-                     font=('맑은 고딕', 20, 'bold')).pack()
+                     font=('Noto Sans KR', 20, 'bold')).pack()
             tk.Label(card, text=label, bg=color, fg=tc('text_primary'),
-                     font=('맑은 고딕', 10)).pack()
+                     font=('Noto Sans KR', 10)).pack()
 
         # 기존 요약 (하위 호환)
         self.tab4_summary_var = tk.StringVar(value="")
@@ -2238,7 +2238,7 @@ class S1OneStopOutboundDialog:
         color = self._status_colors.get(cur, STATUS_COLOR.get(cur, '#6366f1'))
         c.create_rectangle(0, 0, 180, 24, fill=color, outline='')
         c.create_text(90, 12, text=BATCH_STATUS.get(cur, cur),
-                      fill='white', font=('맑은 고딕', 10, 'bold'))
+                      fill='white', font=('Noto Sans KR', 10, 'bold'))
         self._status_bar_label.configure(text='', foreground=color)
 
     def _update_tab_badges(self):
@@ -2297,7 +2297,7 @@ class S1OneStopOutboundDialog:
                 c.create_rectangle(x, 0, x + bar_w, 24, fill=color, outline='')
                 if bar_w > 40:
                     c.create_text(x + bar_w // 2, 12, text=f"{status} {cnt}",
-                                  fill='white', font=('맑은 고딕', 8))
+                                  fill='white', font=('Noto Sans KR', 8))
                 x += bar_w
         except Exception as e:
             logger.warning(f"[UI] footer inventory status bar rendering failed: {e}")

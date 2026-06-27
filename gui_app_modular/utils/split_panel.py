@@ -64,7 +64,7 @@ class MasterDetailSplitPanel(ttk.Frame):
         self._lbl_title = ttk.Label(
             self._detail_header,
             textvariable=self._detail_title_var,
-            font=('맑은 고딕', 10, 'bold')
+            font=('Noto Sans KR', 10, 'bold')
         )
         self._lbl_title.pack(side='left', padx=4, pady=4)
 

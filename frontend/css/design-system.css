@@ -21,16 +21,16 @@
   --border-default: rgba(230, 214, 184, 0.14);
   --border-strong:  rgba(230, 214, 184, 0.26);
 
-  /* Text — 웜 크림 (차가운 흰 #dce8fa → 따뜻하게, 대비 ~14:1) */
-  --text-primary:   #f2ebdf;
-  --text-secondary: #c7b8a4;
-  --text-muted:     #8a7d6c;
+  /* Text — 대비를 조금 더 낮추어 눈 피로 완화 (#f2ebdf -> #d1c9bd) */
+  --text-primary:   #d1c9bd;
+  --text-secondary: #a89d8f;
+  --text-muted:     #756a5c;
   --text-inverse:   #1a1714;
 
-  /* Accent — Steel Blue */
-  --accent:         #38bdf8;
-  --accent-dim:     rgba(56, 189, 248, 0.15);
-  --accent-glow:    rgba(56, 189, 248, 0.25);
+  /* Accent — Amber (Warm & Focus) */
+  --accent:         #f59e0b;
+  --accent-dim:     rgba(245, 158, 11, 0.15);
+  --accent-glow:    rgba(245, 158, 11, 0.25);
 
   /* [v8.7.4] 호환 별칭 — JS 인라인 fallback(var(--surface,#1e293b) 등)에서 쓰지만
      미정의였던 변수들. 기존 테마변수 별칭으로 정의 → 라이트/다크 자동 추종
@@ -77,9 +77,13 @@
   --radius-md: 8px;
   --radius-lg: 12px;
 
-  /* Typography */
+  /* Typography — 가벼운 가중치로 시각적 여백 확보 */
   --font-sans: 'Noto Sans KR', -apple-system, sans-serif;
   --font-mono: 'DM Mono', 'Fira Code', monospace;
+  --weight-light: 300;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 600;
 
   /* Shadows */
   --shadow-card: 0 2px 12px rgba(0,0,0,0.4), 0 0 0 1px var(--border-subtle);
@@ -123,24 +127,25 @@
 /* ── 2. Reset & Base ────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html, body {
+body {
   height: 100%;
   background: var(--bg-root);
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 14px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+  font-weight: var(--weight-regular);
+  line-height: 1.6;
+  -webkit-font-smoothing: none; 
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  text-rendering: optimizeSpeed; 
   overflow: hidden;
 }
 
-/* ── 3. Scrollbar ───────────────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 2px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+/* ── 4. Typography ──────────────────────────────────────────── */
+h1 { font-size: 22px; font-weight: var(--weight-bold); letter-spacing: -0.5px; }
+h2 { font-size: 17px; font-weight: var(--weight-medium); letter-spacing: -0.2px; }
+h3 { font-size: 14px; font-weight: var(--weight-medium); }
+h4 { font-size: 12px; font-weight: var(--weight-medium); text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); }
 
 /* ── 4. Typography ──────────────────────────────────────────── */
 h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
@@ -287,10 +292,12 @@ h4 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacin
 
 .nav-label {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: var(--weight-light);
+  letter-spacing: 0.2px;
   opacity: 0;
   transition: opacity var(--transition);
   flex: 1;
+  -webkit-font-smoothing: antialiased;
 }
 #app.sidebar-expanded .nav-label { opacity: 1; }
 
@@ -480,9 +487,9 @@ h4 { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacin
 }
 
 .card-header h3 { font-size: 13px; font-weight: 600; }
-.card-body { padding: 16px; }
+.card-body { padding: 24px; }
 .card-footer {
-  padding: 10px 16px;
+  padding: 16px 24px;
   border-top: 1px solid var(--border-subtle);
   background: rgba(0,0,0,0.15);
 }

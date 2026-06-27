@@ -79,7 +79,7 @@ class LocationUploadPreviewDialog:
         fail = self.result['fail_count']
 
         stats_text = f"📊 총 {total}개 | ✅ 성공 {success}개 | ❌ 실패 {fail}개"
-        tk.Label(summary_frame, text=stats_text, font=('맑은 고딕', 12, 'bold'),
+        tk.Label(summary_frame, text=stats_text, font=('Noto Sans KR', 12, 'bold'),
                  bg=_bg_sec, fg=_fg_pri).pack()
         if fail > 0:
             first_reason = ""
@@ -87,7 +87,7 @@ class LocationUploadPreviewDialog:
                 first_reason = (self.result['not_found'][0].get('reason') or "").strip()
             msg = first_reason if first_reason else f"LOT·톤백번호로 재고 리스트 매칭 실패 {fail}건"
             tk.Label(summary_frame, text=f"⚠️ {msg}",
-                     font=('맑은 고딕', 10), bg=_bg_sec, fg=_danger, wraplength=500).pack()
+                     font=('Noto Sans KR', 10), bg=_bg_sec, fg=_danger, wraplength=500).pack()
 
         tab_frame = ttk.Notebook(self.dialog)
         tab_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
@@ -107,13 +107,13 @@ class LocationUploadPreviewDialog:
         if success > 0:
             confirm_btn = tk.Button(
                 button_frame, text=f"✅ 업로드 ({success}개)",
-                font=('맑은 고딕', 11, 'bold'), bg=_success, fg=_btn_fg,
+                font=('Noto Sans KR', 11, 'bold'), bg=_success, fg=_btn_fg,
                 padx=20, pady=10, command=self._on_confirm_click
             )
             confirm_btn.pack(side=tk.RIGHT, padx=10)
 
         cancel_btn = tk.Button(
-            button_frame, text="❌ 취소", font=('맑은 고딕', 11),
+            button_frame, text="❌ 취소", font=('Noto Sans KR', 11),
             bg=_neutral, fg=_btn_fg, padx=20, pady=10, command=self._on_cancel_click
         )
         cancel_btn.pack(side=tk.RIGHT, padx=5)

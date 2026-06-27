@@ -92,7 +92,7 @@ class EmailConfigDialog:
         # 가이드
         guide = ttk.Label(frame,
             text="💡 Gmail 앱 비밀번호: Google 계정 → 보안 → 앱 비밀번호",
-            foreground=tc('text_muted'), font=('맑은 고딕', 10))
+            foreground=tc('text_muted'), font=('Noto Sans KR', 10))
         guide.grid(row=len(fields)+1, column=0, columnspan=2, pady=(4, 8))
 
         # 버튼

@@ -46,11 +46,12 @@ class TableStyler:
     COLORS_DARK = {
         'grid_line': '#334155',        # Slate-700
         'grid_line_strong': '#475569', # Slate-600
-        'row_even': '#0f172a',         # Slate-900 (ProDark bg_primary)
-        'row_odd': '#1e293b',          # Slate-800 (ProDark bg_secondary)
-        'row_even_selected': '#164e63',# Cyan-900 (ProDark selection)
-        'row_odd_selected': '#155e75', # Cyan-800
-        'row_selected_fg': '#ecfeff',  # Cyan-50
+        # 1. 명암차 최소화 및 부드러운 연결 (Slate 톤 조절)
+        'row_even': '#161411',         
+        'row_odd': '#1a1814',          
+        'row_even_selected': '#78350f', 
+        'row_odd_selected': '#92400e',  
+        'row_selected_fg': '#fef3c7',  
         'header_bg': '#1e293b',        # Slate-800
         'header_fg': '#f1f5f9',        # Slate-100
         'border': '#334155',           # Slate-700
@@ -58,11 +59,11 @@ class TableStyler:
         'fieldbackground': '#0f172a',  # Slate-900
     }
 
-    # 행 높이 (v8.7.0 Phase1: normal 36px로 가독성 개선)
+    # 행 높이 (v8.7.0 Phase1: 36→40, v8.8.4 가독성 개선: 48)
     ROW_HEIGHT = {
-        'compact': 24,
-        'normal': 40,  # v8.7.0: 36→40
-        'comfortable': 40,
+        'compact': 30,
+        'normal': 48,  
+        'comfortable': 56,
     }
 
     @classmethod
@@ -288,7 +289,7 @@ class TableStyler:
                 text="표시 컬럼:",
                 bg=_ts_bg,
                 fg=_ts_fg,
-                font=('맑은 고딕', 10)
+                font=('Noto Sans KR', 10)
             ).pack(side=tk.LEFT, padx=(10, 5))
 
             for col_id, col_name in toggleable_columns:
@@ -299,14 +300,14 @@ class TableStyler:
                         cls.toggle_column(treeview, cid, v.get())
                     return toggle
 
-                cb = tk.Checkbutton(
+                tk.Label(
                     toolbar,
                     text=col_name,
                     variable=var,
                     command=make_toggle(col_id, var),
                     bg=_ts_bg,
                     fg=_ts_fg,
-                    font=('맑은 고딕', 10)
+                    font=('Noto Sans KR', 10, 'normal')
                 )
                 cb.pack(side=tk.LEFT, padx=2)
 

@@ -40,7 +40,7 @@ class ProductManagementMixin:
         popup.grab_set()
 
         tk.Label(popup, text="📋 품목별 재고 요약",
-                 font=('맑은 고딕', 16, 'bold'), fg=ThemeColors.get('text_primary')).pack(pady=10)
+                 font=('Noto Sans KR', 16, 'bold'), fg=ThemeColors.get('text_primary')).pack(pady=10)
 
         cols = ('product', 'lots', 'tonbags', 'avail_tb', 'total_kg', 'avail_kg', 'out_pct')
         tree = ttk.Treeview(popup, columns=cols, show='headings', height=15)
@@ -116,7 +116,7 @@ class ProductManagementMixin:
                 '합계', '', '', '', f"{grand_init:,.0f}", f"{grand_avail:,.0f}", f"{g_pct:.1f}%"
             ), tags=('total',))
             _apply_tv_theme(tree, parent=None)  # v9.0
-            tree.tag_configure('total', background=ThemeColors.get('chart_grid'), font=('맑은 고딕', 10, 'bold'))
+            tree.tag_configure('total', background=ThemeColors.get('chart_grid'), font=('Noto Sans KR', 10, 'bold'))
 
         except (sqlite3.OperationalError, sqlite3.DatabaseError, ValueError, KeyError) as e:
             logger.error(f"품목 요약 오류: {e}")
@@ -138,7 +138,7 @@ class ProductManagementMixin:
         # 상단: 품목 선택
         sel_frame = ttk.Frame(popup, padding=8)
         sel_frame.pack(fill=X)
-        ttk.Label(sel_frame, text="🔍 품목 선택:", font=('맑은 고딕', 12, 'bold')).pack(side=LEFT, padx=5)
+        ttk.Label(sel_frame, text="🔍 품목 선택:", font=('Noto Sans KR', 12, 'bold')).pack(side=LEFT, padx=5)
 
         product_var = tk.StringVar(value='전체')
         try:
@@ -247,7 +247,7 @@ class ProductManagementMixin:
         popup.grab_set()
 
         tk.Label(popup, text="📊 품목별 입출고 현황",
-                 font=('맑은 고딕', 16, 'bold'), fg=ThemeColors.get('text_primary')).pack(pady=10)
+                 font=('Noto Sans KR', 16, 'bold'), fg=ThemeColors.get('text_primary')).pack(pady=10)
 
         cols = ('product', 'inbound_cnt', 'inbound_kg', 'outbound_cnt', 'outbound_kg', 'return_cnt')
         tree = ttk.Treeview(popup, columns=cols, show='headings', height=12)

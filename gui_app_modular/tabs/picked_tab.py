@@ -338,7 +338,7 @@ class PickedTabMixin:
 
         entry_var = tk.StringVar(value=cur_val)
         entry = tk.Entry(tree, textvariable=entry_var, justify='center',
-                         font=('맑은 고딕', 10))
+                         font=('Noto Sans KR', 10))
         entry.place(x=x, y=y, width=w, height=h)
         entry.focus_set()
         entry.select_range(0, 'end')

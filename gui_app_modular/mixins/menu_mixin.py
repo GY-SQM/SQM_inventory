@@ -163,7 +163,7 @@ class MenuMixin:
         file_menu.add_separator()
         
         # 업로드 메뉴 — menu_registry 기반 (입고 + 출고 동일 목록)
-        _font = ('맑은 고딕', 14)
+        _font = ('Noto Sans KR', 14)
         upload_menu = tk.Menu(file_menu, tearoff=0, font=_font)
         file_menu.add_cascade(label="📥 업로드 메뉴", menu=upload_menu)
         for entry in FILE_MENU_INBOUND_ITEMS:

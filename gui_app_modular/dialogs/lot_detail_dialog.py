@@ -121,11 +121,11 @@ class LotDetailDialogMixin:
         s_icon = status_icons.get(status, '❓')
 
         # v5.6.9: LOT 상세 팝업 스타일 통일 (폰트/정렬)
-        FONT_TITLE = ('맑은 고딕', 16, 'bold')
-        FONT_SUBTITLE = ('맑은 고딕', 12)
-        FONT_LABEL = ('맑은 고딕', 10)
-        FONT_VALUE = ('맑은 고딕', 11, 'bold')
-        FONT_WEIGHT = ('맑은 고딕', 11, 'bold')
+        FONT_TITLE = ('Noto Sans KR', 16, 'bold')
+        FONT_SUBTITLE = ('Noto Sans KR', 12)
+        FONT_LABEL = ('Noto Sans KR', 10)
+        FONT_VALUE = ('Noto Sans KR', 11, 'bold')
+        FONT_WEIGHT = ('Noto Sans KR', 11, 'bold')
 
         tk.Label(header, text=f"📦 {lot_no}", font=FONT_TITLE,
                  bg=header_bg, fg=fg).pack(side=LEFT)
@@ -254,7 +254,7 @@ class LotDetailDialogMixin:
             text=f"✅ 판매가능: {avail_cnt}개 ({avail_kg:,.0f}kg)  |  "
                  f"📤 출고: {picked_cnt}개 ({picked_kg:,.0f}kg)  |  "
                  f"🧪 샘플: {sample_cnt}개  |  총: {len(tonbags)}개",
-            font=('맑은 고딕', 11), bg=card_bg, fg=fg).pack(padx=10)
+            font=('Noto Sans KR', 11), bg=card_bg, fg=fg).pack(padx=10)
 
         # ── TAB 2: 재고 이동 이력 ──
         tab_history = ttk.Frame(nb)

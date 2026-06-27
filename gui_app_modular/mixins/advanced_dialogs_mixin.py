@@ -225,7 +225,7 @@ class AdvancedDialogsMixin:
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text="반품 처리", font=('맑은 고딕', 18, 'bold')).pack(pady=8)
+        ttk.Label(dialog, text="반품 처리", font=('Noto Sans KR', 18, 'bold')).pack(pady=8)
 
         nb = ttk.Notebook(dialog)
         nb.pack(fill=BOTH, expand=True, padx=10, pady=5)
@@ -558,7 +558,7 @@ class AdvancedDialogsMixin:
         from ..utils.constants import BOTH, LEFT, RIGHT, VERTICAL, X, Y
         pv_frame = ttk.LabelFrame(tab_excel, text="반품 미리보기 (DB 자동 조회)")
         pv_frame.pack(fill=BOTH, expand=True, padx=10, pady=5)
-        ttk.Label(pv_frame, text="※ 필수: Lot No, BL NO, 톤백중량, 반품수량(갯수) — 네 열 중 하나라도 비면 반품 업로드 시 오류 표시", font=('맑은 고딕', 10)).pack(anchor='w')
+        ttk.Label(pv_frame, text="※ 필수: Lot No, BL NO, 톤백중량, 반품수량(갯수) — 네 열 중 하나라도 비면 반품 업로드 시 오류 표시", font=('Noto Sans KR', 10)).pack(anchor='w')
         cols = ('lot_no', 'bl_no', 'tonbag_no', 'product', 'weight_kg',
                 'return_qty', 'reason', 'status', 'remark')
         pv_tree = ttk.Treeview(pv_frame, columns=cols, show='headings', height=10)
@@ -581,7 +581,7 @@ class AdvancedDialogsMixin:
         except Exception as e:
             logger.warning(f'[UI] advanced_dialogs_mixin: {e}')
         summary_var = tk.StringVar(value="데이터 붙여넣기 또는 파일 업로드하세요")
-        ttk.Label(tab_excel, textvariable=summary_var, font=('맑은 고딕', 11, 'bold')).pack(pady=3)
+        ttk.Label(tab_excel, textvariable=summary_var, font=('Noto Sans KR', 11, 'bold')).pack(pady=3)
         return pv_tree, summary_var
 
     def _bret_show_input_choice(self, dialog):  # v8.7.0 [SRP]
@@ -608,9 +608,9 @@ class AdvancedDialogsMixin:
         center_dialog(win, dialog)
         f = ttk.Frame(win, padding=(20, 20, 20, 32))
         f.pack(fill=tk.BOTH, expand=True)
-        ttk.Label(f, text=UPLOAD_CHOICE_HEADER, font=('맑은 고딕', 12, 'bold')).pack(anchor='w', pady=(0, 12))
-        ttk.Label(f, text=UPLOAD_CHOICE_PASTE, font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 10))
-        ttk.Label(f, text=UPLOAD_CHOICE_UPLOAD, font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 24))
+        ttk.Label(f, text=UPLOAD_CHOICE_HEADER, font=('Noto Sans KR', 12, 'bold')).pack(anchor='w', pady=(0, 12))
+        ttk.Label(f, text=UPLOAD_CHOICE_PASTE, font=('Noto Sans KR', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 10))
+        ttk.Label(f, text=UPLOAD_CHOICE_UPLOAD, font=('Noto Sans KR', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 24))
         btn_f = ttk.Frame(f)
         btn_f.pack(anchor='center')
         def on_paste():
@@ -980,7 +980,7 @@ class AdvancedDialogsMixin:
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text="문서 변환", font=('맑은 고딕', 16, 'bold')).pack(pady=10)
+        ttk.Label(dialog, text="문서 변환", font=('Noto Sans KR', 16, 'bold')).pack(pady=10)
 
         # 변환 모드 선택
         mode_frame = ttk.LabelFrame(dialog, text="변환 모드 선택")
@@ -1740,7 +1740,7 @@ class AdvancedDialogsMixin:
         filter_frame = tk.LabelFrame(
             dialog, text="  🔍 조회 조건  ",
             bg=BG2, fg=ACCENT,
-            font=('맑은 고딕', 10, 'bold'),
+            font=('Noto Sans KR', 10, 'bold'),
             bd=1, relief='groove', padx=10, pady=6,
         )
         filter_frame.pack(fill='x', padx=10, pady=(10, 4))
@@ -1750,11 +1750,11 @@ class AdvancedDialogsMixin:
 
         def _lbl(parent, text):
             return tk.Label(parent, text=text, bg=BG2, fg=FG2,
-                            font=('맑은 고딕', 10))
+                            font=('Noto Sans KR', 10))
         def _entry(parent, width=12, val=''):
             e = tk.Entry(parent, width=width, bg=tc('bg_primary'), fg=FG,
                          insertbackground=FG,
-                         font=('맑은 고딕', 10), relief='flat', bd=1)
+                         font=('Noto Sans KR', 10), relief='flat', bd=1)
             e.insert(0, val)
             return e
 
@@ -1782,7 +1782,7 @@ class AdvancedDialogsMixin:
         lot_var = tk.StringVar()
         ent_lot = tk.Entry(row0, textvariable=lot_var, width=14,
                            bg=tc('bg_primary'), fg=FG, insertbackground=FG,
-                           font=('맑은 고딕', 10), relief='flat', bd=1)
+                           font=('Noto Sans KR', 10), relief='flat', bd=1)
         ent_lot.pack(side='left', padx=(0, 16))
 
         _lbl(row0, '수출유형').pack(side='left', padx=(0, 4))
@@ -1795,14 +1795,14 @@ class AdvancedDialogsMixin:
         etype_cb.pack(side='left', padx=(0, 16))
 
         tk.Button(
-            row0, text='🔍 조회', font=('맑은 고딕', 10, 'bold'),
+            row0, text='🔍 조회', font=('Noto Sans KR', 10, 'bold'),
             bg=tc('info'), fg=FG, activebackground=tc('info'),
             relief='flat', bd=0, padx=14, pady=3, cursor='hand2',
             command=lambda: _do_query(),
         ).pack(side='left', padx=(0, 6))
 
         tk.Button(
-            row0, text='📊 Excel 저장', font=('맑은 고딕', 10),
+            row0, text='📊 Excel 저장', font=('Noto Sans KR', 10),
             bg=tc('info'), fg=FG, activebackground=tc('info'),
             relief='flat', bd=0, padx=14, pady=3, cursor='hand2',
             command=lambda: _export_excel(),
@@ -1811,7 +1811,7 @@ class AdvancedDialogsMixin:
         # ── 요약 레이블 ──────────────────────────────────────
         summary_var = tk.StringVar(value='조회 결과가 여기에 표시됩니다.')
         tk.Label(dialog, textvariable=summary_var,
-                 bg=BG, fg=FG2, font=('맑은 고딕', 10),
+                 bg=BG, fg=FG2, font=('Noto Sans KR', 10),
                  anchor='w', padx=12).pack(fill='x')
 
         # ── Treeview ─────────────────────────────────────────
@@ -1822,10 +1822,10 @@ class AdvancedDialogsMixin:
         # v9.0: theme_use('default') 제거
         style.configure('RetExport.Treeview',
                         background=BG2, fieldbackground=BG2, foreground=FG,
-                        rowheight=23, font=('맑은 고딕', 10))
+                        rowheight=23, font=('Noto Sans KR', 10))
         style.configure('RetExport.Treeview.Heading',
                         background=BG, foreground=ACCENT,
-                        font=('맑은 고딕', 10, 'bold'), relief='flat',
+                        font=('Noto Sans KR', 10, 'bold'), relief='flat',
                         anchor='center')
         style.map('RetExport.Treeview',
                   background=[('selected', SEL)],

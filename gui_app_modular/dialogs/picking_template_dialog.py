@@ -144,9 +144,9 @@ class PickingTemplateDialog:
                   if _is_select
                   else '고객사별 피킹 고정값 관리. 출고 시 자동 주입됩니다.')
         tk.Label(hdr, text=_title,
-                 font=('맑은 고딕',13,'bold'), bg=hdr.cget('bg'), fg=tc('text_primary')).pack(anchor='w')
+                 font=('Noto Sans KR',13,'bold'), bg=hdr.cget('bg'), fg=tc('text_primary')).pack(anchor='w')
         tk.Label(hdr, text=_sub,
-                 font=('맑은 고딕',10), bg=hdr.cget('bg'), fg=tc('text_muted')).pack(anchor='w')
+                 font=('Noto Sans KR',10), bg=hdr.cget('bg'), fg=tc('text_muted')).pack(anchor='w')
 
         # 본문
         body = tk.Frame(self.popup, bg=self.bg)
@@ -183,7 +183,7 @@ class PickingTemplateDialog:
         sb = tk.Scrollbar(parent, orient='vertical')
         self._list_box = tk.Listbox(
             parent, yscrollcommand=sb.set, selectmode='single',
-            font=('맑은 고딕',10), activestyle='dotbox', width=24,
+            font=('Noto Sans KR',10), activestyle='dotbox', width=24,
             bg=tc('bg_secondary'), fg=tc('text_primary'),
             selectbackground=tc('select_bg'), selectforeground=tc('text_primary'),
             relief='flat', bd=0)
@@ -224,17 +224,17 @@ class PickingTemplateDialog:
         ]
         for r_idx, (label, var, tip) in enumerate(rows):
             base = r_idx * 2
-            ttk.Label(p, text=label, font=('맑은 고딕',10,'bold'),
+            ttk.Label(p, text=label, font=('Noto Sans KR',10,'bold'),
                       anchor='e', width=14).grid(
                 row=base, column=0, sticky='e', padx=(8,6), pady=(8,0))
-            ttk.Entry(p, textvariable=var, font=('맑은 고딕',11)).grid(
+            ttk.Entry(p, textvariable=var, font=('Noto Sans KR',11)).grid(
                 row=base, column=1, sticky='ew', padx=(0,8), pady=(8,0))
-            ttk.Label(p, text=tip, font=('맑은 고딕', 10),
+            ttk.Label(p, text=tip, font=('Noto Sans KR', 10),
                       foreground=tc('text_muted')).grid(
                 row=base+1, column=1, sticky='w', padx=(0,8))
 
         last = len(rows)*2
-        ttk.Label(p, text='활성화', font=('맑은 고딕',10,'bold'),
+        ttk.Label(p, text='활성화', font=('Noto Sans KR',10,'bold'),
                   anchor='e', width=14).grid(
             row=last, column=0, sticky='e', padx=(8,6), pady=(10,0))
         ttk.Checkbutton(p, text='사용 중', variable=self._var_active).grid(
@@ -251,32 +251,32 @@ class PickingTemplateDialog:
         self._var_storage     = tk.StringVar(value='1001 GY logistics')
 
         def row(r, label, widget_fn, tip=None):
-            ttk.Label(p, text=label, font=('맑은 고딕',10,'bold'),
+            ttk.Label(p, text=label, font=('Noto Sans KR',10,'bold'),
                       anchor='e', width=14).grid(
                 row=r*2, column=0, sticky='e', padx=(8,6), pady=(8,0))
             widget_fn(r*2)
             if tip:
-                ttk.Label(p, text=tip, font=('맑은 고딕', 10),
+                ttk.Label(p, text=tip, font=('Noto Sans KR', 10),
                           foreground=tc('text_muted')).grid(
                     row=r*2+1, column=1, sticky='w', padx=(0,8))
 
         def e(var, r):
-            ttk.Entry(p, textvariable=var, font=('맑은 고딕',11)).grid(
+            ttk.Entry(p, textvariable=var, font=('Noto Sans KR',11)).grid(
                 row=r, column=1, sticky='ew', padx=(0,8), pady=(8,0))
 
         def e_delivery(r):
             ttk.Combobox(p, textvariable=self._var_delivery,
                          values=DELIVERY_TERMS_LIST, state='normal',
-                         font=('맑은 고딕',11), width=10).grid(
+                         font=('Noto Sans KR',11), width=10).grid(
                 row=r, column=1, sticky='w', padx=(0,8), pady=(8,0))
 
         def e_bag(r):
             frm = ttk.Frame(p); frm.grid(row=r, column=1, sticky='w', padx=(0,8), pady=(8,0))
             cb = ttk.Combobox(frm, textvariable=self._var_bag_weight,
                               values=BAG_WEIGHT_OPTIONS, state='readonly',
-                              font=('맑은 고딕',11,'bold'), width=8)
+                              font=('Noto Sans KR',11,'bold'), width=8)
             cb.pack(side=LEFT)
-            self._bag_badge = tk.Label(frm, text='', font=('맑은 고딕',10,'bold'),
+            self._bag_badge = tk.Label(frm, text='', font=('Noto Sans KR',10,'bold'),
                                        fg=tc('text_primary'), bg=tc('btn_inbound'), relief='flat', padx=6, pady=1)
             self._bag_badge.pack(side=LEFT, padx=(6,0))
             cb.bind('<<ComboboxSelected>>', self._refresh_bag_badge)
@@ -304,9 +304,9 @@ class PickingTemplateDialog:
         p.columnconfigure(0, weight=1)
         p.rowconfigure(1, weight=1)
         tk.Label(p, text='담당자 메모 (자유 입력)',
-                 font=('맑은 고딕',10,'bold'), anchor='w').grid(
+                 font=('Noto Sans KR',10,'bold'), anchor='w').grid(
             row=0, column=0, sticky='w', padx=8, pady=(8,2))
-        self._text_note = tk.Text(p, font=('맑은 고딕',11),
+        self._text_note = tk.Text(p, font=('Noto Sans KR',11),
                                   wrap='word', relief='solid', bd=1)
         self._text_note.grid(row=1, column=0, sticky=NSEW, padx=8, pady=(0,8))
 

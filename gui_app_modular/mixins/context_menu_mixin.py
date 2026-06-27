@@ -607,9 +607,9 @@ class ContextMenuMixin:
         header.pack(fill=X)
         _header_fg = ThemeColors.get('badge_text', _is_dark)
         tk.Label(header, text="📅 LOT 히스토리 타임라인",
-                 bg=_accent, fg=_header_fg, font=('맑은 고딕', 14, 'bold')).pack()
+                 bg=_accent, fg=_header_fg, font=('Noto Sans KR', 14, 'bold')).pack()
         tk.Label(header, text=f"LOT: {lot_no} | SAP: {lot.get('sap_no', '')} | {lot.get('product', '')}",
-                 bg=_accent, fg=_header_fg, font=('맑은 고딕', 10)).pack()
+                 bg=_accent, fg=_header_fg, font=('Noto Sans KR', 10)).pack()
 
         # 타임라인
         canvas_frame = tk.Frame(dialog, bg=_bg)
@@ -673,7 +673,7 @@ class ContextMenuMixin:
             row.pack(fill=X, padx=10)
 
             tk.Label(row, text=date, bg=_bg, fg=color,
-                     font=('맑은 고딕', 10, 'bold'), width=12, anchor='e').pack(side=LEFT, padx=(0, 10))
+                     font=('Noto Sans KR', 10, 'bold'), width=12, anchor='e').pack(side=LEFT, padx=(0, 10))
 
             dot = tk.Canvas(row, width=20, height=20, bg=_bg, highlightthickness=0)
             dot.create_oval(4, 4, 16, 16, fill=color, outline=color)
@@ -682,9 +682,9 @@ class ContextMenuMixin:
             content = tk.Frame(row, bg=_bg)
             content.pack(side=LEFT, fill=X, expand=YES)
             tk.Label(content, text=f"{icon} {title}", bg=_bg, fg=_fg,
-                     font=('맑은 고딕', 11, 'bold'), anchor=W).pack(anchor=W)
+                     font=('Noto Sans KR', 11, 'bold'), anchor=W).pack(anchor=W)
             tk.Label(content, text=detail, bg=_bg, fg=ThemeColors.get('text_muted', _is_dark),
-                     font=('맑은 고딕', 10), anchor=W).pack(anchor=W)
+                     font=('Noto Sans KR', 10), anchor=W).pack(anchor=W)
 
             if idx < len(events) - 1:
                 tk.Frame(inner, bg=color, height=1).pack(fill=X, padx=50)
@@ -698,7 +698,7 @@ class ContextMenuMixin:
         pct = ((init_w - curr_w) / init_w * 100) if init_w > 0 else 0
 
         tk.Label(pf, text=f"출고 진행률: {pct:.1f}%", bg=_bg, fg=_fg,
-                 font=('맑은 고딕', 11, 'bold')).pack(anchor=W)
+                 font=('Noto Sans KR', 11, 'bold')).pack(anchor=W)
 
         bar = tk.Canvas(pf, height=20, bg=ThemeColors.get('chart_grid'), highlightthickness=0)
         bar.pack(fill=X, pady=5)
@@ -709,7 +709,7 @@ class ContextMenuMixin:
         bar.create_rectangle(0, 0, fill_w, 20, fill=bar_c, outline='')
 
         tk.Label(pf, text=f"입고: {init_w:,.0f}kg | 출고: {init_w-curr_w:,.0f}kg | 잔량: {curr_w:,.0f}kg",
-                 bg=_bg, fg=ThemeColors.get('text_muted', _is_dark), font=('맑은 고딕', 10)).pack(anchor=W)
+                 bg=_bg, fg=ThemeColors.get('text_muted', _is_dark), font=('Noto Sans KR', 10)).pack(anchor=W)
 
         ttk.Button(dialog, text="닫기", command=dialog.destroy).pack(pady=10)
 

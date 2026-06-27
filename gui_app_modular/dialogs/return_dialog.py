@@ -87,7 +87,7 @@ class ReturnInboundPreviewDialog:
         info.pack(fill=X, padx=10)
         tk.Label(info,
                  text=f"총 {len(items)}건 | 사유·비고 셀 더블클릭 편집 가능 | 1건이라도 실패 시 전체 롤백",
-                 font=('맑은 고딕', 10), bg=bg, fg=tc('danger')).pack(anchor='w')
+                 font=('Noto Sans KR', 10), bg=bg, fg=tc('danger')).pack(anchor='w')
 
         # ═══ Treeview ═══
         tree_frame = tk.Frame(self.popup, bg=bg)
@@ -154,7 +154,7 @@ class ReturnInboundPreviewDialog:
         total_tb = sum(it.get('tonbag_count', 0) for it in items)
         tk.Label(btn_bar,
                  text=f"합계: {total_mt:.1f} MT | 톤백 {total_tb}개 | ⚠️ 매칭 실패 시 전체 중단",
-                 font=('맑은 고딕', 10), bg=bg, fg=fg).pack(side=LEFT)
+                 font=('Noto Sans KR', 10), bg=bg, fg=fg).pack(side=LEFT)
 
         ttk.Button(btn_bar, text="취소", command=self.popup.destroy).pack(side=RIGHT, padx=5)
         ttk.Button(btn_bar, text="🔄 반품 실행", command=self._on_submit).pack(side=RIGHT, padx=5)
@@ -186,7 +186,7 @@ class ReturnInboundPreviewDialog:
         x, y, w, h = bbox
 
         current_val = self.tree.set(item, col_name)
-        entry = tk.Entry(self.tree, font=('맑은 고딕', 10))
+        entry = tk.Entry(self.tree, font=('Noto Sans KR', 10))
         entry.insert(0, current_val)
         entry.select_range(0, 'end')
         entry.place(x=x, y=y, width=w, height=h)

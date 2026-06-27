@@ -252,7 +252,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                           background=ThemeColors.get('bg_card', _od),
                           foreground=ThemeColors.get('text_primary', _od),
                           relief='solid', borderwidth=1,
-                          font=('맑은 고딕', 11), padx=10, pady=6,
+                          font=('Noto Sans KR', 11), padx=10, pady=6,
                           wraplength=520)
             lbl.pack()
 
@@ -393,7 +393,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 cell, text=num,
                 bg=_accent if col_i == 0 else _bg,
                 fg='#0f172a' if col_i == 0 else _muted,
-                font=('맑은 고딕', 11, 'bold'),
+                font=('Noto Sans KR', 11, 'bold'),
                 width=3, relief='flat',
             ).pack(side=LEFT, padx=(0, 4))
             # 단계 텍스트
@@ -403,12 +403,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 txt_fr, text=title,
                 bg=_bg,
                 fg=_accent if col_i == 0 else _text,
-                font=('맑은 고딕', 10, 'bold' if col_i == 0 else 'normal'),
+                font=('Noto Sans KR', 10, 'bold' if col_i == 0 else 'normal'),
             ).pack(anchor='w')
             tk.Label(
                 txt_fr, text=sub,
                 bg=_bg, fg=_muted,
-                font=('맑은 고딕', 8),
+                font=('Noto Sans KR', 8),
             ).pack(anchor='w')
             # 구분 화살표
             if col_i < len(STEPS) - 1:
@@ -450,14 +450,14 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
 
         ttk.Label(
             _tpl_row, text="적용 템플릿:",
-            font=('맑은 고딕', 11, 'bold'),
+            font=('Noto Sans KR', 11, 'bold'),
             foreground=ThemeColors.get('text_primary', _os_dark_tpl)
         ).pack(side=LEFT, padx=(4, 4))
 
         # 선택된 템플릿 요약 (선사·이름·톤백·BL형식)
         self._tpl_selected_lbl = ttk.Label(
             _tpl_row, text="(미선택)",
-            font=('맑은 고딕', 11), foreground=tc('text_muted')
+            font=('Noto Sans KR', 11), foreground=tc('text_muted')
         )
         self._tpl_selected_lbl.pack(side=LEFT, padx=(0, 8))
 
@@ -483,7 +483,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         _lbl_ship = ttk.Label(
             _carrier_row,
             text="🚢 선사:",
-            font=('맑은 고딕', 12, 'bold'),
+            font=('Noto Sans KR', 12, 'bold'),
             foreground=ThemeColors.get('text_primary', _os_dark2)
         )
         _lbl_ship.pack(side=LEFT, padx=(4, 4))
@@ -494,7 +494,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             values=list(CARRIER_OPTIONS),
             state='readonly',
             width=16,
-            font=('맑은 고딕', 11),
+            font=('Noto Sans KR', 11),
         )
         self._carrier_pick_combo.pack(side=LEFT, padx=(0, 8))
         self._carrier_pick_combo.bind(
@@ -509,7 +509,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._carrier_label = tk.Label(
             _carrier_row,
             text="  뱃지 클릭: 템플릿 목록  ",
-            font=('맑은 고딕', 12, 'bold'),
+            font=('Noto Sans KR', 12, 'bold'),
             fg=tc('badge_text'),
             bg=tc('bg_secondary'),
             relief="flat", padx=8, pady=2, bd=0, cursor="hand2",
@@ -612,21 +612,21 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             tk.Label(
                 label_fr, text=short_lbl,
                 bg=_bg_card, fg=_txt_pri,
-                font=('맑은 고딕', 11, 'bold'),
+                font=('Noto Sans KR', 11, 'bold'),
             ).pack(side=LEFT)
             _req_text  = ' 필수' if required else ' 선택'
             _req_color = '#dc2626' if required else _txt_muted   # Red-600 / muted
             tk.Label(
                 label_fr, text=_req_text,
                 bg=_bg_card, fg=_req_color,
-                font=('맑은 고딕', 10),
+                font=('Noto Sans KR', 10),
             ).pack(side=LEFT, padx=(4, 0))
 
             # 파일 선택 버튼
             btn_sel = tk.Button(
                 card, text='📂 파일 선택',
                 command=lambda dt=doc_type: self._select_file(dt),
-                font=('맑은 고딕', 10),
+                font=('Noto Sans KR', 10),
                 bg=ThemeColors.get('btn_neutral', _os_dark),
                 fg=ThemeColors.get('badge_text', _os_dark),
                 activebackground=_bg_hover,
@@ -641,7 +641,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             check_label = tk.Label(
                 card, text='○',
                 bg=_bg_card, fg=_txt_muted,
-                font=('맑은 고딕', 13, 'bold'),
+                font=('Noto Sans KR', 13, 'bold'),
             )
             check_label.grid(row=0, column=3, sticky='e', padx=(0, 8))
             self.check_labels[doc_type] = check_label
@@ -650,7 +650,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             file_label = tk.Label(
                 card, text='',
                 bg=_bg_card, fg=_accent_c,
-                font=('맑은 고딕', 10), anchor='w',
+                font=('Noto Sans KR', 10), anchor='w',
             )
             file_label.grid(row=0, column=4, sticky='ew')
             card.columnconfigure(4, weight=1)
@@ -726,7 +726,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
 
         self.parse_hint = ttk.Label(
             actions, text="",
-            foreground=tc('text_primary'), font=('맑은 고딕', 12),
+            foreground=tc('text_primary'), font=('Noto Sans KR', 12),
         )
         self.parse_hint.pack(side=LEFT, fill=X, expand=True, padx=(4, 0))
         self._update_parse_hint()
@@ -766,11 +766,11 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         progress_section.pack(fill=X, pady=(6, 4))
         self._progress_inline_placeholder = ttk.Label(
             progress_section, text="파싱을 시작하면 진행 상황이 여기에 표시됩니다.",
-            font=('맑은 고딕', 11), foreground=ThemeColors.get('text_muted', _pop_dark))
+            font=('Noto Sans KR', 11), foreground=ThemeColors.get('text_muted', _pop_dark))
         self._progress_inline_placeholder.pack(anchor='w')
         self._progress_inline_frame = ttk.Frame(progress_section)
         # 아래에서 pack하지 않음 — 파싱 시작 시 pack, 완료 후 forget
-        self._progress_inline_msg = ttk.Label(self._progress_inline_frame, text="", font=('맑은 고딕', 12, 'bold'))
+        self._progress_inline_msg = ttk.Label(self._progress_inline_frame, text="", font=('Noto Sans KR', 12, 'bold'))
         self._progress_inline_msg.pack(anchor='w')
         _ps = ttk.Style()
         _ps.configure('Inline.Horizontal.TProgressbar', troughcolor=ThemeColors.get('bg_secondary', _pop_dark), thickness=12)
@@ -778,12 +778,12 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         self._progress_bar_container.pack(fill=X, pady=(4, 2))
         self._progress_inline_bar = ttk.Progressbar(self._progress_bar_container, maximum=100, mode='determinate', style='Inline.Horizontal.TProgressbar')
         self._progress_inline_bar.pack(fill=X)
-        self._progress_inline_busy = ttk.Label(self._progress_bar_container, text="진행 중 ●", font=('맑은 고딕', 10),
+        self._progress_inline_busy = ttk.Label(self._progress_bar_container, text="진행 중 ●", font=('Noto Sans KR', 10),
                                                foreground=ThemeColors.get('statusbar_icon_warn', _pop_dark))
         self._progress_inline_busy.place(relx=0, rely=0.5, anchor='w')
         _row2 = ttk.Frame(self._progress_inline_frame)
         _row2.pack(fill=X)
-        self._progress_inline_pct_elapsed = ttk.Label(_row2, text="", font=('맑은 고딕', 10), foreground=ThemeColors.get('text_secondary', _pop_dark))
+        self._progress_inline_pct_elapsed = ttk.Label(_row2, text="", font=('Noto Sans KR', 10), foreground=ThemeColors.get('text_secondary', _pop_dark))
         self._progress_inline_pct_elapsed.pack(side=tk.RIGHT)
         
         # ═══════════════════════════════════════════════════════════
@@ -796,18 +796,18 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             tree_frame = ttk.LabelFrame(main, text="📊 미리보기 (스케일링·처리된 데이터)", padding=4)
             self._tree_frame = tree_frame
             import tkinter.font as tkfont
-            preview_font = tkfont.Font(family='맑은 고딕', size=11)
-            _ = tkfont.Font(family='맑은 고딕', size=10, weight='bold')  # heading_font reserved
+            preview_font = tkfont.Font(family='Noto Sans KR', size=11)
+            _ = tkfont.Font(family='Noto Sans KR', size=10, weight='bold')  # heading_font reserved
             row_height = preview_font.metrics('linespace') + 6
             _tree_fg = ThemeColors.get('text_primary', _tree_dark)
             style = ttk.Style()
             style.configure('Preview.Treeview',
-                            font=('맑은 고딕', 11),
+                            font=('Noto Sans KR', 11),
                             rowheight=row_height,
                             foreground=_tree_fg,
                             fieldbackground=ThemeColors.get('bg_card', _tree_dark))
             style.configure('Preview.Treeview.Heading',
-                            font=('맑은 고딕', 10, 'bold'), anchor='center')
+                            font=('Noto Sans KR', 10, 'bold'), anchor='center')
             columns = tuple(col[0] for col in PREVIEW_COLUMNS)
             self.tree = ttk.Treeview(
                 tree_frame, columns=columns, show="headings",
@@ -880,7 +880,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=X, pady=(8, 0))
 
-        _font = getattr(self, '_toolbar_font', '맑은 고딕') if hasattr(self, '_toolbar_font') else '맑은 고딕'
+        _font = getattr(self, '_toolbar_font', 'Noto Sans KR') if hasattr(self, '_toolbar_font') else 'Noto Sans KR'
         _btn_font_size = 15
         _btn_fg = ThemeColors.get('badge_text', _tree_dark)
         _blue = ThemeColors.get('info', _tree_dark)
@@ -948,7 +948,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
 
         self.summary_var = tk.StringVar(value="")
         _summary_lbl = ttk.Label(btn_frame, textvariable=self.summary_var,
-                                font=('맑은 고딕', 13, 'bold'),
+                                font=('Noto Sans KR', 13, 'bold'),
                                 foreground=ThemeColors.get('statusbar_progress', _tree_dark))
         _summary_lbl.pack(side=LEFT, fill=X, expand=True, padx=10)
 
@@ -1433,50 +1433,50 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         dlg.grab_set()
 
         _ttk.Label(dlg, text="현재 파싱 설정을 새 템플릿으로 저장합니다.",
-                   font=('맑은 고딕', 11)).pack(pady=(16, 6), padx=16, anchor='w')
+                   font=('Noto Sans KR', 11)).pack(pady=(16, 6), padx=16, anchor='w')
 
         form = _ttk.Frame(dlg, padding=16)
         form.pack(fill='both', expand=True)
         form.columnconfigure(1, weight=1)
 
         # 템플릿 ID
-        _ttk.Label(form, text="템플릿 ID *", font=('맑은 고딕', 10, 'bold'),
+        _ttk.Label(form, text="템플릿 ID *", font=('Noto Sans KR', 10, 'bold'),
                    anchor='e', width=14).grid(row=0, column=0, sticky='e', pady=6)
         var_id = _tk.StringVar(value=cur.get('template_id', f"TPL_{uuid.uuid4().hex[:6].upper()}"))
-        _ttk.Entry(form, textvariable=var_id, font=('맑은 고딕', 11)).grid(
+        _ttk.Entry(form, textvariable=var_id, font=('Noto Sans KR', 11)).grid(
             row=0, column=1, sticky='ew', padx=(8, 0), pady=6)
 
         # 템플릿 이름
-        _ttk.Label(form, text="템플릿 이름 *", font=('맑은 고딕', 10, 'bold'),
+        _ttk.Label(form, text="템플릿 이름 *", font=('Noto Sans KR', 10, 'bold'),
                    anchor='e', width=14).grid(row=1, column=0, sticky='e', pady=6)
         _default_name = cur.get('template_name', '') or "새 템플릿"
         var_name = _tk.StringVar(value=_default_name)
-        _ttk.Entry(form, textvariable=var_name, font=('맑은 고딕', 11)).grid(
+        _ttk.Entry(form, textvariable=var_name, font=('Noto Sans KR', 11)).grid(
             row=1, column=1, sticky='ew', padx=(8, 0), pady=6)
 
         # 선사
         CARRIER_OPTIONS = ['UNKNOWN','MSC','MAERSK','CMA CGM','COSCO','EVERGREEN',
                            'HMM','ONE','PIL','SITC','YANG MING','ZIM']
-        _ttk.Label(form, text="선사", font=('맑은 고딕', 10, 'bold'),
+        _ttk.Label(form, text="선사", font=('Noto Sans KR', 10, 'bold'),
                    anchor='e', width=14).grid(row=2, column=0, sticky='e', pady=6)
         var_carrier = _tk.StringVar(value=cur.get('carrier_id', 'UNKNOWN'))
         _ttk.Combobox(form, textvariable=var_carrier, values=CARRIER_OPTIONS,
-                      state='normal', font=('맑은 고딕', 11), width=16).grid(
+                      state='normal', font=('Noto Sans KR', 11), width=16).grid(
             row=2, column=1, sticky='w', padx=(8, 0), pady=6)
 
         # 톤백 단가
-        _ttk.Label(form, text="톤백 단가(kg)", font=('맑은 고딕', 10, 'bold'),
+        _ttk.Label(form, text="톤백 단가(kg)", font=('Noto Sans KR', 10, 'bold'),
                    anchor='e', width=14).grid(row=3, column=0, sticky='e', pady=6)
         var_bag = _tk.StringVar(value=str(cur.get('bag_weight_kg', 500)))
         _ttk.Combobox(form, textvariable=var_bag, values=['500', '1000'],
-                      state='readonly', font=('맑은 고딕', 11), width=8).grid(
+                      state='readonly', font=('Noto Sans KR', 11), width=8).grid(
             row=3, column=1, sticky='w', padx=(8, 0), pady=6)
 
         # 제품 힌트
-        _ttk.Label(form, text="제품 힌트", font=('맑은 고딕', 10, 'bold'),
+        _ttk.Label(form, text="제품 힌트", font=('Noto Sans KR', 10, 'bold'),
                    anchor='e', width=14).grid(row=4, column=0, sticky='e', pady=6)
         var_prod = _tk.StringVar(value=cur.get('product_hint', 'LITHIUM CARBONATE'))
-        _ttk.Entry(form, textvariable=var_prod, font=('맑은 고딕', 11)).grid(
+        _ttk.Entry(form, textvariable=var_prod, font=('Noto Sans KR', 11)).grid(
             row=4, column=1, sticky='ew', padx=(8, 0), pady=6)
 
         # 버튼
@@ -1613,7 +1613,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         else:
             _hdr_txt = "템플릿을 클릭하여 선택하세요"
         _ttk.Label(hdr, text=_hdr_txt,
-                   font=('맑은 고딕', 12, 'bold')).pack(side='left')
+                   font=('Noto Sans KR', 12, 'bold')).pack(side='left')
 
         def _open_template_manager_from_picker():
             confirmed[0] = True
@@ -1722,7 +1722,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         # 선택 개수 표시
         count_lbl = _ttk.Label(btn_row,
                                text=f"표시 {len(templates)}개 / 전체 {len(all_templates)}개",
-                               font=('맑은 고딕', 10))
+                               font=('Noto Sans KR', 10))
         count_lbl.pack(side='left')
 
     def _update_tpl_selected_label(self) -> None:
@@ -2999,7 +2999,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 
                 # 안내 메시지
                 ttk.Label(frame, text=msg_text,
-                         font=('맑은 고딕', 11, 'bold'),
+                         font=('Noto Sans KR', 11, 'bold'),
                          wraplength=460).pack(anchor='w', pady=(0, 12))
                 
                 # ── 날짜/입력 필드 공통 참조: .get(), .set(val), .widget ──
@@ -3032,7 +3032,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                                        bootstyle='info', width=16)
                         de.pack(side=tk.LEFT, padx=(0, 8))
                         ttk.Label(lf, text=hint,
-                                 font=('맑은 고딕', 10), foreground=ThemeColors.get('text_muted', _cal_dark)).pack(side=tk.LEFT)
+                                 font=('Noto Sans KR', 10), foreground=ThemeColors.get('text_muted', _cal_dark)).pack(side=tk.LEFT)
                         def _get():
                             return (de.entry.get() or '').strip() if de and de.winfo_exists() else ''
                         def _set(v):
@@ -3053,10 +3053,10 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                         return _FieldRef(_get, de, _set)
                     else:
                         entry = ttk.Entry(lf, textvariable=var,
-                                         font=('맑은 고딕', 11), width=16)
+                                         font=('Noto Sans KR', 11), width=16)
                         entry.pack(side=tk.LEFT, padx=(0, 8))
                         ttk.Label(lf, text=hint,
-                                 font=('맑은 고딕', 10), foreground=ThemeColors.get('text_muted', _cal_dark)).pack(side=tk.LEFT)
+                                 font=('Noto Sans KR', 10), foreground=ThemeColors.get('text_muted', _cal_dark)).pack(side=tk.LEFT)
                         return _FieldRef(lambda: (var.get() or '').strip(), entry, var.set)
                 
                 # ── 선적일(ship_date) 미표시 — B/L에서 추출되므로 톤백 리스트에 이미 있음 ──
@@ -3076,17 +3076,17 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
                 lf_ft = ttk.LabelFrame(frame, text="Free time (일수)", padding=8)
                 lf_ft.pack(fill=tk.X, pady=(0, 8))
                 ft_var = tk.StringVar(value='')
-                ft_entry = ttk.Entry(lf_ft, textvariable=ft_var, font=('맑은 고딕', 11), width=10)
+                ft_entry = ttk.Entry(lf_ft, textvariable=ft_var, font=('Noto Sans KR', 11), width=10)
                 ft_entry.pack(side=tk.LEFT, padx=(0, 8))
                 ttk.Label(lf_ft, text="반납일-입항일=Free time (둘 중 하나만 입력 시 나머지 자동 계산·자동 입력 시 상대 필드 비활성화)",
-                         font=('맑은 고딕', 10), foreground=ThemeColors.get('text_muted', _ft_dark)).pack(side=tk.LEFT)
+                         font=('Noto Sans KR', 10), foreground=ThemeColors.get('text_muted', _ft_dark)).pack(side=tk.LEFT)
                 ft_ref = _FieldRef(lambda: (ft_var.get() or '').strip(), ft_entry, ft_var.set)
                 
                 # 에러 표시
                 err_var = tk.StringVar()
                 _err_dark = is_dark()
                 ttk.Label(frame, textvariable=err_var,
-                         font=('맑은 고딕', 10), foreground=ThemeColors.get('danger', _err_dark)).pack(anchor='w', pady=(4, 0))
+                         font=('Noto Sans KR', 10), foreground=ThemeColors.get('danger', _err_dark)).pack(anchor='w', pady=(4, 0))
                 
                 # ── con_return ↔ free_time 상호 계산·비활성화 (둘 중 하나 입력 시 상대 필드 자동 계산 후 비활성화) ──
                 _updating_silently = {'v': False}
@@ -3636,7 +3636,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
             logger.warning(f"[UI] get product choices from master failed: {e}")
             choices = ['LITHIUM CARBONATE', 'NICKEL SULFATE HEXAHYDRATE']
         
-        combo = ttk.Combobox(self.tree, values=choices, font=('맑은 고딕', 10),
+        combo = ttk.Combobox(self.tree, values=choices, font=('Noto Sans KR', 10),
                              state='normal')
         
         # 현재 값과 매칭되는 항목 찾기
@@ -3708,7 +3708,7 @@ class OneStopInboundDialog(InboundUploadMixin, InboundDialogBase):
         if col_name == 'product':
             entry = self._create_product_combobox(current_val, x, y, w, h)
         else:
-            entry = tk.Entry(self.tree, font=('맑은 고딕', 10))
+            entry = tk.Entry(self.tree, font=('Noto Sans KR', 10))
             entry.insert(0, current_val.replace(',', ''))
             entry.select_range(0, 'end')
             entry.place(x=x, y=y, width=w, height=h)

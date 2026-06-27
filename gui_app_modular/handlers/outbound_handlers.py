@@ -1332,9 +1332,9 @@ class OutboundHandlersMixin:
             UPLOAD_CHOICE_HEADER, UPLOAD_CHOICE_PASTE, UPLOAD_CHOICE_UPLOAD,
             UPLOAD_CHOICE_BTN_PASTE, UPLOAD_CHOICE_BTN_UPLOAD,
         )
-        ttk.Label(f, text=UPLOAD_CHOICE_HEADER, font=('맑은 고딕', 12, 'bold')).pack(anchor='w', pady=(0, 12))
-        ttk.Label(f, text=UPLOAD_CHOICE_PASTE, font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 10))
-        ttk.Label(f, text=UPLOAD_CHOICE_UPLOAD, font=('맑은 고딕', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 24))
+        ttk.Label(f, text=UPLOAD_CHOICE_HEADER, font=('Noto Sans KR', 12, 'bold')).pack(anchor='w', pady=(0, 12))
+        ttk.Label(f, text=UPLOAD_CHOICE_PASTE, font=('Noto Sans KR', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 10))
+        ttk.Label(f, text=UPLOAD_CHOICE_UPLOAD, font=('Noto Sans KR', 10), wraplength=400, justify=tk.LEFT).pack(anchor='w', pady=(0, 24))
         btn_f = ttk.Frame(f)
         btn_f.pack(anchor='center')
         def on_file():

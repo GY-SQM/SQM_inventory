@@ -267,9 +267,9 @@ class OutboundScheduledTabMixin:
         header = tk.Frame(popup, bg=bg, padx=15, pady=10)
         header.pack(fill=X)
         tk.Label(header, text=f"전체 LOT 톤백 예정/이력 — {len(rows)}건",
-                 font=('맑은 고딕', 12, 'bold'), bg=bg, fg=fg).pack(anchor='w')
+                 font=('Noto Sans KR', 12, 'bold'), bg=bg, fg=fg).pack(anchor='w')
         tk.Label(header, text="판매배정·판매화물 결정·출고·선적 상태 톤백 (LOT별 정렬)",
-                 font=('맑은 고딕', 10), bg=bg, fg=ThemeColors.get('text_secondary', is_dark)).pack(anchor='w')
+                 font=('Noto Sans KR', 10), bg=bg, fg=ThemeColors.get('text_secondary', is_dark)).pack(anchor='w')
         cols = ('lot_no', 'sub_lt', 'weight', 'type', 'status', 'customer', 'out_date')
         tree = ttk.Treeview(popup, columns=cols, show='headings', height=20)
         for cid, txt, w in [
@@ -442,9 +442,9 @@ class OutboundScheduledTabMixin:
         header = tk.Frame(popup, bg=bg, padx=15, pady=10)
         header.pack(fill=X)
         tk.Label(header, text=f"📦 {lot_no}  |  {product}",
-                 font=('맑은 고딕', 14, 'bold'), bg=bg, fg=fg).pack(anchor='w')
+                 font=('Noto Sans KR', 14, 'bold'), bg=bg, fg=fg).pack(anchor='w')
         tk.Label(header, text="출고된 톤백·샘플 이력 (여러 번에 걸친 출고 포함)",
-                 font=('맑은 고딕', 10), bg=bg, fg=ThemeColors.get('text_secondary', is_dark)).pack(anchor='w')
+                 font=('Noto Sans KR', 10), bg=bg, fg=ThemeColors.get('text_secondary', is_dark)).pack(anchor='w')
 
         # 테이블
         cols = ('no', 'sub_lt', 'weight', 'type', 'status', 'customer', 'out_date')

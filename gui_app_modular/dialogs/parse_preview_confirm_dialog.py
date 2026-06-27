@@ -82,12 +82,12 @@ class ParsePreviewConfirmDialog:
         ttk.Label(
             hdr,
             text=f"✅ 파싱 완료 — {len(self.preview_data)}개 LOT  |  소요 시간: {self.elapsed_str}",
-            font=('맑은 고딕', 12, 'bold')
+            font=('Noto Sans KR', 12, 'bold')
         ).pack(side='left')
         ttk.Label(
             hdr,
             text="체크된 항목만 DB에 저장됩니다",
-            font=('맑은 고딕', 10),
+            font=('Noto Sans KR', 10),
             foreground=tc('text_muted')
         ).pack(side='right', padx=8)
 
@@ -101,7 +101,7 @@ class ParsePreviewConfirmDialog:
         ttk.Button(ctrl, text="☐ 전체 해제",  width=12,
                    command=self._deselect_all).pack(side='left', padx=4)
         ttk.Label(ctrl, text=f"총 {len(self.preview_data)}개 LOT",
-                  font=('맑은 고딕', 10)).pack(side='left', padx=12)
+                  font=('Noto Sans KR', 10)).pack(side='left', padx=12)
 
         # ── 테이블 ──
         tbl_frame = ttk.LabelFrame(

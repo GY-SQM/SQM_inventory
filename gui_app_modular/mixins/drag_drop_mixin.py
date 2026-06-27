@@ -42,9 +42,9 @@ class DragDropMixin:
             tk.Label(inner, text="📁", bg=ThemeColors.get('info', _dd_dark), fg=ThemeColors.get('badge_text', _dd_dark),
                      font=('', 48)).pack(pady=(30, 10))
             tk.Label(inner, text="파일을 여기에 놓으세요", bg=ThemeColors.get('info', _dd_dark), fg=ThemeColors.get('badge_text', _dd_dark),
-                     font=('맑은 고딕', 18, 'bold')).pack()
+                     font=('Noto Sans KR', 18, 'bold')).pack()
             tk.Label(inner, text="PDF → 입고 서류 파싱 | Excel → 입고/출고 선택",
-                     bg=ThemeColors.get('info', _dd_dark), fg=ThemeColors.get('arrow_separator', _dd_dark), font=('맑은 고딕', 11)).pack(pady=5)
+                     bg=ThemeColors.get('info', _dd_dark), fg=ThemeColors.get('arrow_separator', _dd_dark), font=('Noto Sans KR', 11)).pack(pady=5)
             
             self._drop_overlay.lift()
         except (RuntimeError, ValueError) as e:
@@ -201,13 +201,13 @@ class DragDropMixin:
         header = tk.Frame(dialog, bg=ThemeColors.get('info'), pady=8)
         header.pack(fill=X)
         tk.Label(header, text="📥 Excel 파일 처리 방법 선택", bg=ThemeColors.get('info', _is_dark), fg=ThemeColors.get('badge_text', _is_dark),
-                 font=('맑은 고딕', 12, 'bold')).pack()
+                 font=('Noto Sans KR', 12, 'bold')).pack()
         
         body = tk.Frame(dialog, bg=_bg, padx=20, pady=10)
         body.pack(fill='both', expand=True)
         
         tk.Label(body, text=f"📄 {os.path.basename(file_path)}", bg=_bg, fg=_fg,
-                 font=('맑은 고딕', 10, 'bold')).pack(pady=(5, 15))
+                 font=('Noto Sans KR', 10, 'bold')).pack(pady=(5, 15))
         
         def do_inbound():
             dialog.destroy()

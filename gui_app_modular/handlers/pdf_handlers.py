@@ -390,7 +390,7 @@ class PDFHandlersMixin:
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text="📝 거래명세서 PDF", font=('맑은 고딕', 14, 'bold')).pack(pady=10)
+        ttk.Label(dialog, text="📝 거래명세서 PDF", font=('Noto Sans KR', 14, 'bold')).pack(pady=10)
 
         form = ttk.Frame(dialog, padding=10)
         form.pack(fill='x')
@@ -513,7 +513,7 @@ class PDFHandlersMixin:
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text=f"📤 출고확인서 — {lot_no}", font=('맑은 고딕', 12, 'bold')).pack(pady=8)
+        ttk.Label(dialog, text=f"📤 출고확인서 — {lot_no}", font=('Noto Sans KR', 12, 'bold')).pack(pady=8)
 
         form = ttk.Frame(dialog, padding=10)
         form.pack(fill='x')
@@ -594,7 +594,7 @@ class PDFHandlersMixin:
         dialog.transient(self.root)
         dialog.grab_set()
 
-        ttk.Label(dialog, text="보고서 기간 선택", font=('맑은 고딕', 12, 'bold')).pack(pady=10)
+        ttk.Label(dialog, text="보고서 기간 선택", font=('Noto Sans KR', 12, 'bold')).pack(pady=10)
 
         sel_frame = ttk.Frame(dialog)
         sel_frame.pack(pady=10)

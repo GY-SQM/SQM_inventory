@@ -155,9 +155,9 @@ class InboundTemplateDialog:
                      if _is_select_mode
                      else '선사 + 단가별 파싱 설정. 파이프라인에서 실제 사용하는 항목만 관리합니다.')
         tk.Label(hdr, text=_title,
-                 font=('맑은 고딕',13,'bold'), bg=hdr.cget('bg'), fg=tc('text_primary')).pack(anchor='w')
+                 font=('Noto Sans KR',13,'bold'), bg=hdr.cget('bg'), fg=tc('text_primary')).pack(anchor='w')
         tk.Label(hdr, text=_subtitle,
-                 font=('맑은 고딕',10), bg=hdr.cget('bg'), fg=tc('text_muted')).pack(anchor='w')
+                 font=('Noto Sans KR',10), bg=hdr.cget('bg'), fg=tc('text_muted')).pack(anchor='w')
 
         # 본문 — 좌우 드래그로 폭 조절 (Panedwindow)
         body = tk.Frame(self.popup, bg=self.bg)
@@ -204,7 +204,7 @@ class InboundTemplateDialog:
         sb = tk.Scrollbar(parent, orient='vertical')
         self._list_box = tk.Listbox(
             parent, yscrollcommand=sb.set, selectmode='single',
-            font=('맑은 고딕',10), activestyle='dotbox', width=24,
+            font=('Noto Sans KR',10), activestyle='dotbox', width=24,
             bg=tc('bg_secondary'), fg=tc('text_primary'),
             selectbackground=tc('select_bg'), selectforeground=tc('text_primary'),
             relief='flat', bd=0)
@@ -235,42 +235,42 @@ class InboundTemplateDialog:
         self._var_active       = tk.IntVar(value=1)
 
         def row(r, label, widget_fn, tip=None):
-            ttk.Label(p, text=label, font=('맑은 고딕',10,'bold'),
+            ttk.Label(p, text=label, font=('Noto Sans KR',10,'bold'),
                       anchor='e', width=16).grid(
                 row=r*2, column=0, sticky='e', padx=(8,6), pady=(8,0))
             widget_fn(r*2)
             if tip:
-                ttk.Label(p, text=tip, font=('맑은 고딕', 10),
+                ttk.Label(p, text=tip, font=('Noto Sans KR', 10),
                           foreground=tc('text_muted')).grid(
                     row=r*2+1, column=1, sticky='w', padx=(0,8))
 
         def e_id(r):
             ttk.Entry(p, textvariable=self._var_id,
-                      font=('맑은 고딕',11)).grid(row=r,column=1,sticky='ew',padx=(0,8),pady=(8,0))
+                      font=('Noto Sans KR',11)).grid(row=r,column=1,sticky='ew',padx=(0,8),pady=(8,0))
         def e_name(r):
             ttk.Entry(p, textvariable=self._var_name,
-                      font=('맑은 고딕',11)).grid(row=r,column=1,sticky='ew',padx=(0,8),pady=(8,0))
+                      font=('Noto Sans KR',11)).grid(row=r,column=1,sticky='ew',padx=(0,8),pady=(8,0))
         def e_carrier(r):
             ttk.Combobox(p, textvariable=self._var_carrier, values=CARRIER_OPTIONS,
-                         state='normal', font=('맑은 고딕',11), width=18).grid(
+                         state='normal', font=('Noto Sans KR',11), width=18).grid(
                 row=r,column=1,sticky='w',padx=(0,8),pady=(8,0))
         def e_bag(r):
             frm=ttk.Frame(p); frm.grid(row=r,column=1,sticky='w',padx=(0,8),pady=(8,0))
             cb=ttk.Combobox(frm, textvariable=self._var_bag_weight,
                             values=BAG_WEIGHT_OPTIONS,state='readonly',
-                            font=('맑은 고딕',11,'bold'),width=8)
+                            font=('Noto Sans KR',11,'bold'),width=8)
             cb.pack(side=LEFT)
-            self._bag_badge=tk.Label(frm,text='',font=('맑은 고딕',10,'bold'),
+            self._bag_badge=tk.Label(frm,text='',font=('Noto Sans KR',10,'bold'),
                                      fg=tc('text_primary'),bg=tc('btn_report'),relief='flat',padx=6,pady=1)
             self._bag_badge.pack(side=LEFT,padx=(6,0))
             cb.bind('<<ComboboxSelected>>',self._refresh_bag_badge)
         def e_prod(r):
             ttk.Entry(p, textvariable=self._var_product_hint,
-                      font=('맑은 고딕',11)).grid(row=r,column=1,sticky='ew',padx=(0,8),pady=(8,0))
+                      font=('Noto Sans KR',11)).grid(row=r,column=1,sticky='ew',padx=(0,8),pady=(8,0))
         def e_wfmt(r):
             ttk.Combobox(p, textvariable=self._var_weight_fmt,
                          values=['EURO','US'],state='readonly',
-                         font=('맑은 고딕',11),width=8).grid(
+                         font=('Noto Sans KR',11),width=8).grid(
                 row=r,column=1,sticky='w',padx=(0,8),pady=(8,0))
 
         row(0,'템플릿 ID *',  e_id,    '예) MSC_LC500  (영문+숫자, 공백없이)')
@@ -288,9 +288,9 @@ class InboundTemplateDialog:
                               'HMMU7', 'ONEU7', 'HLCU7', 'YMLU7', 'CMA7']
             ttk.Combobox(frm, textvariable=self._var_bl_format,
                          values=BL_FMT_OPTIONS, state='normal',
-                         font=('맑은 고딕', 11), width=12).pack(side=tk.LEFT)
+                         font=('Noto Sans KR', 11), width=12).pack(side=tk.LEFT)
             ttk.Label(frm, text='  예) 숫자9=MAERSK, MSCU7=MSC',
-                      font=('맑은 고딕', 10), foreground=tc('text_muted')).pack(side=tk.LEFT)
+                      font=('Noto Sans KR', 10), foreground=tc('text_muted')).pack(side=tk.LEFT)
 
         row(
             6,
@@ -299,7 +299,7 @@ class InboundTemplateDialog:
             '형식(숫자9·MSCU7 등)은 여기서 선택. 실제 BL 문구·샘플은 「🤖 Gemini 힌트」→「🚢 B/L 힌트」에 입력.',
         )
 
-        ttk.Label(p,text='활성화',font=('맑은 고딕',10,'bold'),anchor='e',width=16).grid(
+        ttk.Label(p,text='활성화',font=('Noto Sans KR',10,'bold'),anchor='e',width=16).grid(
             row=12,column=0,sticky='e',padx=(8,6),pady=(10,0))
         ttk.Checkbutton(p,text='사용 중',variable=self._var_active).grid(
             row=12,column=1,sticky='w',padx=(0,8),pady=(10,0))
@@ -317,7 +317,7 @@ class InboundTemplateDialog:
         tk.Label(p,
                  text='Gemini 파싱 힌트 (비워두면 기본 프롬프트 사용). '
                       '선사별 문서 포맷 특이사항을 입력하세요.',
-                 font=('맑은 고딕', 10),fg=tc('text_muted'),anchor='w').grid(
+                 font=('Noto Sans KR', 10),fg=tc('text_muted'),anchor='w').grid(
             row=0,column=0,sticky='w',padx=8,pady=(6,2))
         # v7.4.0: 힌트 순서 BL→PL→INV (파싱 순서와 동일하게 변경)
         self._text_hint_bl  = self._hint_box(p,'🚢 B/L 힌트 (① 먼저 파싱)',    1)
@@ -325,9 +325,9 @@ class InboundTemplateDialog:
         self._text_hint_inv = self._hint_box(p,'🧾 Invoice 힌트 (③ 파싱)',     5)
 
     def _hint_box(self, p, label, row):
-        tk.Label(p,text=label,font=('맑은 고딕',10,'bold'),anchor='w').grid(
+        tk.Label(p,text=label,font=('Noto Sans KR',10,'bold'),anchor='w').grid(
             row=row,column=0,sticky='w',padx=(8,0),pady=(6,0))
-        txt=tk.Text(p,height=4,font=('맑은 고딕',10),wrap='word',relief='solid',bd=1)
+        txt=tk.Text(p,height=4,font=('Noto Sans KR',10),wrap='word',relief='solid',bd=1)
         txt.grid(row=row+1,column=0,sticky=NSEW,padx=8,pady=(2,4))
         p.rowconfigure(row+1,weight=1)
         return txt
@@ -336,9 +336,9 @@ class InboundTemplateDialog:
         p.columnconfigure(0,weight=1)
         p.rowconfigure(1,weight=1)
         tk.Label(p,text='담당자 메모 (자유 입력)',
-                 font=('맑은 고딕',10,'bold'),anchor='w').grid(
+                 font=('Noto Sans KR',10,'bold'),anchor='w').grid(
             row=0,column=0,sticky='w',padx=8,pady=(8,2))
-        self._text_note=tk.Text(p,font=('맑은 고딕',11),wrap='word',relief='solid',bd=1)
+        self._text_note=tk.Text(p,font=('Noto Sans KR',11),wrap='word',relief='solid',bd=1)
         self._text_note.grid(row=1,column=0,sticky=NSEW,padx=8,pady=(0,8))
 
     def _load_list(self):

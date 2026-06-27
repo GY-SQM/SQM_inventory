@@ -101,7 +101,7 @@ class DashboardTabMixin:
         z1_hdr.pack(fill=X, pady=(0, 2))
         tk.Label(z1_hdr, text="재고 및 확인",
                  bg=BG2, fg=FG,
-                 font=('맑은 고딕', 13, 'bold'),
+                 font=('Noto Sans KR', 13, 'bold'),
                  anchor='w', padx=12, pady=4).pack(side=LEFT)
 
         self._dash_view_mode = tk.StringVar(value='mt')
@@ -111,7 +111,7 @@ class DashboardTabMixin:
                 value=val, command=self._refresh_dashboard_products,
                 bg=BG2, fg=FG, selectcolor=BG_CARD,
                 activebackground=BG2, activeforeground=FG,
-                font=('맑은 고딕', 11),
+                font=('Noto Sans KR', 11),
             ).pack(side=RIGHT, padx=6)
 
         product_frame = tk.Frame(zone1, bg=BG_CARD)
@@ -123,14 +123,14 @@ class DashboardTabMixin:
 
         # v8.7.0: 좌우 분할 Treeview — 좌: 재고, 우: 정합성(노랑)
         _matrix_style = ttk.Style()
-        _matrix_style.configure('Matrix.Treeview', font=('맑은 고딕', 10), rowheight=32)
-        _matrix_style.configure('Matrix.Treeview.Heading', font=('맑은 고딕', 10, 'bold'))
+        _matrix_style.configure('Matrix.Treeview', font=('Noto Sans KR', 10), rowheight=32)
+        _matrix_style.configure('Matrix.Treeview.Heading', font=('Noto Sans KR', 10, 'bold'))
         _gold_fg = '#ffc107' if _d else '#b8860b'
         _gold_hd_fg = '#ffd54f' if _d else '#a07000'
         self._gold_fg = _gold_fg
-        _matrix_style.configure('Gold.Treeview', font=('맑은 고딕', 10), rowheight=32,
+        _matrix_style.configure('Gold.Treeview', font=('Noto Sans KR', 10), rowheight=32,
                                 foreground=_gold_fg)
-        _matrix_style.configure('Gold.Treeview.Heading', font=('맑은 고딕', 10, 'bold'),
+        _matrix_style.configure('Gold.Treeview.Heading', font=('Noto Sans KR', 10, 'bold'),
                                 foreground=_gold_hd_fg)
 
         # ── 좌측: 재고 현황 ──
@@ -219,11 +219,11 @@ class DashboardTabMixin:
         alert_hdr.pack(fill=X)
         tk.Label(alert_hdr, text="⚠️  ALERTS  알림 및 경고",
                  bg=BG2, fg=FG_MUTED,
-                 font=('맑은 고딕', 12, 'bold'),
+                 font=('Noto Sans KR', 12, 'bold'),
                  anchor='w', padx=10, pady=6).pack(side=LEFT)
         self._alert_count_label = tk.Label(
             alert_hdr, text='', bg=BG2, fg=DANGER,
-            font=('맑은 고딕', 12, 'bold'), padx=8,
+            font=('Noto Sans KR', 12, 'bold'), padx=8,
         )
         self._alert_count_label._tc_skip = True
         self._alert_count_label.pack(side=RIGHT)
@@ -234,7 +234,7 @@ class DashboardTabMixin:
         self.alert_listbox = tk.Listbox(
             alert_list_frame,
             bg=BG_CARD, fg=FG,
-            font=('맑은 고딕', 11),
+            font=('Noto Sans KR', 11),
             selectmode='single',
             relief='flat', bd=0,
             activestyle='none',
@@ -254,7 +254,7 @@ class DashboardTabMixin:
         self._kpi_summary_label = tk.Label(
             kpi_bar, text='',
             bg=BG2, fg=FG_MUTED,
-            font=('맑은 고딕', 10),
+            font=('Noto Sans KR', 10),
             anchor='w', padx=10, pady=4,
         )
         self._kpi_summary_label.pack(fill=X)
@@ -273,14 +273,14 @@ class DashboardTabMixin:
             variable=self._auto_refresh_var,
             bg=BG, fg=FG_MUTED,
             selectcolor=BG_CARD, activebackground=BG,
-            font=('맑은 고딕', 10),
+            font=('Noto Sans KR', 10),
             command=self._toggle_auto_refresh
             if hasattr(self, '_toggle_auto_refresh') else lambda: None,
         ).pack(side=LEFT)
         self.dashboard_status = tk.Label(
             auto_bar, text='',
             bg=BG, fg=FG_MUTED,
-            font=('맑은 고딕', 10), anchor='e',
+            font=('Noto Sans KR', 10), anchor='e',
         )
         self.dashboard_status.pack(side=RIGHT, padx=4)
 
@@ -323,26 +323,26 @@ class DashboardTabMixin:
         title_row.pack(fill='x')
 
         title_label = tk.Label(title_row, text=title,
-                               font=('맑은 고딕', 11, 'bold'),
+                               font=('Noto Sans KR', 11, 'bold'),
                                bg=_card_bg, fg=color)
         title_label._tc_skip = True
         title_label.pack(side='left')
 
         if subtitle:
             sub_title_lbl = tk.Label(title_row, text=subtitle,
-                                     font=('맑은 고딕', 8),
+                                     font=('Noto Sans KR', 8),
                                      bg=_card_bg, fg=_card_fg)
             sub_title_lbl._tc_skip = True
             sub_title_lbl.pack(side='right')
 
         value_label = tk.Label(content, text=value,
-                               font=('맑은 고딕', 22, 'bold'),
+                               font=('Noto Sans KR', 22, 'bold'),
                                bg=_card_bg, fg=color)
         value_label._tc_skip = True
         value_label.pack(anchor='w', pady=(4, 0))
 
         sub_label = tk.Label(content, text='',
-                             font=('맑은 고딕', 10),
+                             font=('Noto Sans KR', 10),
                              bg=_card_bg, fg=_card_fg)
         sub_label._tc_skip = True
         sub_label.pack(anchor='w', pady=(2, 0))
@@ -470,7 +470,7 @@ class DashboardTabMixin:
             try:
                 self._trend_tree.tag_configure('odd',   background=_odd_bg)
                 self._trend_tree.tag_configure('even',  background=_even_bg)
-                self._trend_tree.tag_configure('total', font=('맑은 고딕', 10, 'bold'),
+                self._trend_tree.tag_configure('total', font=('Noto Sans KR', 10, 'bold'),
                                                          foreground=_tot_fg,
                                                          background=_even_bg)
             except Exception as e:
@@ -524,7 +524,7 @@ class DashboardTabMixin:
 
             if not lots:
                 tk.Label(popup, text="✅ 불일치 LOT 없음 — 정합성 OK",
-                         font=('맑은 고딕', 13, 'bold'), fg=tc('success')).pack(pady=40)
+                         font=('Noto Sans KR', 13, 'bold'), fg=tc('success')).pack(pady=40)
                 return
 
             cols = ('lot_no', 'initial', 'cur_kg', 'out_kg', 'diff')
@@ -1054,11 +1054,11 @@ class DashboardTabMixin:
                         sums_tb['return'], total_all,
                         total_sample,
                     ), tags=('total',))
-                tree.tag_configure('total', font=('맑은 고딕', 11, 'bold'))
+                tree.tag_configure('total', font=('Noto Sans KR', 11, 'bold'))
                 # 우측 정합성 합계
                 if btree:
                     btree.insert('', END, values=_bal_total, tags=('total',))
-                    btree.tag_configure('total', font=('맑은 고딕', 11, 'bold'))
+                    btree.tag_configure('total', font=('Noto Sans KR', 11, 'bold'))
 
         except Exception as e:
             logger.error(f"제품×상태 매트릭스 오류: {e}")
@@ -1141,7 +1141,7 @@ class DashboardTabMixin:
                 y = pad_t + chart_h * (1 - ratio)
                 canvas.create_line(pad_l, y, W - pad_r, y, fill=c_grid, dash=(2, 3))
                 canvas.create_text(pad_l - 2, y, text=f'{max_val*ratio:.0f}',
-                                   anchor='e', font=('맑은 고딕', 7), fill=c_txt)
+                                   anchor='e', font=('Noto Sans KR', 7), fill=c_txt)
 
             for i in range(7):
                 x0 = pad_l + gap / 2 + i * col_w
@@ -1163,7 +1163,7 @@ class DashboardTabMixin:
                 canvas.create_text(
                     x0 + bar_w, H - pad_b + 4,
                     text=labels[i], anchor='n',
-                    font=('맑은 고딕', 7), fill=c_txt)
+                    font=('Noto Sans KR', 7), fill=c_txt)
 
             # 축선
             canvas.create_line(pad_l, pad_t, pad_l, H - pad_b, fill=c_txt)

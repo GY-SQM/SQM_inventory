@@ -337,9 +337,9 @@ v2.9.91 - SQM Inventory System
         frame = ttk.Frame(popup, padding=20)
         frame.pack(fill=tk.BOTH, expand=True)
         ttk.Label(frame, text="테스트용 데이터베이스를 초기화합니다.\n모든 재고·톤백·출고 데이터가 삭제됩니다.",
-                  font=('맑은 고딕', 11), wraplength=360).pack(anchor='w', pady=(0, 12))
+                  font=('Noto Sans KR', 11), wraplength=360).pack(anchor='w', pady=(0, 12))
         ttk.Label(frame, text="정말 데이터베이스를 지우시겠습니까?",
-                  font=('맑은 고딕', 10), foreground=tc('warning')).pack(anchor='w', pady=(0, 16))
+                  font=('Noto Sans KR', 10), foreground=tc('warning')).pack(anchor='w', pady=(0, 16))
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(fill=tk.X)
         def do_reset():

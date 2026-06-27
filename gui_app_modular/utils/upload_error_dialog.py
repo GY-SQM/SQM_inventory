@@ -75,7 +75,7 @@ class UploadErrorDialog:
         title_label = ttk.Label(
             title_frame,
             text=f"❌ {self.title_text}",
-            font=('맑은 고딕', 14, 'bold')
+            font=('Noto Sans KR', 14, 'bold')
         )
         title_label.pack(side=tk.LEFT)
 
@@ -89,7 +89,7 @@ class UploadErrorDialog:
         self.text_area = scrolledtext.ScrolledText(
             text_frame,
             wrap=tk.WORD,
-            font=('맑은 고딕', 10),
+            font=('Noto Sans KR', 10),
             height=20,
             width=80,
             relief=tk.SOLID,
@@ -132,11 +132,11 @@ class UploadErrorDialog:
         self.text_area.config(state=tk.NORMAL)
 
         # 태그 정의
-        self.text_area.tag_config('title', font=('맑은 고딕', 12, 'bold'), foreground=tc('danger'))
-        self.text_area.tag_config('section', font=('맑은 고딕', 10, 'bold'), foreground=tc('info'))
-        self.text_area.tag_config('solution', font=('맑은 고딕', 10), foreground=tc('success'))
-        self.text_area.tag_config('example', font=('맑은 고딕', 10), foreground=tc('info'), background=tc('bg_secondary'))
-        self.text_area.tag_config('separator', font=('맑은 고딕', 10), foreground=tc('text_muted'))
+        self.text_area.tag_config('title', font=('Noto Sans KR', 12, 'bold'), foreground=tc('danger'))
+        self.text_area.tag_config('section', font=('Noto Sans KR', 10, 'bold'), foreground=tc('info'))
+        self.text_area.tag_config('solution', font=('Noto Sans KR', 10), foreground=tc('success'))
+        self.text_area.tag_config('example', font=('Noto Sans KR', 10), foreground=tc('info'), background=tc('bg_secondary'))
+        self.text_area.tag_config('separator', font=('Noto Sans KR', 10), foreground=tc('text_muted'))
 
         # 패턴 매칭으로 스타일 적용
         self.text_area.get('1.0', tk.END)

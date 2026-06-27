@@ -93,12 +93,12 @@ class SQMInventoryApp:
         else:
             self.root = root
         
-        # v8.7.0: 타이틀바에 버전 표시 (윗줄 이동)
+        # v8.8.6: 타이틀바 깔끔하게 앱 이름만 표기
         try:
-            from version import __version__, APP_NAME
-            self.root.title(f"📦 {APP_NAME}  v{__version__}")
+            from version import APP_NAME
+            self.root.title(f"📦 {APP_NAME}")
         except ImportError:
-            self.root.title("📦 SQM 재고관리 시스템  v8.6.6")
+            self.root.title("📦 SQM 재고관리 시스템")
         
         # Store references
         self.tk = tk
@@ -395,6 +395,17 @@ class SQMInventoryApp:
         self._sidebar_frame = tk.Frame(self.main_frame, width=72, bg=tc('bg_secondary'))
         self._sidebar_frame.pack(side='left', fill='y', padx=(4, 0))
         self._sidebar_frame.pack_propagate(False)
+
+        # v8.8.6: 전역 폰트 강제 통일 (모든 위젯에 Noto Sans KR 적용)
+        self.root.option_add('*Font', ('Noto Sans KR', 10, 'normal'))
+
+        # v8.8.6: 가상 디자인 서버(DesignManager) 실시간 스타일 로더 활성화
+        try:
+            from gui_app_modular.utils.ui_constants import DesignManager
+            self.design_manager = DesignManager(self.root)
+            logger.info("✅ 가상 디자인 서버(DesignManager) 활성화")
+        except Exception as e:
+            logger.debug(f"DesignManager 초기화 실패 (무시): {e}")
 
         self._content_frame = ttk.Frame(self.main_frame)
         self._content_frame.pack(side='left', fill=BOTH, expand=YES, padx=(8, 8))
@@ -976,7 +987,7 @@ class SQMInventoryApp:
             self._splash_status_var = tk.StringVar(value='시스템 준비 중...')
             tk.Label(
                 inner, textvariable=self._splash_status_var,
-                font=('맑은 고딕', 11), fg=fg, bg=bg).pack(pady=(10, 0))
+                font=('Noto Sans KR', 11), fg=fg, bg=bg).pack(pady=(10, 0))
 
             # 경과 타이머
             self._splash_timer_var = tk.StringVar(value='0.0s')

@@ -219,7 +219,7 @@ def show_parse_error_recovery(
                  ).pack(anchor='w', pady=1)
 
     tk.Label(card, text="아래에 올바른 값을 직접 입력해 주세요.",
-             bg=CARD, fg='#94a3b8', font=('맑은 고딕', 10, 'italic')
+             bg=CARD, fg='#94a3b8', font=('Noto Sans KR', 10, 'italic')
              ).pack(anchor='w', pady=(6,0))
 
     # ── 입력 폼 ──

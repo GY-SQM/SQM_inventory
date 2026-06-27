@@ -47,7 +47,7 @@ from utils.ui_debug import log_ui_event, safe_widget_bg  # v5.3.6
 
 logger = logging.getLogger(__name__)
 
-FONT_CANDIDATES = ['NanumSquare', 'NanumSquareRound', '나눔스퀘어', 'Malgun Gothic', '맑은 고딕']
+FONT_CANDIDATES = ['NanumSquare', 'NanumSquareRound', '나눔스퀘어', 'Malgun Gothic', 'Noto Sans KR']
 
 
 def _pick_font(root) -> str:
@@ -56,7 +56,7 @@ def _pick_font(root) -> str:
     for f in FONT_CANDIDATES:
         if f in available:
             return f
-    return '맑은 고딕'
+    return 'Noto Sans KR'
 
 
 class ToolbarMixin:
@@ -221,7 +221,7 @@ class ToolbarMixin:
                 text=label,
                 bg=bg_color,
                 fg=tc('text_on_dark'),  # v8.7.0
-                font=('맑은 고딕', 10, 'bold'),
+                font=('Noto Sans KR', 10, 'bold'),
                 padx=12, pady=4,
                 cursor='hand2',
                 relief='flat',
@@ -885,7 +885,7 @@ class ToolbarMixin:
             icon_lbl.pack()
 
             text_lbl = _tk.Label(inner, text=label,
-                                 font=('맑은 고딕', 10),
+                                 font=('Noto Sans KR', 10, 'normal'),
                                  bg=SIDEBAR_BG, fg=TEXT_FG,
                                  justify='center', cursor='hand2')
             text_lbl._tc_skip = True

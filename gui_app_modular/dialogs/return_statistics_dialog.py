@@ -85,7 +85,7 @@ class ReturnStatisticsDialog:
         filter_frame = tk.Frame(popup, bg=tc('bg_secondary'), padx=10, pady=8)
         filter_frame.pack(fill=X)
 
-        tk.Label(filter_frame, text="📅 기간:", font=('맑은 고딕', 10, 'bold'),
+        tk.Label(filter_frame, text="📅 기간:", font=('Noto Sans KR', 10, 'bold'),
                  bg=tc('bg_secondary'), fg=tc('text_primary')).pack(side=LEFT, padx=(0, 5))
 
         today = date.today()
@@ -126,10 +126,10 @@ class ReturnStatisticsDialog:
         self.header_frame = tk.Frame(popup, bg=tc('bg_secondary'), padx=15, pady=8)
         self.header_frame.pack(fill=X)
         self.header_title = tk.Label(self.header_frame, text="📊 반품 사유 통계 리포트",
-                                     font=('맑은 고딕', 13, 'bold'), bg=tc('bg_secondary'), fg=tc('text_primary'))
+                                     font=('Noto Sans KR', 13, 'bold'), bg=tc('bg_secondary'), fg=tc('text_primary'))
         self.header_title.pack(anchor='w')
         self.header_summary = tk.Label(self.header_frame, text="",
-                                        font=('맑은 고딕', 10), bg=tc('bg_secondary'), fg=tc('text_primary'))
+                                        font=('Noto Sans KR', 10), bg=tc('bg_secondary'), fg=tc('text_primary'))
         self.header_summary.pack(anchor='w', pady=(2, 0))
 
         # ═══ Notebook ═══
@@ -332,7 +332,7 @@ class ReturnStatisticsDialog:
 
         months = self.stats.get('by_month', [])
         if not months:
-            c.create_text(w // 2, h // 2, text="데이터 없음", fill='#999', font=('맑은 고딕', 11))
+            c.create_text(w // 2, h // 2, text="데이터 없음", fill='#999', font=('Noto Sans KR', 11))
             return
 
         ml, mr, mt, mb = 50, 20, 15, 30

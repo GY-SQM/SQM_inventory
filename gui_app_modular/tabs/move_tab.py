@@ -32,7 +32,7 @@ class MoveTabMixin:
             make_tab_header(frame, "🔀 Move Management", status_color='#8b5cf6')
         except Exception:
             tk.Label(frame, text="🔀 Move Management",
-                     font=('맑은 고딕', 12, 'bold')).pack(
+                     font=('Noto Sans KR', 12, 'bold')).pack(
                 fill='x', padx=Spacing.Tab.OUTER_PADX, pady=Spacing.Tab.HEADER_PADY)
 
         # ══════════════════════════════════════════════════════════
@@ -57,10 +57,10 @@ class MoveTabMixin:
         tk.Label(row1, text="Current:", width=8, anchor='e').pack(side='left', padx=(Spacing.MD, 0))
         self._move_cur_loc_var = tk.StringVar(value='—')
         tk.Label(row1, textvariable=self._move_cur_loc_var,
-                 font=('맑은 고딕', 10, 'bold')).pack(side='left', padx=Spacing.XS)
+                 font=('Noto Sans KR', 10, 'bold')).pack(side='left', padx=Spacing.XS)
         self._move_lot_info_var = tk.StringVar(value='')
         tk.Label(row1, textvariable=self._move_lot_info_var,
-                 font=('맑은 고딕', 10)).pack(side='left', padx=Spacing.SM)
+                 font=('Noto Sans KR', 10)).pack(side='left', padx=Spacing.SM)
 
         # 2행 — 목적지 + 이동 실행
         row2 = tk.Frame(scan_lf)
@@ -75,7 +75,7 @@ class MoveTabMixin:
 
         self._move_exec_btn = tk.Button(
             row2, text="✅  Move", command=self._on_move_execute,
-            bg='#059669', fg='white', font=('맑은 고딕', 10, 'bold'),
+            bg='#059669', fg='white', font=('Noto Sans KR', 10, 'bold'),
             relief='flat', padx=14, pady=6, cursor='hand2', state='disabled'
         )
         self._move_exec_btn.pack(side='left', padx=Spacing.SM)
@@ -89,7 +89,7 @@ class MoveTabMixin:
         # 결과 메시지
         self._move_msg_var = tk.StringVar(value="톤백 바코드를 스캔하거나 UID를 입력하세요.")
         self._move_msg_lbl = tk.Label(scan_lf, textvariable=self._move_msg_var,
-                                       font=('맑은 고딕', 10), anchor='w')
+                                       font=('Noto Sans KR', 10), anchor='w')
         self._move_msg_lbl.pack(fill='x', padx=Spacing.SM, pady=(0, Spacing.XS))
 
         self._move_current_row = None
@@ -116,8 +116,8 @@ class MoveTabMixin:
         for col_key, col_title in [('pending', 'Pending'), ('approved', 'Approved'), ('completed', 'Completed')]:
             card = tk.Frame(card_frame, relief='solid', bd=1)
             card.pack(side='left', fill='x', expand=True, padx=Spacing.Tab.BTN_GAP)
-            tk.Label(card, text=col_title, font=('맑은 고딕', 10)).pack(pady=(Spacing.XS, 0))
-            lbl = tk.Label(card, text='—', font=('맑은 고딕', 18, 'bold'))
+            tk.Label(card, text=col_title, font=('Noto Sans KR', 10)).pack(pady=(Spacing.XS, 0))
+            lbl = tk.Label(card, text='—', font=('Noto Sans KR', 18, 'bold'))
             lbl.pack(pady=(0, Spacing.XS))
             self._move_summary_labels[col_key] = lbl
 
