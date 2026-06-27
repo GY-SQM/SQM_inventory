@@ -360,8 +360,9 @@ class IntegrityMixin:
             # ★ v7.6.0 검증 12: allocation 합계 vs LOT 입고 총량 대조
             # allocation_plan의 qty_mt 합계가 LOT 입고 총량과 다르면 mismatch
             try:
+                # BUG-003 fix: COUNT*0.5 (행 개수의 절반) → SUM(qty_mt) (실제 합계)
                 _alloc_sum_row = self.db.fetchone(
-                    """SELECT COALESCE(COUNT(CASE WHEN qty_mt >= 0.01 THEN 1 END) * 0.5, 0) as total_alloc_mt
+                    """SELECT COALESCE(SUM(qty_mt), 0) / 1000.0 as total_alloc_mt
                        FROM allocation_plan
                        WHERE lot_no=? AND status NOT IN ('CANCELLED','REJECTED')""",
                     (lot_no,)
