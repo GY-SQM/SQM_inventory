@@ -2086,7 +2086,10 @@ async def template_from_pdf(file: UploadFile = File(...)):
                     getattr(r0, "product", None) or getattr(r0, "product_name", None) or ""
                 )
             if getattr(pl, "bag_weight_kg", None):
-                extracted["bag_weight_kg"] = int(pl.bag_weight_kg)
+                try:
+                    extracted["bag_weight_kg"] = int(float(str(pl.bag_weight_kg)))  # MEDIUM: 안전한 타입 변환
+                except (ValueError, TypeError):
+                    logger.warning("bag_weight_kg 파싱 실패: %s", pl.bag_weight_kg)
             # 선사: PL에 없으면 파일명에서 추론
             for carrier in ["Maersk","ONE","MSC","Evergreen","HMM","CMA CGM",
                             "Hapag","Yang Ming","ZIM","PIL","Wan Hai"]:
@@ -2242,7 +2245,10 @@ async def templates_from_excel(file: UploadFile = File(...)):
                 skipped += 1
                 continue
             tid = _tpl_new_id()
-            _bag = int(float(row.get("bag_weight_kg", 500) or 500))
+            try:  # MEDIUM: 안전한 타입 변환
+                _bag = int(float(row.get("bag_weight_kg", 500) or 500))
+            except (ValueError, TypeError):
+                _bag = 500  # 기본값
             try:
                 con.execute(
                     "INSERT INTO inbound_template "
