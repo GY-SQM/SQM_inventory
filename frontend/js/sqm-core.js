@@ -346,16 +346,24 @@ window.SQM_STATUS_MAP = window.SQM_STATUS_MAP || {
     console.log('[SQM Tooltip] custom dark tooltip ready');
   })();
 
-  // [fix] IIFE 시점에 고정 캡처하지 않고 매 호출 시 실시간으로 읽음
-  // [fix v2] sqm_base URL 파라미터 → window.SQM_API_BASE → location.origin 순으로 읽기
+  // [fix v3] sqm_base 4단계 폴백: window.SQM_API_BASE → URL 파라미터 → sessionStorage → location.origin
+  // 내부 navigate() 로 URL이 바뀌어도 sessionStorage에서 복원되므로 "Failed to fetch" 방지
   function _getApiBase() {
     if (window.SQM_API_BASE) return window.SQM_API_BASE;
     try {
       var p = new URLSearchParams(location.search).get('sqm_base');
-      if (p) { window.SQM_API_BASE = p; return p; }
+      if (p) { window.SQM_API_BASE = p; try { sessionStorage.setItem('sqm_api_base', p); } catch(_){} return p; }
     } catch(_) {}
-    return (window.location && window.location.origin) || '';
+    try {
+      var s = sessionStorage.getItem('sqm_api_base');
+      if (s) { window.SQM_API_BASE = s; return s; }
+    } catch(_) {}
+    var origin = (window.location && window.location.origin) || '';
+    if (origin && origin !== 'null') { window.SQM_API_BASE = origin; return origin; }
+    return '';
   }
+  // IIFE 시작 시 즉시 한 번 읽어 window.SQM_API_BASE 확정
+  (function(){ var b = _getApiBase(); if (b) window.SQM_API_BASE = b; })();
   var API = _getApiBase(); // 초기값 (하위 호환)
 
   /**
