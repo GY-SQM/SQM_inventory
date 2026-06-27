@@ -259,7 +259,8 @@ def outbound_confirm(payload: dict):
         })
     except Exception as e:
         try: con.rollback()   # [fix B-3] 예외 시 명시적 롤백
-        except Exception: pass
+        except Exception as rb_err:
+            logger.error("rollback failed: %s", rb_err)  # HIGH: 빈 except 제거
         logger.error("outbound-confirm error: %s", e)
         return err_response(str(e))
 

@@ -2362,7 +2362,8 @@ async def inbound_invoice(file: UploadFile = File(...)):
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try: os.unlink(tmp_path)
-            except Exception: pass
+            except Exception as cleanup_err:  # HIGH: 빈 except 제거
+                logger.warning(f"temp file cleanup failed: {cleanup_err}")
 
 
 # ─────────────────────────────────────────────────────────
