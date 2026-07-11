@@ -20,12 +20,10 @@ fi
 
 # 2) 스모크 테스트 (GUI/tkinter 의존 테스트 1건 제외)
 if python -m pytest --version >/dev/null 2>&1; then
-  echo "── 스모크 테스트 실행 중 (GUI 테스트 제외) ──"
+  echo "── 스모크 테스트 실행 중 ──"
   # 제외 대상:
-  #  - test_inbound_doc_detector_artifact_guard.py : GUI(tkinter) 필요 → 서버 실행 불가
   #  - test_real_db_has_indexes : 커밋 안 되는 실제 DB 파일에 의존 (환경 의존)
   python -m pytest tests/ -q \
-    --ignore=tests/test_inbound_doc_detector_artifact_guard.py \
     --deselect tests/test_phase1_db_index.py::test_real_db_has_indexes \
     2>&1 | tail -5
 else
