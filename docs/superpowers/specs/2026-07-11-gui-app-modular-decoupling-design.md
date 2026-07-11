@@ -3,7 +3,7 @@
 작성일: 2026-07-11
 대상 버전: v8.8.4
 짝 문서(plan): `docs/superpowers/plans/2026-07-11-gui-app-modular-decoupling-plan.md`
-상태: 승인 대기 — **본 문서 승인 전 코드 변경 금지**
+상태: **승인·실행 완료 (P1~P3, 2026-07-11)** — live 스택 gui 결합 0 달성. P4(실삭제)만 별도 대기.
 
 ---
 
@@ -47,26 +47,30 @@ python -m pytest tests/ -q \
 
 ## 4. 단계별 수용 기준 (Acceptance Criteria)
 
-### P1 — 순수 유틸 이전
-- [ ] `formatters`, `report_footer`, `safe_utils`, `product_master_helper`(로직)이 `core/`·`utils/`에 존재.
-- [ ] live 스택(backend/engine/features/core)이 이 유틸을 **새 위치에서** import.
-- [ ] `gui_app_modular.utils.*` 기존 경로는 역-re-export로 **여전히 동작**(레거시 호환).
-- [ ] 399 passed, 회귀 0.
+### P1 — 순수 유틸 이전 ✅ 완료 (커밋 1fc0ea8, 07018c8, 60c5ab6)
+- [x] `formatters`→`core.formatters`, `report_footer`→`core.report_footer`, `product_master_helper` 로직→`core.product_master` 이전.
+  - `safe_utils`는 **건너뜀**: live 스택 참조 0건(전부 레거시 gui 내부)으로 결합이 아님을 확인.
+- [x] live 스택(engine `export_mixin`/`inbound_mixin`)이 **새 위치에서** import.
+- [x] 기존 gui 경로는 역-re-export로 **여전히 동작**(레거시 호환).
+- [x] 399 passed, 회귀 0.
 
-### P2 — ui_constants 분리
-- [ ] 비-Tk 상수/`tc` 번역이 중립 모듈(예: `core/ui_text.py`)로 분리.
-- [ ] live import가 새 모듈 사용. Tk 위젯 부분은 gui에 잔류.
-- [ ] 399 passed, 회귀 0.
+### P2 — ui_constants 결합 해소 ✅ 완료 (커밋 4c1e908, c4b5823) — 원안 대비 접근 변경(승인됨)
+> **원안(ui_constants 분리)은 폐기.** 분석 결과 출시 앱(`backend.api`)은 ui_constants/tkinter를
+> 이미 전혀 당기지 않았고, `ui_constants`를 끌어오던 것은 engine/features에 **잘못 놓인 GUI 파일 2개**뿐이었다.
+> 1,643줄(게다가 기존 SyntaxError로 깨진) `ui_constants`를 분리하는 것보다, 그 GUI 파일을 제자리로 옮기는 편이 저위험·고효과.
+- [x] `move_approval_dialog_helper.py`(engine), `gemini_chat_gui.py`(features/ai) → `gui_app_modular/dialogs/`로 이동 → **engine_modules/ gui 참조 0**.
+- [x] 사전검수 순수 dataclass(`ReviewItem`/`PreviewField`) → `features/parsers/review_models.py` 추출 (덤: `preview_review_bridge`의 기존 깨진 import 정상화).
+- [x] 399 passed, 회귀 0.
 
-### P3 — controls.py 브리지 정리
-- [ ] `backend/api/controls.py`가 `gui_app_modular.mixins.*`를 import하지 않음.
-- [ ] 웹에서 필요한 동작은 네이티브 구현 or 명시적 stub로 대체(동작 동일/명세됨).
-- [ ] 399 passed, 회귀 0.
+### P3 — controls.py 브리지 정리 ✅ 완료 (커밋 8d363ec)
+- [x] `backend/api/controls.py`가 `gui_app_modular.mixins.*`를 import하지 않음 → **backend/ gui import 0**.
+- [x] keyboard/toolbar 엔드포인트 14개를 F085식 `NotReadyError` 스텁으로 통일(프론트 미사용·서버 미동작 확인, API 표면·기능ID 보존).
+- [x] 399 passed, 회귀 0.
 
-### P4 — 삭제 준비 (별도 승인 필수)
-- [ ] `git grep gui_app_modular -- backend/ engine_modules/ features/ core/ utils/ main_webview.py` → **0건**.
-- [ ] tkinter 미설치 환경에서 `backend.api` import 성공(런타임 의존 제거 검증).
-- [ ] React 앱이 monolith 기능을 커버함을 확인.
+### P4 — 삭제 준비 (별도 승인 필수) — 감사 통과, 실삭제만 대기
+- [x] `git grep gui_app_modular -- backend/ engine_modules/ features/ core/ utils/ main_webview.py` → **0건 달성** (커밋 10a0230 포함).
+- [x] `backend.api` + engine 로드 시 tkinter 미로드 검증(import-time 독립 확인).
+- [ ] React 앱이 monolith 기능을 커버함을 확인. **(미완 — 헤드리스 검증 불가, 별도 필요)**
 - [ ] (승인 후) `gui_app_modular/` 삭제.
 
 ## 5. 위험 & 롤백
@@ -77,6 +81,7 @@ python -m pytest tests/ -q \
 - **롤백 단위:** 각 P는 독립 커밋. 문제 시 단일 커밋 revert로 원복.
 
 ## 6. Definition of Done (이번 이니셔티브)
-- P1~P3 완료, 각 단계 그린.
-- live 스택의 `gui_app_modular` import가 P4 검증 기준(0건)에 도달.
-- P4(실삭제)는 **본 문서와 별도로** React 커버리지 확인 후 승인받아 진행.
+- [x] P1~P3 완료, 각 단계 399 passed 그린.
+- [x] live 스택의 `gui_app_modular` 참조(import·주석·도크스트링) **0건** 달성 = P4 감사 기준 충족.
+- [x] 출시 스택 tkinter 비의존 검증 + CLAUDE.md 반영(커밋 4c04bbf).
+- P4(실삭제)는 **본 문서와 별도로** React 커버리지 확인 후 승인받아 진행. ← **유일한 잔여**.
