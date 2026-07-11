@@ -30,30 +30,8 @@ DOC_TYPES = ("BL", "PL", "FA", "DO", "OTHER", "EXCLUDE")
 FIELD_TYPES = ("string", "int", "float", "date", "enum", "unknown")
 
 
-@dataclass
-class PreviewField:
-    key: str
-    label: str
-    value: Any = ""
-    field_type: str = "string"
-    required: bool = False
-    allowed_values: list[str] = field(default_factory=list)
-    status: str = "대기"
-    message: str = ""
-
-
-@dataclass
-class ReviewItem:
-    file_path: str
-    file_name: str
-    auto_doc_type: str = "OTHER"
-    user_doc_type: str = "OTHER"
-    detect_reason: str = ""
-    preview_fields: list[PreviewField] = field(default_factory=list)
-    preview_status: str = "대기"
-    excluded: bool = False
-    ai_instruction: str = ""
-    ai_last_suggestion: dict[str, Any] | None = None
+# P2 탈결합: 순수 모델(PreviewField/ReviewItem)은 중립 모듈로 이전됨 (Tk 비의존 공유)
+from features.parsers.review_models import PreviewField, ReviewItem  # noqa: E402,F401
 
 
 class PreParseReviewDialog:

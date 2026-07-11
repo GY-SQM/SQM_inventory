@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from gui_app_modular.dialogs.preparse_review_dialog import ReviewItem, PreviewField
+from features.parsers.review_models import ReviewItem, PreviewField
 
 
 def detect_doc_type_from_name(file_name: str) -> tuple[str, str]:
