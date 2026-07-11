@@ -1,8 +1,8 @@
 {
   "name": "sqm-v864-3-frontend",
-  "version": "8.7.0",
+  "version": "8.8.4",
   "private": true,
-  "description": "SQM Inventory v8.7.0 frontend — CSS/JS linting only (no build step).",
+  "description": "SQM Inventory v8.8.4 frontend — CSS/JS linting only (no build step).",
   "scripts": {
     "lint:css": "stylelint \"css/*.css\"",
     "lint:css:fix": "stylelint \"css/*.css\" --fix",

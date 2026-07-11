@@ -3870,7 +3870,7 @@
     }, 30000);
 
     window.SQM = window.SQM || {};
-    window.SQM.version = '8.7.1';
+    window.SQM.version = '8.8.4';
     window.SQM.renderPage = renderPage;
     window.SQM.dispatchAction = dispatchAction;
     window.SQM.currentRoute = function(){ return window.getCurrentRoute(); };
