@@ -739,25 +739,28 @@ def onestop_inbound_upload(
         ("do", do_file, False),
     ]
     tmp_paths: "dict[str, str | None]" = {}
-    for key, uf, required in inputs:
-        if uf is None:
-            if required:
-                raise HTTPException(400, f"{key}: 파일이 없습니다 (필수)")
-            tmp_paths[key] = None
-            continue
-        if not uf.filename or not uf.filename.lower().endswith(".pdf"):
-            raise HTTPException(400, f"{key}: PDF 파일만 지원 (받음: {uf.filename})")
-        content = uf.file.read()
-        if not content:
-            raise HTTPException(400, f"{key}: 빈 파일")
-        if content[:4] != b"%PDF":
-            raise HTTPException(400, f"{key}: 유효한 PDF 파일이 아닙니다")
-        tf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-        tf.write(content)
-        tf.close()
-        tmp_paths[key] = tf.name
-
+    # [fix] 파일 검증도 try 안으로 — 검증 실패 시 아래 except가 SSE error 이벤트 +
+    #       finish_job 을 보내 프론트 진행 스트림이 영구 대기하지 않게 한다.
     try:
+        # 1b. 각 파일 검증 + 임시 저장
+        for key, uf, required in inputs:
+            if uf is None:
+                if required:
+                    raise HTTPException(400, f"{key}: 파일이 없습니다 (필수)")
+                tmp_paths[key] = None
+                continue
+            if not uf.filename or not uf.filename.lower().endswith(".pdf"):
+                raise HTTPException(400, f"{key}: PDF 파일만 지원 (받음: {uf.filename})")
+            content = uf.file.read()
+            if not content:
+                raise HTTPException(400, f"{key}: 빈 파일")
+            if content[:4] != b"%PDF":
+                raise HTTPException(400, f"{key}: 유효한 PDF 파일이 아닙니다")
+            tf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+            tf.write(content)
+            tf.close()
+            tmp_paths[key] = tf.name
+
         # 2. 파서 로드 + 4종 파싱
         try:
             from parsers.document_parser_modular.parser import DocumentParserV3
