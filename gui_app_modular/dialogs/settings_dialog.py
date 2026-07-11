@@ -421,7 +421,7 @@ Open settings.ini now?
             return
 
         try:
-            from features.ai.gemini_chat_gui import GeminiChatWindow
+            from gui_app_modular.dialogs.gemini_chat_gui import GeminiChatWindow
 
             db_path = getattr(self, 'db_path', None)
             if not db_path and hasattr(self, 'engine') and hasattr(self.engine, 'db'):

@@ -162,7 +162,7 @@ class ExportMixin:
 
         # ── 푸터 ──
         try:
-            from gui_app_modular.utils.report_footer import add_gy_logistics_footer
+            from core.report_footer import add_gy_logistics_footer
             add_gy_logistics_footer(ws)
         except (ImportError, ModuleNotFoundError) as _e:
             logger.debug(f"[export_mixin] 무시: {_e}")
@@ -252,7 +252,7 @@ class ExportMixin:
 
                 # v4.0.0 Q9: GY Logistics 푸터
                 try:
-                    from gui_app_modular.utils.report_footer import (
+                    from core.report_footer import (
                         add_gy_logistics_footer,
                     )
                     add_gy_logistics_footer(worksheet)

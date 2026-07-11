@@ -5,7 +5,7 @@
 
 ## 한 줄 요약
 SQM Inventory Management System — 입고/출고/LOT 재고관리 데스크톱 앱.
-PyWebView(데스크톱 창) + FastAPI(로컬 백엔드) + Web UI(frontend). 현재 v8.7.x.
+PyWebView(데스크톱 창) + FastAPI(로컬 백엔드) + Web UI(frontend). 현재 v8.8.4.
 
 ## 빠른 시작 (이 리눅스 세션에서)
 ```bash
@@ -17,8 +17,11 @@ python -m pytest tests/ -q \
   --ignore=tests/test_inbound_doc_detector_artifact_guard.py \
   --deselect tests/test_phase1_db_index.py::test_real_db_has_indexes
 ```
-- **앱 실제 실행은 Windows 전용**(`r1.vbs` / `SQM.vbs`, tkinter+PyWebView 필요)이라
+- **앱 실제 실행은 Windows 전용**(`r1.vbs` / `SQM.vbs` → `main_webview.py`, PyWebView 창)이라
   이 리눅스 세션에서는 GUI 구동 불가. 검증은 **pytest + 엔진/백엔드 로직** 으로 한다.
+- [v8.8.4 탈결합] 출시 스택(`main_webview` → `backend.api` → engine)은 **tkinter 비의존**
+  (import 검증됨 — backend/engine/core/features의 `gui_app_modular` 참조 0). 레거시 Tkinter
+  GUI(`gui_app_modular`)는 삭제 예정인 별도 경로이며, 이 계층 테스트는 위 `--ignore`로 제외한다.
 
 ## 구조 (핵심만)
 | 경로 | 역할 |
@@ -45,10 +48,14 @@ python -m pytest tests/ -q \
 - 기존 기능은 **삭제 금지 — 추가/개선만**.
 - **각 단계마다 git commit** (롤백 가능하게). 커밋 메시지는 한국어, `feat:`/`fix:`/`chore:` 접두.
 - 사용자 향(릴리즈) 변경은 `version.py` 와 `RELEASE_NOTES_*.md` 갱신 고려.
-- 작업 브랜치: `claude/debugging-session-optimization-t3ayma` (지정된 브랜치에만 push).
-- 푸시 전 위 pytest 명령으로 **225 passed** 그린 확인.
+- 작업 브랜치: **각 세션에 지정된 브랜치에만** push (직접 main 에 push 금지).
+- 푸시 전 위 pytest 명령으로 **399 passed** 그린 확인 (v8.8.4 기준. 테스트 추가 시 갱신).
 
 ## 테스트 주의
 - `tests/test_inbound_doc_detector_artifact_guard.py` → tkinter 필요, 서버에서 **collection 에러**(정상). 제외하고 실행.
 - `test_phase1_db_index.py::test_real_db_has_indexes` → 실제 DB 파일 의존. 신규 클론에선 skip,
   한 세션 내 다른 테스트가 DB를 만들면 실패할 수 있어 **deselect** 권장.
+- 드물게 **첫 실행 시** `pdfplumber → pdfminer.six → cryptography` rust 바인딩에서
+  `pyo3_runtime.PanicException` 이 나며 수집(collection)이 통째로 중단될 수 있다.
+  환경(시스템 `cryptography`)에 기인한 일시적 현상으로, **같은 명령을 한 번 더 실행하면** 정상 통과한다.
+  "테스트 전부 깨짐"으로 오판하지 말 것.
