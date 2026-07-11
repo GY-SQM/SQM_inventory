@@ -3170,15 +3170,18 @@ class OutboundMixin(InventoryBaseMixin):
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             with self.db.transaction("IMMEDIATE"):
                 touched_lots = set()
-                # 톤백 STATUS 일괄 OUTBOUND 전환
-                _upd_rows = [
-                    (STATUS_OUTBOUND, now, now, tb['id']) for tb in tonbags
-                ]
-                self.db.executemany(
-                    "UPDATE inventory_tonbag SET status = ?, outbound_date = ?, updated_at = ? WHERE id = ?",
-                    _upd_rows
-                )
                 for tb in tonbags:
+                    # [fix F] TOCTOU 이중출고 방지: 톤백 로드/가드는 트랜잭션 밖에서
+                    #   수행되므로, 동시 요청이 먼저 확정했을 수 있다. status 가드 +
+                    #   rowcount 체크로 '지금도 PICKED 인 톤백'만 전환·기록한다.
+                    #   이미 SOLD면 rowcount=0 → sold_table/movement 재삽입하지 않음.
+                    _cur = self.db.execute(
+                        "UPDATE inventory_tonbag SET status = ?, outbound_date = ?, updated_at = ? "
+                        "WHERE id = ? AND status = ?",
+                        (STATUS_OUTBOUND, now, now, tb['id'], STATUS_PICKED)
+                    )
+                    if _cur.rowcount != 1:
+                        continue  # 이미 다른 요청이 확정함 — 이중 처리 방지
                     self._co_insert_sold_row(tb, now)
                     self._co_insert_outbound_movement(tb, now)
                     # allocation_plan → OUTBOUND 상태 동기화
