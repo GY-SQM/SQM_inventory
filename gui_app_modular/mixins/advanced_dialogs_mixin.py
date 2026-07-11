@@ -2097,7 +2097,7 @@ class AdvancedDialogsMixin:
     def _on_move_approval_queue(self):
         """⑤ v6.6.0: 대량 이동 PENDING → Supervisor 승인 다이얼로그."""
         try:
-            from engine_modules.inventory_modular.move_approval_dialog_helper import (
+            from gui_app_modular.dialogs.move_approval_dialog_helper import (
                 show_move_approval_dialog
             )
         except ImportError as e:
