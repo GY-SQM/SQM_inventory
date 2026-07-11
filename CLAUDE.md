@@ -17,8 +17,11 @@ python -m pytest tests/ -q \
   --ignore=tests/test_inbound_doc_detector_artifact_guard.py \
   --deselect tests/test_phase1_db_index.py::test_real_db_has_indexes
 ```
-- **앱 실제 실행은 Windows 전용**(`r1.vbs` / `SQM.vbs`, tkinter+PyWebView 필요)이라
+- **앱 실제 실행은 Windows 전용**(`r1.vbs` / `SQM.vbs` → `main_webview.py`, PyWebView 창)이라
   이 리눅스 세션에서는 GUI 구동 불가. 검증은 **pytest + 엔진/백엔드 로직** 으로 한다.
+- [v8.8.4 탈결합] 출시 스택(`main_webview` → `backend.api` → engine)은 **tkinter 비의존**
+  (import 검증됨 — backend/engine/core/features의 `gui_app_modular` 참조 0). 레거시 Tkinter
+  GUI(`gui_app_modular`)는 삭제 예정인 별도 경로이며, 이 계층 테스트는 위 `--ignore`로 제외한다.
 
 ## 구조 (핵심만)
 | 경로 | 역할 |
