@@ -126,7 +126,7 @@ def _load_version() -> dict:
             "build_date":  getattr(ver, "BUILD_DATE",  "unknown"),
         }
     except Exception:
-        return {"app_name": "SQM 재고관리 시스템", "version": "8.7.1"}
+        return {"app_name": "SQM 재고관리 시스템", "version": "8.8.4"}
 
 
 # ── F013: 정합성 검증 ─────────────────────────────────────────

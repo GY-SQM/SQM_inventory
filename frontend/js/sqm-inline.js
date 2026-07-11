@@ -3392,7 +3392,7 @@
     }, 30000);
 
     window.SQM = window.SQM || {};
-    window.SQM.version = '8.7.1';
+    window.SQM.version = '8.8.4';
     window.SQM.renderPage = renderPage;
     window.SQM.dispatchAction = dispatchAction;
     /* [FIX 20260604] dispatch split-brain 제거:
