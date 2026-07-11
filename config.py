@@ -450,30 +450,13 @@ def validate_api_key_with_gui(parent=None):
     api_valid, api_error = validate_api_key()
 
     if not api_valid:
-        try:
-            import tkinter as tk
-
-            from gui_app_modular.utils.custom_messagebox import CustomMessageBox
-
-            # 임시 루트 윈도우 (숨김)
-            if parent is None:
-                temp_root = tk.Tk()
-                temp_root.withdraw()
-
-            CustomMessageBox.warning(None,
-                "⚠️ API 설정 필요",
-                "Gemini API 키가 설정되지 않았습니다.\n\n"
-                "PDF 파싱 기능을 사용하려면:\n"
-                "1. 메뉴 > 도구 > Gemini > 설정\n"
-                "2. 또는 환경변수 GEMINI_API_KEY 설정\n\n"
-                "API 키 없이도 기본 기능은 사용 가능합니다."
-            )
-
-            if parent is None:
-                temp_root.destroy()
-
-        except (RuntimeError, ValueError):
-            logger.info(f"⚠️ API 키 미설정: {api_error}")
+        # [P4] 레거시 Tkinter 메시지박스 폴백 제거 — 웹(PyWebView)은 자체 UI로 안내.
+        #      여기선 로그 경고만 남기고 실행은 허용한다.
+        logger.warning(
+            "⚠️ Gemini API 키 미설정: %s — PDF 파싱 기능 제한. "
+            "설정 > Gemini 또는 환경변수 GEMINI_API_KEY 로 설정하세요.",
+            api_error,
+        )
 
     return True  # 실행은 허용 (경고만 표시)
 

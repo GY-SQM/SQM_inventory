@@ -12,16 +12,14 @@ PyWebView(데스크톱 창) + FastAPI(로컬 백엔드) + Web UI(frontend). 현�
 # 테스트 의존성 설치 (SessionStart 훅이 자동 수행)
 pip install -r requirements-test.txt
 
-# 전체 테스트 — GUI(tkinter)·실DB 의존 테스트는 제외하고 실행 (headless 기준)
+# 전체 테스트 — 실DB 의존 테스트만 제외 (headless 기준)
 python -m pytest tests/ -q \
-  --ignore=tests/test_inbound_doc_detector_artifact_guard.py \
   --deselect tests/test_phase1_db_index.py::test_real_db_has_indexes
 ```
 - **앱 실제 실행은 Windows 전용**(`r1.vbs` / `SQM.vbs` → `main_webview.py`, PyWebView 창)이라
   이 리눅스 세션에서는 GUI 구동 불가. 검증은 **pytest + 엔진/백엔드 로직** 으로 한다.
-- [v8.8.4 탈결합] 출시 스택(`main_webview` → `backend.api` → engine)은 **tkinter 비의존**
-  (import 검증됨 — backend/engine/core/features의 `gui_app_modular` 참조 0). 레거시 Tkinter
-  GUI(`gui_app_modular`)는 삭제 예정인 별도 경로이며, 이 계층 테스트는 위 `--ignore`로 제외한다.
+- [v8.8.4 P4] 레거시 Tkinter GUI(`gui_app_modular`)·`theme_aware.py`는 **삭제됨**.
+  출시 스택(`main_webview` → `backend.api` → engine)은 **tkinter 완전 비의존**(import 검증됨).
 
 ## 구조 (핵심만)
 | 경로 | 역할 |
@@ -52,7 +50,6 @@ python -m pytest tests/ -q \
 - 푸시 전 위 pytest 명령으로 **399 passed** 그린 확인 (v8.8.4 기준. 테스트 추가 시 갱신).
 
 ## 테스트 주의
-- `tests/test_inbound_doc_detector_artifact_guard.py` → tkinter 필요, 서버에서 **collection 에러**(정상). 제외하고 실행.
 - `test_phase1_db_index.py::test_real_db_has_indexes` → 실제 DB 파일 의존. 신규 클론에선 skip,
   한 세션 내 다른 테스트가 DB를 만들면 실패할 수 있어 **deselect** 권장.
 - 드물게 **첫 실행 시** `pdfplumber → pdfminer.six → cryptography` rust 바인딩에서
