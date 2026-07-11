@@ -532,7 +532,7 @@ async def pdf_inbound_upload(file: UploadFile = File(...)):
 # ────────────────────────────────────────────────────────────
 # [Sprint 1-2-B] OneStop 입고 — 4종 multipart + 크로스체크
 #
-# v864-2 source: gui_app_modular/dialogs/onestop_inbound.py
+# v864-2 source: (레거시 onestop_inbound 다이얼로그에서 이식)
 # Input: 4 multipart PDFs (BL, PL required; Invoice, DO optional)
 # Flow:
 #   1. 각 PDF 임시 저장
