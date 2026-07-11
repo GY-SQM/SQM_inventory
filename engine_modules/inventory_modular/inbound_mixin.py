@@ -653,7 +653,7 @@ class InboundMixin(InventoryBaseMixin):
         # v6.2.7: product_code 자동감지 (비어있으면 product_master에서 매칭)
         if not lot_data.get('product_code'):
             try:
-                from gui_app_modular.dialogs.product_master_helper import auto_detect_product_code
+                from core.product_master import auto_detect_product_code
                 detected = auto_detect_product_code(self.db, lot_data.get('product', ''))
                 if detected:
                     lot_data['product_code'] = detected
