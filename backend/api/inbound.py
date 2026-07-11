@@ -505,7 +505,7 @@ class PdfInboundRequest(BaseModel):
 # 내부적으로 /pdf base64 엔드포인트와 동일 로직 재사용
 # ────────────────────────────────────────────────────────────
 @router.post("/pdf-upload", summary="📄 PDF 스캔 입고 — multipart 업로드 (F001)")
-async def pdf_inbound_upload(file: UploadFile = File(...)):
+def pdf_inbound_upload(file: UploadFile = File(...)):
     """
     multipart/form-data 로 PDF 업로드 후 /api/inbound/pdf 와 동일하게 처리.
     """
@@ -514,7 +514,7 @@ async def pdf_inbound_upload(file: UploadFile = File(...)):
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, f"PDF 파일만 지원. 받은 파일: {file.filename}")
 
-    content = await file.read()
+    content = file.file.read()
     if not content:
         raise HTTPException(400, "빈 파일")
     if content[:4] != b"%PDF":
@@ -679,7 +679,7 @@ def _validate_packing_weight(pl_obj, *, bag_weight_kg: Optional[int], packing_ty
     "/onestop-upload",
     summary="📥 OneStop 입고 — 4종 PDF multipart + 크로스체크 (v864-2 OneStopInboundDialog)",
 )
-async def onestop_inbound_upload(
+def onestop_inbound_upload(
     bl: "UploadFile | None" = File(None),
     pl: UploadFile = File(...),
     invoice: "UploadFile | None" = File(None),
@@ -747,7 +747,7 @@ async def onestop_inbound_upload(
             continue
         if not uf.filename or not uf.filename.lower().endswith(".pdf"):
             raise HTTPException(400, f"{key}: PDF 파일만 지원 (받음: {uf.filename})")
-        content = await uf.read()
+        content = uf.file.read()
         if not content:
             raise HTTPException(400, f"{key}: 빈 파일")
         if content[:4] != b"%PDF":
