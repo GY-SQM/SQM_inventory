@@ -1003,6 +1003,13 @@ def scan_bulk_upload(file: UploadFile = FileField(...), action: str = "lookup"):
             results.append(r)
         db.commit()
         db.close()
+        # [감사 raw-SQL/(A)] 톤백 상태 일괄 전환 시 parent inventory 무게 재계산 누락 →
+        #   영향 LOT 무게 불변식 복구(상태 전이/표시는 그대로).
+        if action != "lookup":
+            from backend.api.lot_invariant import repair_weight_invariant
+            _affected = {str(r.get("lot_no") or "").strip()
+                         for r in results if r.get("status_changed")}
+            repair_weight_invariant(*_affected, reason="SCAN_BULK_UPLOAD")
         matched = sum(1 for r in results if r.get("matched"))
         not_matched = len(results) - matched
         return {"ok": True, "message": f"처리 완료: {matched} 매칭 / {not_matched} 미매칭",
