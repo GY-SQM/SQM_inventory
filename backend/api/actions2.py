@@ -250,6 +250,11 @@ def outbound_confirm(payload: dict):
         ))
         con.commit()
         con.close()
+        # [감사 raw-SQL/(A)] 위 raw UPDATE 는 current_weight=0 만 하고 picked_weight 로
+        #   옮기지 않아 무게가 사라졌다(initial≠current+picked). 상태 전이는 그대로 두고
+        #   엔진 재계산으로 무게 불변식만 복구한다(SOLD 톤백 → picked 버킷).
+        from backend.api.lot_invariant import repair_weight_invariant
+        repair_weight_invariant(lot_no, reason="ACTION2_OUTBOUND_CONFIRM")
         return ok_response(data={
             "lot_no": lot_no,
             "status": "SOLD",
