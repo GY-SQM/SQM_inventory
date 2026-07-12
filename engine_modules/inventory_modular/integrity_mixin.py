@@ -52,7 +52,7 @@ class IntegrityMixin:
 
         try:
             lot = self.db.fetchone(
-                "SELECT lot_no, initial_weight, current_weight, picked_weight, mxbg_pallet "
+                "SELECT lot_no, initial_weight, current_weight, picked_weight, mxbg_pallet, status "
                 "FROM inventory WHERE lot_no = ?", (lot_no,))
             if not lot:
                 result['errors'].append(f"LOT 없음: {lot_no}")
@@ -62,6 +62,7 @@ class IntegrityMixin:
             iw = float(lot['initial_weight'] or 0)
             cw = float(lot['current_weight'] or 0)
             pw = float(lot['picked_weight'] or 0)
+            lot_status = str(lot['status'] or '').upper()
 
             result['details'] = {
                 'initial_weight': iw,
@@ -100,13 +101,18 @@ class IntegrityMixin:
                     logger.warning(f"[AV-09b] 역유령재고: {lot_no} cw={cw} avail=0")
 
             # 검증 1: initial = current + picked
-            diff = abs(iw - (cw + pw))
-            if diff > WEIGHT_TOLERANCE_KG:
-                result['errors'].append(
-                    f"무게 불일치: initial({iw:.1f}) ≠ "
-                    f"current({cw:.1f}) + picked({pw:.1f}), 차이={diff:.1f}kg"
-                )
-                result['valid'] = False
+            # [fix D] PENDING(입고확정 전) lot 은 재고 무게를 0으로 집계하는 정책이므로
+            #   (current=0/picked=0/initial>0) 이 불변식을 적용하지 않는다. AVAILABLE 로
+            #   입고확정되면 무게가 다시 집계되어 불변식이 성립한다. (AVAILABLE→PENDING
+            #   상태복원 후 무결성 검사가 재고를 오탐하던 문제 해소)
+            if lot_status != 'PENDING':
+                diff = abs(iw - (cw + pw))
+                if diff > WEIGHT_TOLERANCE_KG:
+                    result['errors'].append(
+                        f"무게 불일치: initial({iw:.1f}) ≠ "
+                        f"current({cw:.1f}) + picked({pw:.1f}), 차이={diff:.1f}kg"
+                    )
+                    result['valid'] = False
 
             # v6.9.8 [AV-09c]: picked_weight > initial_weight → 초과 출고 경고
             if pw > iw + WEIGHT_TOLERANCE_KG:
