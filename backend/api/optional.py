@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/optional", tags=["optional"])
 
 # ── Optional 1: 고급 검색 ──────────────────────────────────────
 @router.get("/search")
-async def advanced_search(q: str = "", field: str = "lot"):
+def advanced_search(q: str = "", field: str = "lot"):
     """고급 검색 (LOT/SAP/BL/Container)"""
     try:
         from engine_modules.inventory_modular.engine import SQMInventoryEngineV3  # type: ignore
@@ -101,7 +101,7 @@ async def alert_email(payload: dict | None = None):
 
 # ── Optional 9: 감사 로그 내보내기 ──────────────────────────────
 @router.get("/audit-log")
-async def audit_log(limit: int = 1000):
+def audit_log(limit: int = 1000):
     """감사 로그(audit log) 조회"""
     try:
         from engine_modules.inventory_modular.engine import SQMInventoryEngineV3  # type: ignore
@@ -116,7 +116,7 @@ async def audit_log(limit: int = 1000):
 
 # ── Optional 10: 시스템 헬스 상세 ───────────────────────────────
 @router.get("/system-health")
-async def system_health():
+def system_health():
     """CPU/메모리/DB 연결/디스크 사용량"""
     import sys, platform
     try:

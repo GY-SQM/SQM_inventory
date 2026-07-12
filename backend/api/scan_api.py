@@ -23,7 +23,7 @@ def _db():
 
 
 @router.post("/lookup")
-async def scan_lookup(payload: dict):
+def scan_lookup(payload: dict):
     uid = (payload.get("uid") or payload.get("barcode") or "").strip()
     if not uid:
         return dict(success=False, message="uid 또는 barcode 필드 필요", data=None)
@@ -53,7 +53,7 @@ async def scan_lookup(payload: dict):
 
 
 @router.post("/confirm_outbound")
-async def scan_confirm_outbound(payload: dict):
+def scan_confirm_outbound(payload: dict):
     uid = (payload.get("uid") or payload.get("barcode") or "").strip()
     if not uid:
         return dict(success=False, message="uid 또는 barcode 필드 필요", data=None)
@@ -95,7 +95,7 @@ async def scan_confirm_outbound(payload: dict):
 
 
 @router.post("/return")
-async def scan_return(payload: dict):
+def scan_return(payload: dict):
     uid = (payload.get("uid") or payload.get("barcode") or "").strip()
     reason = (payload.get("reason") or "").strip()
     if not uid:
@@ -128,7 +128,7 @@ async def scan_return(payload: dict):
 
 
 @router.put("/move")
-async def scan_move(payload: dict):
+def scan_move(payload: dict):
     uid = (payload.get("uid") or payload.get("barcode") or "").strip()
     to_loc = (payload.get("to_location") or payload.get("location") or "").strip()
     if not uid or not to_loc:

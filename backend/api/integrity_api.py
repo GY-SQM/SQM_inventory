@@ -23,7 +23,7 @@ def _db():
 
 
 @router.get("/check", summary="🔍 정합성 검증 (F013)")
-async def integrity_check():
+def integrity_check():
     """
     D3: verify_lot_integrity 결과를 반영하여 정합성 검사 수행.
     기존 ABS(initial - (current+picked)) > 1.0 단순 체크에서 엔진의 정밀 검증으로 교체.
@@ -95,7 +95,7 @@ async def integrity_check():
 
 
 @router.get("/diagnostic")
-async def integrity_diagnostic():
+def integrity_diagnostic():
     """
     정합성 진단: initial_weight(inventory) vs SUM(tonbag.weight) 불일치 LOT 조회.
     상태별 톤백 분포 포함 → 어디서 무게가 누락됐는지 파악 가능.
