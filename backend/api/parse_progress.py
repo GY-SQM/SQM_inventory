@@ -43,6 +43,15 @@ _lock = threading.Lock()
 
 # 완료된 job 자동 정리 임계값 (초)
 _GC_AFTER_SEC = 60
+# [감사] 완료(done)되지 못한 채 방치된 orphan job 정리 임계값 (초).
+#   업로드 취소·job_id 불일치 등으로 finish_job 이 영영 안 불리는 job 이
+#   메모리에 무한 축적되는 것을 막는다.
+_STALE_AFTER_SEC = 1800  # 30분
+
+# [감사] SSE 스트림 파라미터 (테스트에서 monkeypatch 가능하도록 모듈 상수화).
+STREAM_POLL_INTERVAL_SEC = 0.15   # 이벤트 폴링 주기
+STREAM_REGISTER_WAIT_SEC = 3.0    # register 지연 허용(등록 대기) 시간
+STREAM_IDLE_TIMEOUT_SEC = 120.0   # 등록됐지만 done 도 새 이벤트도 없이 방치되면 종료
 
 
 def register_job(job_id: str) -> None:
@@ -56,6 +65,7 @@ def register_job(job_id: str) -> None:
             "started_at": time.time(),
             "finished_at": 0.0,
         }
+    _gc()  # 새 등록 때마다 방치된 orphan job 기회주의적 정리
     logger.info(f"[parse_progress] register {job_id}")
 
 
@@ -97,12 +107,13 @@ def finish_job(job_id: str, summary: Optional[dict] = None) -> None:
 
 
 def _gc() -> None:
-    """완료된 지 _GC_AFTER_SEC 초 지난 job 들 제거."""
+    """완료된 지 _GC_AFTER_SEC 초 지난 job + 완료 못 하고 방치된 orphan job 제거."""
     now = time.time()
     with _lock:
         to_del = [
             jid for jid, j in _jobs.items()
-            if j["done"] and (now - j["finished_at"]) > _GC_AFTER_SEC
+            if (j["done"] and (now - j["finished_at"]) > _GC_AFTER_SEC)
+            or (not j["done"] and (now - j.get("started_at", now)) > _STALE_AFTER_SEC)
         ]
         for jid in to_del:
             _jobs.pop(jid, None)

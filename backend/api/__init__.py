@@ -175,27 +175,45 @@ import asyncio as _asyncio
 
 @app.get("/api/onestop/parse-stream/{job_id}", tags=["onestop"],
          summary="📡 파싱 진행 실시간 스트림 (SSE)")
-async def onestop_parse_stream(job_id: str):
-    """text/event-stream 으로 파싱 진행 이벤트를 push."""
+async def onestop_parse_stream(job_id: str, request: Request):
+    """text/event-stream 으로 파싱 진행 이벤트를 push.
+
+    [감사] 무한 스핀/코루틴 누수 방지:
+      - request.is_disconnected() 로 창이 닫히면 즉시 종료(누수 방지).
+      - 등록됐지만 done 도 새 이벤트도 없이 방치되면(업로드 취소·job_id 불일치로
+        finish_job 이 영영 안 옴) STREAM_IDLE_TIMEOUT_SEC 후 error 로 종료 →
+        프론트 진행바가 영원히 도는 일이 없다.
+    """
     async def gen():
         sent = 0
-        # 백엔드 파싱이 register 보다 약간 늦을 수 있어 최대 3초 대기
-        wait_register_until = _asyncio.get_event_loop().time() + 3.0
+        loop = _asyncio.get_event_loop()
+        # 백엔드 파싱이 register 보다 약간 늦을 수 있어 잠시 대기
+        wait_register_until = loop.time() + _pp.STREAM_REGISTER_WAIT_SEC
+        last_activity = loop.time()
         while True:
+            # 클라이언트(분리/메인 창)가 닫히면 즉시 종료 — 서버 코루틴 누수 방지
+            if await request.is_disconnected():
+                return
             events, done, exists = _pp.get_events_since(job_id, sent)
             if not exists:
                 # 아직 등록 안 됨 — 잠시 기다림
-                if _asyncio.get_event_loop().time() > wait_register_until:
+                if loop.time() > wait_register_until:
                     yield "event: error\ndata: {\"msg\":\"job_not_found\"}\n\n"
                     return
                 await _asyncio.sleep(0.1)
                 continue
-            for ev in events:
-                yield _pp.format_sse(ev)
-            sent += len(events)
+            if events:
+                for ev in events:
+                    yield _pp.format_sse(ev)
+                sent += len(events)
+                last_activity = loop.time()
             if done:
                 break
-            await _asyncio.sleep(0.15)
+            # done 도 새 이벤트도 없이 방치되면 유휴 타임아웃으로 종료(무한 스핀 방지)
+            if loop.time() - last_activity > _pp.STREAM_IDLE_TIMEOUT_SEC:
+                yield "event: error\ndata: {\"msg\":\"stream_idle_timeout\"}\n\n"
+                return
+            await _asyncio.sleep(_pp.STREAM_POLL_INTERVAL_SEC)
             # heartbeat (긴 대기 시 keep-alive)
             if not events:  # LOW: truthiness 사용
                 yield ": keepalive\n\n"
