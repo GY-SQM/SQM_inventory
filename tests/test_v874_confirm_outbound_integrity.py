@@ -116,3 +116,46 @@ def test_full_lot_confirm_depletes_available(eng):
         "SELECT COUNT(*) c FROM inventory_tonbag "
         "WHERE lot_no='LOTX' AND status='AVAILABLE'")
     assert _v(avail, "c", 0) == 0
+
+
+def _sold_count(e, lot="LOTX"):
+    r = e.db.fetchone("SELECT COUNT(*) c FROM sold_table WHERE lot_no=?", (lot,))
+    return _v(r, "c", 0)
+
+
+def test_confirm_outbound_no_double_when_tonbags_already_sold(eng):
+    """[fix F] 동시 확정(TOCTOU) 방지 회귀 테스트.
+
+    톤백 로드/이중출고 가드는 트랜잭션 밖에서 수행된다. 두 요청이 거의 동시에
+    진입하면 둘 다 같은 PICKED 톤백을 로드하고 둘 다 가드를 통과할 수 있다.
+    '먼저 들어온 요청'이 이미 SOLD 로 확정한 상황을, 가드 통과 직후·트랜잭션
+    직전 훅(_co_validate_customer_sale_ref)에서 톤백을 SOLD 로 바꿔 재현한다.
+
+    수정 전(가드 없는 executemany): 두 번째 요청도 톤백을 다시 SOLD 마킹 +
+    sold_table/stock_movement 재삽입 → 이중 출고.
+    수정 후(status 가드 + rowcount 체크): 이미 SOLD 인 톤백은 rowcount=0 →
+    재확정/재삽입하지 않음.
+    """
+    _seed(eng, normals=3)
+    eng.quick_outbound("LOTX", 3, "ACME")     # 3개 PICKED
+    assert _sold_count(eng) == 0
+
+    real_validate = eng._co_validate_customer_sale_ref
+
+    def _inject(tonbags, result):
+        rv = real_validate(tonbags, result)
+        # '동시 첫 요청'이 이미 확정한 상태 재현: 트랜잭션 직전에 SOLD 로 전환
+        eng.db.execute(
+            "UPDATE inventory_tonbag SET status='SOLD' "
+            "WHERE lot_no='LOTX' AND status='PICKED'")
+        return rv
+
+    eng._co_validate_customer_sale_ref = _inject
+    r = eng.confirm_outbound("LOTX")
+
+    # 이미 SOLD → 이 요청은 재확정하지 않음 (이중 출고 없음)
+    assert r.get("confirmed", 0) == 0, r
+    assert _sold_count(eng) == 0            # sold_table 이중 삽입 없음
+    mv = eng.db.fetchall(
+        "SELECT id FROM stock_movement WHERE lot_no='LOTX' AND movement_type='OUTBOUND'")
+    assert len(mv) == 0                     # stock_movement 이중 기록 없음
