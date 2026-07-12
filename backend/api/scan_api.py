@@ -73,10 +73,13 @@ def scan_confirm_outbound(payload: dict):
             "UPDATE inventory_tonbag SET status=?, outbound_date=?, updated_at=? WHERE id=?",
             ("SOLD", today, today, r["id"])
         )
+        # [감사 raw-SQL/(A)] 바인딩 개수 버그 수정: 플레이스홀더 5개(lot_no + IN 4개)에
+        #   값이 4개뿐이라 매 호출마다 sqlite 바인딩 오류로 실패했음. 출고성 상태
+        #   4종(SOLD/OUTBOUND/CONFIRMED/SHIPPED)을 채워 정상 동작하게 함.
         remaining = conn.execute(
             "SELECT COUNT(*) FROM inventory_tonbag "
             "WHERE lot_no=? AND status NOT IN (?,?,?,?)",
-            (r["lot_no"], "SOLD", "CONFIRMED", "SHIPPED")
+            (r["lot_no"], "SOLD", "OUTBOUND", "CONFIRMED", "SHIPPED")
         ).fetchone()[0]
         if remaining == 0:
             # HIGH: 상태 검증 추가 (PICKED/AVAILABLE만 SOLD 가능)
@@ -86,6 +89,9 @@ def scan_confirm_outbound(payload: dict):
             )
         conn.commit()
         conn.close()
+        # [감사 raw-SQL/(A)] 톤백 SOLD 전환 후 무게 재계산 누락 → 불변식 복구.
+        from backend.api.lot_invariant import repair_weight_invariant
+        repair_weight_invariant(r["lot_no"], reason="SCAN_CONFIRM_OUTBOUND")
         return dict(success=True,
                     message=uid + " -> SOLD (LOT: " + str(r["lot_no"]) + ")",
                     data=dict(sub_lt=r["sub_lt"], lot_no=r["lot_no"], status="SOLD"))

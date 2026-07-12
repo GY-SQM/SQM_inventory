@@ -971,8 +971,11 @@ def revert_allocation_step(data: dict = Body(...)):
                     (lot_no, src_status),
                 )
         else:
+            # [감사 raw-SQL/(A)] allocation_plan 에 updated_at 컬럼이 없어 이 UPDATE 가
+            #   매번 'no such column: updated_at' 로 터졌다(PICKED→RESERVED / SOLD→PICKED
+            #   되돌리기가 실제로 동작한 적 없음). 존재하지 않는 컬럼 갱신을 제거.
             cur = con.execute(
-                f"UPDATE allocation_plan SET status=?, updated_at=datetime('now') "
+                f"UPDATE allocation_plan SET status=? "
                 f"WHERE status=? AND lot_no IN ({','.join('?' * len(affected_lots))})",
                 [dst_status, src_status] + affected_lots
             )
@@ -985,8 +988,20 @@ def revert_allocation_step(data: dict = Body(...)):
                     "UPDATE inventory_tonbag SET status=? WHERE lot_no=? AND status=?",
                     (dst_status, lot_no, src_status),
                 )
+            # [감사 raw-SQL/(A)] SOLD→PICKED 되돌리기 시 판매기록(sold_table)이 남아
+            #   'inventory=PICKED 인데 판매목록엔 SOLD' 로 어긋나는 wedge 를 막는다.
+            #   되돌린 LOT 의 sold_table 행을 정리(상태 전이 결과는 그대로 PICKED).
+            if src_status == "SOLD":
+                con.execute(
+                    f"DELETE FROM sold_table WHERE lot_no IN ({','.join('?' * len(affected_lots))})",
+                    affected_lots,
+                )
         changed = cur.rowcount
         con.commit(); con.close()
+        # [감사 raw-SQL/(A)] 상태 되돌린 뒤 무게 버킷(current/picked)을 톤백 실제상태에
+        #   맞춰 재계산(예: PICKED→RESERVED 는 picked→current 로 이동해야 정합).
+        from backend.api.lot_invariant import repair_weight_invariant
+        repair_weight_invariant(*affected_lots, reason="ALLOC_REVERT_STEP")
         logger.info(f"[revert-step] {src_status}→{dst_status}: {len(affected_lots)} lots, {changed} rows")
         return {
             "ok": True,

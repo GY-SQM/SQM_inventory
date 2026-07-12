@@ -238,6 +238,10 @@ def return_create(payload: dict):
 
         con.commit()
         con.close()
+        # [감사 raw-SQL/(A)] RETURN 전환 후 무게 재계산 누락 → 불변식 복구.
+        #   (RETURN 톤백은 엔진 재계산에서 current 버킷에 포함되어 정합 유지)
+        from backend.api.lot_invariant import repair_weight_invariant
+        repair_weight_invariant(lot_no, reason="ACTION3_RETURN_CREATE")
         return ok_response(data={
             "lot_no": lot_no,
             "reason": reason,
