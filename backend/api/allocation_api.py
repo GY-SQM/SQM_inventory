@@ -1527,16 +1527,28 @@ def get_allocation(
 
 @router.post("/{lot_no}/cancel", summary="❌ 배정 취소 (LOT 단위)")
 def cancel_allocation_by_lot(lot_no: str):
+    # [fix M4] raw-SQL(allocation_plan 만 CANCELLED) 우회 제거 → 엔진 cancel_reservation 위임.
+    #   기존엔 톤백 RESERVED→AVAILABLE 복원·무게 재계산을 누락해, 활성 plan 없이 RESERVED 로
+    #   남는 '고아 예약'이 쌓여 해당 재고가 재예약/출고 파이프라인에 다시 못 들어갔다.
     try:
-        con = _alloc_db()
-        con.execute(
-            "UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') WHERE lot_no=?",
-            (lot_no,)
-        )
-        con.commit(); con.close()
-        return {"ok": True, "message": f"{lot_no} 배정 취소"}
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None or not hasattr(engine, "cancel_reservation"):
+        raise HTTPException(500, "엔진 cancel_reservation 없음")
+    try:
+        result = engine.cancel_reservation(lot_no=lot_no)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
+    _cancelled = int(result.get("cancelled", 0))
+    return {
+        "ok": bool(result.get("success")) or _cancelled > 0,
+        "lot_no": lot_no,
+        "cancelled": _cancelled,
+        "message": result.get("message") or f"{lot_no} 배정 취소 ({_cancelled}건)",
+    }
 
 
 @router.patch("/{lot_no}", summary="✏️ 배정 행 필드 업데이트")
