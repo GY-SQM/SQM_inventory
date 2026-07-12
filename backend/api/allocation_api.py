@@ -1583,22 +1583,30 @@ def pick_allocation_by_lot(lot_no: str):
 
 @router.post("/{lot_no}/confirm", summary="✅ 출고 확정 PICKED → SOLD")
 def confirm_allocation_by_lot(lot_no: str):
+    # [fix C] 엔진 우회 raw-SQL(2 UPDATE) 제거 → 정식 engine.confirm_outbound 로 위임.
+    #   기존엔 allocation_plan/inventory 의 status 만 SOLD 로 바꾸고 톤백 전환·sold_table·
+    #   stock_movement·무게 재계산을 누락해 LOT 이 wedge(inventory=SOLD인데 톤백=PICKED,
+    #   판매기록 없음)됐다. 엔진 정식 경로는 이 전부를 한 트랜잭션으로 정합 처리한다.
     try:
-        con = _alloc_db()
-        cur = con.execute(
-            "UPDATE allocation_plan SET status='SOLD', executed_at=datetime('now') WHERE lot_no=? AND status='PICKED'",
-            (lot_no,)
-        )
-        # F004 fix: commit 전에 rowcount 체크 (데이터 오염 방지)
-        if cur.rowcount == 0:
-            con.rollback(); con.close()
-            raise HTTPException(404, f"{lot_no}: PICKED 상태가 아니거나 존재하지 않음")
-        con.execute("UPDATE inventory SET status='SOLD' WHERE lot_no=?", (lot_no,))
-        con.commit(); con.close()
-        return {"ok": True, "lot_no": lot_no, "message": f"{lot_no} → SOLD"}
-    except HTTPException: raise
+        from backend.api import engine, ENGINE_AVAILABLE
+    except Exception as e:
+        raise HTTPException(500, f"엔진 로드 실패: {e}")
+    if not ENGINE_AVAILABLE or engine is None or not hasattr(engine, "confirm_outbound"):
+        raise HTTPException(500, "엔진 confirm_outbound 없음")
+    try:
+        result = engine.confirm_outbound(lot_no)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(500, str(e))
+    if not result.get("success"):
+        raise HTTPException(404, result.get("message") or f"{lot_no}: PICKED 상태가 아니거나 확정 불가")
+    return {
+        "ok": True,
+        "lot_no": lot_no,
+        "confirmed": int(result.get("confirmed", 0)),
+        "message": result.get("message") or f"{lot_no} → SOLD",
+    }
 
 
 @router.post("/{lot_no}/reset", summary="🧹 LOT 배정 완전 초기화")
