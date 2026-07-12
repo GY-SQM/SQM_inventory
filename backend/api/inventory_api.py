@@ -208,7 +208,17 @@ def cancel_inventory(lot_no: str):
             "UPDATE inventory_tonbag SET status='AVAILABLE' WHERE lot_no=? AND status NOT IN ('SOLD')",
             (lot_no,)
         )
+        # [감사 raw-SQL/(A)] 배정 취소인데 allocation_plan 이 활성(RESERVED/PICKED)으로 남아
+        #   재예약이 막히던 문제 — 취소 의도를 완성하도록 함께 CANCELLED 처리.
+        db.execute(
+            "UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') "
+            "WHERE lot_no=? AND status NOT IN ('CANCELLED','SOLD')",
+            (lot_no,)
+        )
         db.commit(); db.close()
+        # [감사 raw-SQL/(A)] AVAILABLE 원복 후 무게 버킷 재계산(picked→current 등 정합).
+        from backend.api.lot_invariant import repair_weight_invariant
+        repair_weight_invariant(lot_no, reason="CANCEL_INVENTORY")
         return {"success": True, "message": f"{lot_no} 배정 취소 완료"}
     except Exception as e:
         log.error(f"cancel error: {e}")
@@ -905,21 +915,22 @@ def scan_process(payload: dict):
                 "data": r
             }
         elif action == "outbound":
-            # F001 fix: tonbag 상태 변경 + 부모 inventory 무게 업데이트 (불변식 보장)
-            weight_kg = r.get('weight', 0.0)
             lot_no = r.get('lot_no')
+            # [감사 raw-SQL/(A)] 재스캔 멱등성 + 정확도 수정:
+            #   기존엔 (a) WHERE sub_lt=? 라 같은 sub_lt 를 가진 '다른 LOT' 톤백까지 갱신,
+            #   (b) 상태 가드가 없어 이미 PICKED 인 걸 재스캔하면 무게(current_weight)가
+            #   이중 차감되어 음수/불변식 붕괴. → 매칭된 톤백 id + AVAILABLE 가드로 한정하고,
+            #   수동 무게 가감 대신 엔진 재계산(톤백 실제상태 기준)으로 idempotent 하게 복구.
             db.execute(
-                "UPDATE inventory_tonbag SET status='PICKED', picked_date=date('now') WHERE sub_lt=?",
-                (barcode,)
-            )
-            # 부모 inventory 동시 업데이트 (원자성)
-            db.execute(
-                "UPDATE inventory SET current_weight = current_weight - ?, picked_weight = picked_weight + ? WHERE lot_no = ?",
-                (weight_kg, weight_kg, lot_no)
+                "UPDATE inventory_tonbag SET status='PICKED', picked_date=date('now') "
+                "WHERE id=? AND status='AVAILABLE'",
+                (r['id'],)
             )
             db.commit()
             db.close()
-            return {"success": True, "message": f"{barcode} 출고 처리 완료 (+{weight_kg}kg picked)", "data": r}
+            from backend.api.lot_invariant import repair_weight_invariant
+            repair_weight_invariant(lot_no, reason="SCAN_PROCESS_OUTBOUND")
+            return {"success": True, "message": f"{barcode} 출고 처리 완료", "data": r}
         else:
             db.close()
             return {"success": True, "message": f"{barcode} 조회 완료", "data": r}

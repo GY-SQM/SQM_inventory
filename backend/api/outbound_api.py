@@ -989,6 +989,13 @@ def onestop_pick(req: OneStopPickRequest):
         logger.exception(f"[onestop-pick] 실패: {e}")
         raise HTTPException(500, f"PICKED 전환 실패: {e}")
 
+    # [감사 raw-SQL/(A)] AVAILABLE→PICKED 전환 후 parent inventory 무게 재계산 누락 →
+    #   후속 onestop-complete 전까지 current/picked 가 어긋나 있었다. 영향 LOT 재계산.
+    if picked:
+        from backend.api.lot_invariant import repair_weight_invariant
+        repair_weight_invariant(*{ref.lot_no.strip() for ref in req.tonbags},
+                                reason="ONESTOP_PICK")
+
     return {
         "ok": picked > 0,
         "data": {"picked": picked, "requested": len(req.tonbags), "skipped": skipped[:100]},

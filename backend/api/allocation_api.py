@@ -850,6 +850,9 @@ def cancel_by_sale_ref(data: dict = Body(...)):
                 (lot_no,)
             )
         con.commit(); con.close()
+        # [감사 raw-SQL/(A)] AVAILABLE 원복 후 무게 버킷 재계산(picked→current 정합).
+        from backend.api.lot_invariant import repair_weight_invariant
+        repair_weight_invariant(*lot_list, reason="CANCEL_BY_SALE_REF")
         logger.info(f"[cancel-by-sale-ref] sale_ref={sale_ref}, lots={lot_list}, plans={cancelled_plans}")
         return {
             "ok": True,
@@ -897,6 +900,9 @@ def reset_all_allocations():
                 (lot_no,)
             )
         con.commit(); con.close()
+        # [감사 raw-SQL/(A)] AVAILABLE 원복 후 무게 버킷 재계산.
+        from backend.api.lot_invariant import repair_weight_invariant
+        repair_weight_invariant(*lot_list, reason="RESET_ALL")
         logger.info(f"[reset-all] lots={len(lot_list)}, plans={cancelled_plans}")
         return {
             "ok": True,
@@ -1648,8 +1654,18 @@ def reset_allocation_by_lot(lot_no: str):
             "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL WHERE lot_no=? AND status!='SOLD'",
             (lot_no,)
         )
+        # [감사 raw-SQL/(A)] '완전 초기화'인데 inventory_tonbag 은 그대로 둬서
+        #   inventory=AVAILABLE 인데 톤백은 RESERVED/PICKED 로 남는 wedge 발생 → 톤백도
+        #   함께 AVAILABLE 원복(SOLD 제외)해 초기화 의도를 완성.
+        con.execute(
+            "UPDATE inventory_tonbag SET status='AVAILABLE' WHERE lot_no=? AND status NOT IN ('SOLD')",
+            (lot_no,)
+        )
         deleted = del_cur.rowcount
         con.commit(); con.close()
+        # [감사 raw-SQL/(A)] 무게 버킷 재계산으로 정합 복구.
+        from backend.api.lot_invariant import repair_weight_invariant
+        repair_weight_invariant(lot_no, reason="RESET_ALLOCATION_BY_LOT")
         return {"ok": True, "lot_no": lot_no,
                 "message": f"{lot_no} 초기화 ({deleted}건 삭제)" if deleted else f"{lot_no}: 배정 없음 (inventory만 초기화)"}
     except HTTPException: raise
