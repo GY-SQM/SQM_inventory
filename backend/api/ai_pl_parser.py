@@ -19,7 +19,7 @@ def _project_root() -> str:
 
 
 @router.post("/parse-pl", summary="📄 PL 신뢰도 파서 (Gemini Vision)")
-async def parse_pl(file: UploadFile = File(...)):
+def parse_pl(file: UploadFile = File(...)):
     """
     Packing List PDF를 업로드하면 각 필드 + 신뢰도 점수를 반환.
 
@@ -40,7 +40,7 @@ async def parse_pl(file: UploadFile = File(...)):
 
     fname = file.filename or "upload.pdf"
     suffix = os.path.splitext(fname)[-1].lower() or ".pdf"
-    content = await file.read()
+    content = file.file.read()
 
     if not content:
         raise HTTPException(400, "파일이 비어있습니다")

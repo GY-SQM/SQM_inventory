@@ -35,7 +35,7 @@ def _get_owner():
 
 
 @router.post("/picking")
-async def parse_picking_list(file: UploadFile = File(...)):
+def parse_picking_list(file: UploadFile = File(...)):
     """
     Picking List PDF 업로드 → 파싱 결과 반환.
 
@@ -50,7 +50,7 @@ async def parse_picking_list(file: UploadFile = File(...)):
         # 임시 파일 저장
         suffix = os.path.splitext(file.filename)[1]
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await file.read())
+            tmp.write(file.file.read())
             tmp_path = tmp.name
 
         # 파서 실행

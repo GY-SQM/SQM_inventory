@@ -63,7 +63,7 @@ async def csv_import(payload: dict | None = None):
 
 # ── Optional 6: 엑셀 전체 내보내기 ──────────────────────────────
 @router.post("/excel-export-all")
-async def excel_export_all(payload: dict | None = None):
+def excel_export_all(payload: dict | None = None):
     """전체 재고 엑셀 내보내기"""
     try:
         from engine_modules.inventory_modular.engine import SQMInventoryEngineV3  # type: ignore

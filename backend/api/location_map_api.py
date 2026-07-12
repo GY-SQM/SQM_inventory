@@ -241,12 +241,12 @@ def _build_report(doc: dict, con: sqlite3.Connection) -> dict:
     }
 
 
-async def _save_upload(file: UploadFile) -> str:
+def _save_upload(file: UploadFile) -> str:
     """업로드 파일 → 임시 .xlsx 경로."""
     ext = os.path.splitext(file.filename or '')[1].lower()
     if ext not in ('.xlsx', '.xls'):
         raise ValueError(f'Excel 파일만 지원 (.xlsx/.xls). 받은 파일: {file.filename}')
-    content = await file.read()
+    content = file.file.read()
     if not content:
         raise ValueError('빈 파일입니다')
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
@@ -258,13 +258,13 @@ async def _save_upload(file: UploadFile) -> str:
 # POST /api/location-map/preview
 # ─────────────────────────────────────────────────────────────────────
 @router.post('/preview', summary='📋 위치 매핑 엑셀 미리보기 (검증 + diff, DB 미반영)')
-async def preview_location_map(file: UploadFile = File(...)):
+def preview_location_map(file: UploadFile = File(...)):
     """업로드 엑셀을 파싱·검증하고 직전 batch와 diff 만 반환 (DB 안 건드림)."""
     from features.parsers.location_inventory_parser import parse_location_inventory_excel
 
     tmp_path = None
     try:
-        tmp_path = await _save_upload(file)
+        tmp_path = _save_upload(file)
         doc = parse_location_inventory_excel(tmp_path)
         con = _db()
         try:
@@ -317,7 +317,7 @@ async def preview_location_map(file: UploadFile = File(...)):
 # POST /api/location-map/commit
 # ─────────────────────────────────────────────────────────────────────
 @router.post('/commit', summary='💾 위치 매핑 엑셀 LOT 위치 후보 스냅샷 저장')
-async def commit_location_map(
+def commit_location_map(
     file: UploadFile = File(...),
     force: bool = Query(False, description='입고 누락(10개 미만) 경고를 무시하고 강제 저장'),
     apply_tonbag: bool = Query(False, description='True면 LOT 셀 매핑을 톤백 위치까지 즉시 확정(inventory_tonbag.location 갱신)'),
@@ -334,7 +334,7 @@ async def commit_location_map(
 
     tmp_path = None
     try:
-        tmp_path = await _save_upload(file)
+        tmp_path = _save_upload(file)
         doc = parse_location_inventory_excel(tmp_path)
         con = _db()
         try:

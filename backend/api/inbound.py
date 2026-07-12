@@ -262,7 +262,7 @@ def _clean_value(v: Any) -> Any:
 
 
 @router.post("/bulk-import-excel", summary="📊 수동 입고 — Excel 업로드 (F002)")
-async def bulk_import_excel(file: UploadFile = File(...)):
+def bulk_import_excel(file: UploadFile = File(...)):
     """
     PyWebView 네이티브 수동 입고.
     - multipart/form-data 로 Excel 파일 업로드
@@ -294,7 +294,7 @@ async def bulk_import_excel(file: UploadFile = File(...)):
     # 4. 파일을 임시 저장
     tmp_path = None
     try:
-        content = await file.read()
+        content = file.file.read()
         if not content:
             raise HTTPException(400, "빈 파일")
 
@@ -396,7 +396,7 @@ async def bulk_import_excel(file: UploadFile = File(...)):
 # 기존 features.parsers.return_inbound_parser + return_inbound_engine 재사용
 # ────────────────────────────────────────────────────────────
 @router.post("/return-excel", summary="🔄 반품 입고 — Excel 업로드 (F007)")
-async def return_inbound_excel(file: UploadFile = File(...)):
+def return_inbound_excel(file: UploadFile = File(...)):
     """
     반품 Excel → picking_table 매칭 → inventory 복구 (트랜잭션).
     - parse_return_inbound_excel 로 파싱
@@ -425,7 +425,7 @@ async def return_inbound_excel(file: UploadFile = File(...)):
 
     tmp_path = None
     try:
-        content = await file.read()
+        content = file.file.read()
         if not content:
             raise HTTPException(400, "빈 파일")
 
@@ -2042,12 +2042,12 @@ def delete_template(tid: str):
 
 
 @router.post("/templates/from-pdf", summary="📄 PDF 입고서 파싱 → 템플릿 데이터 추출")
-async def template_from_pdf(file: UploadFile = File(...)):
+def template_from_pdf(file: UploadFile = File(...)):
     """Packing List PDF를 파싱해서 선사·제품명·톤백무게를 추출.
     결과를 프론트에 반환 → 사용자가 확인 후 저장 버튼 클릭 시 POST /templates 호출."""
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, "PDF 파일만 지원합니다")
-    content = await file.read()
+    content = file.file.read()
     if not content:
         raise HTTPException(400, "빈 파일")
 
@@ -2178,7 +2178,7 @@ async def template_from_pdf(file: UploadFile = File(...)):
 
 
 @router.post("/templates/from-excel", summary="📊 Excel 파일 → 템플릿 일괄 등록")
-async def templates_from_excel(file: UploadFile = File(...)):
+def templates_from_excel(file: UploadFile = File(...)):
     """Excel/CSV 파일에서 템플릿을 일괄 생성.
 
     Excel 컬럼 순서 (헤더 행 필수):
@@ -2192,7 +2192,7 @@ async def templates_from_excel(file: UploadFile = File(...)):
             or fname.lower().endswith(".csv")):
         raise HTTPException(400, "xlsx / xls / csv 파일만 지원합니다")
 
-    content = await file.read()
+    content = file.file.read()
     if not content:
         raise HTTPException(400, "빈 파일")
 
@@ -2294,11 +2294,11 @@ async def templates_from_excel(file: UploadFile = File(...)):
 # POST /api/inbound/invoice
 # ─────────────────────────────────────────────────────────
 @router.post("/invoice", summary="Invoice(FA) PDF 업로드 → 기존 LOT 업데이트")
-async def inbound_invoice(file: UploadFile = File(...)):
+def inbound_invoice(file: UploadFile = File(...)):
     """Invoice PDF 파싱 → folio 또는 sap_no로 LOT 매칭 → 금액/선적일 업데이트"""
     tmp_path = None
     try:
-        pdf_bytes = await file.read()
+        pdf_bytes = file.file.read()
         if len(pdf_bytes) < 4 or pdf_bytes[:4] != b"%PDF":
             raise HTTPException(400, "Not a valid PDF file")
 
@@ -2379,11 +2379,11 @@ async def inbound_invoice(file: UploadFile = File(...)):
 # POST /api/inbound/bl
 # ─────────────────────────────────────────────────────────
 @router.post("/bl", summary="B/L PDF 업로드 → 기존 LOT 업데이트")
-async def inbound_bl(file: UploadFile = File(...)):
+def inbound_bl(file: UploadFile = File(...)):
     """BL PDF 파싱 → container_no로 LOT 매칭 → bl_no/vessel/voyage/ship_date 업데이트"""
     tmp_path = None
     try:
-        pdf_bytes = await file.read()
+        pdf_bytes = file.file.read()
         if len(pdf_bytes) < 4 or pdf_bytes[:4] != b"%PDF":
             raise HTTPException(400, "Not a valid PDF file")
 
@@ -2462,11 +2462,11 @@ async def inbound_bl(file: UploadFile = File(...)):
 # POST /api/inbound/do
 # ─────────────────────────────────────────────────────────
 @router.post("/do", summary="D/O PDF 업로드 → 기존 LOT 업데이트")
-async def inbound_do(file: UploadFile = File(...)):
+def inbound_do(file: UploadFile = File(...)):
     """DO PDF 파싱 → bl_no + container_no로 LOT 매칭 → arrival_date/free_time 업데이트"""
     tmp_path = None
     try:
-        pdf_bytes = await file.read()
+        pdf_bytes = file.file.read()
         if len(pdf_bytes) < 4 or pdf_bytes[:4] != b"%PDF":
             raise HTTPException(400, "Not a valid PDF file")
 
