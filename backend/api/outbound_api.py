@@ -1665,6 +1665,12 @@ def barcode_confirm_sold(file: UploadFile = File(...), dry_run: bool = True):
                     f"[barcode-confirm-sold] inventory_tonbag SOLD={applied}, sold_table INSERT={sold_inserted}"
                 )
                 logger.info(f"[barcode-confirm-sold] 반영 완료: {applied}건 ({file.filename})")
+                # [감사 raw-SQL/(A)] 톤백 SOLD 전환 후 parent inventory 무게 재계산 누락 →
+                #   불변식 복구(상태 전이는 그대로). 영향받은 LOT 만 재계산.
+                from backend.api.lot_invariant import repair_weight_invariant
+                _affected = {str(m.get("_db_lot_no") or m.get("lot_no") or "").strip()
+                             for m in matched}
+                repair_weight_invariant(*_affected, reason="BARCODE_CONFIRM_SOLD")
 
             sample_count = sum(1 for it in items if (it.get("weight_kg") or 0) < 10)
 
@@ -1912,6 +1918,11 @@ def picking_sample_sold(file: UploadFile = File(...), dry_run: bool = True):
                 ).fetchone()[0]
                 conn.commit()
                 logger.info(f"[picking-sample-sold] 반영 완료: inventory={applied}, sold_table INSERT={sold_inserted}")
+                # [감사 raw-SQL/(A)] 샘플 톤백 SOLD 전환 후 parent inventory 무게 재계산
+                #   누락 → 불변식 복구(상태 전이는 그대로).
+                from backend.api.lot_invariant import repair_weight_invariant
+                _affected = {str(m.get("lot_no") or "").strip() for m in matched}
+                repair_weight_invariant(*_affected, reason="PICKING_SAMPLE_SOLD")
 
             return {
                 "ok": True,
