@@ -42,6 +42,21 @@ _SYNC_HANDLERS = [
     ("backend.api.location_map_api", "_save_upload"),
     ("backend.api.refresh_excel_api", "refresh_excel_status"),
     ("backend.api.optional", "excel_export_all"),
+    # ── MED (동일 패턴) ──
+    ("backend.api.scan_api", "scan_lookup"),
+    ("backend.api.scan_api", "scan_confirm_outbound"),
+    ("backend.api.scan_api", "scan_return"),
+    ("backend.api.scan_api", "scan_move"),
+    ("backend.api.integrity_api", "integrity_check"),
+    ("backend.api.integrity_api", "integrity_diagnostic"),
+    ("backend.api.optional", "advanced_search"),
+    ("backend.api.optional", "audit_log"),
+    ("backend.api.optional", "system_health"),
+    ("backend.api.queries3", "upload_report_template"),
+    ("backend.api.queries3", "save_report_template_columns"),
+    ("backend.api.report_templates", "upload_template"),
+    ("backend.api.allocation_api", "template_list"),
+    ("backend.api.allocation_api", "template_delete"),
 ]
 
 

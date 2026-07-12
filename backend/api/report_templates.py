@@ -64,12 +64,12 @@ def list_templates():
 
 
 @router.post("/upload")
-async def upload_template(file: UploadFile = File(...)):
+def upload_template(file: UploadFile = File(...)):
     try:
         raw = file.filename or ""
         safe = _validate_filename(raw)
         dest = os.path.join(_templates_dir(), safe)
-        content = await file.read()
+        content = file.file.read()
         if len(content) > 50 * 1024 * 1024:
             raise HTTPException(400, "파일 크기 50MB 초과")
         with open(dest, "wb") as f:

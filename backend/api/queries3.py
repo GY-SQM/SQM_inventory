@@ -1101,7 +1101,7 @@ def list_report_templates(report_type: str = QP(...)):
 
 
 @router.post("/report-template-upload", summary="보고서별 템플릿 추가")
-async def upload_report_template(
+def upload_report_template(
     report_type: str = QP(...),
     display_name: str = QP("", max_length=120),
     mode: str = QP("add"),
@@ -1119,7 +1119,7 @@ async def upload_report_template(
         dest = _report_template_dir(report_type) / "template_1.xlsx"
     else:
         dest = _next_template_path(report_type)
-    content = await file.read()
+    content = file.file.read()
     if len(content) > 50 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="파일 크기 50MB 초과")
     dest.write_bytes(content)
@@ -1155,7 +1155,7 @@ def delete_report_template(report_type: str = QP(...), template: str = QP(...)):
 
 
 @router.post("/report-template-columns", summary="보고서 템플릿 컬럼 구성 저장")
-async def save_report_template_columns(report_type: str = QP(...), template: str = QP(...), payload: dict = Body(default_factory=dict)):
+def save_report_template_columns(report_type: str = QP(...), template: str = QP(...), payload: dict = Body(default_factory=dict)):
     _report_template_path(report_type, template)
     columns = (payload or {}).get("columns") or []
     _set_template_columns(report_type, template, columns)

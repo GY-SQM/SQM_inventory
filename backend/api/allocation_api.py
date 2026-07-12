@@ -1378,7 +1378,7 @@ def template_upload(
 
 # ── Allocation 양식 목록 조회 ──────────────────────────────────
 @router.get("/template-list", summary="📋 등록된 Allocation 양식 목록")
-async def template_list():
+def template_list():
     """resources/templates/allocation/ 의 .json 파일 목록 반환."""
     base = _alloc_template_dir()
     templates = [
@@ -1455,7 +1455,7 @@ async def template_list():
 
 # ── Allocation 양식 삭제 ───────────────────────────────────────
 @router.delete("/template/{template_id}", summary="🗑️ Allocation 양식 삭제")
-async def template_delete(template_id: str):
+def template_delete(template_id: str):
     """지정한 ID의 .json + .xlsx 파일 삭제."""
     safe_id = _safe_template_id(template_id)
     base = _alloc_template_dir()
