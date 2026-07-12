@@ -32,7 +32,7 @@ class RefreshResult(BaseModel):
 
 
 @router.post("/refresh-excel-status", response_model=RefreshResult)
-async def refresh_excel_status():
+def refresh_excel_status():
     """DB allocation_plan 기준으로 _int.xlsx STATUS 컬럼을 갱신합니다."""
     try:
         # 프로젝트 루트 탐색

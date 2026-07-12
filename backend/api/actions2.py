@@ -593,7 +593,7 @@ def open_tonbag_excel(lot_no: Optional[str] = QP(None)):
 
 # ── Sales Order 업로드 (MISS-02) ─────────────────────────────────
 @router.post("/sales-order-upload", summary="📊 Sales Order 업로드 (MISS-02)")
-async def sales_order_upload(file: UploadFile = File(...)):
+def sales_order_upload(file: UploadFile = File(...)):
     """
     Sales Order Excel 파일 업로드 → SalesOrderEngine 처리 → 결과 반환
     v864.2 대응: toolbar_mixin._on_sales_order_upload()
@@ -610,7 +610,7 @@ async def sales_order_upload(file: UploadFile = File(...)):
     suffix = ".xlsx" if fname.lower().endswith(".xlsx") else ".xls"
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     try:
-        content = await file.read()
+        content = file.file.read()
         tmp.write(content)
         tmp.flush()
         tmp.close()

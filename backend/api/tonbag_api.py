@@ -53,7 +53,7 @@ def _clean(v: Any) -> Any:
 
 
 @router.post("/location-upload", summary="📍 톤백 위치 매핑 — Excel 업로드 (F004)")
-async def location_upload(file: UploadFile = File(...)):
+def location_upload(file: UploadFile = File(...)):
     """
     Excel 각 행: (lot_no, sub_lt, location, [reason], [note])
     engine.update_tonbag_location() 반복 호출. 행별 성공/실패 독립.
@@ -78,7 +78,7 @@ async def location_upload(file: UploadFile = File(...)):
 
     tmp_path = None
     try:
-        content = await file.read()
+        content = file.file.read()
         if not content:
             raise HTTPException(400, "빈 파일")
         with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:

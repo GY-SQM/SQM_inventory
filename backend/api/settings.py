@@ -308,9 +308,9 @@ async def auto_detect_carrier_rules(request: Request):
     샘플 PDF 업로드 → PyMuPDF 텍스트 추출 → 정규식으로 BL/DO 필드 자동 인식.
     Gemini API 없이 동작. 인식된 패턴을 carrier_rules 테이블에 저장.
     """
-    import re
-    from datetime import datetime as _dt
+    from starlette.concurrency import run_in_threadpool
 
+    # 동적 multipart 폼이라 이 핸들러는 async 유지(await request.form()).
     form = await request.form()
     carrier_id = (form.get("carrier_id") or "").strip().upper()
     doc_type   = (form.get("doc_type")   or "BL").strip().upper()
@@ -323,76 +323,78 @@ async def auto_detect_carrier_rules(request: Request):
     if doc_type not in ("BL", "DO"):
         raise HTTPException(400, "doc_type: BL|DO")
 
-    # PDF → 텍스트 + 단어 좌표
     pdf_bytes = await pdf_file.read()
-    try:
-        import fitz
-        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-        page = doc[0]
-        W, H = page.rect.width, page.rect.height
-        full_text = page.get_text("text") or ""
-        words_raw = page.get_text("words")
-        doc.close()
-    except Exception as e:
-        raise HTTPException(500, f"PDF 읽기 실패: {e}")
 
-    text_upper = full_text.upper()
+    # [감사] PDF 파싱(PyMuPDF)+정규식+DB 저장은 블로킹 작업 → 스레드풀로 오프로드해
+    #   이벤트루프를 막지 않는다(다른 요청/SSE 가 그동안 멈추지 않음).
+    def _work():
+        import re
+        from datetime import datetime as _dt
+        try:
+            import fitz
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            page = doc[0]
+            full_text = page.get_text("text") or ""
+            doc.close()
+        except Exception as e:
+            raise HTTPException(500, f"PDF 읽기 실패: {e}")
 
-    # ── BL/DO 번호 추출 ──────────────────────────────────────────
-    bl_no = ""
-    pattern = ""
-    patterns_for_carrier = _BL_FORMAT_MAP.get(carrier_id, [])
-
-    # 1) 알려진 선사 패턴으로 먼저 시도
-    for pat in patterns_for_carrier:
-        m = re.search(pat, full_text, re.IGNORECASE)
-        if m:
-            bl_no = m.group(0).upper()
-            pattern = pat
-            break
-
-    # 2) 알 수 없는 선사: 알파벳 접두사 + 숫자 조합 후보 탐색
-    if not bl_no:
-        candidates = re.findall(r'\b([A-Z]{3,5}\d{6,10})\b', full_text)
-        if candidates:
-            bl_no = candidates[0]
-            pre = re.match(r'^([A-Z]+)', bl_no)
-            num = re.search(r'(\d+)$', bl_no)
-            if pre and num:
-                pattern = f"{pre.group(1)}\\d{{{len(num.group(1))}}}"
-
-    # ── 기타 필드 텍스트 추출 ───────────────────────────────────
-    extracted = {"bl_no": bl_no, "bl_no_pattern": pattern,
-                 "carrier_detected": carrier_id, "doc_type": doc_type}
-    for field, pats in _FIELD_LABELS.items():
-        for pat in pats:
+        # ── BL/DO 번호 추출 ──────────────────────────────────────────
+        bl_no = ""
+        pattern = ""
+        patterns_for_carrier = _BL_FORMAT_MAP.get(carrier_id, [])
+        # 1) 알려진 선사 패턴으로 먼저 시도
+        for pat in patterns_for_carrier:
             m = re.search(pat, full_text, re.IGNORECASE)
             if m:
-                extracted[field] = m.group(1).strip()
+                bl_no = m.group(0).upper()
+                pattern = pat
                 break
-        else:
-            extracted.setdefault(field, "")
+        # 2) 알 수 없는 선사: 알파벳 접두사 + 숫자 조합 후보 탐색
+        if not bl_no:
+            candidates = re.findall(r'\b([A-Z]{3,5}\d{6,10})\b', full_text)
+            if candidates:
+                bl_no = candidates[0]
+                pre = re.match(r'^([A-Z]+)', bl_no)
+                num = re.search(r'(\d+)$', bl_no)
+                if pre and num:
+                    pattern = f"{pre.group(1)}\\d{{{len(num.group(1))}}}"
 
-    # ── carrier_rules 저장 ───────────────────────────────────────
-    now = _dt.now().strftime('%Y-%m-%d %H:%M:%S')
-    saved = []
-    con = _db()
-    try:
-        if pattern:
-            cur = con.execute(
-                "INSERT OR IGNORE INTO carrier_rules "
-                "(carrier_id, doc_type, rule_name, pattern, description, sample_value, is_active, created_at, updated_at) "
-                "VALUES (?,?,?,?,?,?,1,?,?)",
-                (carrier_id, doc_type, f"{doc_type}_NO_AUTO",
-                 pattern,
-                 f"{carrier_id} {doc_type} 번호 패턴 (PDF 자동 감지)",
-                 bl_no, now, now)
-            )
-            if cur.rowcount:
-                saved.append(f"{doc_type}_NO_AUTO")
-        con.commit()
-    finally:
-        con.close()
+        # ── 기타 필드 텍스트 추출 ───────────────────────────────────
+        extracted = {"bl_no": bl_no, "bl_no_pattern": pattern,
+                     "carrier_detected": carrier_id, "doc_type": doc_type}
+        for field, pats in _FIELD_LABELS.items():
+            for pat in pats:
+                m = re.search(pat, full_text, re.IGNORECASE)
+                if m:
+                    extracted[field] = m.group(1).strip()
+                    break
+            else:
+                extracted.setdefault(field, "")
+
+        # ── carrier_rules 저장 ───────────────────────────────────────
+        now = _dt.now().strftime('%Y-%m-%d %H:%M:%S')
+        saved = []
+        con = _db()
+        try:
+            if pattern:
+                cur = con.execute(
+                    "INSERT OR IGNORE INTO carrier_rules "
+                    "(carrier_id, doc_type, rule_name, pattern, description, sample_value, is_active, created_at, updated_at) "
+                    "VALUES (?,?,?,?,?,?,1,?,?)",
+                    (carrier_id, doc_type, f"{doc_type}_NO_AUTO",
+                     pattern,
+                     f"{carrier_id} {doc_type} 번호 패턴 (PDF 자동 감지)",
+                     bl_no, now, now)
+                )
+                if cur.rowcount:
+                    saved.append(f"{doc_type}_NO_AUTO")
+            con.commit()
+        finally:
+            con.close()
+        return extracted, pattern, saved, full_text
+
+    extracted, pattern, saved, full_text = await run_in_threadpool(_work)
 
     return {
         "ok": True,

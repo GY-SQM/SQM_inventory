@@ -130,7 +130,7 @@ def _merge_doc_results(bl_data: dict, do_data: dict) -> dict:
 
 # ── 엔드포인트 ────────────────────────────────────────────────────────────────
 @router.post("/generate-from-docs", summary="🤖 AI 선사 템플릿 자동 생성 (PDF 업로드)")
-async def generate_template_from_docs(
+def generate_template_from_docs(
     bl_file: Optional[UploadFile] = File(None,  description="BL(선하증권) PDF"),
     do_file: Optional[UploadFile] = File(None,  description="D/O(화물인도지시서) PDF (선택)"),
 ):
@@ -151,7 +151,7 @@ async def generate_template_from_docs(
             if not (upload.filename or "").lower().endswith(".pdf"):
                 raise HTTPException(400, f"{label} 파일은 PDF만 지원합니다")
 
-            content = await upload.read()
+            content = upload.file.read()
             if not content:
                 raise HTTPException(400, f"{label} 파일이 비어 있습니다")
 

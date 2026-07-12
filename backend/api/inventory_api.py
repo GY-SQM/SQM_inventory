@@ -935,13 +935,13 @@ from fastapi import UploadFile, File as FileField
 import io, pathlib as _pathlib
 
 @scan_router.post("/bulk-upload")
-async def scan_bulk_upload(file: UploadFile = FileField(...), action: str = "lookup"):
+def scan_bulk_upload(file: UploadFile = FileField(...), action: str = "lookup"):
     """
     CSV/Excel 파일 업로드 → tonbag_uid / sub_lt 일괄 조회.
     action=lookup: 조회만 / action=outbound|return|pick|available: 상태 전환
     """
     try:
-        content = await file.read()
+        content = file.file.read()
         ext = _pathlib.Path(file.filename or "upload.csv").suffix.lower()
         try:
             import pandas as pd

@@ -437,7 +437,7 @@ def quick_outbound_info(lot_no: str):
 # features.parsers.picking_list_parser + picking_engine 재사용
 # ────────────────────────────────────────────────────────────
 @router.post("/picking-list-pdf", summary="📋 Picking List PDF 업로드 (F017)")
-async def picking_list_pdf(file: UploadFile = File(...)):
+def picking_list_pdf(file: UploadFile = File(...)):
     """
     Picking List PDF 파싱 → picking_engine.apply_picking_list_to_db() 호출.
     """
@@ -461,7 +461,7 @@ async def picking_list_pdf(file: UploadFile = File(...)):
 
     tmp_path = None
     try:
-        content = await file.read()
+        content = file.file.read()
         if not content:
             raise HTTPException(400, "빈 파일")
         if content[:4] != b"%PDF":
@@ -557,7 +557,7 @@ async def picking_list_pdf(file: UploadFile = File(...)):
 
 # ────────────────────────────────────────────────────────────
 @router.post("/picking-import-excel", summary="📋 Picking List Excel 업로드 (피킹 이력 반영)")
-async def picking_import_excel(file: UploadFile = File(...)):
+def picking_import_excel(file: UploadFile = File(...)):
     """
     Picking List Excel(.xlsx/.xls) 파싱 → apply_picking_list_to_db() 호출.
     PDF(picking-list-pdf)와 동일한 picking_engine 을 공유한다.
@@ -582,7 +582,7 @@ async def picking_import_excel(file: UploadFile = File(...)):
 
     tmp_path = None
     try:
-        content = await file.read()
+        content = file.file.read()
         if not content:
             raise HTTPException(400, "빈 파일")
         ext = os.path.splitext(file.filename)[1].lower()
@@ -1102,7 +1102,7 @@ def onestop_complete(req: OneStopCompleteRequest):
 
 
 @router.post("/proof-upload", summary="📎 OneStop 출고 — 근거문서 저장소 업로드")
-async def proof_upload(files: List[UploadFile] = File(...)):
+def proof_upload(files: List[UploadFile] = File(...)):
     """
     v864-2 S1OneStopOutboundDialog._attach_proof_doc 대응.
     파일을 data/proof_docs/YYYY-MM-DD/ 에 저장하고 SHA-256 기반 중복명을 방지한다.
@@ -1134,7 +1134,7 @@ async def proof_upload(files: List[UploadFile] = File(...)):
         for upload in files:
             if not upload.filename:
                 continue
-            content = await upload.read()
+            content = upload.file.read()
             if not content:
                 continue
             file_hash = hashlib.sha256(content).hexdigest()
@@ -1292,7 +1292,7 @@ def _parse_scan_csv_text(text: str) -> List[Dict[str, Any]]:
     "/onestop-scan-parse",
     summary="📊 OneStop 출고 — OUT 스캔 파일 파싱 (csv/xlsx) [Sprint 1-3-C]",
 )
-async def onestop_scan_parse(file: UploadFile = File(...)):
+def onestop_scan_parse(file: UploadFile = File(...)):
     """
     OUT 스캔 파일(csv/xlsx)을 파싱해 {tonbag_uid, actual_kg} 행 리스트 반환.
     Frontend는 이 결과를 selected_tonbags 와 매칭해 검증 수행.
@@ -1300,7 +1300,7 @@ async def onestop_scan_parse(file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(400, "파일명 없음")
     fname_lower = file.filename.lower()
-    content = await file.read()
+    content = file.file.read()
     if not content:
         raise HTTPException(400, "빈 파일")
 
@@ -1411,7 +1411,7 @@ def proof_docs_download(path: str = ""):
     "/barcode-confirm-sold",
     summary="📦 바코드 스캔 → SOLD 확정 (출고 최종 단계)",
 )
-async def barcode_confirm_sold(file: UploadFile = File(...), dry_run: bool = True):
+def barcode_confirm_sold(file: UploadFile = File(...), dry_run: bool = True):
     """현장 바코드 스캔 Excel → PICKED 톤백을 SOLD 로 확정.
 
     Args:
@@ -1449,7 +1449,7 @@ async def barcode_confirm_sold(file: UploadFile = File(...), dry_run: bool = Tru
 
     tmp_path = None
     try:
-        content = await file.read()
+        content = file.file.read()
         if not content:
             raise HTTPException(400, "빈 파일")
         ext = os.path.splitext(file.filename)[1].lower()
@@ -1720,7 +1720,7 @@ async def barcode_confirm_sold(file: UploadFile = File(...), dry_run: bool = Tru
     "/picking-sample-sold",
     summary="🧪 피킹리스트 기반 샘플 SOLD 확정 (PDF/Excel)",
 )
-async def picking_sample_sold(file: UploadFile = File(...), dry_run: bool = True):
+def picking_sample_sold(file: UploadFile = File(...), dry_run: bool = True):
     """피킹리스트 PDF/Excel → 샘플 행만 추출 → SOLD 확정.
 
     Args:
@@ -1753,7 +1753,7 @@ async def picking_sample_sold(file: UploadFile = File(...), dry_run: bool = True
 
     tmp_path = None
     try:
-        content = await file.read()
+        content = file.file.read()
         if not content:
             raise HTTPException(400, "빈 파일")
         ext = os.path.splitext(file.filename)[1].lower()

@@ -276,7 +276,7 @@ def _rows_from_registered_templates(excel_path: str):
 
 
 @router.post("/bulk-import-excel", summary="📍 Allocation 입력 — Excel 업로드 (F014)")
-async def bulk_import_allocation(file: UploadFile = File(...)):
+def bulk_import_allocation(file: UploadFile = File(...)):
     """
     Allocation Excel → 톤백 예약 (AVAILABLE → RESERVED).
     - engine.reserve_from_allocation(rows, source_file) 호출
@@ -304,7 +304,7 @@ async def bulk_import_allocation(file: UploadFile = File(...)):
 
     tmp_path = None
     try:
-        content = await file.read()
+        content = file.file.read()
         if not content:
             raise HTTPException(400, "빈 파일")
 
@@ -1250,7 +1250,7 @@ def _find_header_row(filepath: _Path):
     return best
 
 @router.post("/template-upload", summary="📥 Allocation 양식 가져오기 (xlsx → json+xlsx 저장)")
-async def template_upload(
+def template_upload(
     file: UploadFile = File(...),
     label: str = "",
     action: str = "check",
@@ -1271,7 +1271,7 @@ async def template_upload(
     suffix = _Path(file.filename).suffix
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     try:
-        contents = await file.read()
+        contents = file.file.read()
         tmp.write(contents)
         tmp.close()
         tmp_path = _Path(tmp.name)
