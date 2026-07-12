@@ -3051,12 +3051,20 @@ class OutboundMixin(InventoryBaseMixin):
                 values
             )
         except sqlite3.OperationalError as e:
-            # NOTE: sold_table 미존재 시 무시, 그 외는 로깅
-            if "no such table" not in str(e).lower():
+            # [감사 #3-M1] sold_table 미존재(구 스키마)만 무시. 그 외 OperationalError
+            #  (락/스키마 불일치/디스크 오류 등)는 삼키지 말고 재전파 → 판매기록 없는
+            #  '반쪽 출고확정'을 막고 트랜잭션 전체 롤백(All-or-Nothing)을 보장.
+            if "no such table" in str(e).lower():
                 logger.warning(
-                    f"[CO_INSERT_SOLD] sold_table 기록 실패: tonbag_id={tb['id']}, "
-                    f"lot_no={tb.get('lot_no')}, error={e}"
+                    f"[CO_INSERT_SOLD] sold_table 미존재 — 판매기록 건너뜀: "
+                    f"tonbag_id={tb['id']}, lot_no={tb.get('lot_no')}"
                 )
+                return
+            logger.error(
+                f"[CO_INSERT_SOLD] sold_table 기록 실패(재전파): tonbag_id={tb['id']}, "
+                f"lot_no={tb.get('lot_no')}, error={e}"
+            )
+            raise
 
     def _co_insert_outbound_movement(self, tb: dict, now: str):
         """stock_movement에 OUTBOUND 이력 INSERT.
@@ -3196,16 +3204,27 @@ class OutboundMixin(InventoryBaseMixin):
                 for lot in touched_lots:
                     self._recalc_lot_status(lot)
 
+                # [감사 #3-M2] 무게 재계산 + 사후검증을 '커밋 전'으로 이동.
+                #   기존엔 with 블록이 커밋된 뒤 재계산·검증을 수행해, 무게 불변식이
+                #   깨진 걸 발견해도 이미 확정된 DB를 되돌릴 수 없었다. 검증을 트랜잭션
+                #   안으로 옮기고, 무게 불변식(LOT_TOTAL_MISMATCH) 위반 시 예외를 던져
+                #   전체 롤백 → 깨진 상태를 애초에 커밋하지 않는다(All-or-Nothing).
+                result['message'] = f"출고 확정: {result['confirmed']}건 OUTBOUND"
+                for _ln in touched_lots:
+                    if hasattr(self, '_recalc_current_weight'):
+                        self._recalc_current_weight(_ln, reason='P2_CONFIRM_OUTBOUND')
+                self._co_run_post_checks(touched_lots, result)
+                _fatal = [
+                    _m for _m in result.get('post_check_errors', [])
+                    if 'LOT_TOTAL_MISMATCH' in _m
+                ]
+                if _fatal:
+                    raise ValueError(
+                        "출고 확정 사후검증 실패(무게 불변식 위반) — 전체 롤백: "
+                        + "; ".join(_fatal)
+                    )
+
             result['success'] = result['confirmed'] > 0
-            result['message'] = f"출고 확정: {result['confirmed']}건 OUTBOUND"
-
-            # 5) 출고 확정 후 touched_lots 전체 재계산
-            for _ln in touched_lots:
-                if hasattr(self, '_recalc_current_weight'):
-                    self._recalc_current_weight(_ln, reason='P2_CONFIRM_OUTBOUND')
-
-            # 6) 사후검증: LOT_TOTAL_MISMATCH + SAMPLE_POLICY
-            self._co_run_post_checks(touched_lots, result)
 
             # v8.7.0: 출고 확정 후 셀 무결성 비파괴 검증 + HALF 셀(CASE 3) 감지
             try:
@@ -3238,7 +3257,11 @@ class OutboundMixin(InventoryBaseMixin):
                 logger.debug(f"[CONFIRM_OUTBOUND] cell_invariants 체크 건너뜀: {_e}")
 
         except (ValueError, TypeError, sqlite3.Error) as e:
-            logger.error(f"출고 확정 오류: {e}")
+            # [감사 #3-M1/M2] 트랜잭션 도중 예외 → 롤백됨. 사후검증 실패로 롤백된
+            #   경우 confirmed 가 실제 DB에 반영되지 않았으므로 0으로 되돌려 오해 방지.
+            logger.error(f"출고 확정 오류(롤백): {e}")
+            result['confirmed'] = 0
+            result['success'] = False
             result['errors'].append(str(e))
 
         return result
