@@ -89,7 +89,16 @@
       console.error('[popout] d2m subscribe 실패', err);
       return null;
     }
+    /* [감사 #3-E] 방어적 중복 실행 차단: 서버가 부수효과(action/close)를 재생하지
+       않도록 고쳤지만, 클라이언트에서도 이미 처리한 event id 이하를 건너뛴다
+       (자동 재연결·이중 전달로 인한 삭제/확정 중복 실행 방지). */
+    let _lastSeenId = 0;
     es.addEventListener('message', function (e) {
+      const idNum = parseInt(e.lastEventId, 10);
+      if (!isNaN(idNum)) {
+        if (idNum <= _lastSeenId) return;   /* 이미 처리한 이벤트 — 재실행 금지 */
+        _lastSeenId = idNum;
+      }
       let ev;
       try { ev = JSON.parse(e.data); } catch(_){ return; }
       _handleD2M(key, ev);
