@@ -23,6 +23,9 @@ from .location_candidates import NO_LOCATION_DATA_MESSAGE, expand_candidates_for
 router = APIRouter(prefix="/api/action2", tags=["actions2"])
 logger = logging.getLogger(__name__)
 
+# [감사 M3] 오류 시에도 연결을 반드시 닫아 DB 락을 방지하는 공용 컨텍스트 매니저.
+from backend.api.db_session import db_session
+
 
 # ── 공통 헬퍼 ────────────────────────────────────────────────────
 def _db_path() -> str:
@@ -59,66 +62,64 @@ def inventory_move(payload: dict):
         raise HTTPException(400, "lot_no, to_loc 필수")
 
     try:
-        con = _db()
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with db_session(_db) as con:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # LOT 존재 확인
-        row = con.execute("SELECT id FROM inventory WHERE lot_no=?", (lot_no,)).fetchone()
-        if not row:
-            con.close()
-            return err_response(f"LOT '{lot_no}' 없음")
+            # LOT 존재 확인
+            row = con.execute("SELECT id FROM inventory WHERE lot_no=?", (lot_no,)).fetchone()
+            if not row:
+                return err_response(f"LOT '{lot_no}' 없음")
 
-        # 톤백 위치 업데이트
-        if from_loc:
-            updated = con.execute("""
-                UPDATE inventory_tonbag
-                SET location=?, location_updated_at=?, updated_at=?
-                WHERE inventory_id=? AND (location=? OR location IS NULL)
-            """, (to_loc, ts, ts, row["id"], from_loc)).rowcount
-        else:
-            updated = con.execute("""
-                UPDATE inventory_tonbag
-                SET location=?, location_updated_at=?, updated_at=?
-                WHERE inventory_id=?
-            """, (to_loc, ts, ts, row["id"])).rowcount
+            # 톤백 위치 업데이트
+            if from_loc:
+                updated = con.execute("""
+                    UPDATE inventory_tonbag
+                    SET location=?, location_updated_at=?, updated_at=?
+                    WHERE inventory_id=? AND (location=? OR location IS NULL)
+                """, (to_loc, ts, ts, row["id"], from_loc)).rowcount
+            else:
+                updated = con.execute("""
+                    UPDATE inventory_tonbag
+                    SET location=?, location_updated_at=?, updated_at=?
+                    WHERE inventory_id=?
+                """, (to_loc, ts, ts, row["id"])).rowcount
 
-        # inventory.location 업데이트
-        con.execute(
-            "UPDATE inventory SET location=?, updated_at=? WHERE id=?",
-            (to_loc, ts, row["id"])
-        )
+            # inventory.location 업데이트
+            con.execute(
+                "UPDATE inventory SET location=?, updated_at=? WHERE id=?",
+                (to_loc, ts, row["id"])
+            )
 
-        # stock_movement 기록
-        con.execute("""
-            INSERT INTO stock_movement
-                (lot_no, movement_type, qty_kg, from_location, to_location,
-                 source_type, actor, remarks, created_at)
-            VALUES (?, 'MOVE', 0, ?, ?, 'MANUAL', 'user', ?, ?)
-        """, (lot_no, from_loc or "", to_loc,
-              f"위치이동: {from_loc or '(없음)'} → {to_loc}", ts))
+            # stock_movement 기록
+            con.execute("""
+                INSERT INTO stock_movement
+                    (lot_no, movement_type, qty_kg, from_location, to_location,
+                     source_type, actor, remarks, created_at)
+                VALUES (?, 'MOVE', 0, ?, ?, 'MANUAL', 'user', ?, ?)
+            """, (lot_no, from_loc or "", to_loc,
+                  f"위치이동: {from_loc or '(없음)'} → {to_loc}", ts))
 
-        con.commit()
-        # v8.7.0: 이동 직후 from/to 셀 모두 비파괴 검증
-        _cell_warnings = []
-        try:
-            from engine_modules.warehouse_cell_logic import check_cell_invariants
-            for _loc in {from_loc, to_loc}:
-                if not _loc:
-                    continue
-                rep = check_cell_invariants(con, _loc)   # enforce는 전역 스위치 따름
-                if not rep['ok']:
-                    _cell_warnings.extend(rep['warnings'])
-        except Exception as _e:
-            logger.debug(f"[inventory-move] cell_invariants 건너뜀: {_e}")
-        con.close()
-        return ok_response(data={
-            "lot_no": lot_no,
-            "from_location": from_loc,
-            "to_location": to_loc,
-            "tonbags_updated": updated,
-            "cell_warnings": _cell_warnings,
-            "message": f"{lot_no} → {to_loc} 이동 완료 ({updated}개 톤백)",
-        })
+            con.commit()
+            # v8.7.0: 이동 직후 from/to 셀 모두 비파괴 검증
+            _cell_warnings = []
+            try:
+                from engine_modules.warehouse_cell_logic import check_cell_invariants
+                for _loc in {from_loc, to_loc}:
+                    if not _loc:
+                        continue
+                    rep = check_cell_invariants(con, _loc)   # enforce는 전역 스위치 따름
+                    if not rep['ok']:
+                        _cell_warnings.extend(rep['warnings'])
+            except Exception as _e:
+                logger.debug(f"[inventory-move] cell_invariants 건너뜀: {_e}")
+            return ok_response(data={
+                "lot_no": lot_no,
+                "from_location": from_loc,
+                "to_location": to_loc,
+                "tonbags_updated": updated,
+                "cell_warnings": _cell_warnings,
+                "message": f"{lot_no} → {to_loc} 이동 완료 ({updated}개 톤백)",
+            })
     except Exception as e:
         logger.error("inventory-move error: %s", e)
         return err_response(str(e))
@@ -137,51 +138,49 @@ def allocate_location(payload: dict):
         raise HTTPException(400, "lot_no, location 필수")
 
     try:
-        con = _db()
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with db_session(_db) as con:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        row = con.execute("SELECT id, location FROM inventory WHERE lot_no=?", (lot_no,)).fetchone()
-        if not row:
-            con.close()
-            return err_response(f"LOT '{lot_no}' 없음")
+            row = con.execute("SELECT id, location FROM inventory WHERE lot_no=?", (lot_no,)).fetchone()
+            if not row:
+                return err_response(f"LOT '{lot_no}' 없음")
 
-        old_loc = row["location"]
-        con.execute(
-            "UPDATE inventory SET location=?, updated_at=? WHERE id=?",
-            (location, ts, row["id"])
-        )
-        con.execute("""
-            UPDATE inventory_tonbag
-            SET location=?, location_updated_at=?, updated_at=?
-            WHERE inventory_id=? AND location IS NULL
-        """, (location, ts, ts, row["id"]))
+            old_loc = row["location"]
+            con.execute(
+                "UPDATE inventory SET location=?, updated_at=? WHERE id=?",
+                (location, ts, row["id"])
+            )
+            con.execute("""
+                UPDATE inventory_tonbag
+                SET location=?, location_updated_at=?, updated_at=?
+                WHERE inventory_id=? AND location IS NULL
+            """, (location, ts, ts, row["id"]))
 
-        # audit_log
-        con.execute("""
-            INSERT INTO audit_log (event_type, event_data, user_note, created_by, created_at)
-            VALUES ('LOCATION_ASSIGN', ?, ?, 'system', ?)
-        """, (
-            f'{{"lot_no":"{lot_no}","location":"{location}"}}',
-            f"위치배정: {old_loc or '없음'} → {location}", ts
-        ))
-        con.commit()
-        # v8.7.0: 위치 배정 직후 셀 무결성 비파괴 검증 (입고→첫 매핑 지점)
-        _cell_warnings = []
-        try:
-            from engine_modules.warehouse_cell_logic import check_cell_invariants
-            rep = check_cell_invariants(con, location)   # enforce는 전역 스위치 따름
-            if not rep['ok']:
-                _cell_warnings = rep['warnings']
-        except Exception as _e:
-            logger.debug(f"[allocate] cell_invariants 건너뜀: {_e}")
-        con.close()
-        return ok_response(data={
-            "lot_no": lot_no,
-            "old_location": old_loc,
-            "new_location": location,
-            "cell_warnings": _cell_warnings,
-            "message": f"{lot_no} → '{location}' 배정 완료",
-        })
+            # audit_log
+            con.execute("""
+                INSERT INTO audit_log (event_type, event_data, user_note, created_by, created_at)
+                VALUES ('LOCATION_ASSIGN', ?, ?, 'system', ?)
+            """, (
+                f'{{"lot_no":"{lot_no}","location":"{location}"}}',
+                f"위치배정: {old_loc or '없음'} → {location}", ts
+            ))
+            con.commit()
+            # v8.7.0: 위치 배정 직후 셀 무결성 비파괴 검증 (입고→첫 매핑 지점)
+            _cell_warnings = []
+            try:
+                from engine_modules.warehouse_cell_logic import check_cell_invariants
+                rep = check_cell_invariants(con, location)   # enforce는 전역 스위치 따름
+                if not rep['ok']:
+                    _cell_warnings = rep['warnings']
+            except Exception as _e:
+                logger.debug(f"[allocate] cell_invariants 건너뜀: {_e}")
+            return ok_response(data={
+                "lot_no": lot_no,
+                "old_location": old_loc,
+                "new_location": location,
+                "cell_warnings": _cell_warnings,
+                "message": f"{lot_no} → '{location}' 배정 완료",
+            })
     except Exception as e:
         logger.error("allocate error: %s", e)
         return err_response(str(e))
@@ -200,56 +199,52 @@ def outbound_confirm(payload: dict):
         raise HTTPException(400, "lot_no 필수")
 
     try:
-        con = _db()
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with db_session(_db) as con:   # 예외 시 rollback+close 보장(구 수동 rollback 대체)
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        row = con.execute(
-            "SELECT id, status, current_weight, product FROM inventory WHERE lot_no=?",
-            (lot_no,)
-        ).fetchone()
+            row = con.execute(
+                "SELECT id, status, current_weight, product FROM inventory WHERE lot_no=?",
+                (lot_no,)
+            ).fetchone()
 
-        if not row:
-            con.close()
-            return err_response(f"LOT '{lot_no}' 없음")
+            if not row:
+                return err_response(f"LOT '{lot_no}' 없음")
 
-        if row["status"] == "SOLD":
-            con.close()
-            return err_response(f"{lot_no} 이미 출고 완료 상태")
+            if row["status"] == "SOLD":
+                return err_response(f"{lot_no} 이미 출고 완료 상태")
 
-        if row["status"] not in ("PICKED", "RESERVED", "AVAILABLE"):
-            con.close()
-            return err_response(f"'{row['status']}' 상태는 출고 확정 불가")
+            if row["status"] not in ("PICKED", "RESERVED", "AVAILABLE"):
+                return err_response(f"'{row['status']}' 상태는 출고 확정 불가")
 
-        weight_kg = row["current_weight"] or 0
-        con.execute(
-            "UPDATE inventory SET status='SOLD', sold_to=?, current_weight=0, updated_at=? WHERE id=?",  # [fix B-3] current_weight 0 차감
-            (customer or row["sold_to"], ts, row["id"])
-        )
-        con.execute("""
-            UPDATE inventory_tonbag
-            SET status='SOLD', outbound_date=?, updated_at=?
-            WHERE inventory_id=? AND status != 'SOLD'
-        """, (ts[:10], ts, row["id"]))
+            weight_kg = row["current_weight"] or 0
+            con.execute(
+                "UPDATE inventory SET status='SOLD', sold_to=?, current_weight=0, updated_at=? WHERE id=?",  # [fix B-3] current_weight 0 차감
+                (customer or row["sold_to"], ts, row["id"])
+            )
+            con.execute("""
+                UPDATE inventory_tonbag
+                SET status='SOLD', outbound_date=?, updated_at=?
+                WHERE inventory_id=? AND status != 'SOLD'
+            """, (ts[:10], ts, row["id"]))
 
-        # stock_movement 기록
-        con.execute("""
-            INSERT INTO stock_movement
-                (lot_no, movement_type, qty_kg, customer,
-                 movement_date, source_type, actor, remarks, created_at)
-            VALUES (?, 'SOLD', ?, ?, ?, 'MANUAL', 'user', ?, ?)
-        """, (lot_no, weight_kg, customer, ts[:10],
-              f"출고확정: {customer or '고객미지정'}", ts))
+            # stock_movement 기록
+            con.execute("""
+                INSERT INTO stock_movement
+                    (lot_no, movement_type, qty_kg, customer,
+                     movement_date, source_type, actor, remarks, created_at)
+                VALUES (?, 'SOLD', ?, ?, ?, 'MANUAL', 'user', ?, ?)
+            """, (lot_no, weight_kg, customer, ts[:10],
+                  f"출고확정: {customer or '고객미지정'}", ts))
 
-        # audit_log
-        con.execute("""
-            INSERT INTO audit_log (event_type, event_data, user_note, created_by, created_at)
-            VALUES ('OUTBOUND_CONFIRM', ?, ?, 'system', ?)
-        """, (
-            f'{{"lot_no":"{lot_no}","weight_kg":{weight_kg},"customer":"{customer}"}}',
-            "출고 확정", ts
-        ))
-        con.commit()
-        con.close()
+            # audit_log
+            con.execute("""
+                INSERT INTO audit_log (event_type, event_data, user_note, created_by, created_at)
+                VALUES ('OUTBOUND_CONFIRM', ?, ?, 'system', ?)
+            """, (
+                f'{{"lot_no":"{lot_no}","weight_kg":{weight_kg},"customer":"{customer}"}}',
+                "출고 확정", ts
+            ))
+        # with 종료 → con commit+close 완료.
         # [감사 raw-SQL/(A)] 위 raw UPDATE 는 current_weight=0 만 하고 picked_weight 로
         #   옮기지 않아 무게가 사라졌다(initial≠current+picked). 상태 전이는 그대로 두고
         #   엔진 재계산으로 무게 불변식만 복구한다(SOLD 톤백 → picked 버킷).
@@ -263,9 +258,6 @@ def outbound_confirm(payload: dict):
             "message": f"{lot_no} 출고 확정 완료",
         })
     except Exception as e:
-        try: con.rollback()   # [fix B-3] 예외 시 명시적 롤백
-        except Exception as rb_err:
-            logger.error("rollback failed: %s", rb_err)  # HIGH: 빈 except 제거
         logger.error("outbound-confirm error: %s", e)
         return err_response(str(e))
 
