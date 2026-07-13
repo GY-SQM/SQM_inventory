@@ -644,6 +644,9 @@ def apply_approved_allocation():
 import sqlite3 as _sqlite3
 from fastapi import Body, Path as PathParam
 
+# [감사 M3] 오류 시에도 연결을 반드시 닫아 DB 락(잠김)을 방지하는 공용 컨텍스트 매니저.
+from backend.api.db_session import db_session
+
 def _alloc_db():
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(os.path.dirname(here))
@@ -723,23 +726,22 @@ def approve_allocation(data: dict = Body(...)):
     if not ids:
         raise HTTPException(400, "ids 필요")
     try:
-        con = _alloc_db()
-        updated = 0
-        for plan_id in ids:
-            cur = con.execute(
-                "UPDATE allocation_plan SET status='APPROVED', approved_at=datetime('now') WHERE id=?",
-                (plan_id,)
-            )
-            updated += cur.rowcount
-            try:
-                con.execute(
-                    "INSERT INTO allocation_approval (allocation_plan_id, status, actor, reason, created_at) VALUES (?,?,?,?,datetime('now'))",
-                    (plan_id, "APPROVED", actor, reason)
+        with db_session(_alloc_db) as con:
+            updated = 0
+            for plan_id in ids:
+                cur = con.execute(
+                    "UPDATE allocation_plan SET status='APPROVED', approved_at=datetime('now') WHERE id=?",
+                    (plan_id,)
                 )
-            except Exception as e:
-                logger.debug(f"allocation_approval insert skip: {e}")  # HIGH: 빈 except 제거
-        con.commit(); con.close()
-        return {"ok": True, "message": f"{updated}건 승인됨", "data": {"updated": updated}}
+                updated += cur.rowcount
+                try:
+                    con.execute(
+                        "INSERT INTO allocation_approval (allocation_plan_id, status, actor, reason, created_at) VALUES (?,?,?,?,datetime('now'))",
+                        (plan_id, "APPROVED", actor, reason)
+                    )
+                except Exception as e:
+                    logger.debug(f"allocation_approval insert skip: {e}")  # HIGH: 빈 except 제거
+            return {"ok": True, "message": f"{updated}건 승인됨", "data": {"updated": updated}}
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -752,23 +754,22 @@ def reject_allocation(data: dict = Body(...)):
     if not ids:
         raise HTTPException(400, "ids 필요")
     try:
-        con = _alloc_db()
-        updated = 0
-        for plan_id in ids:
-            cur = con.execute(
-                "UPDATE allocation_plan SET status='REJECTED', updated_at=datetime('now') WHERE id=?",  # [fix B-1] approve와 동일 컬럼(status) 사용
-                (plan_id,)
-            )
-            updated += cur.rowcount
-            try:
-                con.execute(
-                    "INSERT INTO allocation_approval (allocation_plan_id, status, actor, reason, created_at) VALUES (?,?,?,?,datetime('now'))",
-                    (plan_id, "REJECTED", actor, reason)
+        with db_session(_alloc_db) as con:
+            updated = 0
+            for plan_id in ids:
+                cur = con.execute(
+                    "UPDATE allocation_plan SET status='REJECTED', updated_at=datetime('now') WHERE id=?",  # [fix B-1] approve와 동일 컬럼(status) 사용
+                    (plan_id,)
                 )
-            except Exception:
-                pass
-        con.commit(); con.close()
-        return {"ok": True, "message": f"{updated}건 반려됨", "data": {"updated": updated}}
+                updated += cur.rowcount
+                try:
+                    con.execute(
+                        "INSERT INTO allocation_approval (allocation_plan_id, status, actor, reason, created_at) VALUES (?,?,?,?,datetime('now'))",
+                        (plan_id, "REJECTED", actor, reason)
+                    )
+                except Exception:
+                    pass
+            return {"ok": True, "message": f"{updated}건 반려됨", "data": {"updated": updated}}
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -781,26 +782,25 @@ def patch_allocation(lot_no: str = PathParam(...), data: dict = Body(...)):
     if not fields_to_update:
         raise HTTPException(400, f"허용된 편집 필드 없음. 허용: {sorted(ALLOC_EDITABLE_FIELDS)}")
     try:
-        con = _alloc_db()
-        plan_row = con.execute("SELECT id FROM allocation_plan WHERE lot_no=? LIMIT 1", (lot_no,)).fetchone()
-        updated = 0
-        if plan_row:
-            set_clauses = ", ".join(f"{f}=?" for f in fields_to_update)
-            vals = list(fields_to_update.values()) + [lot_no]
-            cur = con.execute(
-                f"UPDATE allocation_plan SET {set_clauses}, updated_at=datetime('now') WHERE lot_no=?", vals
-            )
-            updated += cur.rowcount
-        INV_FIELD_MAP = {"customer": "sold_to", "sale_ref": "sale_ref", "outbound_date": "ship_date", "remarks": "remarks"}
-        inv_fields = {INV_FIELD_MAP[f]: v for f, v in fields_to_update.items() if f in INV_FIELD_MAP}
-        if inv_fields:
-            set_clauses_inv = ", ".join(f"{f}=?" for f in inv_fields)
-            con.execute(
-                f"UPDATE inventory SET {set_clauses_inv}, updated_at=datetime('now') WHERE lot_no=?",
-                list(inv_fields.values()) + [lot_no]
-            )
-        con.commit(); con.close()
-        return {"ok": True, "data": {"lot_no": lot_no, "updated_fields": list(fields_to_update.keys()), "allocation_rows": updated}}
+        with db_session(_alloc_db) as con:
+            plan_row = con.execute("SELECT id FROM allocation_plan WHERE lot_no=? LIMIT 1", (lot_no,)).fetchone()
+            updated = 0
+            if plan_row:
+                set_clauses = ", ".join(f"{f}=?" for f in fields_to_update)
+                vals = list(fields_to_update.values()) + [lot_no]
+                cur = con.execute(
+                    f"UPDATE allocation_plan SET {set_clauses}, updated_at=datetime('now') WHERE lot_no=?", vals
+                )
+                updated += cur.rowcount
+            INV_FIELD_MAP = {"customer": "sold_to", "sale_ref": "sale_ref", "outbound_date": "ship_date", "remarks": "remarks"}
+            inv_fields = {INV_FIELD_MAP[f]: v for f, v in fields_to_update.items() if f in INV_FIELD_MAP}
+            if inv_fields:
+                set_clauses_inv = ", ".join(f"{f}=?" for f in inv_fields)
+                con.execute(
+                    f"UPDATE inventory SET {set_clauses_inv}, updated_at=datetime('now') WHERE lot_no=?",
+                    list(inv_fields.values()) + [lot_no]
+                )
+            return {"ok": True, "data": {"lot_no": lot_no, "updated_fields": list(fields_to_update.keys()), "allocation_rows": updated}}
     except HTTPException:
         raise
     except Exception as e:
@@ -821,35 +821,34 @@ def cancel_by_sale_ref(data: dict = Body(...)):
     if not sale_ref:
         raise HTTPException(400, "sale_ref 값이 필요합니다")
     try:
-        con = _alloc_db()
-        rows = con.execute(
-            "SELECT DISTINCT lot_no FROM allocation_plan WHERE sale_ref=? AND status NOT IN ('CANCELLED','SOLD')",
-            (sale_ref,)
-        ).fetchall()
-        if not rows:
-            con.close()
-            return {"ok": False, "message": f"SALE REF '{sale_ref}' 에 해당하는 배정이 없거나 이미 취소됨"}
+        with db_session(_alloc_db) as con:
+            rows = con.execute(
+                "SELECT DISTINCT lot_no FROM allocation_plan WHERE sale_ref=? AND status NOT IN ('CANCELLED','SOLD')",
+                (sale_ref,)
+            ).fetchall()
+            if not rows:
+                return {"ok": False, "message": f"SALE REF '{sale_ref}' 에 해당하는 배정이 없거나 이미 취소됨"}
 
-        lot_list = [r[0] for r in rows]
-        cur = con.execute(
-            "UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') "
-            "WHERE sale_ref=? AND status NOT IN ('CANCELLED','SOLD')",
-            (sale_ref,)
-        )
-        cancelled_plans = cur.rowcount
-        for lot_no in lot_list:
-            con.execute(
-                "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL "
-                "WHERE lot_no=? AND status NOT IN ('SOLD')",
-                (lot_no,)
+            lot_list = [r[0] for r in rows]
+            cur = con.execute(
+                "UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') "
+                "WHERE sale_ref=? AND status NOT IN ('CANCELLED','SOLD')",
+                (sale_ref,)
             )
-            # [fix B-2] inventory_tonbag 도 AVAILABLE 복구 (누락 수정)
-            con.execute(
-                "UPDATE inventory_tonbag SET status='AVAILABLE' "
-                "WHERE lot_no=? AND status IN ('RESERVED','PICKED','STAGED')",
-                (lot_no,)
-            )
-        con.commit(); con.close()
+            cancelled_plans = cur.rowcount
+            for lot_no in lot_list:
+                con.execute(
+                    "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL "
+                    "WHERE lot_no=? AND status NOT IN ('SOLD')",
+                    (lot_no,)
+                )
+                # [fix B-2] inventory_tonbag 도 AVAILABLE 복구 (누락 수정)
+                con.execute(
+                    "UPDATE inventory_tonbag SET status='AVAILABLE' "
+                    "WHERE lot_no=? AND status IN ('RESERVED','PICKED','STAGED')",
+                    (lot_no,)
+                )
+        # with 종료 → con commit+close 완료. 이제 엔진 재계산(별도 연결).
         # [감사 raw-SQL/(A)] AVAILABLE 원복 후 무게 버킷 재계산(picked→current 정합).
         from backend.api.lot_invariant import repair_weight_invariant
         repair_weight_invariant(*lot_list, reason="CANCEL_BY_SALE_REF")
@@ -877,29 +876,29 @@ def reset_all_allocations():
     inventory 상태를 AVAILABLE 로 원복. SOLD 는 보호.
     """
     try:
-        con = _alloc_db()
-        rows = con.execute(
-            "SELECT DISTINCT lot_no FROM allocation_plan WHERE status NOT IN ('CANCELLED','SOLD')"
-        ).fetchall()
-        lot_list = [r[0] for r in rows]
-        cur = con.execute(
-            "UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') "
-            "WHERE status NOT IN ('CANCELLED','SOLD')"
-        )
-        cancelled_plans = cur.rowcount
-        for lot_no in lot_list:
-            con.execute(
-                "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL "
-                "WHERE lot_no=? AND status NOT IN ('SOLD')",
-                (lot_no,)
+        with db_session(_alloc_db) as con:
+            rows = con.execute(
+                "SELECT DISTINCT lot_no FROM allocation_plan WHERE status NOT IN ('CANCELLED','SOLD')"
+            ).fetchall()
+            lot_list = [r[0] for r in rows]
+            cur = con.execute(
+                "UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') "
+                "WHERE status NOT IN ('CANCELLED','SOLD')"
             )
-            # F005 fix: tonbag 상태도 복구 (SOLD 제외)
-            con.execute(
-                "UPDATE inventory_tonbag SET status='AVAILABLE' "
-                "WHERE lot_no=? AND status NOT IN ('SOLD')",
-                (lot_no,)
-            )
-        con.commit(); con.close()
+            cancelled_plans = cur.rowcount
+            for lot_no in lot_list:
+                con.execute(
+                    "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL "
+                    "WHERE lot_no=? AND status NOT IN ('SOLD')",
+                    (lot_no,)
+                )
+                # F005 fix: tonbag 상태도 복구 (SOLD 제외)
+                con.execute(
+                    "UPDATE inventory_tonbag SET status='AVAILABLE' "
+                    "WHERE lot_no=? AND status NOT IN ('SOLD')",
+                    (lot_no,)
+                )
+        # with 종료 → con commit+close 완료.
         # [감사 raw-SQL/(A)] AVAILABLE 원복 후 무게 버킷 재계산.
         from backend.api.lot_invariant import repair_weight_invariant
         repair_weight_invariant(*lot_list, reason="RESET_ALL")
@@ -941,69 +940,68 @@ def revert_allocation_step(data: dict = Body(...)):
 
     src_status, dst_status = _REVERT_MAP[from_status]
     try:
-        con = _alloc_db()
-        if lot_nos:
-            placeholders = ",".join("?" * len(lot_nos))
-            rows = con.execute(
-                f"SELECT DISTINCT lot_no FROM allocation_plan "
-                f"WHERE status=? AND lot_no IN ({placeholders})",
-                [src_status] + lot_nos
-            ).fetchall()
-        else:
-            rows = con.execute(
-                "SELECT DISTINCT lot_no FROM allocation_plan WHERE status=?",
-                (src_status,)
-            ).fetchall()
+        with db_session(_alloc_db) as con:
+            if lot_nos:
+                placeholders = ",".join("?" * len(lot_nos))
+                rows = con.execute(
+                    f"SELECT DISTINCT lot_no FROM allocation_plan "
+                    f"WHERE status=? AND lot_no IN ({placeholders})",
+                    [src_status] + lot_nos
+                ).fetchall()
+            else:
+                rows = con.execute(
+                    "SELECT DISTINCT lot_no FROM allocation_plan WHERE status=?",
+                    (src_status,)
+                ).fetchall()
 
-        affected_lots = [r[0] for r in rows]
-        if not affected_lots:
-            con.close()
-            return {"ok": False, "message": f"{src_status} 상태인 배정 없음"}
+            affected_lots = [r[0] for r in rows]
+            if not affected_lots:
+                return {"ok": False, "message": f"{src_status} 상태인 배정 없음"}
 
-        if dst_status == "AVAILABLE":
-            cur = con.execute(
-                f"UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') "
-                f"WHERE status='{src_status}' AND lot_no IN ({','.join('?' * len(affected_lots))})",
-                affected_lots
-            )
-            for lot_no in affected_lots:
-                con.execute(
-                    "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL "
-                    "WHERE lot_no=? AND status=?", (lot_no, src_status)
+            if dst_status == "AVAILABLE":
+                cur = con.execute(
+                    f"UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') "
+                    f"WHERE status='{src_status}' AND lot_no IN ({','.join('?' * len(affected_lots))})",
+                    affected_lots
                 )
-                con.execute(
-                    "UPDATE inventory_tonbag SET status='AVAILABLE' "
-                    "WHERE lot_no=? AND status=?",
-                    (lot_no, src_status),
+                for lot_no in affected_lots:
+                    con.execute(
+                        "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL "
+                        "WHERE lot_no=? AND status=?", (lot_no, src_status)
+                    )
+                    con.execute(
+                        "UPDATE inventory_tonbag SET status='AVAILABLE' "
+                        "WHERE lot_no=? AND status=?",
+                        (lot_no, src_status),
+                    )
+            else:
+                # [감사 raw-SQL/(A)] allocation_plan 에 updated_at 컬럼이 없어 이 UPDATE 가
+                #   매번 'no such column: updated_at' 로 터졌다(PICKED→RESERVED / SOLD→PICKED
+                #   되돌리기가 실제로 동작한 적 없음). 존재하지 않는 컬럼 갱신을 제거.
+                cur = con.execute(
+                    f"UPDATE allocation_plan SET status=? "
+                    f"WHERE status=? AND lot_no IN ({','.join('?' * len(affected_lots))})",
+                    [dst_status, src_status] + affected_lots
                 )
-        else:
-            # [감사 raw-SQL/(A)] allocation_plan 에 updated_at 컬럼이 없어 이 UPDATE 가
-            #   매번 'no such column: updated_at' 로 터졌다(PICKED→RESERVED / SOLD→PICKED
-            #   되돌리기가 실제로 동작한 적 없음). 존재하지 않는 컬럼 갱신을 제거.
-            cur = con.execute(
-                f"UPDATE allocation_plan SET status=? "
-                f"WHERE status=? AND lot_no IN ({','.join('?' * len(affected_lots))})",
-                [dst_status, src_status] + affected_lots
-            )
-            for lot_no in affected_lots:
-                con.execute(
-                    "UPDATE inventory SET status=? WHERE lot_no=? AND status=?",
-                    (dst_status, lot_no, src_status)
-                )
-                con.execute(
-                    "UPDATE inventory_tonbag SET status=? WHERE lot_no=? AND status=?",
-                    (dst_status, lot_no, src_status),
-                )
-            # [감사 raw-SQL/(A)] SOLD→PICKED 되돌리기 시 판매기록(sold_table)이 남아
-            #   'inventory=PICKED 인데 판매목록엔 SOLD' 로 어긋나는 wedge 를 막는다.
-            #   되돌린 LOT 의 sold_table 행을 정리(상태 전이 결과는 그대로 PICKED).
-            if src_status == "SOLD":
-                con.execute(
-                    f"DELETE FROM sold_table WHERE lot_no IN ({','.join('?' * len(affected_lots))})",
-                    affected_lots,
-                )
-        changed = cur.rowcount
-        con.commit(); con.close()
+                for lot_no in affected_lots:
+                    con.execute(
+                        "UPDATE inventory SET status=? WHERE lot_no=? AND status=?",
+                        (dst_status, lot_no, src_status)
+                    )
+                    con.execute(
+                        "UPDATE inventory_tonbag SET status=? WHERE lot_no=? AND status=?",
+                        (dst_status, lot_no, src_status),
+                    )
+                # [감사 raw-SQL/(A)] SOLD→PICKED 되돌리기 시 판매기록(sold_table)이 남아
+                #   'inventory=PICKED 인데 판매목록엔 SOLD' 로 어긋나는 wedge 를 막는다.
+                #   되돌린 LOT 의 sold_table 행을 정리(상태 전이 결과는 그대로 PICKED).
+                if src_status == "SOLD":
+                    con.execute(
+                        f"DELETE FROM sold_table WHERE lot_no IN ({','.join('?' * len(affected_lots))})",
+                        affected_lots,
+                    )
+            changed = cur.rowcount
+        # with 종료 → con commit+close 완료.
         # [감사 raw-SQL/(A)] 상태 되돌린 뒤 무게 버킷(current/picked)을 톤백 실제상태에
         #   맞춰 재계산(예: PICKED→RESERVED 는 picked→current 로 이동해야 정합).
         from backend.api.lot_invariant import repair_weight_invariant
@@ -1583,15 +1581,14 @@ def update_allocation_by_lot(lot_no: str, updates: dict = Body(...)):
     sets = ", ".join(f"{k}=?" for k in fields)
     values = list(fields.values()) + [lot_no]
     try:
-        con = _alloc_db()
-        cur = con.execute(
-            f"UPDATE allocation_plan SET {sets}, created_at=datetime('now') WHERE lot_no=?",
-            values
-        )
-        if cur.rowcount == 0:
-            con.close(); raise HTTPException(404, f"{lot_no} 찾지 못함")
-        con.commit(); con.close()
-        return {"ok": True, "data": {"lot_no": lot_no, "updated_fields": list(fields)}}
+        with db_session(_alloc_db) as con:
+            cur = con.execute(
+                f"UPDATE allocation_plan SET {sets}, created_at=datetime('now') WHERE lot_no=?",
+                values
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(404, f"{lot_no} 찾지 못함")
+            return {"ok": True, "data": {"lot_no": lot_no, "updated_fields": list(fields)}}
     except HTTPException: raise
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -1600,13 +1597,13 @@ def update_allocation_by_lot(lot_no: str, updates: dict = Body(...)):
 @router.post("/{lot_no}/pick", summary="📦 배정 → PICKED 전환")
 def pick_allocation_by_lot(lot_no: str):
     try:
-        con = _alloc_db()
-        cur = con.execute(
-            "UPDATE allocation_plan SET status='PICKED', executed_at=datetime('now') WHERE lot_no=? AND status='RESERVED'",
-            (lot_no,)
-        )
-        con.commit(); con.close()
-        if cur.rowcount == 0:
+        with db_session(_alloc_db) as con:
+            cur = con.execute(
+                "UPDATE allocation_plan SET status='PICKED', executed_at=datetime('now') WHERE lot_no=? AND status='RESERVED'",
+                (lot_no,)
+            )
+            rowcount = cur.rowcount
+        if rowcount == 0:
             raise HTTPException(404, f"{lot_no}: RESERVED 상태가 아니거나 존재하지 않음")
         return {"ok": True, "lot_no": lot_no, "message": f"{lot_no} → PICKED"}
     except HTTPException: raise
@@ -1645,24 +1642,24 @@ def confirm_allocation_by_lot(lot_no: str):
 @router.post("/{lot_no}/reset", summary="🧹 LOT 배정 완전 초기화")
 def reset_allocation_by_lot(lot_no: str):
     try:
-        con = _alloc_db()
-        row = con.execute("SELECT status FROM inventory WHERE lot_no=?", (lot_no,)).fetchone()
-        if row and row[0] == "SOLD":
-            raise HTTPException(409, f"{lot_no}: SOLD 상태는 reset 불가")
-        del_cur = con.execute("DELETE FROM allocation_plan WHERE lot_no=?", (lot_no,))
-        con.execute(
-            "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL WHERE lot_no=? AND status!='SOLD'",
-            (lot_no,)
-        )
-        # [감사 raw-SQL/(A)] '완전 초기화'인데 inventory_tonbag 은 그대로 둬서
-        #   inventory=AVAILABLE 인데 톤백은 RESERVED/PICKED 로 남는 wedge 발생 → 톤백도
-        #   함께 AVAILABLE 원복(SOLD 제외)해 초기화 의도를 완성.
-        con.execute(
-            "UPDATE inventory_tonbag SET status='AVAILABLE' WHERE lot_no=? AND status NOT IN ('SOLD')",
-            (lot_no,)
-        )
-        deleted = del_cur.rowcount
-        con.commit(); con.close()
+        with db_session(_alloc_db) as con:
+            row = con.execute("SELECT status FROM inventory WHERE lot_no=?", (lot_no,)).fetchone()
+            if row and row[0] == "SOLD":
+                raise HTTPException(409, f"{lot_no}: SOLD 상태는 reset 불가")
+            del_cur = con.execute("DELETE FROM allocation_plan WHERE lot_no=?", (lot_no,))
+            con.execute(
+                "UPDATE inventory SET status='AVAILABLE', sold_to=NULL, sale_ref=NULL WHERE lot_no=? AND status!='SOLD'",
+                (lot_no,)
+            )
+            # [감사 raw-SQL/(A)] '완전 초기화'인데 inventory_tonbag 은 그대로 둬서
+            #   inventory=AVAILABLE 인데 톤백은 RESERVED/PICKED 로 남는 wedge 발생 → 톤백도
+            #   함께 AVAILABLE 원복(SOLD 제외)해 초기화 의도를 완성.
+            con.execute(
+                "UPDATE inventory_tonbag SET status='AVAILABLE' WHERE lot_no=? AND status NOT IN ('SOLD')",
+                (lot_no,)
+            )
+            deleted = del_cur.rowcount
+        # with 종료 → con commit+close 완료.
         # [감사 raw-SQL/(A)] 무게 버킷 재계산으로 정합 복구.
         from backend.api.lot_invariant import repair_weight_invariant
         repair_weight_invariant(lot_no, reason="RESET_ALLOCATION_BY_LOT")
