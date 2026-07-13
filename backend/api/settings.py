@@ -15,6 +15,9 @@ from fastapi import APIRouter, HTTPException, Body, Request
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
+# [감사 M3] 오류 시에도 연결을 반드시 닫아 DB 락을 방지하는 공용 컨텍스트 매니저.
+from backend.api.db_session import db_session
+
 
 def _db():
     here = os.path.dirname(os.path.abspath(__file__))
@@ -216,15 +219,14 @@ def create_carrier_rule(payload: Dict[str, Any] = Body(...)):
         "is_active":    1 if payload.get("is_active", True) else 0,
     }
     try:
-        con = _db()
-        cur = con.execute(
-            "INSERT INTO carrier_rules (carrier_id, doc_type, rule_name, pattern, description, sample_value, is_active) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            list(fields.values()),
-        )
-        new_id = cur.lastrowid
-        con.commit(); con.close()
-        return {"ok": True, "data": {**fields, "id": new_id}, "message": "규칙 생성됨"}
+        with db_session(_db) as con:
+            cur = con.execute(
+                "INSERT INTO carrier_rules (carrier_id, doc_type, rule_name, pattern, description, sample_value, is_active) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                list(fields.values()),
+            )
+            new_id = cur.lastrowid
+            return {"ok": True, "data": {**fields, "id": new_id}, "message": "규칙 생성됨"}
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -244,16 +246,14 @@ def update_carrier_rule(rule_id: int, updates: Dict[str, Any] = Body(...)):
     sets = ", ".join(f"{k}=?" for k in fields.keys())
     values = list(fields.values()) + [rule_id]
     try:
-        con = _db()
-        cur = con.execute(
-            f"UPDATE carrier_rules SET {sets}, updated_at=datetime('now') WHERE id=?",
-            values,
-        )
-        if cur.rowcount == 0:
-            con.close()
-            raise HTTPException(404, f"rule {rule_id} 없음")
-        con.commit(); con.close()
-        return {"ok": True, "data": {"id": rule_id, "updated": list(fields.keys())}}
+        with db_session(_db) as con:
+            cur = con.execute(
+                f"UPDATE carrier_rules SET {sets}, updated_at=datetime('now') WHERE id=?",
+                values,
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(404, f"rule {rule_id} 없음")
+            return {"ok": True, "data": {"id": rule_id, "updated": list(fields.keys())}}
     except HTTPException:
         raise
     except Exception as e:
@@ -263,13 +263,11 @@ def update_carrier_rule(rule_id: int, updates: Dict[str, Any] = Body(...)):
 @router.delete("/carrier-rules/{rule_id}", summary="🚢 선사 규칙 삭제 [Sprint 2-B]")
 def delete_carrier_rule(rule_id: int):
     try:
-        con = _db()
-        cur = con.execute("DELETE FROM carrier_rules WHERE id=?", (rule_id,))
-        if cur.rowcount == 0:
-            con.close()
-            raise HTTPException(404, f"rule {rule_id} 없음")
-        con.commit(); con.close()
-        return {"ok": True, "message": f"rule {rule_id} 삭제됨"}
+        with db_session(_db) as con:
+            cur = con.execute("DELETE FROM carrier_rules WHERE id=?", (rule_id,))
+            if cur.rowcount == 0:
+                raise HTTPException(404, f"rule {rule_id} 없음")
+            return {"ok": True, "message": f"rule {rule_id} 삭제됨"}
     except HTTPException:
         raise
     except Exception as e:
@@ -560,13 +558,12 @@ def delete_selected_tables(data: Dict[str, Any] = Body(...)):
     if not tables:
         raise HTTPException(400, "삭제할 테이블이 없거나 허용되지 않는 테이블입니다")
     try:
-        con = _db()
-        deleted = {}
-        for tbl in tables:
-            cur = con.execute(f"DELETE FROM {tbl}")
-            deleted[tbl] = cur.rowcount
-        con.commit(); con.close()
-        total = sum(deleted.values())
-        return {"ok": True, "message": f"{len(tables)}개 테이블 {total}행 삭제됨", "data": deleted}
+        with db_session(_db) as con:
+            deleted = {}
+            for tbl in tables:
+                cur = con.execute(f"DELETE FROM {tbl}")
+                deleted[tbl] = cur.rowcount
+            total = sum(deleted.values())
+            return {"ok": True, "message": f"{len(tables)}개 테이블 {total}행 삭제됨", "data": deleted}
     except Exception as e:
         raise HTTPException(500, str(e))

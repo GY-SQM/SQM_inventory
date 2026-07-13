@@ -1849,6 +1849,10 @@ def _open_db():
     return con
 
 
+# [감사 M3] 오류 시에도 연결을 반드시 닫아 DB 락을 방지하는 공용 컨텍스트 매니저.
+from backend.api.db_session import db_session
+
+
 def _ensure_inbound_template_columns(con):
     """Backward-compatible schema patch for legacy DBs.
 
@@ -1966,26 +1970,24 @@ def _merge_hints(layer2_hint: str, layer1_hint: str) -> str:
 @router.post("/templates", summary="📋 입고 템플릿 신규 생성")
 def create_template(req: TemplateUpsertRequest):
     try:
-        con = _open_db()
-        _ensure_inbound_template_columns(con)
-        tid = _tpl_new_id()
-        # Layer 1↔2 bridge: carrier_id로 Python 템플릿 hint 자동 보강
-        l1_hint_bl = _get_layer1_gemini_hint(req.carrier_id or "", "BL")
-        merged_hint_bl = _merge_hints(req.gemini_hint_bl or "", l1_hint_bl) if hasattr(req, "gemini_hint_bl") else l1_hint_bl
-        con.execute(
-            "INSERT INTO inbound_template "
-            "(template_id, template_name, carrier_id, bag_weight_kg, packing_type, "
-            "product_hint, bl_format, note, gemini_hint_packing, gemini_hint_bl, is_active, "
-            "lot_sqm, mxbg_pallet, sap_no) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?)",
-            (tid, req.template_name, req.carrier_id, req.bag_weight_kg,
-             _normalize_packing_type(req.packing_type, req.bag_weight_kg),
-             req.product_hint, req.bl_format, req.note, req.gemini_hint_packing,
-             merged_hint_bl,
-             req.lot_sqm, req.mxbg_pallet, req.sap_no)
-        )
-        con.commit()
-        con.close()
+        with db_session(_open_db) as con:
+            _ensure_inbound_template_columns(con)
+            tid = _tpl_new_id()
+            # Layer 1↔2 bridge: carrier_id로 Python 템플릿 hint 자동 보강
+            l1_hint_bl = _get_layer1_gemini_hint(req.carrier_id or "", "BL")
+            merged_hint_bl = _merge_hints(req.gemini_hint_bl or "", l1_hint_bl) if hasattr(req, "gemini_hint_bl") else l1_hint_bl
+            con.execute(
+                "INSERT INTO inbound_template "
+                "(template_id, template_name, carrier_id, bag_weight_kg, packing_type, "
+                "product_hint, bl_format, note, gemini_hint_packing, gemini_hint_bl, is_active, "
+                "lot_sqm, mxbg_pallet, sap_no) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,?)",
+                (tid, req.template_name, req.carrier_id, req.bag_weight_kg,
+                 _normalize_packing_type(req.packing_type, req.bag_weight_kg),
+                 req.product_hint, req.bl_format, req.note, req.gemini_hint_packing,
+                 merged_hint_bl,
+                 req.lot_sqm, req.mxbg_pallet, req.sap_no)
+            )
         logger.info(f"[templates] 신규 생성: {tid} / {req.template_name}")
         return {"ok": True, "template_id": tid, "message": f"템플릿 생성 완료: {req.template_name}"}
     except Exception as e:
@@ -1996,25 +1998,24 @@ def create_template(req: TemplateUpsertRequest):
 @router.put("/templates/{tid}", summary="📋 입고 템플릿 수정")
 def update_template(tid: str, req: TemplateUpsertRequest):
     try:
-        con = _open_db()
-        _ensure_inbound_template_columns(con)
-        cur = con.execute(
-            "UPDATE inbound_template SET "
-            "template_name=?, carrier_id=?, bag_weight_kg=?, packing_type=?, "
-            "product_hint=?, bl_format=?, note=?, gemini_hint_packing=?, "
-            "lot_sqm=?, mxbg_pallet=?, sap_no=? "
-            "WHERE template_id=?",
-            (req.template_name, req.carrier_id, req.bag_weight_kg,
-             _normalize_packing_type(req.packing_type, req.bag_weight_kg),
-             req.product_hint, req.bl_format, req.note, req.gemini_hint_packing,
-             req.lot_sqm, req.mxbg_pallet, req.sap_no, tid)
-        )
-        con.commit()
-        con.close()
-        if cur.rowcount == 0:
+        with db_session(_open_db) as con:
+            _ensure_inbound_template_columns(con)
+            cur = con.execute(
+                "UPDATE inbound_template SET "
+                "template_name=?, carrier_id=?, bag_weight_kg=?, packing_type=?, "
+                "product_hint=?, bl_format=?, note=?, gemini_hint_packing=?, "
+                "lot_sqm=?, mxbg_pallet=?, sap_no=? "
+                "WHERE template_id=?",
+                (req.template_name, req.carrier_id, req.bag_weight_kg,
+                 _normalize_packing_type(req.packing_type, req.bag_weight_kg),
+                 req.product_hint, req.bl_format, req.note, req.gemini_hint_packing,
+                 req.lot_sqm, req.mxbg_pallet, req.sap_no, tid)
+            )
+            rowcount = cur.rowcount
+        if rowcount == 0:
             raise HTTPException(404, f"템플릿 ID 없음: {tid}")
         logger.info(f"[templates] 수정: {tid}")
-        return {"ok": True, "updated": cur.rowcount}
+        return {"ok": True, "updated": rowcount}
     except HTTPException:
         raise
     except Exception as e:
@@ -2024,15 +2025,14 @@ def update_template(tid: str, req: TemplateUpsertRequest):
 @router.delete("/templates/{tid}", summary="📋 입고 템플릿 삭제")
 def delete_template(tid: str):
     try:
-        con = _open_db()
-        _ensure_inbound_template_columns(con)
-        # 실제 삭제 대신 is_active=0 (soft delete)
-        cur = con.execute(
-            "UPDATE inbound_template SET is_active=0 WHERE template_id=?", (tid,)
-        )
-        con.commit()
-        con.close()
-        if cur.rowcount == 0:
+        with db_session(_open_db) as con:
+            _ensure_inbound_template_columns(con)
+            # 실제 삭제 대신 is_active=0 (soft delete)
+            cur = con.execute(
+                "UPDATE inbound_template SET is_active=0 WHERE template_id=?", (tid,)
+            )
+            rowcount = cur.rowcount
+        if rowcount == 0:
             raise HTTPException(404, f"템플릿 ID 없음: {tid}")
         return {"ok": True, "deleted": tid}
     except HTTPException:
@@ -2625,40 +2625,36 @@ def confirm_inbound(lot_no: str, payload: dict = {}):
     if inbound_type not in ("DIRECT", "BOND"):
         raise HTTPException(400, "inbound_type 은 'DIRECT' 또는 'BOND' 만 허용")
     try:
-        db = _open_db()
-        row = db.execute(
-            "SELECT id, status FROM inventory WHERE lot_no=?", (lot_no,)
-        ).fetchone()
-        if not row:
-            db.close()
-            raise HTTPException(404, f"{lot_no} 없음")
-        if dict(row)["status"] != "PENDING":
-            db.close()
-            raise HTTPException(
-                400, f"{lot_no}: PENDING 상태가 아님 (현재: {dict(row)['status']})"
-            )
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # inbound_type 컬럼 존재 여부 체크
-        inv_cols = {r[1].lower() for r in db.execute("PRAGMA table_info(inventory)").fetchall()}
-        if "inbound_type" in inv_cols:
+        with db_session(_open_db) as db:
+            row = db.execute(
+                "SELECT id, status FROM inventory WHERE lot_no=?", (lot_no,)
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, f"{lot_no} 없음")
+            if dict(row)["status"] != "PENDING":
+                raise HTTPException(
+                    400, f"{lot_no}: PENDING 상태가 아님 (현재: {dict(row)['status']})"
+                )
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # inbound_type 컬럼 존재 여부 체크
+            inv_cols = {r[1].lower() for r in db.execute("PRAGMA table_info(inventory)").fetchall()}
+            if "inbound_type" in inv_cols:
+                db.execute("""
+                    UPDATE inventory
+                    SET status='AVAILABLE', inbound_date=?, inbound_type=?, updated_at=?
+                    WHERE lot_no=? AND status='PENDING'
+                """, (inbound_date, inbound_type, ts, lot_no))
+            else:
+                db.execute("""
+                    UPDATE inventory
+                    SET status='AVAILABLE', inbound_date=?, updated_at=?
+                    WHERE lot_no=? AND status='PENDING'
+                """, (inbound_date, ts, lot_no))
             db.execute("""
-                UPDATE inventory
-                SET status='AVAILABLE', inbound_date=?, inbound_type=?, updated_at=?
+                UPDATE inventory_tonbag
+                SET status='AVAILABLE', updated_at=?
                 WHERE lot_no=? AND status='PENDING'
-            """, (inbound_date, inbound_type, ts, lot_no))
-        else:
-            db.execute("""
-                UPDATE inventory
-                SET status='AVAILABLE', inbound_date=?, updated_at=?
-                WHERE lot_no=? AND status='PENDING'
-            """, (inbound_date, ts, lot_no))
-        db.execute("""
-            UPDATE inventory_tonbag
-            SET status='AVAILABLE', updated_at=?
-            WHERE lot_no=? AND status='PENDING'
-        """, (ts, lot_no))
-        db.commit()
-        db.close()
+            """, (ts, lot_no))
         logger.info(f"[confirm-inbound] {lot_no} → AVAILABLE (type={inbound_type}, date={inbound_date})")
         return {
             "success": True,
@@ -2687,23 +2683,19 @@ def set_pending_inbound_date(lot_no: str, payload: dict = {}):
         if date_val:
             # 날짜 형식 검증
             datetime.strptime(date_val, "%Y-%m-%d")
-        db = _open_db()
-        row = db.execute(
-            "SELECT status FROM inventory WHERE lot_no=?", (lot_no,)
-        ).fetchone()
-        if not row:
-            db.close()
-            raise HTTPException(404, f"{lot_no} 없음")
-        if dict(row)["status"] != "PENDING":
-            db.close()
-            raise HTTPException(400, f"{lot_no}: PENDING 상태가 아님")
-        ts_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        db.execute(
-            "UPDATE inventory SET inbound_date=?, updated_at=? WHERE lot_no=? AND status='PENDING'",
-            (date_val, ts_now, lot_no)
-        )
-        db.commit()
-        db.close()
+        with db_session(_open_db) as db:
+            row = db.execute(
+                "SELECT status FROM inventory WHERE lot_no=?", (lot_no,)
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, f"{lot_no} 없음")
+            if dict(row)["status"] != "PENDING":
+                raise HTTPException(400, f"{lot_no}: PENDING 상태가 아님")
+            ts_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            db.execute(
+                "UPDATE inventory SET inbound_date=?, updated_at=? WHERE lot_no=? AND status='PENDING'",
+                (date_val, ts_now, lot_no)
+            )
         logger.info(f"[pending-inbound-date] {lot_no} inbound_date={date_val}")
         return {"success": True, "lot_no": lot_no, "inbound_date": date_val}
     except HTTPException:
@@ -2723,38 +2715,33 @@ def revert_to_pending(lot_no: str):
     안전체크: RESERVED/PICKED/SOLD 톤백이 없어야 취소 가능.
     """
     try:
-        db = _open_db()
-        row = db.execute(
-            "SELECT id, status FROM inventory WHERE lot_no=?", (lot_no,)
-        ).fetchone()
-        if not row:
-            db.close()
-            raise HTTPException(404, f"{lot_no} 없음")
-        if dict(row)["status"] != "AVAILABLE":
-            db.close()
-            raise HTTPException(
-                400, f"{lot_no}: AVAILABLE 상태가 아님 (현재: {dict(row)['status']})"
+        with db_session(_open_db) as db:
+            row = db.execute(
+                "SELECT id, status FROM inventory WHERE lot_no=?", (lot_no,)
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, f"{lot_no} 없음")
+            if dict(row)["status"] != "AVAILABLE":
+                raise HTTPException(
+                    400, f"{lot_no}: AVAILABLE 상태가 아님 (현재: {dict(row)['status']})"
+                )
+            blocked = db.execute(
+                "SELECT COUNT(*) FROM inventory_tonbag WHERE lot_no=? AND status IN ('RESERVED','PICKED','SOLD')",
+                (lot_no,)
+            ).fetchone()[0]
+            if blocked:
+                raise HTTPException(
+                    400, f"{lot_no}: RESERVED/PICKED/SOLD 톤백 {blocked}개 존재 — 취소 불가"
+                )
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            db.execute(
+                "UPDATE inventory SET status='PENDING', inbound_date=NULL, updated_at=? WHERE lot_no=? AND status='AVAILABLE'",
+                (ts, lot_no)
             )
-        blocked = db.execute(
-            "SELECT COUNT(*) FROM inventory_tonbag WHERE lot_no=? AND status IN ('RESERVED','PICKED','SOLD')",
-            (lot_no,)
-        ).fetchone()[0]
-        if blocked:
-            db.close()
-            raise HTTPException(
-                400, f"{lot_no}: RESERVED/PICKED/SOLD 톤백 {blocked}개 존재 — 취소 불가"
+            db.execute(
+                "UPDATE inventory_tonbag SET status='PENDING', updated_at=? WHERE lot_no=? AND status='AVAILABLE'",
+                (ts, lot_no)
             )
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        db.execute(
-            "UPDATE inventory SET status='PENDING', inbound_date=NULL, updated_at=? WHERE lot_no=? AND status='AVAILABLE'",
-            (ts, lot_no)
-        )
-        db.execute(
-            "UPDATE inventory_tonbag SET status='PENDING', updated_at=? WHERE lot_no=? AND status='AVAILABLE'",
-            (ts, lot_no)
-        )
-        db.commit()
-        db.close()
         logger.info(f"[revert-pending] {lot_no} AVAILABLE → PENDING")
         return {
             "success": True,
