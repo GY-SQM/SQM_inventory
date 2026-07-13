@@ -18,6 +18,9 @@ from backend.common.excel_alignment import safe_apply_sqm_workbook
 router = APIRouter(prefix="/api/action3", tags=["actions3"])
 logger = logging.getLogger(__name__)
 
+# [감사 M3] 오류 시에도 연결을 반드시 닫아 DB 락을 방지하는 공용 컨텍스트 매니저.
+from backend.api.db_session import db_session
+
 
 # ── 공통 헬퍼 ────────────────────────────────────────────────────
 def _db_path() -> str:
@@ -90,31 +93,27 @@ def cleanup_logs(payload: dict = None):
         return err_response("최소 30일 이상만 정리 가능합니다")
 
     try:
-        con = _db()
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with db_session(_db) as con:
+            # audit_log 정리
+            audit_del = con.execute("""
+                DELETE FROM audit_log
+                WHERE julianday('now') - julianday(created_at) > ?
+            """, (days,)).rowcount
 
-        # audit_log 정리
-        audit_del = con.execute("""
-            DELETE FROM audit_log
-            WHERE julianday('now') - julianday(created_at) > ?
-        """, (days,)).rowcount
+            # stock_movement 정리 (참고용 이동 이력만 — INBOUND/OUTBOUND는 보존)
+            move_del = con.execute("""
+                DELETE FROM stock_movement
+                WHERE movement_type NOT IN ('INBOUND')
+                  AND julianday('now') - julianday(created_at) > ?
+            """, (days,)).rowcount
 
-        # stock_movement 정리 (참고용 이동 이력만 — INBOUND/OUTBOUND는 보존)
-        move_del = con.execute("""
-            DELETE FROM stock_movement
-            WHERE movement_type NOT IN ('INBOUND')
-              AND julianday('now') - julianday(created_at) > ?
-        """, (days,)).rowcount
-
-        con.commit()
-        con.close()
-        return ok_response(data={
-            "days_threshold": days,
-            "audit_log_deleted": audit_del,
-            "stock_movement_deleted": move_del,
-            "total_deleted": audit_del + move_del,
-            "message": f"{days}일 이전 로그 {audit_del + move_del}건 정리 완료",
-        })
+            return ok_response(data={
+                "days_threshold": days,
+                "audit_log_deleted": audit_del,
+                "stock_movement_deleted": move_del,
+                "total_deleted": audit_del + move_del,
+                "message": f"{days}일 이전 로그 {audit_del + move_del}건 정리 완료",
+            })
     except Exception as e:
         logger.error("cleanup-logs error: %s", e)
         return err_response(str(e))
@@ -142,26 +141,23 @@ def do_update(payload: dict):
         return err_response(f"'{field}' 필드는 수정 불가. 허용: {sorted(ALLOWED_FIELDS)}")
 
     try:
-        con = _db()
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with db_session(_db) as con:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        row = con.execute("SELECT id FROM document_do WHERE lot_no=?", (lot_no,)).fetchone()
-        if not row:
-            con.close()
-            return err_response(f"D/O LOT '{lot_no}' 없음")
+            row = con.execute("SELECT id FROM document_do WHERE lot_no=?", (lot_no,)).fetchone()
+            if not row:
+                return err_response(f"D/O LOT '{lot_no}' 없음")
 
-        con.execute(
-            f"UPDATE document_do SET {field}=?, parsed_at=? WHERE lot_no=?",
-            (value, ts, lot_no)
-        )
-        con.commit()
-        con.close()
-        return ok_response(data={
-            "lot_no": lot_no,
-            "field": field,
-            "value": value,
-            "message": f"{lot_no} D/O {field} 업데이트 완료",
-        })
+            con.execute(
+                f"UPDATE document_do SET {field}=?, parsed_at=? WHERE lot_no=?",
+                (value, ts, lot_no)
+            )
+            return ok_response(data={
+                "lot_no": lot_no,
+                "field": field,
+                "value": value,
+                "message": f"{lot_no} D/O {field} 업데이트 완료",
+            })
     except Exception as e:
         logger.error("do-update error: %s", e)
         return err_response(str(e))
@@ -183,61 +179,59 @@ def return_create(payload: dict):
         raise HTTPException(400, "lot_no 필수")
 
     try:
-        con = _db()
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        today = ts[:10]
+        with db_session(_db) as con:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            today = ts[:10]
 
-        # inventory 확인
-        row = con.execute("SELECT id, status, current_weight FROM inventory WHERE lot_no=?", (lot_no,)).fetchone()
-        if not row:
-            con.close()
-            return err_response(f"LOT '{lot_no}' 없음")
+            # inventory 확인
+            row = con.execute("SELECT id, status, current_weight FROM inventory WHERE lot_no=?", (lot_no,)).fetchone()
+            if not row:
+                return err_response(f"LOT '{lot_no}' 없음")
 
-        # 실제 재고 상태 반영 — 이력만 쌓이고 Return 탭에 보이지 않는 상태를 방지 (HIGH: 상태 검증)
-        con.execute(
-            "UPDATE inventory SET status='RETURN', updated_at=? WHERE lot_no=? AND status IN ('PICKED','AVAILABLE')",
-            (ts, lot_no),
-        )
-        if tonbag_uid:
+            # 실제 재고 상태 반영 — 이력만 쌓이고 Return 탭에 보이지 않는 상태를 방지 (HIGH: 상태 검증)
             con.execute(
-                "UPDATE inventory_tonbag SET status='RETURN', updated_at=? "
-                "WHERE lot_no=? AND (tonbag_uid=? OR CAST(sub_lt AS TEXT)=?)",
-                (ts, lot_no, tonbag_uid, tonbag_uid),
-            )
-        else:
-            con.execute(
-                "UPDATE inventory_tonbag SET status='RETURN', updated_at=? WHERE lot_no=?",
+                "UPDATE inventory SET status='RETURN', updated_at=? WHERE lot_no=? AND status IN ('PICKED','AVAILABLE')",
                 (ts, lot_no),
             )
+            if tonbag_uid:
+                con.execute(
+                    "UPDATE inventory_tonbag SET status='RETURN', updated_at=? "
+                    "WHERE lot_no=? AND (tonbag_uid=? OR CAST(sub_lt AS TEXT)=?)",
+                    (ts, lot_no, tonbag_uid, tonbag_uid),
+                )
+            else:
+                con.execute(
+                    "UPDATE inventory_tonbag SET status='RETURN', updated_at=? WHERE lot_no=?",
+                    (ts, lot_no),
+                )
 
-        # return_history INSERT
-        con.execute("""
-            INSERT INTO return_history
-                (lot_no, sub_lt, reason, weight_kg, return_date,
-                 remark, created_at)
-            VALUES (?, ?, ?, ?, ?, 'RETURN', ?)
-        """, (lot_no, tonbag_uid, reason, weight_kg, today, ts))
+            # return_history INSERT
+            con.execute("""
+                INSERT INTO return_history
+                    (lot_no, sub_lt, reason, weight_kg, return_date,
+                     remark, created_at)
+                VALUES (?, ?, ?, ?, ?, 'RETURN', ?)
+            """, (lot_no, tonbag_uid, reason, weight_kg, today, ts))
 
-        # stock_movement 기록
-        con.execute("""
-            INSERT INTO stock_movement
-                (lot_no, movement_type, qty_kg, source_type,
-                 actor, remarks, created_at)
-            VALUES (?, 'RETURN', ?, 'MANUAL', 'user', ?, ?)
-        """, (lot_no, weight_kg, f"반품: {reason}", ts))
+            # stock_movement 기록
+            con.execute("""
+                INSERT INTO stock_movement
+                    (lot_no, movement_type, qty_kg, source_type,
+                     actor, remarks, created_at)
+                VALUES (?, 'RETURN', ?, 'MANUAL', 'user', ?, ?)
+            """, (lot_no, weight_kg, f"반품: {reason}", ts))
 
-        # audit_log
-        con.execute("""
-            INSERT INTO audit_log
-                (event_type, event_data, user_note, created_by, created_at)
-            VALUES ('RETURN_CREATE', ?, ?, 'system', ?)
-        """, (
-            f'{{"lot_no":"{lot_no}","reason":"{reason}","weight_kg":{weight_kg}}}',
-            reason, ts
-        ))
+            # audit_log
+            con.execute("""
+                INSERT INTO audit_log
+                    (event_type, event_data, user_note, created_by, created_at)
+                VALUES ('RETURN_CREATE', ?, ?, 'system', ?)
+            """, (
+                f'{{"lot_no":"{lot_no}","reason":"{reason}","weight_kg":{weight_kg}}}',
+                reason, ts
+            ))
 
-        con.commit()
-        con.close()
+        # with 종료 → con commit+close 완료.
         # [감사 raw-SQL/(A)] RETURN 전환 후 무게 재계산 누락 → 불변식 복구.
         #   (RETURN 톤백은 엔진 재계산에서 current 버킷에 포함되어 정합 유지)
         from backend.api.lot_invariant import repair_weight_invariant
@@ -367,26 +361,24 @@ def db_reset(body: dict = Body(default={})):
             shutil.copy2(db_file, os.path.join(backup_dir, backup_name))
 
         # 모든 사용자 테이블 데이터 삭제
-        con = _db()
-        tables = [r[0] for r in con.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-        ).fetchall()]
+        with db_session(_db) as con:
+            tables = [r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()]
 
-        deleted = {}
-        for tbl in tables:
-            count = con.execute(f"SELECT COUNT(*) FROM [{tbl}]").fetchone()[0]
-            if count > 0:
-                con.execute(f"DELETE FROM [{tbl}]")
-                deleted[tbl] = count
+            deleted = {}
+            for tbl in tables:
+                count = con.execute(f"SELECT COUNT(*) FROM [{tbl}]").fetchone()[0]
+                if count > 0:
+                    con.execute(f"DELETE FROM [{tbl}]")
+                    deleted[tbl] = count
 
-        # [Fix 2026-05-09] VACUUM 트랜잭션 함정 회피
-        # Python sqlite3는 DELETE 시 자동 BEGIN -> VACUUM이 트랜잭션 내부에서 실행되어 실패
-        # 해결: 먼저 DELETE 트랜잭션 커밋 + 연결 종료 -> 별도 연결로 VACUUM
-        con.commit()  # DELETE 트랜잭션 종료
-        # WAL checkpoint(TRUNCATE): WAL 파일을 main DB에 병합 후 0바이트로 리셋
-        # VACUUM은 다른 커넥션이 열려 있으면 실패하므로 checkpoint 사용
-        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        con.close()
+            # [Fix 2026-05-09] VACUUM 트랜잭션 함정 회피
+            # Python sqlite3는 DELETE 시 자동 BEGIN -> VACUUM이 트랜잭션 내부에서 실행되어 실패
+            # 해결: 먼저 DELETE 트랜잭션 커밋 -> checkpoint. (연결 close 는 with 가 보장)
+            con.commit()  # DELETE 트랜잭션 종료(체크포인트 전 필수)
+            # WAL checkpoint(TRUNCATE): WAL 파일을 main DB에 병합 후 0바이트로 리셋
+            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
         return ok_response(
             data={"tables_cleared": deleted, "backup": backup_name},

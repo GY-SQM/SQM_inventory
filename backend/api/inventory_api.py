@@ -14,6 +14,9 @@ from fastapi.responses import JSONResponse
 
 log = logging.getLogger(__name__)
 
+# [감사 M3] 오류 시에도 연결을 반드시 닫아 DB 락을 방지하는 공용 컨텍스트 매니저.
+from backend.api.db_session import db_session
+
 # ─── 헬퍼 ────────────────────────────────────────────────────────────
 def _db_path() -> str:
     # 테스트 모드: 환경변수 SQM_TEST_DB_PATH 우선 사용
@@ -198,24 +201,24 @@ def get_inventory(
 @inv_router.post("/{lot_no}/cancel")
 def cancel_inventory(lot_no: str):
     try:
-        db = _db()
-        db.execute(
-            "UPDATE inventory SET status='AVAILABLE', sale_ref=NULL, sold_to=NULL WHERE lot_no=?",
-            (lot_no,)
-        )
-        # F003 fix: inventory_tonbag도 복구 (SOLD 제외)
-        db.execute(
-            "UPDATE inventory_tonbag SET status='AVAILABLE' WHERE lot_no=? AND status NOT IN ('SOLD')",
-            (lot_no,)
-        )
-        # [감사 raw-SQL/(A)] 배정 취소인데 allocation_plan 이 활성(RESERVED/PICKED)으로 남아
-        #   재예약이 막히던 문제 — 취소 의도를 완성하도록 함께 CANCELLED 처리.
-        db.execute(
-            "UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') "
-            "WHERE lot_no=? AND status NOT IN ('CANCELLED','SOLD')",
-            (lot_no,)
-        )
-        db.commit(); db.close()
+        with db_session(_db) as db:
+            db.execute(
+                "UPDATE inventory SET status='AVAILABLE', sale_ref=NULL, sold_to=NULL WHERE lot_no=?",
+                (lot_no,)
+            )
+            # F003 fix: inventory_tonbag도 복구 (SOLD 제외)
+            db.execute(
+                "UPDATE inventory_tonbag SET status='AVAILABLE' WHERE lot_no=? AND status NOT IN ('SOLD')",
+                (lot_no,)
+            )
+            # [감사 raw-SQL/(A)] 배정 취소인데 allocation_plan 이 활성(RESERVED/PICKED)으로 남아
+            #   재예약이 막히던 문제 — 취소 의도를 완성하도록 함께 CANCELLED 처리.
+            db.execute(
+                "UPDATE allocation_plan SET status='CANCELLED', cancelled_at=datetime('now') "
+                "WHERE lot_no=? AND status NOT IN ('CANCELLED','SOLD')",
+                (lot_no,)
+            )
+        # with 종료 → db commit+close 완료.
         # [감사 raw-SQL/(A)] AVAILABLE 원복 후 무게 버킷 재계산(picked→current 등 정합).
         from backend.api.lot_invariant import repair_weight_invariant
         repair_weight_invariant(lot_no, reason="CANCEL_INVENTORY")
@@ -892,29 +895,30 @@ def scan_process(payload: dict):
     if not barcode:
         raise HTTPException(400, "barcode is required")
     try:
-        db = _db()
-        c  = db.cursor()
-        # sub_lt 또는 tonbag_uid로 조회
-        row = c.execute("""
-            SELECT t.*, i.product, i.status AS lot_status
-            FROM inventory_tonbag t
-            LEFT JOIN inventory i ON i.lot_no = t.lot_no
-            WHERE t.sub_lt = ? OR t.tonbag_uid = ?
-        """, (barcode, barcode)).fetchone()
+        with db_session(_db) as db:
+            c  = db.cursor()
+            # sub_lt 또는 tonbag_uid로 조회
+            row = c.execute("""
+                SELECT t.*, i.product, i.status AS lot_status
+                FROM inventory_tonbag t
+                LEFT JOIN inventory i ON i.lot_no = t.lot_no
+                WHERE t.sub_lt = ? OR t.tonbag_uid = ?
+            """, (barcode, barcode)).fetchone()
 
-        if not row:
-            db.close()
-            return {"success": False, "message": f"바코드를 찾을 수 없음: {barcode}"}
+            if not row:
+                return {"success": False, "message": f"바코드를 찾을 수 없음: {barcode}"}
 
-        r = dict(row)
-        if action == "lookup":
-            db.close()
-            return {
-                "success": True,
-                "message": f"LOT {r.get('lot_no')} / {r.get('sub_lt')} — 위치: {r.get('location','-')}",
-                "data": r
-            }
-        elif action == "outbound":
+            r = dict(row)
+            if action == "lookup":
+                return {
+                    "success": True,
+                    "message": f"LOT {r.get('lot_no')} / {r.get('sub_lt')} — 위치: {r.get('location','-')}",
+                    "data": r
+                }
+            if action != "outbound":
+                return {"success": True, "message": f"{barcode} 조회 완료", "data": r}
+
+            # action == "outbound"
             lot_no = r.get('lot_no')
             # [감사 raw-SQL/(A)] 재스캔 멱등성 + 정확도 수정:
             #   기존엔 (a) WHERE sub_lt=? 라 같은 sub_lt 를 가진 '다른 LOT' 톤백까지 갱신,
@@ -926,14 +930,10 @@ def scan_process(payload: dict):
                 "WHERE id=? AND status='AVAILABLE'",
                 (r['id'],)
             )
-            db.commit()
-            db.close()
-            from backend.api.lot_invariant import repair_weight_invariant
-            repair_weight_invariant(lot_no, reason="SCAN_PROCESS_OUTBOUND")
-            return {"success": True, "message": f"{barcode} 출고 처리 완료", "data": r}
-        else:
-            db.close()
-            return {"success": True, "message": f"{barcode} 조회 완료", "data": r}
+        # with 종료 → db commit+close 완료.
+        from backend.api.lot_invariant import repair_weight_invariant
+        repair_weight_invariant(lot_no, reason="SCAN_PROCESS_OUTBOUND")
+        return {"success": True, "message": f"{barcode} 출고 처리 완료", "data": r}
     except Exception as e:
         log.error(f"scan process error: {e}")
         raise HTTPException(500, str(e))
@@ -976,44 +976,43 @@ def scan_bulk_upload(file: UploadFile = FileField(...), action: str = "lookup"):
         uids = df[uid_col].dropna().str.strip().unique().tolist()
         if not uids:
             return {"ok": False, "message": "유효한 UID 없음"}
-        db = _db()
-        results = []
-        for uid in uids:
-            row = db.execute("""
-                SELECT t.id, t.sub_lt, t.lot_no, t.tonbag_uid, t.status,
-                       t.weight, t.location, i.product, i.warehouse
-                FROM inventory_tonbag t
-                LEFT JOIN inventory i ON i.lot_no = t.lot_no
-                WHERE t.tonbag_uid = ? OR t.sub_lt = ?
-                LIMIT 1
-            """, (uid, uid)).fetchone()
-            if row:
-                r = dict(row)
-                r["input_uid"] = uid
-                r["matched"] = True
-                if action != "lookup":
-                    STATUS_TRANS = {
-                        "outbound": ("PICKED", "SOLD"),
-                        "return": ("PICKED", "RETURN"),  # F002 fix: 튜플 오류 (괄호만은 문자열)
-                        "pick": ("AVAILABLE", "PICKED"),
-                        "available": (None, "AVAILABLE"),
-                    }
-                    trans = STATUS_TRANS.get(action.lower())
-                    if trans:
-                        src, dst = trans
-                        if src is None or r.get("status") == src:
-                            # SQM-008 fix: 반품(RETURN) 시 location 초기화
-                            if action.lower() == "return":
-                                db.execute("UPDATE inventory_tonbag SET status=?, location=NULL WHERE id=?", (dst, r["id"]))
-                            else:
-                                db.execute("UPDATE inventory_tonbag SET status=? WHERE id=?", (dst, r["id"]))
-                            r["status_changed"] = f"{src or '*'} -> {dst}"
-                r["weight"] = float(r.get("weight") or 0)
-            else:
-                r = {"input_uid": uid, "matched": False, "lot_no": None, "status": None, "weight": 0}
-            results.append(r)
-        db.commit()
-        db.close()
+        with db_session(_db) as db:
+            results = []
+            for uid in uids:
+                row = db.execute("""
+                    SELECT t.id, t.sub_lt, t.lot_no, t.tonbag_uid, t.status,
+                           t.weight, t.location, i.product, i.warehouse
+                    FROM inventory_tonbag t
+                    LEFT JOIN inventory i ON i.lot_no = t.lot_no
+                    WHERE t.tonbag_uid = ? OR t.sub_lt = ?
+                    LIMIT 1
+                """, (uid, uid)).fetchone()
+                if row:
+                    r = dict(row)
+                    r["input_uid"] = uid
+                    r["matched"] = True
+                    if action != "lookup":
+                        STATUS_TRANS = {
+                            "outbound": ("PICKED", "SOLD"),
+                            "return": ("PICKED", "RETURN"),  # F002 fix: 튜플 오류 (괄호만은 문자열)
+                            "pick": ("AVAILABLE", "PICKED"),
+                            "available": (None, "AVAILABLE"),
+                        }
+                        trans = STATUS_TRANS.get(action.lower())
+                        if trans:
+                            src, dst = trans
+                            if src is None or r.get("status") == src:
+                                # SQM-008 fix: 반품(RETURN) 시 location 초기화
+                                if action.lower() == "return":
+                                    db.execute("UPDATE inventory_tonbag SET status=?, location=NULL WHERE id=?", (dst, r["id"]))
+                                else:
+                                    db.execute("UPDATE inventory_tonbag SET status=? WHERE id=?", (dst, r["id"]))
+                                r["status_changed"] = f"{src or '*'} -> {dst}"
+                    r["weight"] = float(r.get("weight") or 0)
+                else:
+                    r = {"input_uid": uid, "matched": False, "lot_no": None, "status": None, "weight": 0}
+                results.append(r)
+        # with 종료 → db commit+close 완료.
         # [감사 raw-SQL/(A)] 톤백 상태 일괄 전환 시 parent inventory 무게 재계산 누락 →
         #   영향 LOT 무게 불변식 복구(상태 전이/표시는 그대로).
         if action != "lookup":
