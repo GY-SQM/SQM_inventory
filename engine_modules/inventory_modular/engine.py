@@ -290,12 +290,17 @@ class SQMInventoryEngineV3(
                     if token and chat_id:
                         import urllib.request
                         import urllib.parse
+                        import shutil
+                        
+                        _, _, free = shutil.disk_usage("C:\\")
+                        free_gb = free / (1024**3)
                         
                         msg = (
                             f"⚠️ [GY SQM DB 용량 임계치 경고]\n"
                             f"데이터베이스 최적화 정리가 필요한 시점입니다.\n\n"
                             f"📌 active DB 크기: {db_size_mb:.2f} MB / 10.00 MB\n"
-                            f"📌 audit_log 감사이력: {audit_rows} 건 / 1000 건\n\n"
+                            f"📌 audit_log 감사이력: {audit_rows} 건 / 1000 건\n"
+                            f"📌 C드라이브 여유공간: {free_gb:.2f} GB 남음\n\n"
                             f"💡 3-AI 디스크 다이어트 툴을 통해 복사본 아카이빙 및 VACUUM 처리를 권장합니다."
                         )
                         
