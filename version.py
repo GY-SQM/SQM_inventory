@@ -1,14 +1,19 @@
 # -*- coding: utf-8 -*-
 """SQM 재고관리 시스템 버전 정보"""
 
-__version__ = "8.8.3"
-VERSION = "8.8.3"
-__version__ = "8.8.4"
-VERSION = "8.8.4"
-VERSION_TUPLE = (8, 8, 4)
-RELEASE_DATE = "2026-06-28"
-BUILD_DATE = "2026-06-28"
+__version__ = "8.8.5"
+VERSION = "8.8.5"
+VERSION_TUPLE = (8, 8, 5)
+RELEASE_DATE = "2026-07-18"
+BUILD_DATE = "2026-07-18"
 BUILD_NOTE = (
+    "v8.8.5 (2026-07-18)\n"
+    "데이터베이스 유지보수 및 디스크 최적화 릴리즈\n"
+    "  [DB] sqm_inventory.db 무결성 검증 완료 및 REINDEX / VACUUM 최적화 완료\n"
+    "  [DB] audit_log 내의 58개 과거 감사 이력 데이터 아카이브 완료 및 DB 슬림화\n"
+    "  [MAINT] 윈도우 스케줄러 자동 디스크 청소 주기 등록 (월/수/금 오전 11:00)\n"
+    "  [MAINT] 파이썬 pip 라이브러리 캐시 3.42 GB 정리 및 자동 청소 연동\n"
+    "\n" +
     "v8.8.4 (2026-06-28)\n"
     "3-AI 협업 정합성 전수 검사 및 강화 패치\n"
     "  [AUDIT] 전 데이터베이스 무결성 전수 스캔 (Phase 1~4 완료)\n"

@@ -42,6 +42,7 @@ output/
 # Database
 data/db/*.db
 data/db/*.sqlite
+data/db/backups/
 
 # Sensitive config
 settings.ini
