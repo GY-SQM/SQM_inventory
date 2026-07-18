@@ -226,6 +226,89 @@ class SQMInventoryEngineV3(
         self.warnings = []
 
         logger.info(f"SQMInventoryEngineV3 initialized: {self.db_path}")
+        
+        # [PREVENT-ALERT] 데이터베이스 임계치 모니터링 알림 트리거
+        try:
+            self._check_db_limits_and_alert()
+        except Exception as e:
+            logger.error(f"[Alert] DB 모니터링 시작 실패: {e}")
+
+    def _check_db_limits_and_alert(self):
+        """DB 용량 및 감사 로그 개수를 실시간 모니터링하여 임계치 초과 시 알림"""
+        import time
+        import json
+        
+        if not self.db_path:
+            return
+            
+        db_dir = os.path.dirname(self.db_path)
+        state_file = os.path.join(db_dir, "alert_state.json")
+        now = time.time()
+        last_alert = 0.0
+        
+        if os.path.exists(state_file):
+            try:
+                with open(state_file, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+                    last_alert = state.get("last_alert_time", 0.0)
+            except Exception:
+                pass
+                
+        # 24시간 동안 중복 알림 전송 방지 (86400초)
+        if now - last_alert < 86400:
+            return
+            
+        audit_rows = 0
+        db_size_mb = 0.0
+        
+        # 1) SQLite DB 파일 크기 체크
+        if self.db_type.lower() == 'sqlite' and os.path.exists(self.db_path):
+            db_size_mb = os.path.getsize(self.db_path) / (1024 * 1024)
+            
+        # 2) audit_log 행 수 조회
+        if self.db is not None:
+            try:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_log';")
+                if cursor.fetchone():
+                    cursor.execute("SELECT COUNT(*) FROM audit_log;")
+                    audit_rows = cursor.fetchone()[0]
+            except Exception:
+                pass
+                
+        # 3) 임계치 비교 (audit_log > 1000 또는 DB 크기 > 10MB)
+        if audit_rows > 1000 or db_size_mb > 10.0:
+            try:
+                config_path = r"C:\Users\남기동\.gy_remote_config.json"
+                if os.path.exists(config_path):
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        cfg = json.load(f)
+                        token = cfg.get("bot_tokens", {}).get("대흥남기동2025", "")
+                        chat_id = cfg.get("allowed_ids", [538125119])[0]
+                        
+                    if token and chat_id:
+                        import urllib.request
+                        import urllib.parse
+                        
+                        msg = (
+                            f"⚠️ [GY SQM DB 용량 임계치 경고]\n"
+                            f"데이터베이스 최적화 정리가 필요한 시점입니다.\n\n"
+                            f"📌 active DB 크기: {db_size_mb:.2f} MB / 10.00 MB\n"
+                            f"📌 audit_log 감사이력: {audit_rows} 건 / 1000 건\n\n"
+                            f"💡 3-AI 디스크 다이어트 툴을 통해 복사본 아카이빙 및 VACUUM 처리를 권장합니다."
+                        )
+                        
+                        url = f"https://api.telegram.org/bot{token}/sendMessage"
+                        data = urllib.parse.urlencode({'chat_id': chat_id, 'text': msg}).encode('utf-8')
+                        req = urllib.request.Request(url, data=data)
+                        urllib.request.urlopen(req, timeout=5)
+                        
+                        # 최종 발송 상태 저장
+                        with open(state_file, 'w', encoding='utf-8') as f:
+                            json.dump({"last_alert_time": now}, f)
+            except Exception as e:
+                logger.error(f"[Alert] Telegram alert dispatch failed: {e}")
 
     def get_connection(self) -> Any:
         """
