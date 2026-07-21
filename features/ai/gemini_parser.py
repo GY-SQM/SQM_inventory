@@ -859,6 +859,35 @@ class GeminiDocumentParser:
         return {}
 
     # =========================================================================
+    # P2 (2026-07-21) — 프롬프트/좌표 변경 이력 감사 (스켈레톤)
+    # =========================================================================
+    # 컴플라이언스 차원: "이번 PL 파싱이 어떤 프롬프트 버전으로 실행됐나" 역추적.
+    # P2 인터페이스 단계 — helper 만 추가. DB 컬럼 추가는 다음 세션.
+    # 절대 건드리지 말 것: ocr_auto_tuner 동시성, 입고 PENDING 게이트.
+
+    _PROMPT_FINGERPRINT_LEN = 12  # SHA256 hex 첫 12자 (충돌확률 ~10^-7)
+
+    @staticmethod
+    def _get_prompt_fingerprint(prompt: str) -> str:
+        """P2: 프롬프트 내용 → 짧은 핑거프린트 (SHA256 hex 12자).
+
+        호출 시점의 prompt 문자열을 해시. prompt가 약간만 바뀌어도 완전히 다른 값.
+        동일 prompt면 동일 fingerprint 보장 (결정론적).
+
+        Args:
+            prompt: 프롬프트 원문
+
+        Returns:
+            12자 hex 문자열. prompt가 빈 문자열이면 빈 문자열.
+        """
+        if not prompt:
+            return ""
+        import hashlib
+        return hashlib.sha256(prompt.encode("utf-8")).hexdigest()[
+            :GeminiDocumentParser._PROMPT_FINGERPRINT_LEN
+        ]
+
+    # =========================================================================
     # P0 (2026-07-21) — 검증기반 프롬프트 교정 재파싱 루프 (스켈레톤)
     # =========================================================================
     # 범위: Packing List 파싱 결과의 self-consistency 검증 + 교정 프롬프트 빌더.

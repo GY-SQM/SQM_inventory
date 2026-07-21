@@ -168,6 +168,7 @@
 
 - [ ] **🟢 P2 — 프롬프트/좌표 변경 이력 감사** (컴플라이언스). audit_log 또는 parsing_log에
       프롬프트 버전/좌표 범위 기록 → "왜 이번 파싱이 달라졌나" 역추적. *(여유 시)*
+  - **진행 상태 (2026-07-21, 스켈레톤):** `_get_prompt_fingerprint` helper 추가 (SHA256 12자). DB 컬럼 추가 + `_log_parse_result` 인자화 + parse_packing_list 통합은 다음 세션. 회귀 503 passed.
 
 ---
 
