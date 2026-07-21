@@ -859,6 +859,80 @@ class GeminiDocumentParser:
         return {}
 
     # =========================================================================
+    # P0 (2026-07-21) — 검증기반 프롬프트 교정 재파싱 루프 (스켈레톤)
+    # =========================================================================
+    # 범위: Packing List 파싱 결과의 self-consistency 검증 + 교정 프롬프트 빌더.
+    #       retry loop 본체는 다음 세션에서 통합. 이번엔 기반(검증·교정 빌더)만 추가.
+    # 절대 건드리지 말 것: ocr_auto_tuner의 동시성/Circuit Breaker, 입고 PENDING 게이트.
+
+    #: P0 교정 전략 식별자 (검증 실패 시 어떤 교정 힌트를 줄지 결정)
+    CORRECTION_STRATEGY_INTEGER_ONLY = "p0_integer_only"        # 숫자 오인식 교정
+    CORRECTION_STRATEGY_EXCLUDE_KNOWN = "p0_exclude_known_lots"  # 누락 LOT 교정
+
+    #: P0 검증 실패 시 parsing_log method 태그
+    _LOG_METHOD_VALIDATE_FAIL = "p0_validate_failed"
+
+    def _validate_lot_result(self, result: 'PackingListResult') -> tuple:
+        """P0: PackingListResult self-consistency 검증.
+
+        Returns:
+            (ok, reason) 튜플.
+            - ok=True: 검증 통과 (또는 검증 불가 — LOT 0개)
+            - ok=False: reason에 실패 사유
+        """
+        try:
+            if not result.lots:
+                # LOT 0개는 기존 soft-warning과 동일하게 통과시킴 (강제 실패 아님)
+                return True, "lot_count=0 (skip self-consistency)"
+            expected_net = sum(float(lot.net_weight_kg or 0.0) for lot in result.lots)
+            if abs(expected_net - float(result.total_net_weight_kg or 0.0)) > 0.01:
+                return False, (
+                    f"total_mismatch: header={result.total_net_weight_kg:.2f}, "
+                    f"sum={expected_net:.2f}"
+                )
+            return True, ""
+        except Exception as _ve:
+            # 검증 자체가 실패해도 기존 흐름을 막지 않음
+            return True, f"validate_exception={_ve}"
+
+    def _build_correction_prompt(
+        self,
+        strategy: str,
+        result: 'PackingListResult',
+        original_prompt: str,
+    ) -> str:
+        """P0: 검증 실패 시 사용하는 교정 프롬프트 빌더.
+
+        Args:
+            strategy: CORRECTION_STRATEGY_* 상수 중 하나
+            result: 직전 파싱 결과 (LOT 정보 추출용)
+            original_prompt: 원본 프롬프트
+
+        Returns:
+            교정 힌트가 append된 새 프롬프트. 매칭되는 strategy가 없으면 original_prompt 그대로.
+        """
+        if strategy == self.CORRECTION_STRATEGY_INTEGER_ONLY:
+            return (
+                f"{original_prompt}\n\n"
+                f"[교정 힌트 — P0: 정수 추출]\n"
+                f"이전 시도에서 숫자가 잘못 인식됐습니다. "
+                f"모든 수치는 정수(kg)로만 추출하세요.\n"
+                f"예: '5.131,250' → 5131250 (콤마·점 제거 후 정수)\n"
+                f"net_weight_kg·gross_weight_kg는 kg 단위 정수."
+            )
+        if strategy == self.CORRECTION_STRATEGY_EXCLUDE_KNOWN:
+            known = [str(l.lot_no).strip() for l in result.lots if l.lot_no]
+            known_str = ", ".join(known[:15])
+            return (
+                f"{original_prompt}\n\n"
+                f"[교정 힌트 — P0: 누락 LOT]\n"
+                f"이미 추출된 LOT 번호: {known_str}\n"
+                f"위 LOT는 이미 있으니 제외하고, 문서에서 나머지 LOT만 추출하세요.\n"
+                f"누락 LOT이 없으면 빈 lots 배열 반환."
+            )
+        return original_prompt
+
+    # =========================================================================
     # Packing List 파싱
     # =========================================================================
 
@@ -1105,6 +1179,24 @@ JSON만 출력하세요."""
             result.containers = _seen_containers
 
             result.success = len(result.lots) > 0
+
+            # P0(2026-07-21): self-consistency 검증 후크 — 검증 실패 시 로깅만.
+            # 기존 success 판정(result.success = ...)은 변경하지 않음 (다음 세션에서 retry loop 통합).
+            _v_ok, _v_reason = self._validate_lot_result(result)
+            if not _v_ok:
+                logger.warning(
+                    f"[GeminiParser][P0] PL 검증 실패: {_v_reason} (lot_count={len(result.lots)})"
+                )
+                result.error_message = result.error_message or _v_reason
+                self._log_parse_result(
+                    doc_type='PL',
+                    source_file=os.path.basename(pdf_path) if pdf_path else '',
+                    success=False,
+                    lot_count=len(result.lots),
+                    method=self._LOG_METHOD_VALIDATE_FAIL,
+                    error_msg=_v_reason,
+                )
+
             # v8.2.4: 파싱 통계 기록
             self._log_parse_result(
                 doc_type='PL',

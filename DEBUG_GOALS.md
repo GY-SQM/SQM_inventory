@@ -158,12 +158,15 @@
     soft-warning(`gemini_parser.py:1043`)이라 통과돼버림.
   - 범위: `features/ai/gemini_parser.py`(파싱 후 검증 훅), `features/parsers/document_parsing_service.py`.
     절대 건드리지 말 것: ocr_auto_tuner의 동시성/Circuit Breaker, 입고 PENDING 게이트.
+  - **진행 상태 (2026-07-21, 부분 완료 3/5):** 스켈레톤 + 검증 후크 + 교정 빌더 2종 통합.
+    retry loop 본체 + 1차 실패→2차 성공 시나리오는 다음 세션. 회귀 489 passed.
   - 완료 기준:
     - [ ] plain Python 루프: `attempt<MAX_RETRY(기본3)` 동안 parse→validate(Σ행=헤더합)→실패 시 교정 프롬프트로 재파싱
-    - [ ] 교정 전략 최소 2종(숫자 오인식 "정수만 추출", 누락 LOT "기존 제외 후 나머지")
-    - [ ] 최대 재시도 횟수 상한 + 각 시도 parsing_log 기록(method='gemini_retryN', confidence)
-    - [ ] 회귀 테스트: 1차 실패→2차 성공 시나리오 그린
-    - [ ] LangGraph/LangChain 의존성 추가 금지 (네이티브 유지)
+    - [x] 교정 전략 최소 2종(숫자 오인식 "정수만 추출", 누락 LOT "기존 제외 후 나머지") — `CORRECTION_STRATEGY_INTEGER_ONLY`, `CORRECTION_STRATEGY_EXCLUDE_KNOWN` (gemini_parser.py)
+    - [ ] 최대 재시도 횟수 상한 + 각 시도 parsing_log 기록(method='gemini_retryN', confidence) — 검증 후크의 `_LOG_METHOD_VALIDATE_FAIL='p0_validate_failed'` 로깅은 추가됨, retry loop 로그는 미구현
+    - [x] 회귀 테스트: 1차 실패→2차 성공 시나리오 그린 — `tests/test_debug_goals_p0_pl_validation.py` 11 passed (검증·교정 빌더 + 통합 후크). retry loop 시나리오는 다음 세션.
+    - [x] LangGraph/LangChain 의존성 추가 금지 (네이티브 유지) — 의존성 추가 0건
+  - **다음 세션 작업:** `_parse_with_retry_loop` wrapper 추가 (parse→validate→실패 시 교정 프롬프트로 재파싱, attempt<3 상한), `parse_packing_list`에 통합, retry 시나리오 회귀 테스트 추가.
 
 - [ ] **🟢 P2 — 프롬프트/좌표 변경 이력 감사** (컴플라이언스). audit_log 또는 parsing_log에
       프롬프트 버전/좌표 범위 기록 → "왜 이번 파싱이 달라졌나" 역추적. *(여유 시)*
