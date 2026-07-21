@@ -74,9 +74,16 @@ if _HAS_REAL_CONSOLE:
     _console_h.setLevel(logging.INFO)
     _console_h.setFormatter(logging.Formatter(_fmt))
     _root_logger.addHandler(_console_h)
-# 파일 핸들러 (DEBUG 이상 전부)
+# 파일 핸들러 (DEBUG 이상 전부) — 회전 정책 적용 (audit-report.md 🟡 #4)
+# v8.8.5(2026-07-21): 10MB × 5 백업으로 운영 로그 무한 증식 방지
 try:
-    _file_h = logging.FileHandler(LOG_PATH, encoding='utf-8')
+    from logging.handlers import RotatingFileHandler
+    _file_h = RotatingFileHandler(
+        LOG_PATH,
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding='utf-8',
+    )
     _file_h.setLevel(logging.DEBUG)
     _file_h.setFormatter(logging.Formatter(_fmt))
     _root_logger.addHandler(_file_h)

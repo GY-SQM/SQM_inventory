@@ -90,10 +90,11 @@
 - `data/db/backups/sqm_inventory_archive_*.db` 자동 백업 패턴 확인
 - `backups/` 폴더 git 추적 제외 (`.gitignore` line 45)
 
-### 5.3 로그 회전 — 🟡 권고
-- `logs/sqm_inventory.log: 5.2 MB`
-- `logs/sqm_inventory.log.1: 10.5 MB` (회전 파일 1개만 보존)
-- 🟡 권고: 보존 정책 강화 — `log.1` 1개 → `log.1~log.5` 또는 날짜별 회전 (30일 보존). Windows 작업 스케줄러 + `logrotate` 또는 Python `RotatingFileHandler(maxBytes=10MB, backupCount=5)` 적용.
+### 5.3 로그 회전 — ✅ 해결 (2026-07-21)
+- `config_logging.py`: `RotatingFileHandler(LOG_MAX_SIZE_MB=10, LOG_BACKUP_COUNT=5)` 적용 — 운영 로그
+- `main_webview.py`: `RotatingFileHandler(maxBytes=10MB, backupCount=5)` 추가 — sqm_debug.log
+- 회귀 테스트 7종 그린 (config_logging + main_webview)
+- 🟢 **조치 완료** — 더 이상 권고 사항 아님
 
 ---
 
@@ -101,11 +102,13 @@
 
 ### 🔴 즉시수정: 0건
 
-### 🟡 권고 4건 (배포 차단 아님, 다음 개선 과제로 인계)
+### 🟡 권고 3건 (배포 차단 아님, 다음 개선 과제로 인계)
 1. `config.py:116` `PG_PASSWORD` 기본값 정리
 2. backend/ f-string SQL 11건 — 파라미터 바인딩 정식 전환
 3. 오류 메시지 내부 정보 노출 (I), 대용량 업로드 크기 제한 (D) — STRIDE 권고
-4. `logs/` 회전 정책 강화 (현재 1개 → 5개 또는 30일)
+
+### ✅ 해결 (2026-07-21 회고)
+- ~~로그 회전 정책 강화~~ → `RotatingFileHandler(10MB × 5)` 양쪽 로그에 적용
 
 ### 🟢 통과
 - 비밀정보 관리 (env/keyring)
