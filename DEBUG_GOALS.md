@@ -166,9 +166,9 @@
     - [x] 회귀 테스트: 1차 실패→2차 성공 시나리오 그린 — `tests/test_debug_goals_p0_pl_validation.py` 19 passed (검증·교정 빌더 + retry 5종 시나리오)
     - [x] LangGraph/LangChain 의존성 추가 금지 (네이티브 유지) — 의존성 추가 0건
 
-- [ ] **🟢 P2 — 프롬프트/좌표 변경 이력 감사** (컴플라이언스). audit_log 또는 parsing_log에
+- [x] **✅ P2 — 프롬프트/좌표 변경 이력 감사** (컴플라이언스). audit_log 또는 parsing_log에
       프롬프트 버전/좌표 범위 기록 → "왜 이번 파싱이 달라졌나" 역추적. *(여유 시)*
-  - **진행 상태 (2026-07-21, 스켈레톤):** `_get_prompt_fingerprint` helper 추가 (SHA256 12자). DB 컬럼 추가 + `_log_parse_result` 인자화 + parse_packing_list 통합은 다음 세션. 회귀 503 passed.
+  - **완료 (2026-07-21):** `parsing_log.prompt_version` 컬럼 추가 (멱등 ALTER) + `_get_prompt_fingerprint`(SHA256 12자) + `_log_parse_result(prompt_version=)` 인자화 + `parse_packing_list` + P0 retry helper 통합. 회귀 515 passed.
 
 ---
 
@@ -176,4 +176,5 @@
 
 - ✅ **P1 (2026-06-15)** PL 파싱 신뢰도 DB 영속화 — `parsing_log.confidence_score` + 테스트 4종.
 - ✅ **P0 (2026-07-21)** 검증기반 프롬프트 교정 재파싱 루프 — `_validate_lot_result` + `_build_correction_prompt`(전략 2종) + `_retry_parse_with_validation`(max_retry=2). 회귀 497 passed.
+- ✅ **P2 (2026-07-21)** 프롬프트 핑거프린트 DB 영속화 — `parsing_log.prompt_version` + `_get_prompt_fingerprint` + `parse_packing_list` + P0 retry helper 통합. 회귀 515 passed.
 <!-- 완료된 목표는 여기로 옮겨 ✅ 로 보관 -->

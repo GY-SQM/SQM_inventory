@@ -404,10 +404,12 @@ class GeminiDocumentParser:
                           lot_count: int = 0, method: str = '',
                           error_msg: str = '', duration_ms: int = 0,
                           carrier_id: str = '',
-                          confidence_score: float = None) -> None:
+                          confidence_score: float = None,
+                          prompt_version: str = '') -> None:
         """v8.2.4: 파싱 결과를 parsing_log 테이블에 기록.
         DB 미설정 시 조용히 스킵.
         v8.8.x(P1): confidence_score(0~100) 영속화 — 신뢰도 역추적용.
+        v8.8.5(P2): prompt_version(SHA256 12자) 영속화 — 프롬프트 변경 이력 추적용.
         """
         if not self._db:
             return
@@ -415,12 +417,13 @@ class GeminiDocumentParser:
             self._db.execute(
                 """INSERT INTO parsing_log
                    (doc_type, source_file, carrier_id, success, bl_no,
-                    lot_count, method, error_msg, duration_ms, confidence_score)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    lot_count, method, error_msg, duration_ms, confidence_score,
+                    prompt_version)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (doc_type, source_file or '', carrier_id or '',
                  1 if success else 0, bl_no or '',
                  lot_count, method or '', error_msg or '', duration_ms,
-                 confidence_score)
+                 confidence_score, prompt_version or '')
             )
         except Exception as _le:
             logger.debug(f"[GeminiParser] parsing_log 기록 스킵: {_le}")
@@ -972,6 +975,7 @@ class GeminiDocumentParser:
         result: 'PackingListResult',
         original_prompt: str,
         max_retry: int = 2,
+        prompt_version: str = '',
     ) -> None:
         """P0(2026-07-21): 검증 기반 교정 재파싱 루프.
 
@@ -1030,6 +1034,7 @@ class GeminiDocumentParser:
                         lot_count=len(result.lots),
                         method=f'gemini_retry{attempt}_no_data',
                         error_msg=f'strategy={strategy}, prev_reason={_reason}',
+                        prompt_version=prompt_version,
                     )
                     continue
                 _added = 0
@@ -1079,6 +1084,7 @@ class GeminiDocumentParser:
                             f'strategy={strategy}, added={_added}, '
                             f'prev_reason={_reason}'
                         ),
+                        prompt_version=prompt_version,
                     )
                 else:
                     logger.info(
@@ -1091,6 +1097,7 @@ class GeminiDocumentParser:
                         lot_count=len(result.lots),
                         method=f'gemini_retry{attempt}_no_add',
                         error_msg=f'strategy={strategy}, prev_reason={_reason}',
+                        prompt_version=prompt_version,
                     )
             except Exception as _e:
                 logger.warning(f"[GeminiParser][P0] retry{attempt} 예외: {_e}")
@@ -1101,6 +1108,7 @@ class GeminiDocumentParser:
                     lot_count=len(result.lots),
                     method=f'gemini_retry{attempt}_exception',
                     error_msg=str(_e),
+                    prompt_version=prompt_version,
                 )
 
     def parse_packing_list(self, pdf_path: str,
@@ -1176,6 +1184,10 @@ class GeminiDocumentParser:
             if _safe_pl_hint:
                 prompt += f"\n\n<carrier_hint>\n{_safe_pl_hint}\n</carrier_hint>"
                 logger.debug(f"[GeminiParser] PL 힌트 주입 ({len(_safe_pl_hint)}자)")
+
+            # P2(2026-07-21): 프롬프트 핑거프린트 — "왜 이번 파싱이 달라졌나" 역추적용.
+            # 본 _log_parse_result 호출들 + P0 retry helper에 동일 값 전달.
+            _prompt_version = self._get_prompt_fingerprint(prompt)
 
             # v8.0.0 [SMART-PARSE]: 텍스트 우선 → PDF 직접 → 이미지 폴백
             try:
@@ -1344,6 +1356,7 @@ JSON만 출력하세요."""
                 result=result,
                 original_prompt=prompt,
                 max_retry=2,
+                prompt_version=_prompt_version,
             )
 
             # lots 집계: total_lots, total_maxibag, containers (비교 스크립트 호환용)
@@ -1373,6 +1386,7 @@ JSON만 출력하세요."""
                     lot_count=len(result.lots),
                     method=self._LOG_METHOD_VALIDATE_FAIL,
                     error_msg=_v_reason,
+                    prompt_version=_prompt_version,
                 )
 
             # v8.2.4: 파싱 통계 기록
@@ -1383,6 +1397,7 @@ JSON만 출력하세요."""
                 lot_count=len(result.lots),
                 method='gemini',
                 error_msg='' if result.success else 'lot_count=0',
+                prompt_version=_prompt_version,
             )
 
             # v2.5.8: 제품명 로깅

@@ -720,14 +720,18 @@ class DatabaseSchemaMixin:
                 error_msg   TEXT,                -- 실패 시 오류 메시지
                 duration_ms INTEGER DEFAULT 0,   -- 파싱 소요 시간 (ms)
                 confidence_score REAL,           -- 문서 전체 신뢰도(0~100, PL 신뢰도 파서)
+                prompt_version TEXT,             -- v8.8.5(P2): 프롬프트 핑거프린트(SHA256 12자)
                 created_at  TEXT DEFAULT (datetime('now','localtime'))
             )
         """)
-        # 기존 DB 멱등 마이그레이션: confidence_score 컬럼 보강 (P1 — 신뢰도 영속화)
+        # 기존 DB 멱등 마이그레이션: 누락 컬럼 보강
         _plog_cols = {r[1].lower() for r in
                       self.execute("PRAGMA table_info(parsing_log)").fetchall()}
         if 'confidence_score' not in _plog_cols:
             self.execute("ALTER TABLE parsing_log ADD COLUMN confidence_score REAL")
+        if 'prompt_version' not in _plog_cols:
+            # P2(2026-07-21): 프롬프트 핑거프린트 컬럼 — "왜 이번 파싱이 달라졌나" 역추적용
+            self.execute("ALTER TABLE parsing_log ADD COLUMN prompt_version TEXT")
         self.execute(
             "CREATE INDEX IF NOT EXISTS idx_parsing_log_doc_type "
             "ON parsing_log(doc_type)"
@@ -735,6 +739,10 @@ class DatabaseSchemaMixin:
         self.execute(
             "CREATE INDEX IF NOT EXISTS idx_parsing_log_created "
             "ON parsing_log(created_at)"
+        )
+        self.execute(
+            "CREATE INDEX IF NOT EXISTS idx_parsing_log_prompt_version "
+            "ON parsing_log(prompt_version)"
         )
         logger.info("[스키마] parsing_log 테이블 생성 완료")
 
