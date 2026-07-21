@@ -152,21 +152,19 @@
       컬럼 추가(신규 CREATE + 기존 DB 멱등 ALTER), `_log_parse_result` 신뢰도 파라미터,
       `/api/ai/parse-pl` 엔드포인트가 doc_confidence 기록. 테스트 4종(329 passed). *(완료)*
 
-- [ ] **🔴 P0 — 검증기반 "프롬프트 교정 재파싱" 루프** (LangGraph Node 3 패턴, 네이티브 구현)
+- [x] **✅ P0 — 검증기반 "프롬프트 교정 재파싱" 루프** (LangGraph Node 3 패턴, 네이티브 구현)
   - 배경: 현재는 "Gemini 실패→OpenAI 폴백 1회" + "LOT 누락 힌트 재시도 1회"만. 일반화된
     "검증 실패 → 프롬프트/조건 교정 → 재파싱(최대 N회)" 루프 부재. PL 헤더합 vs 행합 검증이
     soft-warning(`gemini_parser.py:1043`)이라 통과돼버림.
   - 범위: `features/ai/gemini_parser.py`(파싱 후 검증 훅), `features/parsers/document_parsing_service.py`.
     절대 건드리지 말 것: ocr_auto_tuner의 동시성/Circuit Breaker, 입고 PENDING 게이트.
-  - **진행 상태 (2026-07-21, 부분 완료 3/5):** 스켈레톤 + 검증 후크 + 교정 빌더 2종 통합.
-    retry loop 본체 + 1차 실패→2차 성공 시나리오는 다음 세션. 회귀 489 passed.
+  - **완료 (2026-07-21):** `_validate_lot_result`(Σ행 vs total self-consistency) + `_build_correction_prompt`(전략 2종) + `_retry_parse_with_validation`(max_retry=2 wrapper) + `parse_packing_list` 통합. 회귀 497 passed.
   - 완료 기준:
-    - [ ] plain Python 루프: `attempt<MAX_RETRY(기본3)` 동안 parse→validate(Σ행=헤더합)→실패 시 교정 프롬프트로 재파싱
-    - [x] 교정 전략 최소 2종(숫자 오인식 "정수만 추출", 누락 LOT "기존 제외 후 나머지") — `CORRECTION_STRATEGY_INTEGER_ONLY`, `CORRECTION_STRATEGY_EXCLUDE_KNOWN` (gemini_parser.py)
-    - [ ] 최대 재시도 횟수 상한 + 각 시도 parsing_log 기록(method='gemini_retryN', confidence) — 검증 후크의 `_LOG_METHOD_VALIDATE_FAIL='p0_validate_failed'` 로깅은 추가됨, retry loop 로그는 미구현
-    - [x] 회귀 테스트: 1차 실패→2차 성공 시나리오 그린 — `tests/test_debug_goals_p0_pl_validation.py` 11 passed (검증·교정 빌더 + 통합 후크). retry loop 시나리오는 다음 세션.
+    - [x] plain Python 루프: `attempt<MAX_RETRY(기본3)` 동안 parse→validate(Σ행=헤더합)→실패 시 교정 프롬프트로 재파싱 — `_retry_parse_with_validation(max_retry=2)` (총 3회 시도)
+    - [x] 교정 전략 최소 2종(숫자 오인식 "정수만 추출", 누락 LOT "기존 제외 후 나머지") — `CORRECTION_STRATEGY_INTEGER_ONLY`, `CORRECTION_STRATEGY_EXCLUDE_KNOWN`
+    - [x] 최대 재시도 횟수 상한 + 각 시도 parsing_log 기록(method='gemini_retryN', confidence) — `gemini_retry1`, `gemini_retry2`, `gemini_retryN_no_data`, `gemini_retryN_no_add`, `gemini_retryN_exception` 5종 태그
+    - [x] 회귀 테스트: 1차 실패→2차 성공 시나리오 그린 — `tests/test_debug_goals_p0_pl_validation.py` 19 passed (검증·교정 빌더 + retry 5종 시나리오)
     - [x] LangGraph/LangChain 의존성 추가 금지 (네이티브 유지) — 의존성 추가 0건
-  - **다음 세션 작업:** `_parse_with_retry_loop` wrapper 추가 (parse→validate→실패 시 교정 프롬프트로 재파싱, attempt<3 상한), `parse_packing_list`에 통합, retry 시나리오 회귀 테스트 추가.
 
 - [ ] **🟢 P2 — 프롬프트/좌표 변경 이력 감사** (컴플라이언스). audit_log 또는 parsing_log에
       프롬프트 버전/좌표 범위 기록 → "왜 이번 파싱이 달라졌나" 역추적. *(여유 시)*
@@ -176,4 +174,5 @@
 ## 완료된 목표 (기록 보관)
 
 - ✅ **P1 (2026-06-15)** PL 파싱 신뢰도 DB 영속화 — `parsing_log.confidence_score` + 테스트 4종.
+- ✅ **P0 (2026-07-21)** 검증기반 프롬프트 교정 재파싱 루프 — `_validate_lot_result` + `_build_correction_prompt`(전략 2종) + `_retry_parse_with_validation`(max_retry=2). 회귀 497 passed.
 <!-- 완료된 목표는 여기로 옮겨 ✅ 로 보관 -->

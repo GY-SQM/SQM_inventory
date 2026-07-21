@@ -936,6 +936,144 @@ class GeminiDocumentParser:
     # Packing List 파싱
     # =========================================================================
 
+    def _retry_parse_with_validation(
+        self,
+        pdf_path: str,
+        images: List[bytes],
+        result: 'PackingListResult',
+        original_prompt: str,
+        max_retry: int = 2,
+    ) -> None:
+        """P0(2026-07-21): 검증 기반 교정 재파싱 루프.
+
+        v8.2.4 [GEMINI-PL-HINT-RETRY] 가 끝난 후 발동한다.
+        attempt<max_retry 동안:
+          1) _validate_lot_result() 로 self-consistency 검증
+          2) ok=True 면 조용히 return
+          3) ok=False 면 strategy별 교정 프롬프트로 _call_gemini 재호출
+          4) 응답의 새 LOT를 기존 lot_no set과 중복검사 후 result.lots 에 merge
+          5) total_net_weight_kg / total_gross_weight_kg 재계산
+          6) parsing_log 에 method='gemini_retryN' 기록
+
+        Args:
+            pdf_path: 원본 PDF 경로 (로깅용)
+            images: 1페이지 Gemini 이미지 bytes (재호출용). 멀티페이지면 1페이지만 사용.
+            result: in-place 수정. 호출자가 return 후 그대로 사용.
+            original_prompt: 1차 호출에 사용된 원본 프롬프트 (교정 프롬프트 빌더에 전달)
+            max_retry: 최대 재시도 횟수. 기본 2 (총 3회 시도).
+
+        Notes:
+            - attempt1=integer_only(숫자 오인식 교정), attempt2=exclude_known_lots(누락 LOT 교정)
+            - 교정 응답이 없거나 추가 LOT 0개면 다음 attempt로 (no-op 도 기록)
+            - 예외 발생 시에도 다음 attempt 진행, method='gemini_retryN_exception' 기록
+        """
+        if not images:
+            return
+        _seen: set = {str(l.lot_no).strip() for l in result.lots if l.lot_no}
+        for attempt in range(1, max_retry + 1):
+            _ok, _reason = self._validate_lot_result(result)
+            if _ok:
+                # 검증 통과 — 더 이상 재시도 안 함
+                return
+            strategy = (
+                self.CORRECTION_STRATEGY_INTEGER_ONLY
+                if attempt == 1
+                else self.CORRECTION_STRATEGY_EXCLUDE_KNOWN
+            )
+            logger.warning(
+                f"[GeminiParser][P0] retry{attempt} 시작: "
+                f"strategy={strategy}, reason={_reason}, lot_count={len(result.lots)}"
+            )
+            _correction_prompt = self._build_correction_prompt(
+                strategy, result, original_prompt
+            )
+            try:
+                _retry_text = self._call_gemini(_correction_prompt, images[0])
+                _retry_data = self._extract_json(_retry_text)
+                if not _retry_data or not isinstance(_retry_data.get("lots"), list):
+                    logger.warning(
+                        f"[GeminiParser][P0] retry{attempt} 응답에 lots 배열 없음"
+                    )
+                    self._log_parse_result(
+                        doc_type='PL',
+                        source_file=os.path.basename(pdf_path) if pdf_path else '',
+                        success=False,
+                        lot_count=len(result.lots),
+                        method=f'gemini_retry{attempt}_no_data',
+                        error_msg=f'strategy={strategy}, prev_reason={_reason}',
+                    )
+                    continue
+                _added = 0
+                for _lot_data in _retry_data["lots"]:
+                    if not isinstance(_lot_data, dict):
+                        continue
+                    _lot_no = str(_lot_data.get("lot_no", "")).strip()
+                    if not _lot_no or _lot_no in _seen:
+                        continue
+                    try:
+                        _new_lot = LOTItem(
+                            list_no=len(result.lots) + 1,
+                            lot_no=_lot_no,
+                            net_weight_kg=float(_lot_data.get("net_weight_kg", 0) or 0),
+                            gross_weight_kg=float(_lot_data.get("gross_weight_kg", 0) or 0),
+                            mxbg=int(_lot_data.get("mxbg", 0) or 0),
+                            container_no=str(_lot_data.get("container_no", "") or "").strip(),
+                            del_no=str(_lot_data.get("del_no", "") or "").strip(),
+                            al_no=str(_lot_data.get("al_no", "") or "").strip(),
+                            lot_sqm=str(_lot_data.get("lot_sqm", "") or "").strip(),
+                        )
+                        result.lots.append(_new_lot)
+                        _seen.add(_lot_no)
+                        _added += 1
+                    except Exception as _ae:
+                        logger.warning(
+                            f"[GeminiParser][P0] retry{attempt} LOT 추가 실패: {_ae}"
+                        )
+                if _added > 0:
+                    result.total_net_weight_kg = sum(
+                        float(l.net_weight_kg or 0.0) for l in result.lots
+                    )
+                    result.total_gross_weight_kg = sum(
+                        float(l.gross_weight_kg or 0.0) for l in result.lots
+                    )
+                    logger.info(
+                        f"[GeminiParser][P0] retry{attempt} 성공: "
+                        f"+{_added}개 (총 {len(result.lots)}개)"
+                    )
+                    self._log_parse_result(
+                        doc_type='PL',
+                        source_file=os.path.basename(pdf_path) if pdf_path else '',
+                        success=True,
+                        lot_count=len(result.lots),
+                        method=f'gemini_retry{attempt}',
+                        error_msg=(
+                            f'strategy={strategy}, added={_added}, '
+                            f'prev_reason={_reason}'
+                        ),
+                    )
+                else:
+                    logger.info(
+                        f"[GeminiParser][P0] retry{attempt}: 추가 LOT 없음"
+                    )
+                    self._log_parse_result(
+                        doc_type='PL',
+                        source_file=os.path.basename(pdf_path) if pdf_path else '',
+                        success=True,
+                        lot_count=len(result.lots),
+                        method=f'gemini_retry{attempt}_no_add',
+                        error_msg=f'strategy={strategy}, prev_reason={_reason}',
+                    )
+            except Exception as _e:
+                logger.warning(f"[GeminiParser][P0] retry{attempt} 예외: {_e}")
+                self._log_parse_result(
+                    doc_type='PL',
+                    source_file=os.path.basename(pdf_path) if pdf_path else '',
+                    success=False,
+                    lot_count=len(result.lots),
+                    method=f'gemini_retry{attempt}_exception',
+                    error_msg=str(_e),
+                )
+
     def parse_packing_list(self, pdf_path: str,
                            bag_weight_kg: int = None,  # v8.6.1: None → DEFAULT_TONBAG_WEIGHT fallback
                            gemini_hint: str = '') -> PackingListResult:
@@ -1169,6 +1307,16 @@ JSON만 출력하세요."""
                 except Exception as _retry_err:
                     logger.warning(f"[GeminiParser] PL 힌트 재시도 실패(무시): {_retry_err}")
 
+            # P0(2026-07-21): 검증 기반 교정 재파싱 — v8.2.4 힌트 재시도 이후 발동.
+            # 검증 실패 시 최대 2회까지 교정 프롬프트로 재파싱, method='gemini_retryN' 로깅.
+            self._retry_parse_with_validation(
+                pdf_path=pdf_path,
+                images=images,
+                result=result,
+                original_prompt=prompt,
+                max_retry=2,
+            )
+
             # lots 집계: total_lots, total_maxibag, containers (비교 스크립트 호환용)
             result.total_lots = len(result.lots)
             result.total_maxibag = sum(lot.mxbg for lot in result.lots)
@@ -1180,8 +1328,9 @@ JSON만 출력하세요."""
 
             result.success = len(result.lots) > 0
 
-            # P0(2026-07-21): self-consistency 검증 후크 — 검증 실패 시 로깅만.
-            # 기존 success 판정(result.success = ...)은 변경하지 않음 (다음 세션에서 retry loop 통합).
+            # P0(2026-07-21): self-consistency 검증 후크 — retry loop 끝난 후 최종 검증.
+            # retry loop가 _retry_parse_with_validation() 으로 위에서 이미 시도·병합 완료.
+            # 여기서도 여전히 실패면 로깅만 (success 판정은 보존).
             _v_ok, _v_reason = self._validate_lot_result(result)
             if not _v_ok:
                 logger.warning(
