@@ -136,7 +136,7 @@
 ## 다음 개선 과제 인계
 
 1. **central allowlist 모듈** (`core/db_allowed.py`) — backend/ 11개 위치의 분산된 화이트리스트 통합 (다음 v9.0.0)
-2. **HTTPException 5xx str(e) 마이그레이션** — 기존 12건의 `HTTPException(500, str(e))` → `safe_internal_error()` 일괄 전환 (Q3 2026)
+2. ~~**HTTPException 5xx str(e) 마이그레이션**~~ — ✅ 완료 (2026-07-21): backend/ 8개 파일 65건 일괄 변환. `temp/migrate_safe_error.py` + 회귀 테스트 5종 그린.
 3. **UploadFile 엔드포인트 check_upload_size() 추가** — 미들웨어 외 2차 검증 (Q3 2026)
 4. **CI 통합 (Bandit / flake8-bugbear)** — f-string SQL, 하드코딩 키 자동 검출 (v9.0.0)
 

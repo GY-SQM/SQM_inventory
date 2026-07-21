@@ -11,6 +11,7 @@ import logging
 from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException, Body, Request
+from core.error_helpers import safe_internal_error
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -117,7 +118,7 @@ def get_api_keys_status():
         }
     except Exception as e:
         logger.error(f"get_api_keys_status error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 @router.post("/api-keys", summary="API 키 저장 (keyring) [Sprint 2-B]")
@@ -144,7 +145,7 @@ def save_api_key(payload: Dict[str, Any] = Body(...)):
     except ImportError:
         raise HTTPException(500, "keyring 미설치")
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 @router.delete("/api-keys/{service}", summary="API 키 삭제 (keyring) [Sprint 2-B]")
@@ -164,7 +165,7 @@ def delete_api_key(service: str):
             pass
         return {"ok": True, "message": f"{service} API key 삭제됨"}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ==============================================================
@@ -197,7 +198,7 @@ def list_carrier_rules(carrier_id: Optional[str] = None, doc_type: Optional[str]
         }
     except Exception as e:
         logger.error(f"list_carrier_rules error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 @router.post("/carrier-rules", summary="🚢 선사 규칙 생성 [Sprint 2-B]")
@@ -228,7 +229,7 @@ def create_carrier_rule(payload: Dict[str, Any] = Body(...)):
             new_id = cur.lastrowid
             return {"ok": True, "data": {**fields, "id": new_id}, "message": "규칙 생성됨"}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 @router.patch("/carrier-rules/{rule_id}", summary="🚢 선사 규칙 수정 [Sprint 2-B]")
@@ -257,7 +258,7 @@ def update_carrier_rule(rule_id: int, updates: Dict[str, Any] = Body(...)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 @router.delete("/carrier-rules/{rule_id}", summary="🚢 선사 규칙 삭제 [Sprint 2-B]")
@@ -271,7 +272,7 @@ def delete_carrier_rule(rule_id: int):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ==============================================================
@@ -544,7 +545,7 @@ def get_table_stats():
         con.close()
         return {"ok": True, "data": result}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 @router.post("/table-delete", summary="🗑️ 선택 테이블 삭제 (Stage 2 — 개발 전용)")
 def delete_selected_tables(data: Dict[str, Any] = Body(...)):
@@ -566,4 +567,4 @@ def delete_selected_tables(data: Dict[str, Any] = Body(...)):
             total = sum(deleted.values())
             return {"ok": True, "message": f"{len(tables)}개 테이블 {total}행 삭제됨", "data": deleted}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")

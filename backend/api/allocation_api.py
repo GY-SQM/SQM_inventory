@@ -10,6 +10,7 @@ import tempfile
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from core.error_helpers import safe_internal_error
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/allocation", tags=["allocation"])
@@ -743,7 +744,7 @@ def approve_allocation(data: dict = Body(...)):
                     logger.debug(f"allocation_approval insert skip: {e}")  # HIGH: 빈 except 제거
             return {"ok": True, "message": f"{updated}건 승인됨", "data": {"updated": updated}}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 @router.post("/reject", summary="❌ 할당 반려 (Stage 2)")
@@ -771,7 +772,7 @@ def reject_allocation(data: dict = Body(...)):
                     pass
             return {"ok": True, "message": f"{updated}건 반려됨", "data": {"updated": updated}}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 ALLOC_EDITABLE_FIELDS = {"qty_mt", "customer", "sale_ref", "outbound_date", "remarks"}
@@ -804,7 +805,7 @@ def patch_allocation(lot_no: str = PathParam(...), data: dict = Body(...)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -862,7 +863,7 @@ def cancel_by_sale_ref(data: dict = Body(...)):
         raise
     except Exception as e:
         logger.exception(f"[cancel-by-sale-ref] error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -910,7 +911,7 @@ def reset_all_allocations():
         }
     except Exception as e:
         logger.exception(f"[reset-all] error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1016,7 +1017,7 @@ def revert_allocation_step(data: dict = Body(...)):
         raise
     except Exception as e:
         logger.exception(f"[revert-step] error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1227,7 +1228,7 @@ def get_allocation_lot_overview():
         return {"ok": True, "data": result, "count": len(result)}
     except Exception as e:
         logger.exception(f"[lot-overview] error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ──────────────────────────────────────────────────────────────
@@ -1541,7 +1542,7 @@ def get_allocation(
         return rows
     except Exception as e:
         logger.error("GET /api/allocation error: %s", e)
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 @router.post("/{lot_no}/cancel", summary="❌ 배정 취소 (LOT 단위)")
@@ -1560,7 +1561,7 @@ def cancel_allocation_by_lot(lot_no: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
     _cancelled = int(result.get("cancelled", 0))
     return {
         "ok": bool(result.get("success")) or _cancelled > 0,
@@ -1591,7 +1592,7 @@ def update_allocation_by_lot(lot_no: str, updates: dict = Body(...)):
             return {"ok": True, "data": {"lot_no": lot_no, "updated_fields": list(fields)}}
     except HTTPException: raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 @router.post("/{lot_no}/pick", summary="📦 배정 → PICKED 전환")
@@ -1608,7 +1609,7 @@ def pick_allocation_by_lot(lot_no: str):
         return {"ok": True, "lot_no": lot_no, "message": f"{lot_no} → PICKED"}
     except HTTPException: raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 @router.post("/{lot_no}/confirm", summary="✅ 출고 확정 PICKED → SOLD")
@@ -1628,7 +1629,7 @@ def confirm_allocation_by_lot(lot_no: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
     if not result.get("success"):
         raise HTTPException(404, result.get("message") or f"{lot_no}: PICKED 상태가 아니거나 확정 불가")
     return {
@@ -1667,5 +1668,5 @@ def reset_allocation_by_lot(lot_no: str):
                 "message": f"{lot_no} 초기화 ({deleted}건 삭제)" if deleted else f"{lot_no}: 배정 없음 (inventory만 초기화)"}
     except HTTPException: raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 

@@ -9,6 +9,7 @@ DELETE /api/carriers/{id}      → 소프트 삭제 (is_active=0)
 import sqlite3
 import logging
 from fastapi import APIRouter, HTTPException
+from core.error_helpers import safe_internal_error
 from backend.common.errors import ok_response
 
 router = APIRouter(prefix="/api/carriers", tags=["carriers"])
@@ -79,7 +80,7 @@ def list_carriers():
         return {"data": [_row(r) for r in rows]}
     except Exception as e:
         logging.error(f"[carriers] list failed: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ── GET /api/carriers/{carrier_id} ───────────────────────────────
@@ -101,7 +102,7 @@ def get_carrier(carrier_id: str):
         raise
     except Exception as e:
         logging.error(f"[carriers] get {carrier_id} failed: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ── POST /api/carriers ────────────────────────────────────────────
@@ -156,7 +157,7 @@ def create_carrier(payload: dict):
         raise
     except Exception as e:
         logging.error(f"[carriers] create {carrier_id} failed: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ── PUT /api/carriers/{carrier_id} ───────────────────────────────
@@ -192,7 +193,7 @@ def update_carrier(carrier_id: str, payload: dict):
         raise
     except Exception as e:
         logging.error(f"[carriers] update {carrier_id} failed: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ── DELETE /api/carriers/{carrier_id} ────────────────────────────
@@ -220,4 +221,4 @@ def delete_carrier(carrier_id: str):
         raise
     except Exception as e:
         logging.error(f"[carriers] delete {carrier_id} failed: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")

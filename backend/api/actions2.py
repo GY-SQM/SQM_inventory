@@ -15,6 +15,7 @@ import shutil
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query as QP, UploadFile, File
+from core.error_helpers import safe_internal_error
 from fastapi.responses import FileResponse, StreamingResponse
 from backend.common.errors import ok_response, err_response
 from backend.common.excel_alignment import safe_apply_sqm_workbook
@@ -463,7 +464,7 @@ def export_tonbag_excel(lot_no: Optional[str] = QP(None)):
         )
     except Exception as e:
         logger.error("export-tonbag-excel error: %s", e)
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ── 톤백 리스트 JSON (v8.7.0 — 화면 테이블 렌더용) ────────────────────────
@@ -528,7 +529,7 @@ def tonbag_list_json(lot_no: Optional[str] = QP(None)):
         }}
     except Exception as e:
         logger.error("tonbag-list-json error: %s", e)
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 def _project_root_a2() -> str:
@@ -585,7 +586,7 @@ def open_tonbag_excel(lot_no: Optional[str] = QP(None)):
         return ok_response({"filename": fname, "path": out_path, "rows": len(rows), "opened": True})
     except Exception as e:
         logger.error("open-tonbag-excel error: %s", e)
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ── Sales Order 업로드 (MISS-02) ─────────────────────────────────

@@ -11,6 +11,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(_
 sys.path.insert(0, PROJECT_ROOT)
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from core.error_helpers import safe_internal_error
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from typing import Optional, List
@@ -660,7 +661,7 @@ def get_inventory(
             "data": rows[start:start + page_size],
         }
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 @app.get("/api/inventory/{lot_no}")
 def get_lot_detail(lot_no: str):
@@ -674,7 +675,7 @@ def get_lot_detail(lot_no: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 # ── Tonbags ──────────────────────────────────────────────────
 @app.get("/api/tonbags")
@@ -687,7 +688,7 @@ def get_tonbags(
     try:
         return engine.get_tonbags(lot_no=lot_no, status=status)
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 # ── Allocation ───────────────────────────────────────────────
 @app.get("/api/allocation")
@@ -698,7 +699,7 @@ def get_allocation():
         rows = engine.get_inventory(status="RESERVED")
         return {"total": len(rows), "data": rows}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 # ── Outbound ─────────────────────────────────────────────────
 @app.get("/api/outbound/scheduled")
@@ -708,7 +709,7 @@ def get_outbound_scheduled():
     try:
         return engine.get_inventory(status="PICKED")
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 @app.get("/api/outbound/history")
 def get_outbound_history(
@@ -720,7 +721,7 @@ def get_outbound_history(
     try:
         return engine.get_inventory(status="SOLD")
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 # ── Move (Tonbag 위치이동) ────────────────────────────────────
 @app.post("/api/move")
@@ -739,7 +740,7 @@ def move_tonbag(payload: dict):
         # F007 fix: AttributeError도 503 반환 (엔진 메서드 누락)
         raise HTTPException(503, "엔진 메서드 누락 — 서버 설정 오류")
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 @app.get("/api/move/history")
 def get_move_history(limit: int = Query(50, ge=1, le=500)):
@@ -750,7 +751,7 @@ def get_move_history(limit: int = Query(50, ge=1, le=500)):
     except AttributeError:
         return []
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 # ── Allocation Actions ────────────────────────────────────────
 @app.post("/api/allocation/{lot}/cancel")
@@ -763,7 +764,7 @@ def cancel_allocation(lot: str):
     except AttributeError:
         raise HTTPException(503, "엔진 메서드 누락 — 서버 설정 오류")
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 # ── Outbound Actions ──────────────────────────────────────────
 @app.post("/api/outbound/{lot_no}/confirm")
@@ -776,7 +777,7 @@ def confirm_outbound(lot_no: str):
     except AttributeError:
         raise HTTPException(503, "엔진 메서드 누락 — 서버 설정 오류")
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 @app.post("/api/outbound/{lot_no}/cancel")
 def cancel_outbound_lot(lot_no: str):
@@ -788,7 +789,7 @@ def cancel_outbound_lot(lot_no: str):
     except AttributeError:
         raise HTTPException(503, "엔진 메서드 누락 — 서버 설정 오류")
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 # ── Integrity ────────────────────────────────────────────────
 @app.get("/api/integrity/quick")
@@ -816,7 +817,7 @@ def export_excel(payload: dict):
         safe_apply_sqm_file(out)
         return {"success": True, "path": out}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 # ── Activity Log ─────────────────────────────────────────────
 @app.get("/api/log/activity")
@@ -826,7 +827,7 @@ def get_activity_log(limit: int = Query(100, ge=1, le=1000)):
     try:
         return engine.get_outbound_event_log(limit=limit)
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 # ── Sample Data Fallbacks ────────────────────────────────────
 def _sample_dashboard():

@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Query, Body, Form
+from core.error_helpers import safe_internal_error
 from pydantic import BaseModel, Field
 
 from core.constants import DEFAULT_WAREHOUSE
@@ -2367,7 +2368,7 @@ def inbound_invoice(file: UploadFile = File(...)):
         raise
     except Exception as e:
         logger.exception(f"inbound_invoice error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try: os.unlink(tmp_path)
@@ -2449,7 +2450,7 @@ def inbound_bl(file: UploadFile = File(...)):
         raise
     except Exception as e:
         logger.exception(f"inbound_bl error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try:
@@ -2572,7 +2573,7 @@ def inbound_do(file: UploadFile = File(...)):
         raise
     except Exception as e:
         logger.exception(f"inbound_do error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try:
@@ -2608,7 +2609,7 @@ def get_pending_inbound():
         return {"success": True, "data": [dict(r) for r in rows], "count": len(rows)}
     except Exception as e:
         logger.error(f"GET /pending error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ── PENDING → AVAILABLE 입고 확정 ────────────────────────────────
@@ -2667,7 +2668,7 @@ def confirm_inbound(lot_no: str, payload: dict = {}):
         raise
     except Exception as e:
         logger.error(f"POST /confirm/{lot_no} error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ── PENDING 실제 입고일 인라인 업데이트 ────────────────────────────────────
@@ -2704,7 +2705,7 @@ def set_pending_inbound_date(lot_no: str, payload: dict = {}):
         raise HTTPException(400, "날짜 형식 오류 (YYYY-MM-DD)")
     except Exception as e:
         logger.error(f"PATCH /pending/{lot_no}/inbound-date error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ── AVAILABLE → PENDING 입고 취소 ──────────────────────────────────────────────────────
@@ -2752,4 +2753,4 @@ def revert_to_pending(lot_no: str):
         raise
     except Exception as e:
         logger.error(f"POST /revert/{lot_no} error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")

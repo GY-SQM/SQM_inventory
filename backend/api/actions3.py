@@ -11,6 +11,7 @@ import logging
 from datetime import datetime, date
 from typing import Optional
 from fastapi import APIRouter, Body, HTTPException, Query as QP
+from core.error_helpers import safe_internal_error
 from fastapi.responses import FileResponse
 from backend.common.errors import ok_response, err_response
 from backend.common.excel_alignment import safe_apply_sqm_workbook
@@ -334,7 +335,7 @@ def export_invoice_excel(lot_no: Optional[str] = QP(None)):
         )
     except Exception as e:
         logger.error("export-invoice-excel error: %s", e)
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ── 테스트 DB 초기화 (개발자 전용) ──────────────────────────────

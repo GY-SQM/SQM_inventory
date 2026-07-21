@@ -10,6 +10,7 @@ import sqlite3, os, sys, logging
 from datetime import datetime
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, Query as QP, HTTPException, Body
+from core.error_helpers import safe_internal_error
 from fastapi.responses import JSONResponse
 
 log = logging.getLogger(__name__)
@@ -192,7 +193,7 @@ def get_inventory(
         return rows
     except Exception as e:
         log.error(f"GET /api/inventory error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -225,7 +226,7 @@ def cancel_inventory(lot_no: str):
         return {"success": True, "message": f"{lot_no} 배정 취소 완료"}
     except Exception as e:
         log.error(f"cancel error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -350,7 +351,7 @@ def unallocated_tonbags(lot_no: Optional[str] = QP(None),
             db.close()
     except Exception as e:
         log.error(f"unallocated-tonbags error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -465,7 +466,7 @@ def assign_location(payload: dict = Body(...)):
         raise
     except Exception as e:
         log.error(f"assign-location error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -536,7 +537,7 @@ def assign_locations_bulk(payload: dict = Body(...)):
         raise
     except Exception as e:
         log.error(f"assign-locations-bulk error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -587,7 +588,7 @@ def clear_lot_locations(payload: dict = Body(...)):
         raise
     except Exception as e:
         log.error(f"clear-lot-locations error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -657,7 +658,7 @@ def get_allocation(
         return rows
     except Exception as e:
         log.error(f"GET /api/allocation error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -674,7 +675,7 @@ def cancel_allocation(lot_no: str):
         db.commit(); db.close()
         return {"success": True, "message": f"{lot_no} 배정 취소"}
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -724,7 +725,7 @@ def update_allocation(lot_no: str, updates: Dict[str, Any] = Body(...)):
         raise
     except Exception as e:
         log.error(f"PATCH /api/allocation/{lot_no} error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -750,7 +751,7 @@ def pick_allocation(lot_no: str):
         raise
     except Exception as e:
         log.error(f"POST /api/allocation/{lot_no}/pick error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -781,7 +782,7 @@ def confirm_allocation(lot_no: str):
         raise
     except Exception as e:
         log.error(f"POST /api/allocation/{lot_no}/confirm error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -814,7 +815,7 @@ def reset_allocation(lot_no: str):
         raise
     except Exception as e:
         log.error(f"POST /api/allocation/{lot_no}/reset error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -882,7 +883,7 @@ def get_tonbags(
         return rows
     except Exception as e:
         log.error(f"GET /api/tonbags error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -936,7 +937,7 @@ def scan_process(payload: dict):
         return {"success": True, "message": f"{barcode} 출고 처리 완료", "data": r}
     except Exception as e:
         log.error(f"scan process error: {e}")
-        raise HTTPException(500, str(e))
+        raise safe_internal_error(e, op="API 요청")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
