@@ -15,8 +15,9 @@
 - `settings.ini`는 `.gitignore`에 포함 (line 48) — **🟢 안전**
 - `keyring` 사용 (`config.py:212, 255`) — Windows 자격증명 관리자 활용
 
-### 🟡 권고 1건
-- `config.py:116` `PG_PASSWORD = os.environ.get('SQM_PG_PASSWORD', 'postgres')` — 기본값 `'postgres'` 있으나, SQM이 SQLite만 사용 (`config_sql.py`에 PG 호환 코드만 존재, 실제 사용 0건). **무해하나 정리 권장** — 기본값 `''` (빈 문자열)로 변경하고, PG 사용 시 명시적 환경변수 요구.
+### 🟡 권고 1건 → ✅ 해결 (2026-07-21)
+- ~~`config.py:116` `PG_PASSWORD = os.environ.get('SQM_PG_PASSWORD', 'postgres')` — 기본값 `'postgres'` 있으나, SQM이 SQLite만 사용 (`config_sql.py`에 PG 호환 코드만 존재, 실제 사용 0건). **무해하나 정리 권장** — 기본값 `''` (빈 문자열)로 변경하고, PG 사용 시 명시적 환경변수 요구.~~
+- ✅ **조치 완료** — 기본값 `''` 로 변경, 주석에 audit 정책 명시. PostgreSQL 전환 시 `SQM_PG_PASSWORD` 환경변수 **명시적** 설정이 강제됨.
 
 ---
 
@@ -102,13 +103,13 @@
 
 ### 🔴 즉시수정: 0건
 
-### 🟡 권고 3건 (배포 차단 아님, 다음 개선 과제로 인계)
-1. `config.py:116` `PG_PASSWORD` 기본값 정리
-2. backend/ f-string SQL 11건 — 파라미터 바인딩 정식 전환
-3. 오류 메시지 내부 정보 노출 (I), 대용량 업로드 크기 제한 (D) — STRIDE 권고
+### 🟡 권고 2건 (배포 차단 아님, 다음 개선 과제로 인계)
+1. backend/ f-string SQL 11건 — 파라미터 바인딩 정식 전환
+2. 오류 메시지 내부 정보 노출 (I), 대용량 업로드 크기 제한 (D) — STRIDE 권고
 
 ### ✅ 해결 (2026-07-21 회고)
 - ~~로그 회전 정책 강화~~ → `RotatingFileHandler(10MB × 5)` 양쪽 로그에 적용
+- ~~`config.py:116` `PG_PASSWORD` 기본값 정리~~ → `''` 빈 문자열로 변경 (SQM_PG_PASSWORD 환경변수 명시 요구)
 
 ### 🟢 통과
 - 비밀정보 관리 (env/keyring)

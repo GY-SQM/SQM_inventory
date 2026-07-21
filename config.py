@@ -113,7 +113,11 @@ PG_HOST = os.environ.get('SQM_PG_HOST', 'localhost')
 PG_PORT = int(os.environ.get('SQM_PG_PORT', '5432'))
 PG_DATABASE = os.environ.get('SQM_PG_DATABASE', 'sqm_inventory')
 PG_USER = os.environ.get('SQM_PG_USER', 'postgres')
-PG_PASSWORD = os.environ.get('SQM_PG_PASSWORD', 'postgres')
+# v8.8.5(2026-07-21): 기본값 'postgres' → '' 로 정리 (audit-report.md 🟡 #1)
+# - SQM은 기본적으로 SQLite로 운영되므로 PG_PASSWORD가 실제로 사용되지 않음
+# - PostgreSQL 전환 시 SQM_PG_PASSWORD 환경변수 **명시적** 설정이 강제됨
+# - 빈 비번으로 psycopg2가 시도 → 연결 실패 → 명확한 에러로 환경변수 누락 알림
+PG_PASSWORD = os.environ.get('SQM_PG_PASSWORD', '')
 
 # PostgreSQL 연결 풀 설정
 PG_MIN_CONNECTIONS = int(os.environ.get('SQM_PG_MIN_CONN', '2'))
