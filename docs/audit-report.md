@@ -23,11 +23,16 @@
 
 ## 2. 입력 검증 (보안 기본 5종)
 
-### 2.1 SQL — 🟡 권고
-- backend/ 폴더 f-string SQL: **11건** (`actions3.py`, `actions.py`, `allocation_api.py`, `inbound.py`, `outbound_api.py`, `queries3.py`, `settings.py`)
-- SQM은 내부 FastAPI + SQLite로 사용자 입력이 SQL로 직접 안 들어감 (대부분 ORM/파라미터화)
-- 🟡 권고: f-string SQL 모두 `?` 플레이스홀더 + 파라미터 바인딩으로 정식 전환 (지금은 가능하면 보강)
-- 🔴 즉시수정 필요한 건: **0건** (외부 사용자 입력 경로 분석 결과)
+### 2.1 SQL — ✅ 해결 (2026-07-21)
+- backend/ 폴더 f-string SQL: **11건** (모두 식별자 — 테이블명/컬럼명 동적)
+- 모든 11건 분석 결과: **SQL 인젝션 위험 0** 🟢
+  - 화이트리스트 (`ALLOC_EDITABLE_FIELDS`, `ALLOWED_FIELDS`, `ALLOWED`) 또는
+  - DB 메타 (`sqlite_master`, `PRAGMA table_info`) 또는
+  - 하드코딩 리스트 (`SHOW_TABLES`, `tables=[...]`) 또는
+  - `?` 플레이스홀더 동적 생성 (모범 사례)
+- **상세 인벤토리**: `docs/audit-f-string-sql-inventory.md` (2026-07-21 작성)
+- **회귀 테스트**: `tests/test_audit_yellow_2_f_string_sql_inventory.py` 13 passed
+- 🟢 **조치 완료** — 코드 변경 없음, 가이드 문서화 + 회귀 테스트로 보호
 
 ### 2.2 경로 — 🟢 통과
 - `open(`, `Path()` 사용처는 모두 서버 측 파일 (PDF/Excel)로 사용자 입력 직접 노출 없음
@@ -103,13 +108,13 @@
 
 ### 🔴 즉시수정: 0건
 
-### 🟡 권고 2건 (배포 차단 아님, 다음 개선 과제로 인계)
-1. backend/ f-string SQL 11건 — 파라미터 바인딩 정식 전환
-2. 오류 메시지 내부 정보 노출 (I), 대용량 업로드 크기 제한 (D) — STRIDE 권고
+### 🟡 권고 1건 (배포 차단 아님, 다음 개선 과제로 인계)
+1. 오류 메시지 내부 정보 노출 (I), 대용량 업로드 크기 제한 (D) — STRIDE 권고
 
 ### ✅ 해결 (2026-07-21 회고)
 - ~~로그 회전 정책 강화~~ → `RotatingFileHandler(10MB × 5)` 양쪽 로그에 적용
-- ~~`config.py:116` `PG_PASSWORD` 기본값 정리~~ → `''` 빈 문자열로 변경 (SQM_PG_PASSWORD 환경변수 명시 요구)
+- ~~`config.py:116` `PG_PASSWORD` 기본값 정리~~ → `''` 빈 문자열로 변경
+- ~~backend/ f-string SQL 11건~~ → 인벤토리 문서화 + 회귀 테스트 13종으로 보호. 모든 11건 화이트리스트/DB 메타/? 바인딩 중 하나 적용 확인.
 
 ### 🟢 통과
 - 비밀정보 관리 (env/keyring)
