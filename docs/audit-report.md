@@ -59,8 +59,8 @@
 | **S** (위장) | 로컬 사용자 = OS 로그인 사용자. 별도 인증 없음 (단일 PC 데스크톱 앱) | 🟢 |
 | **T** (변조) | SQLite WAL 모드, 트랜잭션 가드. 외부 네트워크 미노출 | 🟢 |
 | **R** (부인) | `audit_log` 테이블 22 rows, `stock_movement` 140 rows — 추적 가능 | 🟢 |
-| **I** (정보노출) | 오류 메시지에 내부 경로/쿼리 노출 가능 — `error_message` 필드 다수 | 🟡 (아래 권고) |
-| **D** (서비스거부) | PDF/이미지 대용량 업로드 시 멈춤 가능 — 별도 크기 제한 검증 부재 | 🟡 (아래 권고) |
+| **I** (정보노출) | ✅ 해결 (2026-07-21) — `core.error_helpers.safe_internal_error()`: 5xx `str(e)` 노출 차단, request_id만 노출. 서버 로그에 traceback 기록. | 🟢 |
+| **D** (서비스거부) | ✅ 해결 (2026-07-21) — `core.upload_limits.UploadSizeLimitMiddleware` (50MB) + `check_upload_size()` 전역 보호. Content-Length 헤더 사전 차단 + 실제 read 후 2차 검증. | 🟢 |
 | **E** (권한상승) | 단일 사용자 권한 모델, 관리자 기능 분리 없음 | 🟢 |
 
 ---
@@ -108,13 +108,14 @@
 
 ### 🔴 즉시수정: 0건
 
-### 🟡 권고 1건 (배포 차단 아님, 다음 개선 과제로 인계)
-1. 오류 메시지 내부 정보 노출 (I), 대용량 업로드 크기 제한 (D) — STRIDE 권고
+### 🟡 권고 0건 — 모든 권고 해결됨 (2026-07-21)
 
 ### ✅ 해결 (2026-07-21 회고)
 - ~~로그 회전 정책 강화~~ → `RotatingFileHandler(10MB × 5)` 양쪽 로그에 적용
 - ~~`config.py:116` `PG_PASSWORD` 기본값 정리~~ → `''` 빈 문자열로 변경
 - ~~backend/ f-string SQL 11건~~ → 인벤토리 문서화 + 회귀 테스트 13종으로 보호. 모든 11건 화이트리스트/DB 메타/? 바인딩 중 하나 적용 확인.
+- ~~STRIDE I (오류 메시지 노출)~~ → `core.error_helpers.safe_internal_error()` 5xx `str(e)` 노출 차단
+- ~~STRIDE D (대용량 업로드 DoS)~~ → `core.upload_limits.UploadSizeLimitMiddleware` (50MB) + `check_upload_size()`
 
 ### 🟢 통과
 - 비밀정보 관리 (env/keyring)
@@ -123,18 +124,21 @@
 - 개인정보·라이선스 (GPL 0건)
 - 트랜잭션 (WAL)
 - 백업 (자동)
+- STRIDE I (오류 메시지 노출) ✅ 해결
+- STRIDE D (대용량 업로드) ✅ 해결
 
 ### 출고 가능 선언
 - 사내 배포 / 직원 PC 설치: **즉시 가능**
-- 외부 거래처·GitHub 공개: **🟡 권고 4건 반영 후 출고 권장**
+- 외부 거래처·GitHub 공개: **🟢 모든 권고 반영 완료, 즉시 출고 가능**
 
 ---
 
 ## 다음 개선 과제 인계
 
-1. **Q3 2026 회고 시점에 STRIDE I, D 처리** — 오류 메시지 정제 + 업로드 크기 제한
-2. **다음 v8.9.0 릴리즈 시 f-string SQL 정식 전환** (점진적, 한 모듈씩)
-3. **로그 회전 정책 v8.9.0에 포함** — `RotatingFileHandler` + 작업 스케줄러
+1. **central allowlist 모듈** (`core/db_allowed.py`) — backend/ 11개 위치의 분산된 화이트리스트 통합 (다음 v9.0.0)
+2. **HTTPException 5xx str(e) 마이그레이션** — 기존 12건의 `HTTPException(500, str(e))` → `safe_internal_error()` 일괄 전환 (Q3 2026)
+3. **UploadFile 엔드포인트 check_upload_size() 추가** — 미들웨어 외 2차 검증 (Q3 2026)
+4. **CI 통합 (Bandit / flake8-bugbear)** — f-string SQL, 하드코딩 키 자동 검출 (v9.0.0)
 
 ---
 

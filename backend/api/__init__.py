@@ -346,6 +346,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── v8.8.5(2026-07-21) STRIDE D: 업로드 크기 제한 미들웨어 (audit 🟡 #3)
+# Content-Length 헤더로 사전 차단. 50MB 초과 시 413 Payload Too Large.
+try:
+    from core.upload_limits import UploadSizeLimitMiddleware
+    app.add_middleware(UploadSizeLimitMiddleware, max_bytes=50 * 1024 * 1024)
+    logging.info("UploadSizeLimitMiddleware (50 MB) loaded OK")
+except Exception as _upload_mw_e:
+    logging.warning(f"UploadSizeLimitMiddleware 로드 실패: {_upload_mw_e}")
+
 # ── v864.3 Debug Visibility: 프론트엔드 에러 수집 라우터 ─────
 try:
     from backend.api.debug_log import router as debug_log_router
