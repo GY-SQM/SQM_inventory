@@ -15,7 +15,9 @@ from backend.common.errors import ok_response, err_response
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/report-templates", tags=["report-templates"])
 
-_ALLOWED_EXT = (".xlsx", ".xls", ".pdf", ".docx", ".csv", ".html")
+from core.db_allowed import ALLOWED_FILE_EXTS  # v9.0.0 central allowlist (Phase 2 Step 1)
+
+# ALLOWED_FILE_EXTS 는 v9.0.0 부터 core.db_allowed.ALLOWED_FILE_EXTS 로 이전 (위 import 참조)
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9가-힣._\- \(\)]{1,200}$")
 
 
@@ -34,8 +36,8 @@ def _validate_filename(name: str) -> str:
     if not _SAFE_NAME.match(base):
         raise HTTPException(400, "허용되지 않는 문자가 포함된 파일명")
     low = base.lower()
-    if not any(low.endswith(ext) for ext in _ALLOWED_EXT):
-        raise HTTPException(400, f"허용 확장자: {', '.join(_ALLOWED_EXT)}")
+    if not any(low.endswith(ext) for ext in ALLOWED_FILE_EXTS):
+        raise HTTPException(400, f"허용 확장자: {', '.join(ALLOWED_FILE_EXTS)}")
     return base
 
 

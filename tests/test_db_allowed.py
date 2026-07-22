@@ -25,6 +25,7 @@ from core.db_allowed import (
     LOT_EDIT_FIELDS,
     CARRIER_RULE_EDIT_FIELDS,
     ALLOWED_TABLE_DELETE,
+    ALLOWED_FILE_EXTS,
     validate,
     all_tables,
     all_statuses,
@@ -247,3 +248,27 @@ class TestStep4:
         """절대 허용 안 함: inventory, inventory_tonbag."""
         assert "inventory" not in ALLOWED_TABLE_DELETE
         assert "inventory_tonbag" not in ALLOWED_TABLE_DELETE
+
+
+# ── Phase 2 Step 1: ALLOWED_FILE_EXTS + validate(kind='file_ext') ──
+
+class TestPhase2Step1:
+    def test_t26_file_exts_basic(self):
+        """ALLOWED_FILE_EXTS 기본 (6개)."""
+        assert ".xlsx" in ALLOWED_FILE_EXTS
+        assert ".pdf" in ALLOWED_FILE_EXTS
+        assert len(ALLOWED_FILE_EXTS) == 6
+        assert isinstance(ALLOWED_FILE_EXTS, frozenset)
+
+    def test_t27_validate_file_ext(self):
+        """validate(kind='file_ext', ...) 동작."""
+        assert validate("report", "file_ext", ".xlsx") is True
+        assert validate("report", "file_ext", ".pdf") is True
+        assert validate("report", "file_ext", ".exe") is False
+        assert validate("report", "file_ext", "xlsx") is False  # 점(.) 필수
+
+    def test_t28_file_exts_excludes_dangerous(self):
+        """위험 확장자 (실행 파일) 부재."""
+        dangerous = [".exe", ".bat", ".sh", ".py", ".js", ".dll", ".so"]
+        for ext in dangerous:
+            assert ext not in ALLOWED_FILE_EXTS, f"{ext} should not be allowed"

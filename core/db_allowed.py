@@ -26,10 +26,10 @@ Phase 1 (2026-07-22): CLOSED ✓
     - queries3.py: 정적 ALLOWED_* 없음 (모두 동적 set comprehension) → SKIP
       (v8.8.5 audit 인벤토리 #1.4: "queries3.py:1925 — 테이블명 동적 (DB 메타)")
 
-Phase 2 (예정): 확장
-    - report_templates.py _ALLOWED_EXT (파일 확장자)
-    - queries3.py 동적 set → 명시적 allowlist 변환 검토
-    - lint 가드 / 모니터링
+Phase 2 (2026-07-22): 확장
+    - Step 1: report_templates.py _ALLOWED_EXT (파일 확장자)
+    - (예정) queries3.py 동적 set → 명시적 allowlist 변환
+    - (예정) lint 가드 / 모니터링
 """
 
 
@@ -179,6 +179,18 @@ ALLOWED_TABLE_DELETE = frozenset({
     "outbound_event_log",
 })
 
+# 파일 확장자 화이트리스트 (report_templates.py → central allowlist 이전)
+# Phase 2 Step 1: backend/api/report_templates.py:18의 _ALLOWED_EXT 마이그레이션
+# Note: file extension (DB 무관) — central allowlist 모듈에 같이 두는 이유는 단일 검증 진입점 통일
+ALLOWED_FILE_EXTS = frozenset({
+    ".xlsx",
+    ".xls",
+    ".pdf",
+    ".docx",
+    ".csv",
+    ".html",
+})
+
 
 # ── 단일 검증 진입점 ──────────────────────────────────────────
 
@@ -222,6 +234,8 @@ def validate(area: str, kind: str, value: str) -> bool:
         return value in ALLOWED_SCOPES
     elif kind == "lot_field":
         return value in LOT_EDIT_FIELDS
+    elif kind == "file_ext":
+        return value in ALLOWED_FILE_EXTS
     return False
 
 
