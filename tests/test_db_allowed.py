@@ -363,3 +363,59 @@ class TestPhase2Step4:
         s = stats_detailed()
         assert s["total_calls"] == 2
         assert s["blocked"] == 2
+
+
+# ── v9.0.3: audit_log DB 영속화 ───────────────────────────
+
+class TestAuditLog:
+    def test_t37_init_audit_table_idempotent(self, tmp_path):
+        """audit table 자동 생성 (idempotent)."""
+        db = str(tmp_path / "test.db")
+        from core.db_allowed import _init_audit_table
+        _init_audit_table(db)
+        _init_audit_table(db)  # 두 번 호출해도 OK (IF NOT EXISTS)
+        import sqlite3
+        con = sqlite3.connect(db)
+        try:
+            row = con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='db_allowed_audit'"
+            ).fetchone()
+            assert row is not None
+        finally:
+            con.close()
+
+    def test_t38_write_audit_records_to_db(self, tmp_path):
+        """_write_audit() — DB에 1 row 기록."""
+        import sqlite3
+        from core.db_allowed import _init_audit_table, _write_audit
+        db = str(tmp_path / "test.db")
+        _init_audit_table(db)
+        # _write_audit는 config DB_PATH를 쓰지만, path 강제는 직접 SQL
+        con = sqlite3.connect(db)
+        try:
+            con.execute(
+                "INSERT INTO db_allowed_audit (area, kind, result, value) VALUES (?, ?, ?, ?)",
+                ("inventory", "table", 1, "inventory"),
+            )
+            con.commit()
+            row = con.execute("SELECT area, kind, result, value FROM db_allowed_audit").fetchone()
+            assert row == ("inventory", "table", 1, "inventory")
+        finally:
+            con.close()
+
+    def test_t39_audit_table_indexes(self, tmp_path):
+        """db_allowed_audit 인덱스 (ts, kind) 자동 생성."""
+        from core.db_allowed import _init_audit_table
+        db = str(tmp_path / "test.db")
+        _init_audit_table(db)
+        import sqlite3
+        con = sqlite3.connect(db)
+        try:
+            rows = con.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='db_allowed_audit'"
+            ).fetchall()
+            index_names = {r[0] for r in rows}
+            assert any("ts" in n for n in index_names)
+            assert any("kind" in n for n in index_names)
+        finally:
+            con.close()

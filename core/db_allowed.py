@@ -39,6 +39,7 @@ Phase 2 (2026-07-22): 확장
 
 import io
 import logging
+import sqlite3
 from pathlib import Path
 from types import MappingProxyType
 from typing import List, Optional
@@ -270,6 +271,7 @@ def validate(area: str, kind: str, value: str) -> bool:
     """
     if not isinstance(value, str) or not value:
         _record_validate(area, kind, False)
+        _write_audit(area, kind, False, str(value) if value is not None else "")
         return False
 
     if kind == "table":
@@ -288,6 +290,7 @@ def validate(area: str, kind: str, value: str) -> bool:
         result = False
 
     _record_validate(area, kind, result)
+    _write_audit(area, kind, result, value)
     return result
 
 
@@ -304,6 +307,66 @@ def _record_validate(area: str, kind: str, result: bool) -> None:
     """validate() 호출 카운트 (in-memory)."""
     key = (area, kind, result)
     _VALIDATE_COUNTS[key] = _VALIDATE_COUNTS.get(key, 0) + 1
+
+
+# v9.0.3: audit_log DB 영속화
+# 별도 테이블 db_allowed_audit — 자동 마이그레이션 (테이블 없으면 생성)
+_AUDIT_TABLE_NAME = "db_allowed_audit"
+
+
+def _init_audit_table(db_path: Optional[str] = None) -> None:
+    """db_allowed_audit 테이블 자동 생성 (마이그레이션)."""
+    path = db_path or _get_default_db_path()
+    if not path:
+        return  # DB 경로 없으면 skip (테스트 환경 등)
+    try:
+        con = sqlite3.connect(path, timeout=5)
+        try:
+            con.execute(f"""
+                CREATE TABLE IF NOT EXISTS {_AUDIT_TABLE_NAME} (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts TEXT NOT NULL DEFAULT (datetime('now')),
+                    area TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    result INTEGER NOT NULL,
+                    value TEXT
+                )
+            """)
+            con.execute(f"CREATE INDEX IF NOT EXISTS idx_{_AUDIT_TABLE_NAME}_ts ON {_AUDIT_TABLE_NAME}(ts)")
+            con.execute(f"CREATE INDEX IF NOT EXISTS idx_{_AUDIT_TABLE_NAME}_kind ON {_AUDIT_TABLE_NAME}(kind)")
+            con.commit()
+        finally:
+            con.close()
+    except sqlite3.Error as e:
+        logger.warning(f"audit table init 실패 (skip): {e}")
+
+
+def _get_default_db_path() -> Optional[str]:
+    """기본 DB 경로 추정 (config 또는 환경변수)."""
+    try:
+        from config import DB_PATH  # type: ignore
+        return str(DB_PATH)
+    except Exception:
+        return None  # 테스트 환경에서는 None
+
+
+def _write_audit(area: str, kind: str, result: bool, value: str) -> None:
+    """audit_log DB 기록 (silent 실패 — 모니터링은 best-effort)."""
+    path = _get_default_db_path()
+    if not path:
+        return
+    try:
+        con = sqlite3.connect(path, timeout=2)
+        try:
+            con.execute(
+                f"INSERT INTO {_AUDIT_TABLE_NAME} (area, kind, result, value) VALUES (?, ?, ?, ?)",
+                (area, kind, 1 if result else 0, value[:200] if value else None),
+            )
+            con.commit()
+        finally:
+            con.close()
+    except sqlite3.Error as e:
+        logger.debug(f"audit write 실패 (skip): {e}")
 
 
 def stats_detailed() -> dict:
