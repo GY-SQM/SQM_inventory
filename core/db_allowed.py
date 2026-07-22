@@ -60,6 +60,7 @@ ALLOWED_TABLES = frozenset({
 ALLOWED_STATUS = frozenset({
     # inventory / lot
     "AVAILABLE",        # 가용
+    "RESERVED",         # 예약 (할당 확정, 출고 전)
     "PENDING",          # 입고 대기
     "PENDING_APPROVAL", # 할당 승인 대기
     "STAGED",           # 피킹 준비
@@ -105,6 +106,19 @@ ALLOWED_SCOPES = frozenset({
     "current_filter",
     "all_status",
 })
+
+# 상태 전이 맵 (status_revert_api.py → central allowlist 이전)
+# Phase 1 Step 2: backend/api/status_revert_api.py에서 마이그레이션
+# from_status → to_status (허용되는 되돌리기 단계)
+# Note: dict (mutable) — 의도적. 상태 머신 진화 시 업데이트 가능.
+#       키/값 모두 ALLOWED_STATUS 안의 값이어야 한다 (런타임 cross-check 권장).
+REVERT_MAP = {
+    "AVAILABLE": "PENDING",
+    "RESERVED": "AVAILABLE",
+    "PICKED": "RESERVED",
+    "SOLD": "PICKED",
+    "RETURN": "AVAILABLE",
+}
 
 
 # ── 단일 검증 진입점 ──────────────────────────────────────────

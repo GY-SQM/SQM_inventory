@@ -20,6 +20,8 @@ from core.db_allowed import (
     ALLOWED_TABLES,
     ALLOWED_STATUS,
     ALLOWED_AREAS,
+    ALLOWED_SCOPES,
+    REVERT_MAP,
     validate,
     all_tables,
     all_statuses,
@@ -150,3 +152,35 @@ class TestHelpers:
         assert all_tables() == sorted(all_tables())
         assert all_statuses() == sorted(all_statuses())
         assert all_areas() == sorted(all_areas())
+
+
+# ── REVERT_MAP (state transition) ────────────────────────────
+
+class TestRevertMap:
+    def test_t13_revert_map_basic(self):
+        """REVERT_MAP 핵심 매핑."""
+        assert REVERT_MAP["AVAILABLE"] == "PENDING"
+        assert REVERT_MAP["PICKED"] == "RESERVED"
+        assert REVERT_MAP["SOLD"] == "PICKED"
+        assert REVERT_MAP["RETURN"] == "AVAILABLE"
+
+    def test_t14_revert_map_unknown(self):
+        """정의되지 않은 from_status는 None."""
+        assert REVERT_MAP.get("INVALID") is None
+        assert REVERT_MAP.get("available") is None  # 대소문자
+
+    def test_t15_revert_map_keys_in_status(self):
+        """모든 키가 ALLOWED_STATUS 안의 값."""
+        for key in REVERT_MAP:
+            assert key in ALLOWED_STATUS, f"{key} not in ALLOWED_STATUS"
+
+    def test_t16_revert_map_values_in_status(self):
+        """모든 값이 ALLOWED_STATUS 안의 값 (cross-check)."""
+        for from_st, to_st in REVERT_MAP.items():
+            assert to_st in ALLOWED_STATUS, f"{from_st} → {to_st}: target not in ALLOWED_STATUS"
+
+    def test_t17_allowed_scopes_isfrozenset(self):
+        """ALLOWED_SCOPES도 immutable."""
+        assert isinstance(ALLOWED_SCOPES, frozenset)
+        with pytest.raises(AttributeError):
+            ALLOWED_SCOPES.add("hacked")
