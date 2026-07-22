@@ -1,0 +1,15 @@
+{
+  "_comment": "SQM v9.0.6 narrow SQL context lint baseline. 첫 가동 시 발견된 의도된 dynamic 11건 검토/등록. 신규 동적 SQL만 [WARN]으로 잡힘.",
+
+  "backend/api/allocation_api.py:963": "REVERT_MAP 결과 (src_status=core.db_allowed.REVERT_MAP[from_status])",
+  "backend/api/inbound.py:1783": "string-concat, generator expression inner var (clauses는 SAFE_PLACEHOLDER_NAMES)",
+  "backend/api/inbound.py:2602": "select_cols는 SAFE_PLACEHOLDER_NAMES, order_col은 코드 내부 literal 할당",
+  "backend/api/db_session.py:42": "int() cast — busy_timeout은 정수 (int(busy_timeout_ms))",
+  "backend/api/product_master.py:77": "new_cols는 literal 리스트 (PRODUCT_COLUMNS), allowlist 거침",
+  "backend/api/queries.py:447": "picking_source는 if/else 분기에서 literal 할당",
+  "backend/api/queries3.py:1929": "audit 인벤토리 #1.4 — 테이블명 동적 (DB 메타)",
+  "backend/api/sales_order_validation.py:51": "sale_expr은 if/else 분기 literal 할당",
+  "backend/api/status_revert_api.py:207": "string-concat, _base_query는 internal helper, where는 SAFE",
+  "backend/api/status_revert_api.py:448": "expr은 if/else 분기 literal, _base_query는 internal helper",
+  "backend/api/__init__.py:49": "literal 리스트 (NEW_INVENTORY_COLUMNS), allowlist 거침"
+}
