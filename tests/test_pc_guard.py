@@ -80,6 +80,45 @@ def test_pc20_judge_disabled():
     assert "비활성" in result["판정"]
 
 
+def test_pc20b_judge_dict_registry_full_auth():
+    """dict registry (config_local fallback) → FULL_AUTH."""
+    fp = {
+        "hostname": "test-pc",
+        "machine_guid": "guid-1",
+        "macs": ["AA:BB:CC:DD:EE:FF"],
+    }
+    data = {"allowed_pcs": [{
+        "name": "test-pc",
+        "macs": ["AA:BB:CC:DD:EE:FF"],
+        "machine_guid": "guid-1",
+    }]}
+    result = pc_guard._judge(fp, data)
+    assert result["판정코드"] == "FULL_AUTH"
+
+
+def test_pc20c_judge_dict_registry_partial_auth():
+    """dict registry, guid 미등록 → PARTIAL_AUTH."""
+    fp = {
+        "hostname": "test-pc",
+        "machine_guid": "guid-1",
+        "macs": ["AA:BB:CC:DD:EE:FF"],
+    }
+    data = {"allowed_pcs": [{
+        "name": "test-pc",
+        "macs": ["AA:BB:CC:DD:EE:FF"],
+        "machine_guid": "",  # 미등록
+    }]}
+    result = pc_guard._judge(fp, data)
+    assert result["판정코드"] == "PARTIAL_AUTH"
+
+
+def test_pc20d_judge_unknown_type():
+    """registry가 Path/dict/None이 아니면 REGISTRY_PARSE_ERROR."""
+    fp = {"hostname": "x", "machine_guid": "g", "macs": []}
+    result = pc_guard._judge(fp, 42)  # int (invalid type)
+    assert result["판정코드"] == "REGISTRY_PARSE_ERROR"
+
+
 def test_pc21_judge_registry_missing(tmp_path):
     """registry 파일 없음 → REGISTRY_MISSING."""
     fp = {"hostname": "x", "machine_guid": "g", "macs": []}
@@ -254,9 +293,10 @@ def test_pc33_register_registry_missing(tmp_path, monkeypatch):
 # ── is_allowed ──────────────────────────────────────────
 
 def test_pc40_is_allowed_disabled(monkeypatch):
-    """registry None → True (비활성)."""
+    """registry None → True (비활성). env + config_local 둘 다 없음."""
     monkeypatch.delenv("PC_GUARD_REGISTRY", raising=False)
-    allowed, reason = pc_guard.is_allowed(None)
+    with patch.object(pc_guard, "_load_local_default", return_value=None):
+        allowed, reason = pc_guard.is_allowed(None)
     assert allowed is True
     assert "비활성" in reason
 

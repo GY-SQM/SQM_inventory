@@ -63,6 +63,37 @@ def get_registry_path() -> Optional[Path]:
     return Path(p)
 
 
+def _load_local_default() -> Optional[dict]:
+    """config_local.ALLOWED_PCS import 시도. 실패 시 None.
+
+    SQM_inventory는 GitHub 공개 repo이므로 회사 PC 데이터를 코드에 직접
+    박지 않음. config_local.py는 .gitignore에 등록되어 로컬에만 존재.
+    """
+    try:
+        from config_local import ALLOWED_PCS  # type: ignore
+        return ALLOWED_PCS
+    except ImportError:
+        return None
+    except Exception:
+        return None
+
+
+def load_registry() -> Optional[object]:
+    """
+    Registry 자동 결정 (우선순위):
+        1) PC_GUARD_REGISTRY 환경변수 → Path
+        2) config_local.ALLOWED_PCS import → dict
+        3) None (DISABLED)
+
+    Returns:
+        Path (env), dict (config_local), 또는 None
+    """
+    p = get_registry_path()
+    if p is not None:
+        return p
+    return _load_local_default()
+
+
 # ── 핑거프린트 수집 ─────────────────────────────────────
 
 def collect_fingerprint() -> dict:
@@ -193,36 +224,48 @@ def inspect(registry_path: Optional[Path] = None) -> dict:
 
 # ── 판정 로직 ────────────────────────────────────────────
 
-def _judge(fp: dict, registry_path: Optional[Path]) -> dict:
-    """fingerprint + registry_path → 판정 dict."""
-    if registry_path is None:
+def _judge(fp: dict, registry) -> dict:
+    """fingerprint + registry → 판정 dict. registry는 Path, dict, 또는 None."""
+    if registry is None:
         return {
             "호스트명": fp["hostname"],
             "MAC일치": False,
             "GUID일치": False,
-            "판정": "비활성 (PC_GUARD_REGISTRY 미설정)",
+            "판정": "비활성 (PC_GUARD_REGISTRY 미설정, config_local 없음)",
             "판정코드": "DISABLED",
         }
-    if not registry_path.exists():
+    # Path → 파일에서 dict 로드
+    if isinstance(registry, Path):
+        if not registry.exists():
+            return {
+                "호스트명": fp["hostname"],
+                "MAC일치": False,
+                "GUID일치": False,
+                "판정": f"⚠️ registry 없음: {registry}",
+                "판정코드": "REGISTRY_MISSING",
+            }
+        try:
+            raw = registry.read_text(encoding="utf-8")
+            data = json.loads(raw)
+        except Exception as e:
+            return {
+                "호스트명": fp["hostname"],
+                "MAC일치": False,
+                "GUID일치": False,
+                "판정": f"⚠️ registry 파싱 실패: {e}",
+                "판정코드": "REGISTRY_PARSE_ERROR",
+            }
+    elif isinstance(registry, dict):
+        data = registry
+    else:
         return {
             "호스트명": fp["hostname"],
             "MAC일치": False,
             "GUID일치": False,
-            "판정": f"⚠️ registry 없음: {registry_path}",
-            "판정코드": "REGISTRY_MISSING",
-        }
-    try:
-        raw = registry_path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-        allowed = data.get("allowed_pcs", [])
-    except Exception as e:
-        return {
-            "호스트명": fp["hostname"],
-            "MAC일치": False,
-            "GUID일치": False,
-            "판정": f"⚠️ registry 파싱 실패: {e}",
+            "판정": f"⚠️ registry 타입 오류: {type(registry).__name__}",
             "판정코드": "REGISTRY_PARSE_ERROR",
         }
+    allowed = data.get("allowed_pcs", [])
 
     fp_macs = set(fp["macs"])
     for pc in allowed:
@@ -270,13 +313,18 @@ def is_allowed(registry_path: Optional[Path] = None) -> tuple[bool, str]:
     """
     허용된 PC인지 확인. 메인 가드 진입점.
 
+    registry_path가 None이면 자동 결정:
+        1) PC_GUARD_REGISTRY env → Path
+        2) config_local.ALLOWED_PCS → dict
+        3) None (DISABLED)
+
     Returns:
         (allowed, reason) — allowed=True면 SQM_inventory 정상 기동.
         FULL_AUTH, DISABLED → True
         PARTIAL_AUTH, NOT_REGISTERED, REGISTRY_* → False
     """
     if registry_path is None:
-        registry_path = get_registry_path()
+        registry_path = load_registry()  # Path | dict | None
     fp = collect_fingerprint()
     judgment = _judge(fp, registry_path)
     code = judgment.get("판정코드", "")

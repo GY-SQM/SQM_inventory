@@ -71,6 +71,9 @@ data/db/*.db-shm
 # UI 런타임 상태 (창 크기·위치 — 사용자별 상이, 추적 불필요)
 window_state.json
 
-# ������ �ӽ� ��� (ȸ��/flake8)
+# ������ �ӽ� ��� (ȸ��/flake8)
 .pytest_output.txt
 flake8_*.txt
+
+# PC Guard 회사 PC 명단 (GitHub 공개 금지, 회사 내부용)
+config_local.py
