@@ -32,6 +32,9 @@ from core.db_allowed import (
     all_statuses,
     all_areas,
     stats,
+    stats_detailed,
+    reset_counts,
+    _VALIDATE_COUNTS,
 )
 
 
@@ -302,3 +305,61 @@ class TestPhase2Step2:
         """MappingProxyType — read-only."""
         with pytest.raises(TypeError):
             REPORT_FIELDS_BY_TYPE["new_report"] = frozenset()
+
+
+# ── Phase 2 Step 4: 모니터링 (in-memory 카운터) ────────────
+
+class TestPhase2Step4:
+    def setup_method(self):
+        """각 테스트 전 카운터 초기화."""
+        reset_counts()
+
+    def test_t32_stats_detailed_empty(self):
+        """빈 카운터 → 0건."""
+        s = stats_detailed()
+        assert s["total_calls"] == 0
+        assert s["allowed"] == 0
+        assert s["blocked"] == 0
+        assert s["by_kind"] == {}
+
+    def test_t33_stats_detailed_records_allowed(self):
+        """allowed 카운트."""
+        validate("inventory", "table", "inventory")  # allowed
+        validate("inventory", "table", "lot")  # allowed
+        s = stats_detailed()
+        assert s["total_calls"] == 2
+        assert s["allowed"] == 2
+        assert s["blocked"] == 0
+        assert s["by_kind"]["table"]["allowed"] == 2
+
+    def test_t34_stats_detailed_records_blocked(self):
+        """blocked 카운트 (화이트리스트 부재)."""
+        validate("inventory", "table", "sql_injection_attempt")  # blocked
+        s = stats_detailed()
+        assert s["total_calls"] == 1
+        assert s["allowed"] == 0
+        assert s["blocked"] == 1
+        assert s["by_kind"]["table"]["blocked"] == 1
+
+    def test_t35_stats_detailed_mixed(self):
+        """mixed allowed + blocked."""
+        validate("inventory", "table", "inventory")  # allowed
+        validate("inventory", "table", "bad")  # blocked
+        validate("inventory", "status", "AVAILABLE")  # allowed
+        validate("inventory", "status", "bad")  # blocked
+        s = stats_detailed()
+        assert s["total_calls"] == 4
+        assert s["allowed"] == 2
+        assert s["blocked"] == 2
+        assert s["by_kind"]["table"]["allowed"] == 1
+        assert s["by_kind"]["table"]["blocked"] == 1
+        assert s["by_kind"]["status"]["allowed"] == 1
+        assert s["by_kind"]["status"]["blocked"] == 1
+
+    def test_t36_stats_detailed_records_invalid_input(self):
+        """invalid input (None, 빈 문자열) 도 카운트."""
+        validate("inventory", "table", "")  # blocked (빈 문자열)
+        validate("inventory", "table", None)  # blocked (None)
+        s = stats_detailed()
+        assert s["total_calls"] == 2
+        assert s["blocked"] == 2

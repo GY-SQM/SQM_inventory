@@ -31,7 +31,9 @@ Phase 2 (2026-07-22): 확장
     - Step 1: report_templates.py _ALLOWED_EXT (파일 확장자) ✓
     - Step 2: queries3.py _REPORT_FIELDS (L331 frozenset lookup)
               — L644/653/891 dynamic set (user input) 의도된 dynamic으로 skip
-    - (예정) lint 가드 / 모니터링
+    - Step 3: lint 가드 (tools/lint_db_hardcoding.py) ✓
+    - Step 4: 모니터링 (in-memory 카운터 + stats_detailed)
+    - (예정) audit_log 영속화
 """
 
 
@@ -267,21 +269,76 @@ def validate(area: str, kind: str, value: str) -> bool:
         False
     """
     if not isinstance(value, str) or not value:
+        _record_validate(area, kind, False)
         return False
 
     if kind == "table":
-        return value in ALLOWED_TABLES
+        result = value in ALLOWED_TABLES
     elif kind == "status":
-        return value in ALLOWED_STATUS
+        result = value in ALLOWED_STATUS
     elif kind == "area":
-        return value in ALLOWED_AREAS
+        result = value in ALLOWED_AREAS
     elif kind == "scope_type":
-        return value in ALLOWED_SCOPES
+        result = value in ALLOWED_SCOPES
     elif kind == "lot_field":
-        return value in LOT_EDIT_FIELDS
+        result = value in LOT_EDIT_FIELDS
     elif kind == "file_ext":
-        return value in ALLOWED_FILE_EXTS
-    return False
+        result = value in ALLOWED_FILE_EXTS
+    else:
+        result = False
+
+    _record_validate(area, kind, result)
+    return result
+
+
+# ── 모니터링 (Phase 2 Step 4) ─────────────────────────────────
+
+# in-memory 카운터 (Thread-safe with GIL)
+# 형식: { (area, kind, result) : count }
+#   - result: True (허용) / False (차단)
+#   - 호출 패턴 추적 + 차단 시도 카운트
+_VALIDATE_COUNTS: dict[tuple[str, str, bool], int] = {}
+
+
+def _record_validate(area: str, kind: str, result: bool) -> None:
+    """validate() 호출 카운트 (in-memory)."""
+    key = (area, kind, result)
+    _VALIDATE_COUNTS[key] = _VALIDATE_COUNTS.get(key, 0) + 1
+
+
+def stats_detailed() -> dict:
+    """
+    validate() 호출 통계 (모니터링용).
+
+    Returns:
+        dict: {
+            "total_calls": int,
+            "allowed": int,
+            "blocked": int,
+            "by_kind": {kind: {"allowed": int, "blocked": int}, ...},
+        }
+    """
+    total = sum(_VALIDATE_COUNTS.values())
+    allowed = sum(v for (a, k, r), v in _VALIDATE_COUNTS.items() if r)
+    blocked = total - allowed
+
+    by_kind: dict[str, dict[str, int]] = {}
+    for (a, k, r), v in _VALIDATE_COUNTS.items():
+        if k not in by_kind:
+            by_kind[k] = {"allowed": 0, "blocked": 0}
+        by_kind[k]["allowed" if r else "blocked"] += v
+
+    return {
+        "total_calls": total,
+        "allowed": allowed,
+        "blocked": blocked,
+        "by_kind": by_kind,
+    }
+
+
+def reset_counts() -> None:
+    """카운터 초기화 (테스트용)."""
+    _VALIDATE_COUNTS.clear()
 
 
 # ── 헬퍼 (디버그/모니터링용) ─────────────────────────────────
