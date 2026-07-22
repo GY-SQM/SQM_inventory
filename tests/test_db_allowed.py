@@ -22,6 +22,7 @@ from core.db_allowed import (
     ALLOWED_AREAS,
     ALLOWED_SCOPES,
     REVERT_MAP,
+    LOT_EDIT_FIELDS,
     validate,
     all_tables,
     all_statuses,
@@ -184,3 +185,32 @@ class TestRevertMap:
         assert isinstance(ALLOWED_SCOPES, frozenset)
         with pytest.raises(AttributeError):
             ALLOWED_SCOPES.add("hacked")
+
+
+# ── LOT_EDIT_FIELDS + validate(kind='lot_field') ────────────
+
+class TestLotEditFields:
+    def test_t18_lot_edit_fields_basic(self):
+        """LOT_EDIT_FIELDS 핵심 컬럼."""
+        assert "free_time" in LOT_EDIT_FIELDS
+        assert "warehouse_name" in LOT_EDIT_FIELDS
+        assert "final_destination" in LOT_EDIT_FIELDS
+        assert len(LOT_EDIT_FIELDS) == 8
+
+    def test_t19_lot_edit_fields_immutable(self):
+        """LOT_EDIT_FIELDS는 frozenset."""
+        assert isinstance(LOT_EDIT_FIELDS, frozenset)
+        with pytest.raises(AttributeError):
+            LOT_EDIT_FIELDS.add("hacked")
+
+    def test_t20_validate_lot_field(self):
+        """validate(kind='lot_field', ...) 동작."""
+        assert validate("inventory", "lot_field", "free_time") is True
+        assert validate("inventory", "lot_field", "warehouse_name") is True
+        assert validate("inventory", "lot_field", "qty_mt") is False  # 일반 컬럼 (수정 불가)
+        assert validate("inventory", "lot_field", "DROP_FIELD") is False
+
+    def test_t21_validate_scope_type(self):
+        """validate(kind='scope_type', ...) 동작 (Step 1 보강)."""
+        assert validate("inventory", "scope_type", "container_no") is True
+        assert validate("inventory", "scope_type", "unknown") is False

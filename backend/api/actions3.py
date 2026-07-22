@@ -15,6 +15,7 @@ from core.error_helpers import safe_internal_error
 from fastapi.responses import FileResponse
 from backend.common.errors import ok_response, err_response
 from backend.common.excel_alignment import safe_apply_sqm_workbook
+from core.db_allowed import LOT_EDIT_FIELDS  # v9.0.0 central allowlist
 
 router = APIRouter(prefix="/api/action3", tags=["actions3"])
 logger = logging.getLogger(__name__)
@@ -131,15 +132,11 @@ def do_update(payload: dict):
     field  = (payload.get("field")  or "").strip()
     value  = payload.get("value", "")
 
-    # 허용 필드 화이트리스트 (SQL Injection 방지)
-    ALLOWED_FIELDS = {
-        "free_time", "con_return", "warehouse_name", "warehouse_code",
-        "arrival_date", "stock_date", "place_of_delivery", "final_destination"
-    }
+    # 허용 필드 화이트리스트 (SQL Injection 방지) — v9.0.0 부터 core.db_allowed.LOT_EDIT_FIELDS
     if not lot_no or not field:
         raise HTTPException(400, "lot_no, field 필수")
-    if field not in ALLOWED_FIELDS:
-        return err_response(f"'{field}' 필드는 수정 불가. 허용: {sorted(ALLOWED_FIELDS)}")
+    if field not in LOT_EDIT_FIELDS:
+        return err_response(f"'{field}' 필드는 수정 불가. 허용: {sorted(LOT_EDIT_FIELDS)}")
 
     try:
         with db_session(_db) as con:

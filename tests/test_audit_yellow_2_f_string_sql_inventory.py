@@ -46,15 +46,15 @@ def test_y2_actions_py_1051_hardcoded_table_list():
 
 
 def test_y2_actions3_py_152_allowed_fields_whitelist():
-    """🟡 #2.2: actions3.py:152 — ALLOWED_FIELDS 화이트리스트 통과 후만 컬럼명 사용."""
+    """🟡 #2.2: actions3.py:152 — LOT_EDIT_FIELDS 화이트리스트 통과 후만 컬럼명 사용."""
     code = _read("backend/api/actions3.py")
-    # ALLOWED_FIELDS set 정의 있어야 함
-    assert "ALLOWED_FIELDS" in code, "ALLOWED_FIELDS 화이트리스트 누락"
-    # 화이트리스트 체크 (if field not in ALLOWED_FIELDS) 후 SQL 실행
+    # LOT_EDIT_FIELDS set 정의 있어야 함
+    assert "LOT_EDIT_FIELDS" in code, "LOT_EDIT_FIELDS 화이트리스트 누락"
+    # 화이트리스트 체크 (if field not in LOT_EDIT_FIELDS) 후 SQL 실행
     assert re.search(
-        r"if\s+field\s+not\s+in\s+ALLOWED_FIELDS\s*:",
+        r"if\s+field\s+not\s+in\s+LOT_EDIT_FIELDS\s*:",
         code,
-    ), "ALLOWED_FIELDS 검증 패턴(if field not in) 누락"
+    ), "LOT_EDIT_FIELDS 검증 패턴(if field not in) 누락"
     # f-string SQL 위치
     assert re.search(
         r"f[\"']UPDATE\s+document_do\s+SET\s+\{field\}=\?",

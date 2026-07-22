@@ -120,6 +120,20 @@ REVERT_MAP = {
     "RETURN": "AVAILABLE",
 }
 
+# LOT 수정 가능 컬럼 화이트리스트 (actions3.py → central allowlist 이전)
+# Phase 1 Step 3: backend/api/actions3.py의 ALLOWED_FIELDS 마이그레이션
+# SQL Injection 방지: 사용자 입력 field 값이 이 리스트 안에 있어야만 UPDATE 허용
+LOT_EDIT_FIELDS = frozenset({
+    "free_time",
+    "con_return",
+    "warehouse_name",
+    "warehouse_code",
+    "arrival_date",
+    "stock_date",
+    "place_of_delivery",
+    "final_destination",
+})
+
 
 # ── 단일 검증 진입점 ──────────────────────────────────────────
 
@@ -159,6 +173,10 @@ def validate(area: str, kind: str, value: str) -> bool:
         return value in ALLOWED_STATUS
     elif kind == "area":
         return value in ALLOWED_AREAS
+    elif kind == "scope_type":
+        return value in ALLOWED_SCOPES
+    elif kind == "lot_field":
+        return value in LOT_EDIT_FIELDS
     return False
 
 
