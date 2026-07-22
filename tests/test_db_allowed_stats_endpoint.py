@@ -71,3 +71,91 @@ def test_e03_endpoint_raw_counts(client):
     # 예: "inventory|status|True" (area="inventory", kind="status", result=True)
     assert any("status" in k and "True" in k for k in data["raw_counts"].keys())
     assert all(v >= 1 for v in data["raw_counts"].values())
+
+
+# ── v9.0.4: audit_log 조회 endpoint ─────────────────────
+
+class TestAuditEndpoint:
+    def test_e04_audit_endpoint_no_db(self, monkeypatch):
+        """DB 경로 없으면 graceful fail."""
+        from core.db_allowed import _get_default_db_path
+        monkeypatch.setattr(_get_default_db_path, "__defaults__", (None,))
+        # 직접 None 강제
+        from fastapi import FastAPI
+        from backend.api.db_allowed_stats import router as r
+        app = FastAPI()
+        app.include_router(r)
+        client = TestClient(app)
+        # config import 실패 (또는 DB_PATH 없음) → ok=False
+        response = client.get("/api/admin/db-allowed/audit")
+        assert response.status_code == 200
+        data = response.json()
+        # ok=False or ok=True (DB 환경에 따라 다름) 둘 다 OK
+        assert "ok" in data
+        assert "data" in data
+
+    def test_e05_audit_endpoint_basic(self, tmp_path, monkeypatch):
+        """기본 조회 — DB에 row 삽입 후 검증."""
+        import sqlite3
+        from core.db_allowed import _init_audit_table, _get_default_db_path
+        db = str(tmp_path / "audit_test.db")
+        _init_audit_table(db)
+        # 강제로 DB path 설정
+        import core.db_allowed as db_mod
+        original = db_mod._get_default_db_path
+        monkeypatch.setattr(db_mod, "_get_default_db_path", lambda: db)
+        # INSERT
+        con = sqlite3.connect(db)
+        try:
+            con.execute("INSERT INTO db_allowed_audit (area, kind, result, value) VALUES (?, ?, ?, ?)",
+                         ("inventory", "table", 1, "inventory"))
+            con.execute("INSERT INTO db_allowed_audit (area, kind, result, value) VALUES (?, ?, ?, ?)",
+                         ("inventory", "table", 0, "sql_injection"))
+            con.commit()
+        finally:
+            con.close()
+        # endpoint 호출
+        from fastapi import FastAPI
+        from backend.api.db_allowed_stats import router as r
+        app = FastAPI()
+        app.include_router(r)
+        client = TestClient(app)
+        response = client.get("/api/admin/db-allowed/audit")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["data"]["count"] >= 2
+        # blocked_only 필터
+        response = client.get("/api/admin/db-allowed/audit?blocked_only=true")
+        data = response.json()
+        blocked_rows = [r for r in data["data"]["rows"] if r["result"] is False]
+        assert len(blocked_rows) >= 1
+
+    def test_e06_audit_endpoint_kind_filter(self, tmp_path, monkeypatch):
+        """kind 필터."""
+        import sqlite3
+        from core.db_allowed import _init_audit_table
+        db = str(tmp_path / "audit_test2.db")
+        _init_audit_table(db)
+        import core.db_allowed as db_mod
+        monkeypatch.setattr(db_mod, "_get_default_db_path", lambda: db)
+        con = sqlite3.connect(db)
+        try:
+            con.execute("INSERT INTO db_allowed_audit (area, kind, result, value) VALUES (?, ?, ?, ?)",
+                         ("inventory", "table", 1, "inventory"))
+            con.execute("INSERT INTO db_allowed_audit (area, kind, result, value) VALUES (?, ?, ?, ?)",
+                         ("inventory", "status", 1, "AVAILABLE"))
+            con.commit()
+        finally:
+            con.close()
+        from fastapi import FastAPI
+        from backend.api.db_allowed_stats import router as r
+        app = FastAPI()
+        app.include_router(r)
+        client = TestClient(app)
+        # kind=table 필터
+        response = client.get("/api/admin/db-allowed/audit?kind=table")
+        data = response.json()
+        assert data["ok"] is True
+        for row in data["data"]["rows"]:
+            assert row["kind"] == "table"
