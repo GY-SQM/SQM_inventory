@@ -70,3 +70,7 @@ data/db/*.db-shm
 
 # UI ëŸ°íƒ€ì„ ìƒíƒœ (ì°½ í¬ê¸°Â·ìœ„ì¹˜ â€” ì‚¬ìš©ìë³„ ìƒì´, ì¶”ì  ë¶ˆí•„ìš”)
 window_state.json
+
+# ¼­º£ÀÌ ÀÓ½Ã Ãâ·Â (È¸±Í/flake8)
+.pytest_output.txt
+flake8_*.txt
