@@ -87,6 +87,25 @@ ALLOWED_AREAS = frozenset({
     "settings",
 })
 
+# 상태복원 API의 scope 타입 (status_revert_api.py → central allowlist 이전)
+# Phase 1 Step 1: backend/api/status_revert_api.py에서 마이그레이션
+ALLOWED_SCOPES = frozenset({
+    "container_no",
+    "bl_no",
+    "lot_no",
+    "lot_nos",
+    "selected_lots",
+    "inbound_date",
+    "sale_ref",
+    "customer",
+    "picking_no",
+    "outbound_date",
+    "barcode_batch",
+    "return_reason",
+    "current_filter",
+    "all_status",
+})
+
 
 # ── 단일 검증 진입점 ──────────────────────────────────────────
 

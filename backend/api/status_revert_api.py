@@ -15,6 +15,8 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
+from core.db_allowed import ALLOWED_SCOPES  # v9.0.0 central allowlist
+
 
 router = APIRouter(prefix="/api/status-revert", tags=["status-revert"])
 
@@ -26,22 +28,7 @@ REVERT_MAP = {
     "RETURN": "AVAILABLE",
 }
 
-ALLOWED_SCOPES = {
-    "container_no",
-    "bl_no",
-    "lot_no",
-    "lot_nos",
-    "selected_lots",
-    "inbound_date",
-    "sale_ref",
-    "customer",
-    "picking_no",
-    "outbound_date",
-    "barcode_batch",
-    "return_reason",
-    "current_filter",
-    "all_status",
-}
+# ALLOWED_SCOPES 는 v9.0.0 부터 core.db_allowed 에서 import (위 import 참조)
 
 
 def _db_path() -> str:
