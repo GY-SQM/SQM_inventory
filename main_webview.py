@@ -271,7 +271,7 @@ def is_port_open(host, port):
         return False
     finally:
         try: s.close()
-        except Exception: pass
+        except Exception as e: log.debug(f"socket close 실패 (무시): {e}")
 
 def select_available_api_port(preferred_port=API_DEFAULT_PORT, max_port=API_PORT_MAX):
     for port in range(preferred_port, max_port + 1):
