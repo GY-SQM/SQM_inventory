@@ -18,9 +18,18 @@ Phase 0 (2026-07-22): 스켈레톤
     - validate() 기본 구현
     - helper (all_tables, all_statuses)
 
-Phase 1 (예정): backend/ 11개 위치 마이그레이션
-    - actions3.py, queries3.py, report_templates.py, settings.py,
-      status_revert_api.py, __init__.py 등
+Phase 1 (2026-07-22): CLOSED ✓
+    - Step 1: status_revert_api.py → ALLOWED_SCOPES
+    - Step 2: status_revert_api.py → REVERT_MAP + ALLOWED_STATUS.RESERVED
+    - Step 3: actions3.py → LOT_EDIT_FIELDS
+    - Step 4: settings.py → CARRIER_RULE_EDIT_FIELDS + ALLOWED_TABLE_DELETE
+    - queries3.py: 정적 ALLOWED_* 없음 (모두 동적 set comprehension) → SKIP
+      (v8.8.5 audit 인벤토리 #1.4: "queries3.py:1925 — 테이블명 동적 (DB 메타)")
+
+Phase 2 (예정): 확장
+    - report_templates.py _ALLOWED_EXT (파일 확장자)
+    - queries3.py 동적 set → 명시적 allowlist 변환 검토
+    - lint 가드 / 모니터링
 """
 
 
