@@ -3,6 +3,7 @@
 core/db_allowed.py
 ==================
 SQM v9.0.0 — 중앙 화이트리스트 (DB 접근 검증)
+SQM v9.0.0 — 중앙 화이트리스트 (DB 접근 검증)
 
 backend/ 11개 위치에 분산되어 있던 화이트리스트를 한 곳에 통합한다.
 모든 DB 접근(테이블, 컬럼, 상태, operation)은 validate()를 거친다.
@@ -27,10 +28,20 @@ Phase 1 (2026-07-22): CLOSED ✓
       (v8.8.5 audit 인벤토리 #1.4: "queries3.py:1925 — 테이블명 동적 (DB 메타)")
 
 Phase 2 (2026-07-22): 확장
-    - Step 1: report_templates.py _ALLOWED_EXT (파일 확장자)
-    - (예정) queries3.py 동적 set → 명시적 allowlist 변환
+    - Step 1: report_templates.py _ALLOWED_EXT (파일 확장자) ✓
+    - Step 2: queries3.py _REPORT_FIELDS (L331 frozenset lookup)
+              — L644/653/891 dynamic set (user input) 의도된 dynamic으로 skip
     - (예정) lint 가드 / 모니터링
 """
+
+
+import io
+import logging
+from pathlib import Path
+from types import MappingProxyType
+from typing import List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 # ── 화이트리스트 ────────────────────────────────────────────────
@@ -189,6 +200,40 @@ ALLOWED_FILE_EXTS = frozenset({
     ".docx",
     ".csv",
     ".html",
+})
+
+# Report fields by report_type (queries3.py → central allowlist 이전)
+# Phase 2 Step 2: backend/api/queries3.py:70의 _REPORT_FIELDS 마이그레이션
+# report_type → frozenset of field names (label 정보는 _REPORT_FIELDS_LABELS_BY_TYPE 참고)
+# Note: 이 dict의 frozenset은 L331의 dynamic set comprehension을 명시적으로 만든 것.
+#       L644/653/891의 {v.lower() for v in vals}는 dynamic (user input) — 의도된 dynamic set으로 유지.
+REPORT_FIELDS_BY_TYPE = MappingProxyType({
+    "outbound_report": frozenset({
+        "destination", "delivery_date", "lot_no", "sap_no", "bl_no",
+        "container_no", "sales_order_no", "picking_no", "sku",
+        "description", "nw_mt", "gw_mt", "qty", "is_sample",
+    }),
+    "export_work_report": frozenset({
+        "fixed_1", "description", "lot_no", "qty", "nw_mt",
+        "gw_mt", "container_no", "seal_no", "size_type",
+    }),
+    "sales_order_dn": frozenset({
+        "destination", "delivery_date", "lot_no", "sap_no", "bl_no",
+        "sales_order_no", "picking_no", "sku", "description",
+        "nw_mt", "gw_mt", "qty",
+    }),
+    "storage_confirmation": frozenset({
+        "no", "part_no", "part_description", "sap_no", "lot_no",
+        "in_date", "invoice_net_weight", "inspection_net_weight",
+        "balance", "damage_weight", "damage_reason",
+        "container_no", "bl_no",
+    }),
+    "sold_inventory_report": frozenset({
+        "product", "sap_no", "eta_busan", "date_in_stock", "sc_rcvd",
+        "days", "qty_mt", "lot_no", "wh", "salar_invoice_no",
+        "sold_to", "sale_ref", "invoice_date", "picked_up_qty_mt",
+        "balance", "gw", "actual_pick_up", "old", "condition", "remark",
+    }),
 })
 
 

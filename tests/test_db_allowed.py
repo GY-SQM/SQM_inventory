@@ -26,6 +26,7 @@ from core.db_allowed import (
     CARRIER_RULE_EDIT_FIELDS,
     ALLOWED_TABLE_DELETE,
     ALLOWED_FILE_EXTS,
+    REPORT_FIELDS_BY_TYPE,
     validate,
     all_tables,
     all_statuses,
@@ -272,3 +273,32 @@ class TestPhase2Step1:
         dangerous = [".exe", ".bat", ".sh", ".py", ".js", ".dll", ".so"]
         for ext in dangerous:
             assert ext not in ALLOWED_FILE_EXTS, f"{ext} should not be allowed"
+
+
+# ── Phase 2 Step 2: REPORT_FIELDS_BY_TYPE ─────────────────
+
+class TestPhase2Step2:
+    def test_t29_report_fields_by_type_basic(self):
+        """5개 report_type별 fields frozenset."""
+        assert "outbound_report" in REPORT_FIELDS_BY_TYPE
+        assert "export_work_report" in REPORT_FIELDS_BY_TYPE
+        assert "sales_order_dn" in REPORT_FIELDS_BY_TYPE
+        assert "storage_confirmation" in REPORT_FIELDS_BY_TYPE
+        assert "sold_inventory_report" in REPORT_FIELDS_BY_TYPE
+        for rt, fields in REPORT_FIELDS_BY_TYPE.items():
+            assert isinstance(fields, frozenset), f"{rt} fields is not frozenset"
+            assert len(fields) > 0
+
+    def test_t30_outbound_report_fields(self):
+        """outbound_report 14개 fields (예: lot_no, container_no, bl_no)."""
+        fields = REPORT_FIELDS_BY_TYPE["outbound_report"]
+        assert "lot_no" in fields
+        assert "container_no" in fields
+        assert "bl_no" in fields
+        assert "is_sample" in fields
+        assert len(fields) == 14
+
+    def test_t31_report_fields_by_type_immutable(self):
+        """MappingProxyType — read-only."""
+        with pytest.raises(TypeError):
+            REPORT_FIELDS_BY_TYPE["new_report"] = frozenset()

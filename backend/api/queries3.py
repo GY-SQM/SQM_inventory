@@ -21,6 +21,9 @@ from backend.common.errors import ok_response, err_response
 router = APIRouter(prefix="/api/q3", tags=["queries3"])
 logger = logging.getLogger(__name__)
 
+# [v9.0.0 central allowlist] report fields by type (Phase 2 Step 2)
+from core.db_allowed import REPORT_FIELDS_BY_TYPE  # noqa: E402
+
 
 # ── DB 경로 헬퍼 ─────────────────────────────────────────────────
 def _db() -> sqlite3.Connection:
@@ -328,7 +331,8 @@ def _get_template_columns(report_type: str, template: str) -> list[dict]:
 
 
 def _set_template_columns(report_type: str, template: str, columns: list[dict]) -> None:
-    allowed = {f["field"] for f in _REPORT_FIELDS.get(report_type, [])}
+    # v9.0.0: REPORT_FIELDS_BY_TYPE.get() frozenset lookup (Phase 2 Step 2)
+    allowed = REPORT_FIELDS_BY_TYPE.get(report_type, frozenset())
     clean = []
     for col in columns or []:
         field = str(col.get("field") or "").strip()
