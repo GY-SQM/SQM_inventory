@@ -369,6 +369,39 @@ def _write_audit(area: str, kind: str, result: bool, value: str) -> None:
         logger.debug(f"audit write 실패 (skip): {e}")
 
 
+def cleanup_audit(days: int = 30) -> int:
+    """
+    오래된 audit_log 정리 (days 일 이전 row 삭제).
+
+    Args:
+        days: 보관 기간 (default 30일). 0 또는 음수면 no-op (안전).
+
+    Returns:
+        int: 삭제된 row 수. DB 없거나 실패 시 0.
+    """
+    if days <= 0:
+        return 0
+    path = _get_default_db_path()
+    if not path:
+        return 0
+    try:
+        con = sqlite3.connect(path, timeout=5)
+        try:
+            cur = con.execute(
+                f"DELETE FROM {_AUDIT_TABLE_NAME} WHERE ts < datetime('now', ?)",
+                (f"-{days} days",),
+            )
+            deleted = cur.rowcount
+            con.commit()
+            logger.info(f"audit_log cleanup: {deleted}건 삭제 (>{days}일)")
+            return deleted
+        finally:
+            con.close()
+    except sqlite3.Error as e:
+        logger.warning(f"audit cleanup 실패 (skip): {e}")
+        return 0
+
+
 def stats_detailed() -> dict:
     """
     validate() 호출 통계 (모니터링용).

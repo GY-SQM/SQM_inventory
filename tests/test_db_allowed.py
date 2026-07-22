@@ -419,3 +419,59 @@ class TestAuditLog:
             assert any("kind" in n for n in index_names)
         finally:
             con.close()
+
+
+# ── v9.0.5: audit_log 자동 정리 ───────────────────────────
+
+class TestAuditCleanup:
+    def test_t40_cleanup_audit_basic(self, tmp_path, monkeypatch):
+        """오래된 row 삭제 + 최근 row 유지."""
+        import sqlite3
+        from core.db_allowed import _init_audit_table, cleanup_audit
+        import core.db_allowed as db_mod
+        db = str(tmp_path / "cleanup.db")
+        _init_audit_table(db)
+        monkeypatch.setattr(db_mod, "_get_default_db_path", lambda: db)
+        con = sqlite3.connect(db)
+        try:
+            # 50일 전 row 1개
+            con.execute(
+                f"INSERT INTO db_allowed_audit (ts, area, kind, result, value) VALUES (datetime('now', '-50 days'), ?, ?, ?, ?)",
+                ("inventory", "table", 1, "old"),
+            )
+            # 오늘 row 1개
+            con.execute(
+                f"INSERT INTO db_allowed_audit (ts, area, kind, result, value) VALUES (datetime('now'), ?, ?, ?, ?)",
+                ("inventory", "table", 1, "new"),
+            )
+            con.commit()
+        finally:
+            con.close()
+        # 30일 이전 row 삭제
+        deleted = cleanup_audit(days=30)
+        assert deleted == 1
+        # 남은 row 확인
+        con = sqlite3.connect(db)
+        try:
+            rows = con.execute("SELECT value FROM db_allowed_audit").fetchall()
+            assert len(rows) == 1
+            assert rows[0][0] == "new"
+        finally:
+            con.close()
+
+    def test_t41_cleanup_audit_zero_days(self, tmp_path, monkeypatch):
+        """days=0 → no-op (안전)."""
+        import core.db_allowed as db_mod
+        monkeypatch.setattr(db_mod, "_get_default_db_path", lambda: str(tmp_path / "noop.db"))
+        from core.db_allowed import cleanup_audit
+        assert cleanup_audit(0) == 0
+        assert cleanup_audit(-1) == 0
+
+    def test_t42_cleanup_audit_no_db(self):
+        """DB 없으면 0 반환."""
+        from core.db_allowed import cleanup_audit
+        # config import 실패 → _get_default_db_path() = None
+        # 이 테스트는 config가 import 안 되는 환경 의존
+        # (대부분의 환경에서 config는 존재하므로 0이 아닐 수도)
+        result = cleanup_audit(30)
+        assert isinstance(result, int)

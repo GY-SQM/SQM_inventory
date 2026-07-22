@@ -17,7 +17,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 import core.db_allowed as _db_allowed_mod
-from core.db_allowed import stats_detailed, _VALIDATE_COUNTS
+from core.db_allowed import stats_detailed, _VALIDATE_COUNTS, cleanup_audit
 
 router = APIRouter(prefix="/api/admin/db-allowed", tags=["admin"])
 
@@ -94,3 +94,17 @@ def get_db_allowed_audit(
             con.close()
     except sqlite3.Error as e:
         return {"ok": False, "error": str(e), "data": {"rows": []}}
+
+
+@router.post("/audit/cleanup", summary="오래된 audit_log 정리 (v9.0.5+)")
+def post_audit_cleanup(
+    days: int = Query(30, ge=1, le=365, description="보관 기간 (일). 기본 30일."),
+):
+    """
+    N일 이전 audit_log row 삭제.
+
+    운영 부담 ↓ — DB 크기 자동 관리.
+    기본 30일 (월 단위), 1~365일 설정 가능.
+    """
+    deleted = cleanup_audit(days)
+    return {"ok": True, "data": {"deleted": deleted, "days": days}}

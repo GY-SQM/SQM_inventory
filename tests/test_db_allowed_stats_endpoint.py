@@ -159,3 +159,35 @@ class TestAuditEndpoint:
         assert data["ok"] is True
         for row in data["data"]["rows"]:
             assert row["kind"] == "table"
+
+    def test_e07_audit_cleanup_endpoint(self, tmp_path, monkeypatch):
+        """POST /api/admin/db-allowed/audit/cleanup — 오래된 row 삭제."""
+        import sqlite3
+        from core.db_allowed import _init_audit_table
+        db = str(tmp_path / "audit_cleanup_test.db")
+        _init_audit_table(db)
+        import core.db_allowed as db_mod
+        monkeypatch.setattr(db_mod, "_get_default_db_path", lambda: db)
+        con = sqlite3.connect(db)
+        try:
+            # 50일 전 row 1개
+            con.execute(
+                f"INSERT INTO db_allowed_audit (ts, area, kind, result, value) "
+                f"VALUES (datetime('now', '-50 days'), ?, ?, ?, ?)",
+                ("inventory", "table", 1, "old"),
+            )
+            con.commit()
+        finally:
+            con.close()
+        from fastapi import FastAPI
+        from backend.api.db_allowed_stats import router as r
+        app = FastAPI()
+        app.include_router(r)
+        client = TestClient(app)
+        # 30일 이전 삭제
+        response = client.post("/api/admin/db-allowed/audit/cleanup?days=30")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["data"]["deleted"] == 1
+        assert data["data"]["days"] == 30
