@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException, Body, Request
 from core.error_helpers import safe_internal_error
+from core.db_allowed import CARRIER_RULE_EDIT_FIELDS, ALLOWED_TABLE_DELETE  # v9.0.0 central allowlist
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -234,7 +235,7 @@ def create_carrier_rule(payload: Dict[str, Any] = Body(...)):
 
 @router.patch("/carrier-rules/{rule_id}", summary="🚢 선사 규칙 수정 [Sprint 2-B]")
 def update_carrier_rule(rule_id: int, updates: Dict[str, Any] = Body(...)):
-    allowed = {"carrier_id", "doc_type", "rule_name", "pattern", "description", "sample_value", "is_active"}
+    allowed = CARRIER_RULE_EDIT_FIELDS  # v9.0.0: core.db_allowed.CARRIER_RULE_EDIT_FIELDS
     fields = {k: v for k, v in (updates or {}).items() if k in allowed}
     if not fields:
         raise HTTPException(400, "수정 가능 필드 없음")
@@ -549,13 +550,8 @@ def get_table_stats():
 
 @router.post("/table-delete", summary="🗑️ 선택 테이블 삭제 (Stage 2 — 개발 전용)")
 def delete_selected_tables(data: Dict[str, Any] = Body(...)):
-    ALLOWED = {
-        "outbound", "outbound_item", "allocation_plan", "picking_table",
-        "sold_table", "return_history", "stock_movement", "audit_log",
-        "parsing_log", "outbound_event_log",
-        # 절대 허용 안 함: inventory, inventory_tonbag (실 데이터)
-    }
-    tables = [t for t in (data.get("tables") or []) if t in ALLOWED]
+    # ALLOWED 는 v9.0.0 부터 core.db_allowed.ALLOWED_TABLE_DELETE 로 이전 (위 import 참조)
+    tables = [t for t in (data.get("tables") or []) if t in ALLOWED_TABLE_DELETE]
     if not tables:
         raise HTTPException(400, "삭제할 테이블이 없거나 허용되지 않는 테이블입니다")
     try:

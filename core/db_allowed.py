@@ -38,9 +38,15 @@ ALLOWED_TABLES = frozenset({
     # 입고 / 출고
     "inbound_doc",    # 입고 서류
     "picking",        # 피킹
+    "outbound",       # 출고
+    "outbound_item",  # 출고 상세
+    "picking_table",  # 피킹 테이블
+    "outbound_event_log",  # 출고 이벤트 로그
     "allocation",     # LOT 할당
+    "allocation_plan",    # 할당 계획
     "sales_order",    # 판매 오더
     "return_log",     # 반품
+    "return_history", # 반품 이력
     # 마스터
     "product_master", # 제품 마스터
     "carriers",       # 선사 마스터
@@ -132,6 +138,36 @@ LOT_EDIT_FIELDS = frozenset({
     "stock_date",
     "place_of_delivery",
     "final_destination",
+})
+
+# 선사 규칙(carrier_rules) 수정 가능 컬럼 (settings.py → central allowlist 이전)
+# Phase 1 Step 4: backend/api/settings.py:237의 함수-로컬 `allowed` 마이그레이션
+# update_carrier_rule: 사용자 입력 updates dict 안의 key만 통과
+CARRIER_RULE_EDIT_FIELDS = frozenset({
+    "carrier_id",
+    "doc_type",
+    "rule_name",
+    "pattern",
+    "description",
+    "sample_value",
+    "is_active",
+})
+
+# 개발용 table-delete 허용 테이블 (settings.py → central allowlist 이전)
+# Phase 1 Step 4: backend/api/settings.py:552의 모듈-로컬 ALLOWED 마이그레이션
+# 절대 허용 안 함: inventory, inventory_tonbag (실 데이터)
+# invariant: ALLOWED_TABLE_DELETE ⊆ ALLOWED_TABLES
+ALLOWED_TABLE_DELETE = frozenset({
+    "outbound",
+    "outbound_item",
+    "allocation_plan",
+    "picking_table",
+    "sold_table",
+    "return_history",
+    "stock_movement",
+    "audit_log",
+    "parsing_log",
+    "outbound_event_log",
 })
 
 

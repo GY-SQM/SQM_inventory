@@ -86,12 +86,16 @@ def test_y2_queries3_py_1925_hardcoded_table_list():
 
 
 def test_y2_settings_py_251_allowed_whitelist():
-    """🟡 #2.5: settings.py:251 — 명시적 allowed 화이트리스트 통과 후 컬럼명 사용."""
+    """🟡 #2.5: settings.py:251 — 명시적 allowed 화이트리스트 통과 후 컬럼명 사용.
+
+    v9.0.0: 'allowed = {...}' 인라인 정의 → 'allowed = CARRIER_RULE_EDIT_FIELDS' 로 hoist.
+    둘 다 패턴 매치되도록 regex 확장.
+    """
     code = _read("backend/api/settings.py")
-    # allowed set 정의
-    assert re.search(
-        r"allowed\s*=\s*\{[^}]*carrier_id[^}]*\}",
-        code,
+    # allowed 정의 (인라인 set 또는 import 할당)
+    assert (
+        re.search(r"allowed\s*=\s*\{[^}]*carrier_id[^}]*\}", code)
+        or re.search(r"allowed\s*=\s*CARRIER_RULE_EDIT_FIELDS", code)
     ), "settings.py의 allowed 화이트리스트 누락 (carrier_id 포함)"
     # 'if k in allowed' 또는 'if k not in allowed' 패턴 (dict comprehension 내부)
     assert (
@@ -101,17 +105,24 @@ def test_y2_settings_py_251_allowed_whitelist():
 
 
 def test_y2_settings_py_540_564_hardcoded_or_whitelist():
-    """🟡 #2.6: settings.py:540, 564 — SHOW_TABLES 하드코딩 또는 ALLOWED 화이트리스트."""
+    """🟡 #2.6: settings.py:540, 564 — SHOW_TABLES 하드코딩 또는 ALLOWED 화이트리스트.
+
+    v9.0.0: 'ALLOWED = {...}' 인라인 → 'ALLOWED_TABLE_DELETE' import.
+    새 패턴 반영.
+    """
     code = _read("backend/api/settings.py")
     # SHOW_TABLES 하드코딩 리스트 (line 530) 또는 ALLOWED 화이트리스트 (line 551)
-    assert "SHOW_TABLES" in code or "ALLOWED" in code, (
-        "settings.py에 SHOW_TABLES/ALLOWED 보호 누락"
-    )
-    # for tbl in SHOW_TABLES 또는 [t for t in ... if t in ALLOWED] 패턴
+    assert (
+        "SHOW_TABLES" in code
+        or "ALLOWED" in code
+        or "ALLOWED_TABLE_DELETE" in code
+    ), "settings.py에 SHOW_TABLES/ALLOWED/ALLOWED_TABLE_DELETE 보호 누락"
+    # for tbl in SHOW_TABLES 또는 [t for t in ... if t in ALLOWED(_TABLE_DELETE)] 패턴
     assert (
         re.search(r"for\s+tbl\s+in\s+SHOW_TABLES", code)
         or re.search(r"if\s+t\s+in\s+ALLOWED", code)
-    ), "settings.py에 SHOW_TABLES/ALLOWED 보호 패턴 누락"
+        or re.search(r"if\s+t\s+in\s+ALLOWED_TABLE_DELETE", code)
+    ), "settings.py에 SHOW_TABLES/ALLOWED/ALLOWED_TABLE_DELETE 보호 패턴 누락"
 
 
 def test_y2_allocation_api_py_680_hardcoded_sets():

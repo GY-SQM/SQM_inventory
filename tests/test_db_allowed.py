@@ -23,6 +23,8 @@ from core.db_allowed import (
     ALLOWED_SCOPES,
     REVERT_MAP,
     LOT_EDIT_FIELDS,
+    CARRIER_RULE_EDIT_FIELDS,
+    ALLOWED_TABLE_DELETE,
     validate,
     all_tables,
     all_statuses,
@@ -214,3 +216,34 @@ class TestLotEditFields:
         """validate(kind='scope_type', ...) 동작 (Step 1 보강)."""
         assert validate("inventory", "scope_type", "container_no") is True
         assert validate("inventory", "scope_type", "unknown") is False
+
+
+# ── Step 4: CARRIER_RULE_EDIT_FIELDS + ALLOWED_TABLE_DELETE ──
+
+class TestStep4:
+    def test_t22_carrier_rule_fields(self):
+        """선사 규칙 수정 가능 컬럼 (7개)."""
+        assert "carrier_id" in CARRIER_RULE_EDIT_FIELDS
+        assert "doc_type" in CARRIER_RULE_EDIT_FIELDS
+        assert "is_active" in CARRIER_RULE_EDIT_FIELDS
+        assert len(CARRIER_RULE_EDIT_FIELDS) == 7
+        assert isinstance(CARRIER_RULE_EDIT_FIELDS, frozenset)
+
+    def test_t23_allowed_table_delete(self):
+        """개발용 table-delete 허용 테이블 (10개)."""
+        assert "outbound" in ALLOWED_TABLE_DELETE
+        assert "audit_log" in ALLOWED_TABLE_DELETE
+        assert "parsing_log" in ALLOWED_TABLE_DELETE
+        assert "outbound_event_log" in ALLOWED_TABLE_DELETE
+        assert len(ALLOWED_TABLE_DELETE) == 10
+        assert isinstance(ALLOWED_TABLE_DELETE, frozenset)
+
+    def test_t24_table_delete_subset_of_tables(self):
+        """invariant: ALLOWED_TABLE_DELETE ⊆ ALLOWED_TABLES."""
+        for t in ALLOWED_TABLE_DELETE:
+            assert t in ALLOWED_TABLES, f"{t} not in ALLOWED_TABLES (invariant 위반)"
+
+    def test_t25_table_delete_excludes_real_data(self):
+        """절대 허용 안 함: inventory, inventory_tonbag."""
+        assert "inventory" not in ALLOWED_TABLE_DELETE
+        assert "inventory_tonbag" not in ALLOWED_TABLE_DELETE
