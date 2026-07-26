@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """SQM 재고관리 시스템 버전 정보"""
 
-__version__ = "8.8.5"
-VERSION = "8.8.5"
-VERSION_TUPLE = (8, 8, 5)
-RELEASE_DATE = "2026-07-18"
-BUILD_DATE = "2026-07-18"
+__version__ = "9.0.7.2"
+VERSION = "9.0.7.2"
+VERSION_TUPLE = (9, 0, 7, 2)
+RELEASE_DATE = "2026-07-26"
+BUILD_DATE = "2026-07-26"
 BUILD_NOTE = (
     "v8.8.5 (2026-07-18)\n"
     "데이터베이스 유지보수 및 디스크 최적화 릴리즈\n"
