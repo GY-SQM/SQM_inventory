@@ -77,3 +77,5 @@ flake8_*.txt
 
 # PC Guard 회사 PC 명단 (GitHub 공개 금지, 회사 내부용)
 config_local.py
+sqm_debug.log*
+sqm_debug.log.1
