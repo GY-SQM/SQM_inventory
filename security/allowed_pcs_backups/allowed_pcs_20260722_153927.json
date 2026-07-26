@@ -1,0 +1,19 @@
+{
+  "allowed_pcs": [
+    {
+      "name": "광양대흥남기동",
+      "macs": [
+        "A4:AE:12:27:5F:50"
+      ],
+      "machine_guid": "0a34d372-c03e-44cc-a5cd-9402ae06bb77"
+    },
+    {
+      "name": "광양남기동",
+      "macs": [
+        "7C:FA:80:AF:BB:12"
+      ],
+      "machine_guid": "a04856f7-99fa-40c1-8b58-6f87d0b32fe7"
+    }
+  ],
+  "_comment": "MAC: ipconfig /all → 물리적 주소, GUID: 레지스트리 MachineGuid"
+}
