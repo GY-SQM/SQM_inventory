@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """SQM 재고관리 시스템 버전 정보"""
 
+APP_NAME = "SQM 재고관리 시스템"
+APP_NAME_EN = "SQM Inventory Management System"
 __version__ = "9.0.7.2"
 VERSION = "9.0.7.2"
 VERSION_TUPLE = (9, 0, 7, 2)
