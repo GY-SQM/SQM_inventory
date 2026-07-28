@@ -1,4 +1,4 @@
-/* =======================================================================
+﻿/* =======================================================================
    SQM Inventory v8.7.0 - sqm-inline.js
    Rebuilt: 2026-04-21  Ruby (Senior Software Architect)
    Updated: 2026-04-27  Draggable modals, parse log panel, step badge, ESC guard
@@ -3392,7 +3392,7 @@
     }, 30000);
 
     window.SQM = window.SQM || {};
-    window.SQM.version = '8.8.4';
+    window.SQM.version = '9.0.7.2';
     window.SQM.renderPage = renderPage;
     window.SQM.dispatchAction = dispatchAction;
     /* [FIX 20260604] dispatch split-brain 제거:

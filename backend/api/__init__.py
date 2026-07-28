@@ -1,4 +1,4 @@
-"""
+﻿"""
 SQM Inventory — FastAPI Backend (PyWebView Edition)
 포트: launcher-selected local port
 """
@@ -147,7 +147,7 @@ def _run_db_migrations():
 
 _run_db_migrations()
 
-app = FastAPI(title="SQM Inventory API", version="8.8.4")
+app = FastAPI(title="SQM Inventory API", version="9.0.7.2")
 
 
 # ── 정적 파일 캐시 무효화 미들웨어 ──────────────────────────────────────────
@@ -636,7 +636,7 @@ def health():
         "engine_available": ENGINE_AVAILABLE,
         "modules_loaded": loaded,
         "modules_total": 8,
-        "version": "8.8.4",
+        "version": "9.0.7.2",
     }
 
 # ── Inventory ────────────────────────────────────────────────

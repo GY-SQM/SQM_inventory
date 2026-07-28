@@ -1,4 +1,4 @@
-/* SQM Inventory — sqm-tonbag.js (TonbagPage — 톤백 전체) */
+﻿/* SQM Inventory — sqm-tonbag.js (TonbagPage — 톤백 전체) */
 (function () {
   'use strict';
   if (window.__SQM_TONBAG_INSTALLED__) return;
@@ -3870,7 +3870,7 @@
     }, 30000);
 
     window.SQM = window.SQM || {};
-    window.SQM.version = '8.8.4';
+    window.SQM.version = '9.0.7.2';
     window.SQM.renderPage = renderPage;
     window.SQM.dispatchAction = dispatchAction;
     window.SQM.currentRoute = function(){ return window.getCurrentRoute(); };

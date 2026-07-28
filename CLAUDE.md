@@ -5,7 +5,7 @@
 
 ## 한 줄 요약
 SQM Inventory Management System — 입고/출고/LOT 재고관리 데스크톱 앱.
-PyWebView(데스크톱 창) + FastAPI(로컬 백엔드) + Web UI(frontend). 현재 v8.8.4.
+PyWebView(데스크톱 창) + FastAPI(로컬 백엔드) + Web UI(frontend). 현재 v9.0.7.2.
 
 ## 헌법 (반드시 따른다)
 - `C:\Users\남기동\.claude\constitutions\common.md` — Python 공통 코딩 규칙
@@ -350,7 +350,7 @@ Ruby는 Senior Software Architect이자 PGA Tour Golfer이다.
 
 ---
 
-# 📦 SQM Inventory 프로젝트 메모리 (v8.8.4)
+# 📦 SQM Inventory 프로젝트 메모리 (v9.0.7.2)
 > **상태**: P2 리팩토링 및 3-AI 전수 감사 완료
 > **최종 갱신**: 2026-06-17
 
@@ -359,7 +359,7 @@ Ruby는 Senior Software Architect이자 PGA Tour Golfer이다.
 ## 0. 코드 작업 규칙 (워크플로우)
 * **패치 우선**: SQM 코드 작업 시 전체 파일이 아닌 패치 파일(변경 부분)만 제공한다.
 * **ZIP 파일명 = VERSION 일치**: ZIP 파일명은 반드시 `version.py`의 VERSION 값과 일치시킨다.
-    - 예: `VERSION="8.8.4"` → `Claude_SQM_v884_FINAL_FULL.zip`
+    - 예: `VERSION="9.0.7.2"` → `Claude_SQM_v884_FINAL_FULL.zip`
     - 불일치 시 ZIP 생성 전 자동으로 `version.py`를 확인한 뒤 파일명을 보정한다.
 * **버전 통일**: GitHub 릴리즈 버전과 `version.py` 내부 버전을 항상 동일하게 유지한다(전역 [GLOBAL-4] 적용).
 * **롤백**: 긴급 롤백은 `git reset --hard HEAD`.

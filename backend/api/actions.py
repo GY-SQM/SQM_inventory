@@ -1,4 +1,4 @@
-"""
+﻿"""
 SQM v8.6.6 — 엔진+SQL 혼합 액션 엔드포인트
 # [B-11] prefix 규칙: /api/action(v1 핵심), /api/action2(v2 확장), /api/action3(v3 유틸)
 # 향후 통합 시 /api/actions/{version} 단일 라우터로 이관 예정
@@ -126,7 +126,7 @@ def _load_version() -> dict:
             "build_date":  getattr(ver, "BUILD_DATE",  "unknown"),
         }
     except Exception:
-        return {"app_name": "SQM 재고관리 시스템", "version": "8.8.4"}
+        return {"app_name": "SQM 재고관리 시스템", "version": "9.0.7.2"}
 
 
 # ── F013: 정합성 검증 ─────────────────────────────────────────

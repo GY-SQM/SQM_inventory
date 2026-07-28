@@ -1,4 +1,4 @@
-"""
+﻿"""
 SQM v8.6.6 — Info / Help 정적 응답 엔드포인트
 Phase 4-A Group 2: F057, F058, F059, F060, F062
 
@@ -156,6 +156,6 @@ def get_version():
         logger.warning("version.py load failed: %s", e)
         return ok_response(data={
             "app_name": "SQM 재고관리 시스템",
-            "version":  "8.8.4",
+            "version":  "9.0.7.2",
             "note":     "version.py 로드 실패 — 기본값 표시"
         })
