@@ -1,4 +1,4 @@
-﻿"""
+"""
 SQM v8.6.6 — Info / Help 정적 응답 엔드포인트
 Phase 4-A Group 2: F057, F058, F059, F060, F062
 

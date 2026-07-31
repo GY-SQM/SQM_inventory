@@ -1,4 +1,4 @@
-﻿"""
+"""
 SQM Inventory — FastAPI Backend (PyWebView Edition)
 포트: launcher-selected local port
 """
