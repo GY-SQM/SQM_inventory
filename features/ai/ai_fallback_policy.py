@@ -14,8 +14,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# 2026-07-31: openrouter를 2순위로 올림 (z-ai/glm-5.2 via OpenRouter).
+# Gemini 장애 시 OpenRouter 경유 GLM으로 자동 폴백.
 DEFAULT_PROVIDER_ORDER = (
     "gemini",
+    "openrouter",
     "ollama",
     "lmstudio",
     "paid_openai",
@@ -23,7 +26,7 @@ DEFAULT_PROVIDER_ORDER = (
 
 PAID_PROVIDERS = {"paid_openai", "openai", "anthropic"}
 LOCAL_PROVIDERS = {"ollama", "lmstudio"}
-FREE_REMOTE_PROVIDERS = {"gemini"}
+FREE_REMOTE_PROVIDERS = {"gemini", "openrouter"}
 
 
 @dataclass(frozen=True)
