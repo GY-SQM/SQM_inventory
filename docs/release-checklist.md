@@ -5,6 +5,7 @@
 ## 1. Version Gate
 
 - [ ] `version.py` version matches release name.
+- [ ] Run `python scripts\check_release_version.py --release vX.Y.Z` before creating a GitHub release.
 - [ ] Release notes mention user-visible changes and migration risks.
 - [ ] Artifact name matches the release version.
 
@@ -50,4 +51,4 @@ rg -n 'f".*SELECT|% .*SELECT|\.format\(.*SELECT' .
 
 Blocking issue:
 
-- 
+-
