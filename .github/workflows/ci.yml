@@ -40,6 +40,7 @@ jobs:
           }
           if ($LASTEXITCODE -gt 1) { exit $LASTEXITCODE }
           Write-Output "PASS: no direct window.confirm in frontend"
+          exit 0
 
       - name: Run regression tests
         run: python -m pytest tests/ -q

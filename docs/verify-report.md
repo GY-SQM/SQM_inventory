@@ -78,7 +78,7 @@
 - Branch protection for `main` is blocked by GitHub account/repository plan: private repository requires GitHub Pro or public repository for this feature.
 - Existing SQL f-string findings remain outside this release-gate/UI-confirm/CI change and are documented in `docs/audit-f-string-sql-inventory.md`.
 - Pytest emitted one cache permission warning for `.pytest_cache`; tests still passed.
-- The first `SQM CI` push run failed because GitHub Windows runner did not have `rg`; workflow was corrected to use `git grep` instead.
+- The first `SQM CI` push run failed because GitHub Windows runner did not have `rg`; workflow was corrected to use `git grep` instead. The second run confirmed no matches but needed explicit `exit 0` because PowerShell preserved `git grep` no-match exit code 1.
 - The manual release gate should be run before creating the next release tag; `SQM CI` is the PR/push status check candidate for future branch protection.
 
 ## Final Verdict
