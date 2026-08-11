@@ -1,0 +1,45 @@
+name: SQM CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: CI / test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-test.txt
+
+      - name: Compile release gate script
+        run: python -m py_compile scripts\check_release_version.py
+
+      - name: Check frontend syntax
+        run: node --check frontend\js\sqm-core.js
+
+      - name: Sweep direct window.confirm
+        run: |
+          $matches = rg -n "window\.confirm\(" frontend
+          if ($LASTEXITCODE -eq 0) {
+            Write-Output $matches
+            exit 1
+          }
+          if ($LASTEXITCODE -gt 1) { exit $LASTEXITCODE }
+          Write-Output "PASS: no direct window.confirm in frontend"
+
+      - name: Run regression tests
+        run: python -m pytest tests/ -q
