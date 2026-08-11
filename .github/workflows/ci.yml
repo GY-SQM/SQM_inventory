@@ -33,7 +33,7 @@ jobs:
 
       - name: Sweep direct window.confirm
         run: |
-          $matches = rg -n "window\.confirm\(" frontend
+          $matches = git grep -n "window.confirm(" -- frontend
           if ($LASTEXITCODE -eq 0) {
             Write-Output $matches
             exit 1

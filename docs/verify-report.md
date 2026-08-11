@@ -25,12 +25,12 @@
 | Direct confirm sweep | `rg -n "window\.confirm\(" frontend` | PASS | No matches |
 | Confirm usage sweep | `rg -n "window\.confirm\(|sqmConfirm\(" frontend docs AGENTS.md CLAUDE.md` | PASS | Only policy text remains in docs; no frontend direct confirm/fallback remains |
 | GitHub Actions workflow scan | `rg -n "release-gate|check_release_version|workflow_dispatch|actions/checkout|setup-python" .github docs scripts` | PASS | `.github/workflows/release-gate.yml` contains manual release gate workflow |
-| PR CI workflow inspect | `Get-Content -Path .github\workflows\ci.yml` | PASS | `SQM CI` runs on `pull_request` and `push` to `main`, job name `CI / test` |
+| PR CI workflow inspect | `Get-Content -Path .github\workflows\ci.yml` | PASS | `SQM CI` runs on `pull_request` and `push` to `main`, job name `CI / test`; direct confirm sweep uses `git grep` so GitHub runner does not need `rg` |
 | Secret scan | `rg -n "api[_-]?key|secret|password|token|Bearer " .` | PASS | Findings are key-handling code, docs, tests, and templates; no literal production secret observed |
 | Local-only tracked scan | `git -c safe.directory=H:/program/sqm/SQM_inventory ls-files \| rg "config_local|settings.ini|logs/|data/db/|backup/"` | WARN | `settings.ini.template` is tracked intentionally; no local config/db/log/backup path reported |
 | Dangerous API scan | `rg -n "os\.system|shell=True|pickle\.load|yaml\.load|eval\(|exec\(" .` | WARN | Existing references include docs, regex `.exec`, wrapper names, and `sqm-popout.js` indirect eval comment; no new dangerous API added by this change |
 | SQL f-string sweep | `rg -n 'f".*SELECT|% .*SELECT|\.format\(.*SELECT' .` | WARN | Existing SQL construction findings; prior audit exists in `docs/audit-f-string-sql-inventory.md`; no SQL changed here |
-| Regression tests | `python -m pytest tests/ -q` | PASS | `688 passed, 1 warning in 25.08s` |
+| Regression tests | `python -m pytest tests/ -q` | PASS | `688 passed, 1 warning in 24.17s` |
 
 ## 2. Functional Checks
 
@@ -78,6 +78,7 @@
 - Branch protection for `main` is blocked by GitHub account/repository plan: private repository requires GitHub Pro or public repository for this feature.
 - Existing SQL f-string findings remain outside this release-gate/UI-confirm/CI change and are documented in `docs/audit-f-string-sql-inventory.md`.
 - Pytest emitted one cache permission warning for `.pytest_cache`; tests still passed.
+- The first `SQM CI` push run failed because GitHub Windows runner did not have `rg`; workflow was corrected to use `git grep` instead.
 - The manual release gate should be run before creating the next release tag; `SQM CI` is the PR/push status check candidate for future branch protection.
 
 ## Final Verdict
