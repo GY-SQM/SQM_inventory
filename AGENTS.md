@@ -12,9 +12,9 @@
 
 ## Main Branch Protection
 
-- Do not push directly to `main` for normal code changes.
+- Default to branch -> PR -> `SQM CI / CI / test` success -> merge for all normal repository changes.`r`n- Do not push directly to `main` for normal code changes.
 - Use branch -> PR -> `SQM CI / CI / test` success -> merge.
-- After GitHub Pro upgrade or repository public conversion, enable `main` branch protection and require the `CI / test` status check.
+- After GitHub Pro upgrade or repository public conversion, enable `main` branch protection using `docs/github-branch-protection.md` and require the `CI / test` status check.
 - Emergency direct pushes must be documented in `docs/verify-report.md` with reason, commands, and follow-up audit.
 ## Harness Engineering Gates
 

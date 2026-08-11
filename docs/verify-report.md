@@ -6,8 +6,8 @@
 ## Summary
 
 - Date(KST): 2026-08-11
-- Change: v9.0.7.2 release gate, direct confirm removal, GitHub Actions gates, branch protection attempt, PR policy docs, and pytest cache warning removal
-- Scope: release gate script, release checklist, release audit, frontend confirm guard, GitHub Actions workflows, GitHub branch protection readiness, pytest cache configuration
+- Change: v9.0.7.2 release gate, direct confirm removal, GitHub Actions gates, branch protection setup docs, PR-only default policy, .codex ignore, and pytest cache warning removal
+- Scope: release gate script, release checklist, release audit, frontend confirm guard, GitHub Actions workflows, GitHub branch protection readiness, pytest cache configuration, local runtime ignore rules
 - Verdict: PASS with branch protection BLOCKED by GitHub plan limitation
 
 ## 1. Commands Run
@@ -30,7 +30,7 @@
 | Local-only tracked scan | `git -c safe.directory=H:/program/sqm/SQM_inventory ls-files \| rg "config_local|settings.ini|logs/|data/db/|backup/"` | WARN | `settings.ini.template` is tracked intentionally; no local config/db/log/backup path reported |
 | Dangerous API scan | `rg -n "os\.system|shell=True|pickle\.load|yaml\.load|eval\(|exec\(" .` | WARN | Existing references include docs, regex `.exec`, wrapper names, and `sqm-popout.js` indirect eval comment; no new dangerous API added by this change |
 | SQL f-string sweep | `rg -n 'f".*SELECT|% .*SELECT|\.format\(.*SELECT' .` | WARN | Existing SQL construction findings; prior audit exists in `docs/audit-f-string-sql-inventory.md`; no SQL changed here |
-| Regression tests | `python -m pytest tests/ -q` | PASS | `688 passed in 24.19s` with pytest cache disabled |
+| Regression tests | `python -m pytest tests/ -q` | PASS | `688 passed in 25.12s` with pytest cache disabled |
 
 ## 2. Functional Checks
 
@@ -72,14 +72,16 @@
 | `pytest.ini` | UTF-8 | no BOM intended | ASCII-only content | PASS |
 | `frontend/js/sqm-core.js` | UTF-8 | no BOM intended | Existing Korean text readable | PASS |
 | `docs/release-checklist.md` | UTF-8 | no BOM intended | ASCII-only touched line | PASS |
+| `docs/github-branch-protection.md` | UTF-8 | no BOM intended | ASCII-only content | PASS |
+| `.gitignore` | UTF-8 | no BOM intended | ASCII-only touched block | PASS |
 | `AGENTS.md` | UTF-8 | no BOM intended | ASCII-only touched block | PASS |
 | `docs/verify-report.md` | UTF-8 | no BOM intended | ASCII-only content | PASS |
 
 ## 6. Open Risks
 
-- Branch protection for `main` is blocked by GitHub account/repository plan: private repository requires GitHub Pro or public repository for this feature.
+- Branch protection for `main` is blocked by GitHub account/repository plan: private repository requires GitHub Pro or public repository for this feature. Setup instructions are now recorded in `docs/github-branch-protection.md`.
 - Existing SQL f-string findings remain outside this release-gate/UI-confirm/CI change and are documented in `docs/audit-f-string-sql-inventory.md`.
-- `.pytest_cache` is inaccessible on this PC; pytest cache writes are disabled via `pytest.ini`, removing the warning without changing test assertions.
+- `.pytest_cache` is inaccessible on this PC; pytest cache writes are disabled via `pytest.ini`, removing the warning without changing test assertions.`r`n- `.codex/` is ignored as local runtime state and should not be committed.
 - The first `SQM CI` push run failed because GitHub Windows runner did not have `rg`; workflow was corrected to use `git grep` instead. The second run confirmed no matches but needed explicit `exit 0` because PowerShell preserved `git grep` no-match exit code 1. The next run reached pytest and exposed a CI-only real DB index check; `test_real_db_has_indexes` now skips on `GITHUB_ACTIONS=true` while local real DB validation remains active.
 - The manual release gate should be run before creating the next release tag; `SQM CI` is the PR/push status check candidate for future branch protection.
 

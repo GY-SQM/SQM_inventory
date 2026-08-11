@@ -79,3 +79,6 @@ flake8_*.txt
 config_local.py
 sqm_debug.log*
 sqm_debug.log.1
+
+# Codex local runtime state
+.codex/
