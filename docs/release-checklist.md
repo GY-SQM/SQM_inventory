@@ -44,7 +44,14 @@ rg -n 'f".*SELECT|% .*SELECT|\.format\(.*SELECT' .
 - [ ] Main user flow tested start to finish for changed workflows.
 - [ ] Loading, normal, empty, and error states checked for changed screens.
 
-## 6. Final Decision
+## 6. GitHub Protection Gate
+
+- [ ] Normal changes were made through branch -> PR -> merge, not direct `main` push.
+- [ ] `SQM CI / CI / test` passed before merge or release.
+- [ ] If branch protection is unavailable, the GitHub plan limitation is recorded in `docs/verify-report.md`.
+- [ ] After GitHub Pro upgrade or public conversion, `main` branch protection requires `CI / test`.
+
+## 7. Final Decision
 
 - [ ] PASS: release/share allowed.
 - [ ] HOLD: blocking issue found.
