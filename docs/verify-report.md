@@ -6,8 +6,8 @@
 ## Summary
 
 - Date(KST): 2026-08-11
-- Change: v9.0.7.2 release gate, direct confirm removal, GitHub Actions gates, and branch protection attempt
-- Scope: release gate script, release checklist, release audit, frontend confirm guard, GitHub Actions workflows, GitHub branch protection readiness
+- Change: v9.0.7.2 release gate, direct confirm removal, GitHub Actions gates, branch protection attempt, PR policy docs, and pytest cache warning removal
+- Scope: release gate script, release checklist, release audit, frontend confirm guard, GitHub Actions workflows, GitHub branch protection readiness, pytest cache configuration
 - Verdict: PASS with branch protection BLOCKED by GitHub plan limitation
 
 ## 1. Commands Run
@@ -30,7 +30,7 @@
 | Local-only tracked scan | `git -c safe.directory=H:/program/sqm/SQM_inventory ls-files \| rg "config_local|settings.ini|logs/|data/db/|backup/"` | WARN | `settings.ini.template` is tracked intentionally; no local config/db/log/backup path reported |
 | Dangerous API scan | `rg -n "os\.system|shell=True|pickle\.load|yaml\.load|eval\(|exec\(" .` | WARN | Existing references include docs, regex `.exec`, wrapper names, and `sqm-popout.js` indirect eval comment; no new dangerous API added by this change |
 | SQL f-string sweep | `rg -n 'f".*SELECT|% .*SELECT|\.format\(.*SELECT' .` | WARN | Existing SQL construction findings; prior audit exists in `docs/audit-f-string-sql-inventory.md`; no SQL changed here |
-| Regression tests | `python -m pytest tests/ -q` | PASS | `688 passed, 1 warning in 25.06s` |
+| Regression tests | `python -m pytest tests/ -q` | PASS | `688 passed in 24.19s` with pytest cache disabled |
 
 ## 2. Functional Checks
 
@@ -43,7 +43,7 @@
 | Manual release gate | Add manual workflow | `workflow_dispatch` runs version gate, compile, pytest | Workflow active | PASS |
 | PR CI gate | Add push/PR workflow | CI runs compile, JS check, confirm sweep, pytest | Workflow file present | PASS |
 | Branch protection | Enable/inspect `main` protection | Protection available | GitHub plan blocks feature | BLOCKED |
-| Test suite | Run pytest | No regression failures | 688 passed locally; CI real DB check skips under `GITHUB_ACTIONS=true` | PASS |
+| Test suite | Run pytest | No regression failures | 688 passed locally with no cache warning; CI real DB check skips under `GITHUB_ACTIONS=true` | PASS |
 
 ## 3. UI State Checks
 
@@ -69,15 +69,17 @@
 | `scripts/check_release_version.py` | UTF-8 | no BOM intended | ASCII-only content | PASS |
 | `.github/workflows/release-gate.yml` | UTF-8 | no BOM intended | ASCII-only content | PASS |
 | `.github/workflows/ci.yml` | UTF-8 | no BOM intended | ASCII-only content | PASS |
+| `pytest.ini` | UTF-8 | no BOM intended | ASCII-only content | PASS |
 | `frontend/js/sqm-core.js` | UTF-8 | no BOM intended | Existing Korean text readable | PASS |
 | `docs/release-checklist.md` | UTF-8 | no BOM intended | ASCII-only touched line | PASS |
+| `AGENTS.md` | UTF-8 | no BOM intended | ASCII-only touched block | PASS |
 | `docs/verify-report.md` | UTF-8 | no BOM intended | ASCII-only content | PASS |
 
 ## 6. Open Risks
 
 - Branch protection for `main` is blocked by GitHub account/repository plan: private repository requires GitHub Pro or public repository for this feature.
 - Existing SQL f-string findings remain outside this release-gate/UI-confirm/CI change and are documented in `docs/audit-f-string-sql-inventory.md`.
-- Pytest emitted one cache permission warning for `.pytest_cache`; tests still passed.
+- `.pytest_cache` is inaccessible on this PC; pytest cache writes are disabled via `pytest.ini`, removing the warning without changing test assertions.
 - The first `SQM CI` push run failed because GitHub Windows runner did not have `rg`; workflow was corrected to use `git grep` instead. The second run confirmed no matches but needed explicit `exit 0` because PowerShell preserved `git grep` no-match exit code 1. The next run reached pytest and exposed a CI-only real DB index check; `test_real_db_has_indexes` now skips on `GITHUB_ACTIONS=true` while local real DB validation remains active.
 - The manual release gate should be run before creating the next release tag; `SQM CI` is the PR/push status check candidate for future branch protection.
 
