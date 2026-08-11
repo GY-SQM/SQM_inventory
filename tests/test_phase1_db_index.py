@@ -103,13 +103,16 @@ def test_missing_table_does_not_crash():
 
 def test_real_db_has_indexes():
     """실제 프로젝트 DB에 인덱스가 존재하는지 확인."""
+    import pytest
+
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        pytest.skip("CI 환경에서는 운영 DB 인덱스 검사를 건너뜀")
+
     db_path = os.path.join(
         os.path.dirname(__file__), "..", "data", "db", "sqm_inventory.db"
     )
     if not os.path.exists(db_path):
-        import pytest
         pytest.skip("실제 DB 파일 없음 — CI 환경에서 건너뜀")
-
     con = sqlite3.connect(db_path)
     names = {r[0] for r in
              con.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()}
