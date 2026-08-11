@@ -6,8 +6,8 @@
 ## Summary
 
 - Date(KST): 2026-08-11
-- Change: v9.0.7.2 release gate and GitHub release readiness
-- Scope: version gate script, release checklist, release audit
+- Change: v9.0.7.2 release gate, direct confirm removal, and GitHub Actions release gate
+- Scope: release gate script, release checklist, release audit, frontend confirm guard, GitHub Actions workflow
 - Verdict: PASS with existing warnings recorded
 
 ## 1. Commands Run
@@ -15,38 +15,44 @@
 | Step | Command | Result | Evidence |
 |---|---|---|---|
 | Current version | `Get-Content -Path version.py -TotalCount 30` | PASS | `VERSION = "9.0.7.2"`, `__version__ = "9.0.7.2"` |
-| GitHub latest release before update | `gh release list -R GY-SQM/SQM_inventory --limit 10` | PASS | Latest was `v9.0.7` |
-| Remote tag check | `git -c safe.directory=H:/program/sqm/SQM_inventory ls-remote --tags origin` | PASS | `v9.0.7.2` was not present before release |
-| Release version gate | `python scripts\check_release_version.py --release v9.0.7.2` | PASS | `version.py 9.0.7.2 matches release tag v9.0.7.2; remote tag is free` |
+| GitHub release check | `gh release list -R GY-SQM/SQM_inventory --limit 5` | PASS | Latest is `SQM v9.0.7.2` |
+| Release tag check | `git -c safe.directory=H:/program/sqm/SQM_inventory ls-remote --tags origin refs/tags/v9.0.7.2` | PASS | Tag points to `74f74b264c474e37e6276eac10c063fae76fd9f4` |
+| Release version gate before release | `python scripts\check_release_version.py --release v9.0.7.2` | PASS | `version.py 9.0.7.2 matches release tag v9.0.7.2; remote tag is free` before tag creation |
 | Python compile | `python -m py_compile scripts\check_release_version.py` | PASS | Exit code 0 |
+| JS syntax check | `node --check frontend\js\sqm-core.js` | PASS | Exit code 0 |
+| Direct confirm sweep | `rg -n "window\.confirm\(" frontend` | PASS | No matches |
+| Confirm usage sweep | `rg -n "window\.confirm\(|sqmConfirm\(" frontend docs AGENTS.md CLAUDE.md` | PASS | Only policy text remains in docs; no frontend direct confirm/fallback remains |
+| GitHub Actions workflow scan | `rg -n "release-gate|check_release_version|workflow_dispatch|actions/checkout|setup-python" .github docs scripts` | PASS | `.github/workflows/release-gate.yml` contains manual release gate workflow |
 | Secret scan | `rg -n "api[_-]?key|secret|password|token|Bearer " .` | PASS | Findings are key-handling code, docs, tests, and templates; no literal production secret observed |
 | Local-only tracked scan | `git -c safe.directory=H:/program/sqm/SQM_inventory ls-files \| rg "config_local|settings.ini|logs/|data/db/|backup/"` | WARN | `settings.ini.template` is tracked intentionally; no local config/db/log/backup path reported |
 | Dangerous API scan | `rg -n "os\.system|shell=True|pickle\.load|yaml\.load|eval\(|exec\(" .` | WARN | Existing references include docs, regex `.exec`, wrapper names, and `sqm-popout.js` indirect eval comment; no new dangerous API added by this change |
 | SQL f-string sweep | `rg -n 'f".*SELECT|% .*SELECT|\.format\(.*SELECT' .` | WARN | Existing SQL construction findings; prior audit exists in `docs/audit-f-string-sql-inventory.md`; no SQL changed here |
-| UI confirm sweep | `rg -n "window\.confirm\(" .` | WARN | Existing wrapper fallback in `frontend/js/sqm-core.js`; no workflow confirm added here |
-| Regression tests | `python -m pytest tests/ -q` | PASS | `688 passed, 1 warning in 42.92s` |
+| Regression tests | `python -m pytest tests/ -q` | PASS | `688 passed, 1 warning in 23.22s` |
 
 ## 2. Functional Checks
 
 | Case | Input/Action | Expected | Actual | PASS/FAIL |
 |---|---|---|---|---|
-| Version/release match | Release `v9.0.7.2` | `version.py` equals `9.0.7.2` | Match | PASS |
-| Duplicate release guard | Remote tag lookup | Release tag is free before creation | Free | PASS |
+| Version/release match | Release `v9.0.7.2` | GitHub latest equals local version | Latest release is `v9.0.7.2` | PASS |
+| Duplicate release guard | Remote tag lookup before release | Release tag is free before creation | Free before creation | PASS |
 | Checklist usability | Add version gate command | Release checklist includes direct command | Present | PASS |
+| Direct confirm removal | Remove sync fallback | No `window.confirm(` in frontend | No matches | PASS |
+| GitHub Actions gate | Add manual workflow | `workflow_dispatch` runs version gate, compile, pytest | Workflow file present | PASS |
 | Test suite | Run pytest | No regression failures | 688 passed | PASS |
 
 ## 3. UI State Checks
 
 | Screen | Loading | Normal | Empty | Error | Notes |
 |---|---|---|---|---|---|
-| Changed screens | N/A | N/A | N/A | N/A | Release gate/documentation-only change |
+| Changed screens | N/A | N/A | N/A | N/A | Removed unused sync confirm fallback only; existing async modal remains |
 
 ## 4. SWEEP Search
 
 | Pattern | Command | Findings | Action |
 |---|---|---|---|
-| Version mismatch | `python scripts\check_release_version.py --release v9.0.7.2` | No mismatch | Gate added |
-| Direct confirm | `rg -n "window\.confirm\(" .` | Existing wrapper fallback only | Recorded warning |
+| Version mismatch | `python scripts\check_release_version.py --release v9.0.7.2` | No mismatch before release | Gate added |
+| Direct confirm | `rg -n "window\.confirm\(" frontend` | No frontend matches | Fallback removed |
+| Release workflow | `rg -n "workflow_dispatch|check_release_version" .github docs scripts` | Found workflow and checklist entries | GitHub Actions connected |
 | Secrets | `rg -n "api[_-]?key|secret|password|token|Bearer " .` | Key-handling code/templates/tests | Recorded, no production secret observed |
 | Dangerous APIs | `rg -n "os\.system|shell=True|pickle\.load|yaml\.load|eval\(|exec\(" .` | Existing audited patterns | Recorded warning |
 
@@ -55,16 +61,18 @@
 | File/Data | UTF-8 | UTF-8 BOM | CP949/EUC-KR sample | Result |
 |---|---|---|---|---|
 | `scripts/check_release_version.py` | UTF-8 | no BOM intended | ASCII-only content | PASS |
+| `.github/workflows/release-gate.yml` | UTF-8 | no BOM intended | ASCII-only content | PASS |
+| `frontend/js/sqm-core.js` | UTF-8 | no BOM intended | Existing Korean text readable | PASS |
 | `docs/release-checklist.md` | UTF-8 | no BOM intended | ASCII-only touched line | PASS |
 | `docs/verify-report.md` | UTF-8 | no BOM intended | ASCII-only content | PASS |
 
 ## 6. Open Risks
 
-- Existing SQL f-string findings remain outside this release-gate change and are documented in `docs/audit-f-string-sql-inventory.md`.
-- Existing `window.confirm` fallback remains in `frontend/js/sqm-core.js`; workflows should continue using `sqmConfirmAsync`.
+- Existing SQL f-string findings remain outside this release-gate/UI-confirm change and are documented in `docs/audit-f-string-sql-inventory.md`.
 - Pytest emitted one cache permission warning for `.pytest_cache`; tests still passed.
+- The GitHub Actions release gate is manual (`workflow_dispatch`) and should be run before creating the next release tag.
 
 ## Final Verdict
 
 - PASS/FAIL: PASS
-- Reason: `v9.0.7.2` version gate passed, release tag was free before release, and regression tests passed.
+- Reason: `v9.0.7.2` is the GitHub latest release, direct frontend `window.confirm` is removed, GitHub Actions release gate is present, and regression tests passed.

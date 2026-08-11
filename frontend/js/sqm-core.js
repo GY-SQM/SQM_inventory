@@ -4,15 +4,6 @@
    Updated: 2026-04-27  Draggable modals, parse log panel, step badge, ESC guard
    ======================================================================= */
 /* -----------------------------------------------------------------------
-   sqmConfirm — 브라우저 기본 sqmConfirm() 추상화 래퍼
-   향후 커스텀 모달(비동기)로 교체할 때 이 함수만 변경하면 됨
-   사용법: if (!sqmConfirm('정말 삭제할까요?')) return;
-   ----------------------------------------------------------------------- */
-window.sqmConfirm = window.sqmConfirm || function (msg) {
-  return window.confirm(msg);
-};
-
-/* -----------------------------------------------------------------------
    sqmConfirmAsync — 인페이지 비동기 확인 모달 (Promise<boolean>)
    이유: pywebview/WebView2 에서 native window.confirm 이 표면화되지 않고
          WebView2 전체를 블로킹 → "눌러도 멈춤" 증상. native 다이얼로그를
