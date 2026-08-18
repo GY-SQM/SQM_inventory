@@ -32,18 +32,19 @@ gh api repos/GY-SQM/SQM_inventory/branches/main/protection
 
 Expected protection API result after the plan supports the feature: HTTP 200 with required status check contexts including `CI / test`.
 
-## Current Limitation
+## Current State
 
-As of 2026-08-11, GitHub returned HTTP 403 for branch protection on this private repository:
+As of 2026-08-18, `main` branch protection is enabled for this public repository.
 
-```text
-Upgrade to GitHub Pro or make this repository public to enable this feature.
-```
+Required settings confirmed by API:
 
-Until that is resolved, enforce the same workflow operationally:
-
-```text
-branch -> PR -> SQM CI / CI / test success -> merge
-```
+- Required status check: `CI / test`
+- Require branches to be up to date before merging
+- Require pull request reviews: 1 approval
+- Dismiss stale reviews
+- Require conversation resolution
+- Enforce admins
+- Force pushes disabled
+- Deletions disabled
 
 Emergency direct pushes must be recorded in `docs/verify-report.md` with reason, command evidence, and follow-up audit.
