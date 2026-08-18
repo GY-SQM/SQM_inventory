@@ -120,7 +120,11 @@ def save_settings(payload: ApiKeyPayload):
         from config import save_api_key_secure, save_gemini_model
         source = save_api_key_secure(payload.api_key.strip())
         if source == "FAILED":
-            raise HTTPException(500, "API 키 저장 실패")
+            raise HTTPException(
+                500,
+                "API 키 저장 실패: keyring(OS 자격증명 관리자) 사용이 필요합니다. "
+                "환경변수 GEMINI_API_KEY 또는 keyring 설정을 확인하세요."
+            )
         if payload.model and payload.model.strip():
             save_gemini_model(payload.model.strip())
         # Gemini Client 싱글턴 리셋 (다음 호출 시 새 키로 재생성)

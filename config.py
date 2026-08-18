@@ -169,7 +169,7 @@ def _load_settings():
     ★★★ v3.9.7: 보안 강화 ★★★
     1. 환경변수 우선 (GEMINI_API_KEY)
     2. keyring (OS 자격증명 관리자) 2순위
-    3. settings.ini는 폴백용 + 자동 마이그레이션
+    3. settings.ini는 레거시 읽기 전용 폴백 + 자동 마이그레이션
     """
     config = configparser.ConfigParser()
 
@@ -224,7 +224,7 @@ def _load_settings():
         try:
             config.read(SETTINGS_FILE, encoding='utf-8')
 
-            # ★★★ 3순위: ini 파일 (+ 자동 마이그레이션) ★★★
+            # ★★★ 3순위: ini 파일 (레거시 읽기 폴백 + 자동 마이그레이션) ★★★
             if not result.get('api_key') or result.get('api_key_source') is None:
                 ini_key = config.get('Gemini', 'api_key', fallback='')
                 if ini_key and not ini_key.startswith('your-'):
@@ -274,7 +274,11 @@ def _migrate_api_key_to_keyring(api_key: str, config: configparser.ConfigParser)
 
 
 def save_api_key_secure(api_key: str) -> str:
-    """v3.9.7: API 키를 가장 안전한 방법으로 저장 (GUI에서 호출)"""
+    """v3.9.7: API 키를 가장 안전한 방법으로 저장 (GUI에서 호출)
+
+    저장은 keyring(OS 자격증명 관리자)만 허용한다.
+    settings.ini 평문 저장은 더 이상 새로 만들지 않는다.
+    """
     # 1순위: keyring
     try:
         import keyring
@@ -282,21 +286,7 @@ def save_api_key_secure(api_key: str) -> str:
         return 'KEYRING'
     except (ImportError, Exception) as _e:
         logger.debug(f"Suppressed: {_e}")
-
-    # 2순위: 환경변수 안내
-    # (실제 환경변수 설정은 사용자가 해야 하므로 ini에 저장)
-    try:
-        config = configparser.ConfigParser()
-        if SETTINGS_FILE.exists():
-            config.read(SETTINGS_FILE, encoding='utf-8')
-        if not config.has_section('Gemini'):
-            config.add_section('Gemini')
-        config.set('Gemini', 'api_key', api_key)
-        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            config.write(f)
-        return 'INI'
-    except (OSError, IOError, PermissionError):
-        return 'FAILED'
+    return 'FAILED'
 
 
 def save_gemini_model(model: str) -> bool:
@@ -343,9 +333,9 @@ def validate_api_key():
 
 def get_api_key_warning():
     """v2.8.0: API 키 보안 경고 메시지 반환"""
-    if API_KEY_SOURCE == 'INI':
-        return ("⚠️ API 키가 settings.ini에 평문 저장됨\n"
-                "환경변수 GEMINI_API_KEY 사용을 권장합니다.")
+    if API_KEY_SOURCE in ('INI', 'INI_LEGACY'):
+        return ("⚠️ API 키가 settings.ini에서 읽혔습니다\n"
+                "새 저장은 keyring(OS 자격증명 관리자)만 사용하고, 환경변수 GEMINI_API_KEY 사용을 권장합니다.")
     return None
 
 
