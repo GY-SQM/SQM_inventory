@@ -89,3 +89,31 @@
 
 - PASS/FAIL: PASS with branch protection BLOCKED
 - Reason: `v9.0.7.2` is the GitHub latest release, direct frontend `window.confirm` is removed, GitHub Actions release and PR CI gates are present, and regression tests passed. `main` branch protection could not be enabled because GitHub returned a plan limitation error.
+
+## 2026-08-18 Current Sync and Protection Check
+
+| Check | Command | Result | Evidence |
+|---|---|---|---|
+| Fetch remote and tags | `git fetch origin --prune --tags` | PASS | New tag `v9.0.7.2` fetched; stale agent branches pruned |
+| Local vs remote main | `git rev-list --left-right --count HEAD...origin/main` | PASS | `0 0` |
+| Worktree cleanliness | `git status --porcelain=v1` | PASS | No output |
+| Local test suite | `python -m pytest tests/ -q` | PASS | `688 passed, 41 warnings in 78.36s` |
+| Latest CI on main | `gh run list --repo GY-SQM/SQM_inventory --branch main --limit 1` | PASS | `SQM CI` success for `0d7141928212386e7f19f1bd39f08203a4903a6a` |
+| Latest release | `gh release view --repo GY-SQM/SQM_inventory --json tagName,name,isDraft,isPrerelease,publishedAt,url` | PASS | `SQM v9.0.7.2`, tag `v9.0.7.2`, published `2026-08-11T06:40:13Z` |
+| Branch protection | `gh api repos/GY-SQM/SQM_inventory/branches/main/protection` | WARN | GitHub returned `404 Branch not protected` |
+| Rulesets | `gh api repos/GY-SQM/SQM_inventory/rulesets` | WARN | Empty response; no repository ruleset protecting `main` |
+| Repository visibility | `gh repo view GY-SQM/SQM_inventory --json nameWithOwner,visibility,isPrivate,defaultBranchRef` | PASS | Public repository, default branch `main` |
+
+Current verdict: local `main` is synchronized with `origin/main`, release version is `9.0.7.2`, and tests/CI pass. `main` is not currently protected by classic branch protection or rulesets.
+
+## 2026-08-18 Branch Protection Enablement
+
+| Check | Command | Result | Evidence |
+|---|---|---|---|
+| PR workflow check name | `gh run view 31469248285 --repo GY-SQM/SQM_inventory --json jobs,conclusion,headSha,url` | PASS | Successful job name is `CI / test` |
+| Documentation branch | `git switch -c docs/current-sync-protection-check` | PASS | Branch created from current `main` |
+| Documentation commit | `git commit -m "docs: record current sync and protection check"` | PASS | Commit `64f2520` |
+| Documentation PR | `gh pr create --repo GY-SQM/SQM_inventory --base main --head docs/current-sync-protection-check` | PASS | PR #28: `https://github.com/GY-SQM/SQM_inventory/pull/28` |
+| Enable main protection | `gh api --method PUT repos/GY-SQM/SQM_inventory/branches/main/protection --input -` | PASS | Required check `CI / test`, strict status checks, one approving review, stale review dismissal, conversation resolution, admin enforcement, force push/deletion disabled |
+
+Current verdict: `main` branch protection is enabled. Normal changes must use branch -> PR -> `CI / test` success -> review/merge.
