@@ -3,12 +3,20 @@
 
 APP_NAME = "SQM 재고관리 시스템"
 APP_NAME_EN = "SQM Inventory Management System"
-__version__ = "9.0.7.2"
-VERSION = "9.0.7.2"
-VERSION_TUPLE = (9, 0, 7, 2)
-RELEASE_DATE = "2026-07-26"
-BUILD_DATE = "2026-07-26"
+__version__ = "9.0.7.3"
+VERSION = "9.0.7.3"
+VERSION_TUPLE = (9, 0, 7, 3)
+RELEASE_DATE = "2026-09-22"
+BUILD_DATE = "2026-09-22"
 BUILD_NOTE = (
+    "v9.0.7.3 (2026-09-22)\n"
+    "GY 전역 아키텍처 헌법 준수 및 SHA-256 멱등성 영수증 이식 릴리즈\n"
+    "  [CONSTITUTION] 전역 감독형 AI 에이전트 헌법 5대 조항 전수 감사 및 부합성 100% 달성\n"
+    "  [PARSER] BaseParser 내 SHA-256 Content Hash 영수증 생성 compute_content_hash() 이식\n"
+    "  [DB] SQLite DB (inbound_history, inventory, audit_log) content_hash 컬럼 마이그레이션 확인\n"
+    "  [TEST] 멱등성 검증 전용 회귀 테스트(test_v884_idempotency_content_hash.py) 추가 (총 690개 100% Pass)\n"
+    "\n" +
+
     "v8.8.5 (2026-07-18)\n"
     "데이터베이스 유지보수 및 디스크 최적화 릴리즈\n"
     "  [DB] sqm_inventory.db 무결성 검증 완료 및 REINDEX / VACUUM 최적화 완료\n"
