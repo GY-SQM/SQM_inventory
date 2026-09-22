@@ -39,3 +39,14 @@ class BaseParser(ABC):
     def has_errors(self) -> bool:
         """에러 존재 여부"""
         return len(self.errors) > 0
+
+    def compute_content_hash(self, data: Any) -> str:
+        """파싱 데이터 또는 원본의 SHA-256 Content Hash 계산 (멱등성 검증용 영수증 발급)"""
+        import hashlib
+        import json
+        if isinstance(data, (dict, list)):
+            dumped = json.dumps(data, sort_keys=True, default=str)
+        else:
+            dumped = str(data)
+        return hashlib.sha256(dumped.encode("utf-8")).hexdigest()
+
